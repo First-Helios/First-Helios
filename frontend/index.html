@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChainStaffingTracker — Austin TX</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+    <div id="header">
+        <h1>ChainStaffingTracker</h1>
+        <p>Community Job Fair Targeting — Austin, TX</p>
+        <div id="controls">
+            <select id="chain-filter">
+                <option value="">All Chains</option>
+                <option value="starbucks">Starbucks</option>
+                <option value="dutch_bros">Dutch Bros</option>
+            </select>
+            <select id="tier-filter">
+                <option value="">All Tiers</option>
+                <option value="critical">Critical</option>
+                <option value="elevated">Elevated</option>
+                <option value="adequate">Adequate</option>
+            </select>
+            <button id="refresh-btn">Refresh</button>
+        </div>
+    </div>
+    <div id="map"></div>
+    <div id="sidebar">
+        <h2>Top Targets</h2>
+        <div id="targets-list"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

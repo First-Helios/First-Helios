@@ -1,0 +1,185 @@
+# ChainStaffingTracker Configuration
+# All chain targets, scoring weights, region definitions, and BLS series IDs.
+# No hardcoded values in the codebase — everything comes from here via config/loader.py.
+
+regions:
+  austin_tx:
+    display_name: "Austin, TX"
+    center_lat: 30.2672
+    center_lng: -97.7431
+    radius_mi: 25
+    location_string: "Austin, TX"
+    state: "TX"
+
+industries:
+  coffee_cafe:
+    display_name: "Coffee & Café"
+    search_terms:
+      - "barista"
+      - "coffee"
+      - "cafe"
+      - "shift supervisor"
+    local_search_terms:
+      - "barista"
+      - "cafe worker"
+      - "coffee shop"
+    subreddits:
+      - "starbucks"
+      - "starbucksbaristas"
+      - "Austin"
+    sentiment_keywords:
+      negative:
+        - "understaffed"
+        - "skeleton crew"
+        - "short staffed"
+        - "no one working"
+        - "only one person"
+        - "waited forever"
+        - "closed early"
+        - "drive thru only"
+        - "lobby closed"
+        - "hiring desperately"
+        - "quitting"
+        - "turnover"
+        - "burned out"
+        - "overworked"
+      positive:
+        - "fully staffed"
+        - "great service"
+        - "quick"
+        - "well run"
+        - "good team"
+
+chains:
+  starbucks:
+    display_name: "Starbucks"
+    industry: "coffee_cafe"
+    careers_api:
+      base_url: "https://www.starbucks.com/careers/"
+      search_url: "https://starbucks.wd1.myworkdayjobs.com/en-US/StarbucksExternalCareerSite"
+      api_url: "https://starbucks.wd1.myworkdayjobs.com/wday/cxs/starbucks/StarbucksExternalCareerSite/jobs"
+      location_filter: "Austin, TX, US"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "SB"
+    maps_search_query: "Starbucks Austin TX"
+    target_roles:
+      - "barista"
+      - "shift supervisor"
+      - "shift manager"
+      - "store manager"
+    standing_postings_per_store: 2
+    standard_roles:
+      - "barista"
+      - "shift supervisor"
+
+  dutch_bros:
+    display_name: "Dutch Bros"
+    industry: "coffee_cafe"
+    careers_api:
+      base_url: "https://careers.dutchbros.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "DB"
+    maps_search_query: "Dutch Bros Austin TX"
+    target_roles:
+      - "broista"
+      - "shift lead"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "broista"
+
+scoring:
+  weights:
+    careers_api: 0.40
+    job_boards: 0.35
+    sentiment: 0.25
+
+  posting_age_decay:
+    fresh_days: 7
+    stale_days: 90
+
+  tiers:
+    critical:
+      min_percentile: 67
+      label: "critical"
+    elevated:
+      min_percentile: 33
+      label: "elevated"
+    adequate:
+      min_percentile: 0
+      label: "adequate"
+
+targeting:
+  weights:
+    staffing_stress: 0.40
+    wage_gap: 0.30
+    isolation: 0.20
+    local_alternatives: 0.10
+  tiers:
+    prime:
+      min_score: 70
+    strong:
+      min_score: 45
+    moderate:
+      min_score: 0
+  local_radius_mi: 2.0
+
+rate_limits:
+  careers_api:
+    delay_seconds: 1.0
+  google_maps:
+    delay_min_seconds: 3.0
+    delay_max_seconds: 5.0
+  reddit:
+    delay_seconds: 2.0
+  bls:
+    delay_seconds: 1.0
+
+http:
+  timeout_seconds: 30
+  max_retries: 3
+  backoff_factor: 2.0
+  user_agent: "ChainStaffingTracker/1.0"
+
+bls_series:
+  austin_food_service_employment:
+    series_id: "SMU48124207072200001"
+    description: "Austin-Round Rock MSA, Food Services and Drinking Places, All Employees (thousands)"
+  austin_leisure_hospitality_employment:
+    series_id: "SMU48124207000000001"
+    description: "Austin-Round Rock MSA, Leisure and Hospitality, All Employees (thousands)"
+  austin_accommodation_food_employment:
+    series_id: "SMU48124207072000001"
+    description: "Austin-Round Rock MSA, Accommodation and Food Services, All Employees (thousands)"
+  national_food_service_hourly:
+    series_id: "CEU7072200003"
+    description: "National Food Services and Drinking Places, Average Hourly Earnings (all employees)"
+  national_food_service_employment:
+    series_id: "CEU7072200001"
+    description: "National Food Services and Drinking Places, All Employees (thousands)"
+
+scheduler:
+  careers_api:
+    cron:
+      hour: 3
+      minute: 0
+  jobspy:
+    cron:
+      hour: 4
+      minute: 0
+  reddit:
+    interval_hours: 6
+  google_maps:
+    cron:
+      day_of_week: "mon"
+      hour: 5
+      minute: 0
+  bls:
+    cron:
+      day_of_week: "mon"
+      hour: 6
+      minute: 0
