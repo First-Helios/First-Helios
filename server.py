@@ -931,6 +931,79 @@ def agent_history():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ── Discovery endpoints ──────────────────────────────────────────────────────
+
+@app.route("/api/discovery/scan")
+def discovery_scan():
+    """Run a full discovery scan and return prioritised leads.
+
+    Query params:
+      - region (optional, default: austin_tx)
+      - max_leads (optional, default: 25, max 100)
+      - types (optional, comma-separated: coverage_gaps,data_dimension_gaps,
+               stale_leads,geographic_clusters,local_opportunities)
+    """
+    region = request.args.get("region", "austin_tx")
+    max_leads = min(request.args.get("max_leads", 25, type=int), 100)
+    types_raw = request.args.get("types", "")
+    include_types = [t.strip() for t in types_raw.split(",") if t.strip()] or None
+
+    try:
+        from backend.discovery import run_discovery
+        scan = run_discovery(region=region, max_leads=max_leads, include_types=include_types)
+        return jsonify({"status": "ok", **scan.to_dict()})
+    except Exception as e:
+        logger.error("[Server] Discovery scan failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/discovery/summary")
+def discovery_summary():
+    """Quick discovery dashboard — coverage stats without full scan.
+
+    Query params:
+      - region (optional, default: austin_tx)
+    """
+    region = request.args.get("region", "austin_tx")
+
+    try:
+        from backend.discovery import get_discovery_summary
+        summary = get_discovery_summary(region=region)
+        return jsonify({"status": "ok", **summary})
+    except Exception as e:
+        logger.error("[Server] Discovery summary failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/discovery/leads")
+def discovery_leads():
+    """Return leads from the most recent scan as agent proposals.
+
+    Query params:
+      - region (optional, default: austin_tx)
+      - min_priority (optional, default: 0, range 0-100)
+      - limit (optional, default: 10, max 50)
+    """
+    region = request.args.get("region", "austin_tx")
+    min_priority = request.args.get("min_priority", 0, type=int)
+    limit = min(request.args.get("limit", 10, type=int), 50)
+
+    try:
+        from backend.discovery import run_discovery
+        scan = run_discovery(region=region, max_leads=limit)
+        leads = [l.to_dict() for l in scan.leads if l.priority >= min_priority]
+        proposals = [l.to_agent_proposal() for l in scan.leads if l.priority >= min_priority]
+        return jsonify({
+            "status": "ok",
+            "count": len(leads),
+            "leads": leads[:limit],
+            "agent_proposals": proposals[:limit],
+        })
+    except Exception as e:
+        logger.error("[Server] Discovery leads failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ── Ollama Agent endpoints ───────────────────────────────────────────────────
 
 @app.route("/api/agent/ollama/status")
@@ -1094,6 +1167,66 @@ def openclaw_tracker():
         })
     except Exception as e:
         logger.error("[Server] OpenClaw tracker failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/freshness")
+def openclaw_freshness():
+    """Source freshness overview — how old each data source is.
+
+    Returns all freshness records sorted by staleness (most stale first),
+    plus summary stats for the agent and dashboard.
+    """
+    try:
+        from backend.database import get_all_freshness
+        from agent_interface.schemas import FRESHNESS_THRESHOLDS
+
+        records = get_all_freshness()
+        stale_count = sum(1 for r in records if r.get("is_stale", True))
+        fresh_count = len(records) - stale_count
+
+        return jsonify({
+            "status": "ok",
+            "total_tracked": len(records),
+            "stale": stale_count,
+            "fresh": fresh_count,
+            "thresholds": FRESHNESS_THRESHOLDS,
+            "records": records,
+        })
+    except Exception as e:
+        logger.error("[Server] OpenClaw freshness failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/freshness/check", methods=["POST"])
+def openclaw_freshness_check():
+    """Check freshness for a specific intent/region/brand/industry combo.
+
+    POST JSON: { "intent": "...", "region": "...", "brand": "...", "industry": "..." }
+    """
+    try:
+        from backend.database import check_freshness
+        from agent_interface.schemas import FRESHNESS_THRESHOLDS
+
+        data = request.get_json(force=True)
+        intent = data.get("intent", "")
+        region = data.get("region", "austin_tx")
+        brand = data.get("brand") or None
+        industry = data.get("industry") or None
+
+        result = check_freshness(
+            intent=intent,
+            region=region,
+            brand=brand,
+            industry=industry,
+        )
+        result["threshold_days"] = FRESHNESS_THRESHOLDS.get(intent, 14.0)
+        if result.get("age_days") is not None:
+            result["is_stale"] = result["age_days"] > result["threshold_days"]
+
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.error("[Server] Freshness check failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

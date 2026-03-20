@@ -133,21 +133,33 @@ class OSMAdapter(BaseScraper):
                         existing.lng = lng
                         existing.last_seen = datetime.utcnow()
                     else:
-                        session.add(
-                            Store(
-                                store_num=store_num,
-                                chain=self.chain,
-                                industry=chain_cfg.get("industry", "unknown"),
-                                store_name=tags.get("name", brand),
-                                address=address,
-                                lat=lat,
-                                lng=lng,
-                                region=region,
-                                first_seen=datetime.utcnow(),
-                                last_seen=datetime.utcnow(),
-                                is_active=True,
-                            )
+                        # Check for spatial duplicate from another source
+                        from backend.dedup import find_existing_match
+                        spatial_match = find_existing_match(
+                            session, self.chain, lat, lng,
                         )
+                        if spatial_match:
+                            spatial_match.last_seen = datetime.utcnow()
+                            # Fill address if canonical is empty
+                            if address and not spatial_match.address:
+                                spatial_match.address = address
+                            store_num = spatial_match.store_num
+                        else:
+                            session.add(
+                                Store(
+                                    store_num=store_num,
+                                    chain=self.chain,
+                                    industry=chain_cfg.get("industry", "unknown"),
+                                    store_name=tags.get("name", brand),
+                                    address=address,
+                                    lat=lat,
+                                    lng=lng,
+                                    region=region,
+                                    first_seen=datetime.utcnow(),
+                                    last_seen=datetime.utcnow(),
+                                    is_active=True,
+                                )
+                            )
 
                     signals.append(
                         ScraperSignal(

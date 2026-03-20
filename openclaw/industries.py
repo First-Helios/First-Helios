@@ -332,6 +332,109 @@ CHILDCARE = _register(IndustryDimension(
 ))
 
 
+# ── Hair & Beauty Services ───────────────────────────────────────────
+
+HAIR_BEAUTY = _register(IndustryDimension(
+    key="hair_beauty",
+    display_name="Hair & Beauty Services",
+    description="Hair salons, barbershops, beauty services — where independent stylists and shop owners compete with Great Clips, Supercuts, Sport Clips. Local owners often pay better (booth rent vs commission) but lack recruiting reach.",
+    job_search_terms=(
+        "hair stylist", "hairdresser", "barber", "cosmetologist",
+        "salon manager", "colorist", "shampoo assistant",
+        "esthetician", "nail technician", "beauty advisor",
+        "receptionist salon", "stylist assistant",
+    ),
+    poi_search_terms=(
+        "hair salon", "barbershop", "beauty salon", "barber shop",
+        "nail salon", "day spa", "beauty supply",
+        "cosmetology", "waxing", "threading",
+    ),
+    sentiment_keywords=(
+        "understaffed", "walk-ins only", "long wait", "no openings",
+        "booth rent", "commission split", "low pay", "tips only",
+        "great clientele", "flexible schedule", "love my chair",
+        "toxic salon", "overbooked", "burnout", "high turnover",
+    ),
+    naics_codes=("812111", "812112"),  # Barber shops, Beauty salons
+    mega_corps=(
+        MegaCorp("great_clips", "Great Clips", (), None, "Q5598967"),
+        MegaCorp("supercuts", "Supercuts", (), None, "Q7644063"),
+        MegaCorp("sport_clips", "Sport Clips", ("sports_clips",), None, "Q7579634"),
+        MegaCorp("fantastic_sams", "Fantastic Sams", (), None, "Q5434724"),
+    ),
+))
+
+# ── Auto Repair & Maintenance ───────────────────────────────────────
+
+AUTO_REPAIR = _register(IndustryDimension(
+    key="auto_repair",
+    display_name="Auto Repair & Maintenance",
+    description="Oil change shops, tire centers, general repair — where independent mechanics and local shops compete with Jiffy Lube, Midas, Firestone. Local shops often pay significantly more for skilled techs but can't recruit against franchise ad budgets.",
+    job_search_terms=(
+        "auto mechanic", "automotive technician", "lube tech",
+        "oil change technician", "tire technician", "auto tech",
+        "service advisor", "service writer", "brake technician",
+        "alignment technician", "shop manager", "mechanic",
+        "diesel mechanic", "fleet mechanic",
+    ),
+    poi_search_terms=(
+        "auto repair", "mechanic", "oil change", "tire shop",
+        "auto body", "brake shop", "muffler shop",
+        "transmission repair", "auto service",
+    ),
+    sentiment_keywords=(
+        "understaffed", "overworked", "flat rate", "flag hours",
+        "no benefits", "tool costs", "good shop", "fair pay",
+        "toxic management", "parts shortage", "high turnover",
+        "love wrenching", "career path", "ASE certified",
+    ),
+    naics_codes=("811111", "811112", "811118"),  # General auto repair, Exhaust/Transmission, Other
+    mega_corps=(
+        MegaCorp("jiffy_lube", "Jiffy Lube", (), None, "Q6192810"),
+        MegaCorp("midas", "Midas", ("midas_auto",), None, "Q3312613"),
+        MegaCorp("firestone", "Firestone Complete Auto Care", ("firestone_auto",), None, "Q420837"),
+        MegaCorp("pep_boys", "Pep Boys", (), None, "Q3375007"),
+        MegaCorp("valvoline", "Valvoline Instant Oil Change", ("valvoline_instant",), None, "Q1283718"),
+    ),
+))
+
+# ── HVAC & Skilled Trades ───────────────────────────────────────────
+
+HVAC_SKILLED_TRADES = _register(IndustryDimension(
+    key="hvac_skilled_trades",
+    display_name="HVAC & Skilled Trades",
+    description="Heating, cooling, plumbing, electrical — where local contractors compete with franchise service chains like Service Experts, Aire Serv, Mr. Electric. Skilled tradespeople are in extreme demand; local shops often pay $5-15/hr more but have zero recruiting presence.",
+    job_search_terms=(
+        "HVAC technician", "HVAC installer", "HVAC service tech",
+        "plumber", "electrician", "maintenance technician",
+        "refrigeration tech", "sheet metal worker", "duct installer",
+        "service plumber", "journeyman electrician", "apprentice HVAC",
+        "apprentice plumber", "apprentice electrician",
+        "facilities maintenance", "building maintenance",
+    ),
+    poi_search_terms=(
+        "HVAC", "heating and cooling", "air conditioning repair",
+        "plumber", "electrician", "handyman",
+        "appliance repair", "water heater", "furnace repair",
+    ),
+    sentiment_keywords=(
+        "understaffed", "overbooked", "on call 24/7", "burnout",
+        "no work-life balance", "great pay", "overtime",
+        "apprenticeship", "union", "journeyman", "master plumber",
+        "franchise fees", "van stock costs", "commission based",
+        "good benefits", "retirement", "tool allowance",
+    ),
+    naics_codes=("238220", "238210", "238110"),  # Plumbing/HVAC, Electrical, Poured concrete
+    mega_corps=(
+        MegaCorp("service_experts", "Service Experts Heating & Air", (), None, None),
+        MegaCorp("aire_serv", "Aire Serv", (), None, None),
+        MegaCorp("one_hour_heating", "One Hour Heating & Air Conditioning", ("one_hour_air",), None, None),
+        MegaCorp("mr_electric", "Mr. Electric", (), None, None),
+        MegaCorp("roto_rooter", "Roto-Rooter", (), None, "Q7370727"),
+    ),
+))
+
+
 # ══════════════════════════════════════════════════════════════════════
 # Helpers
 # ══════════════════════════════════════════════════════════════════════

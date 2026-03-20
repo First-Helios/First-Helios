@@ -5,10 +5,11 @@ Before the agent spends an API call, every proposed search term and
 parameter is checked against the known-valid pool.  This is the gate
 that prevents the LLM from hallucinating queries that waste budget.
 
-Three levels of validation:
-  1. TERM CHECK — is the search term in the industry's approved pool?
-  2. GEO CHECK  — is the target inside the region bounding box?
-  3. DRY-RUN    — simulate the query against rate_manager without executing
+Four levels of validation:
+  1. FRESHNESS CHECK — is existing data still within threshold?
+  2. TERM CHECK — is the search term in the industry's approved pool?
+  3. GEO CHECK  — is the target inside the region bounding box?
+  4. DRY-RUN    — simulate the query against rate_manager without executing
 
 If a term fails, the validator returns the closest valid alternatives
 so the LLM can self-correct in one round-trip.
@@ -229,6 +230,7 @@ def check_budget_for_intent(intent: str, max_calls: int = 5) -> dict:
         "score_refresh": [],
         "data_quality_audit": [],
         "campaign_status": [],
+        "discovery_scan": [],
     }
 
     sources = INTENT_SOURCE_MAP.get(intent, [])
@@ -265,6 +267,51 @@ def check_budget_for_intent(intent: str, max_calls: int = 5) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# Freshness gate
+# ══════════════════════════════════════════════════════════════════════
+
+def check_freshness_for_intent(
+    intent: str,
+    region: str,
+    brand: str | None = None,
+    industry: str | None = None,
+) -> dict | None:
+    """Check if data for this query combo is still fresh.
+
+    Returns a dict with is_stale, age_days, threshold_days, etc.
+    Returns None if freshness tracking is unavailable (import error, etc).
+    """
+    try:
+        from agent_interface.schemas import FRESHNESS_THRESHOLDS
+        from backend.database import check_freshness
+
+        threshold = FRESHNESS_THRESHOLDS.get(intent, 14.0)
+
+        # Intents with threshold 0 always run — skip freshness gate
+        if threshold <= 0:
+            return None
+
+        result = check_freshness(
+            intent=intent,
+            region=region,
+            brand=brand,
+            industry=industry,
+        )
+        # Inject the configured threshold so caller can compare
+        result["threshold_days"] = threshold
+
+        # Re-evaluate staleness against the configured threshold
+        if result.get("age_days") is not None:
+            result["is_stale"] = result["age_days"] > threshold
+
+        return result
+
+    except Exception as e:
+        logger.warning("[PreValidate] Freshness check error: %s — allowing query", e)
+        return None
+
+
+# ══════════════════════════════════════════════════════════════════════
 # Batch pre-validation (what the orchestrator calls before sending)
 # ══════════════════════════════════════════════════════════════════════
 
@@ -278,6 +325,12 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
         search_terms: list[str] (optional)
 
     Returns a BatchPreValidationResult with per-item details.
+
+    Validation order:
+      1. Industry/brand enum check
+      2. Freshness gate — skip if data is still fresh
+      3. Term validation against approved pools
+      4. Budget dry-run
     """
     batch = BatchPreValidationResult(total=len(plan))
     total_api_calls = 0
@@ -288,6 +341,7 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
         brand = item.get("brand", "")
         terms = item.get("search_terms", [])
         max_calls = item.get("max_budget_spend", 5)
+        region = item.get("region", "austin_tx")
 
         # Validate industry if provided
         if industry:
@@ -305,11 +359,45 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
                 batch.rejected += 1
                 continue
 
-        # Validate each search term
+        # ── Freshness gate ──────────────────────────────────────────
+        # Check if data for this intent/region/brand/industry is still fresh.
+        # If so, skip the query to reduce redundancy.
+        freshness = check_freshness_for_intent(
+            intent=intent,
+            region=region,
+            brand=brand or None,
+            industry=industry or None,
+        )
+        if freshness and not freshness["is_stale"]:
+            batch.results.append(PreValidationResult(
+                is_valid=False,
+                proposed_term=intent,
+                rejection_reason=(
+                    f"Data is still fresh — collected {freshness['age_days']:.1f} days ago "
+                    f"(threshold: {freshness['threshold_days']} days). "
+                    f"Next collection due: {freshness['next_due_at'] or 'unknown'}. "
+                    f"Records on file: {freshness['records_collected']}. "
+                    f"Pick a different intent, brand, or industry."
+                ),
+                industry_key=industry or None,
+                budget_ok=True,
+                budget_detail={"skipped": "data_still_fresh", **freshness},
+            ))
+            batch.rejected += 1
+            continue
+
+        # Infer term_type from intent so POI queries check poi_search_terms
+        term_type = "job"  # default
+        if intent.startswith("poi_"):
+            term_type = "poi"
+        elif intent.startswith("sentiment"):
+            term_type = "sentiment"
+
+        # Validate each search term against the correct pool
         term_issues = []
         for t in terms:
             if industry:
-                tv = validate_search_term(t, industry, "job")
+                tv = validate_search_term(t, industry, term_type)
                 if not tv.is_valid:
                     term_issues.append(tv)
 
@@ -323,13 +411,23 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
         budget = check_budget_for_intent(intent, max_calls)
         total_api_calls += max_calls
 
+        # Build freshness context for valid result
+        freshness_note = None
+        if freshness and freshness.get("never_collected"):
+            freshness_note = "Never collected — first run"
+        elif freshness:
+            freshness_note = f"Last collected {freshness['age_days']:.1f} days ago (stale, threshold: {freshness['threshold_days']} days)"
+
         batch.results.append(PreValidationResult(
             is_valid=True,
             proposed_term=intent,
             matched_term=intent,
             industry_key=industry or None,
             budget_ok=budget.get("budget_ok", True),
-            budget_detail=budget,
+            budget_detail={
+                **(budget or {}),
+                "freshness": freshness_note,
+            },
         ))
         batch.valid += 1
 

@@ -32,6 +32,7 @@ from agent_interface.schemas import (
     Brand,
     ConciseResult,
     DataSource,
+    FRESHNESS_THRESHOLDS,
     Intent,
     ResultStatus,
 )
@@ -103,6 +104,34 @@ def execute(query: AgentQuery) -> ConciseResult:
 
         # Add remaining budget info
         result.api_calls_remaining_today = _get_total_remaining_budget(query)
+
+        # ── Record freshness stamp ──────────────────────────────────
+        # After successful or partial execution, update the freshness table
+        # so future queries know when data was last collected.
+        if result.status in (ResultStatus.COMPLETED, ResultStatus.PARTIAL):
+            try:
+                from backend.database import upsert_freshness
+                threshold = FRESHNESS_THRESHOLDS.get(query.intent.value, 14.0)
+                upsert_freshness(
+                    intent=query.intent.value,
+                    region=query.region.value,
+                    brand=query.brand.value if query.brand else None,
+                    industry=query.industry.value if query.industry else None,
+                    records_collected=result.records_found,
+                    status=result.status.value,
+                    source_key=None,  # populated if specific source known
+                    threshold_days=threshold,
+                    notes=f"query_id={query.query_id}, api_calls={result.api_calls_used}",
+                )
+                logger.info(
+                    "[Executor] Freshness stamped: %s/%s brand=%s industry=%s (%d records)",
+                    query.intent.value, query.region.value,
+                    query.brand.value if query.brand else "-",
+                    query.industry.value if query.industry else "-",
+                    result.records_found,
+                )
+            except Exception as e:
+                logger.warning("[Executor] Freshness upsert failed (non-fatal): %s", e)
 
         return result
 
@@ -744,6 +773,80 @@ def _execute_campaign_status(query: AgentQuery) -> ConciseResult:
         )
 
 
+def _execute_discovery_scan(query: AgentQuery) -> ConciseResult:
+    """DISCOVERY_SCAN — Analyze collected data to find what to collect next.
+
+    Runs all five discovery strategies against the current DB state and
+    returns ranked leads. No API calls — purely analytical.
+    """
+    anomalies: list[str] = []
+    suggested_next: list[dict] = []
+
+    try:
+        from backend.discovery import run_discovery, get_discovery_summary
+
+        # Run full discovery scan
+        scan = run_discovery(
+            region=query.region.value,
+            max_leads=25,
+        )
+
+        # Build anomalies from summary
+        summary = scan.summary
+        anomalies.append(
+            f"Industries: {summary.get('industries_with_data', 0)}/{summary.get('industries_registered', 0)} have data"
+        )
+        missing = summary.get("industries_missing", [])
+        if missing:
+            anomalies.append(f"Industries with ZERO data: {missing}")
+
+        anomalies.append(
+            f"Discovery found {scan.total_leads} leads: {scan.leads_by_type}"
+        )
+
+        # Convert top leads into suggested_next for the agent
+        for lead in scan.leads[:10]:  # top 10
+            proposal = lead.to_agent_proposal()
+            suggested_next.append({
+                "action": lead.suggested_intent,
+                "query": proposal,
+                "description": lead.description,
+                "priority": lead.priority,
+                "lead_type": lead.lead_type,
+            })
+
+        # Add coverage summary to anomalies
+        disc_summary = get_discovery_summary(query.region.value)
+        brand_cov = disc_summary.get("brand_coverage", {})
+        anomalies.append(
+            f"Brand coverage: {brand_cov.get('with_data', 0)}/{brand_cov.get('registered', 0)} "
+            f"({brand_cov.get('coverage_pct', 0)}%)"
+        )
+        freshness = disc_summary.get("freshness", {})
+        if freshness.get("stale", 0) > 0:
+            anomalies.append(
+                f"Stale data: {freshness['stale']} intent/brand combos need re-collection"
+            )
+
+        return ConciseResult(
+            query_id=query.query_id,
+            status=ResultStatus.COMPLETED,
+            intent=query.intent,
+            records_found=scan.total_leads,
+            anomalies=anomalies,
+            suggested_next=suggested_next,
+        )
+
+    except Exception as e:
+        logger.error("[Executor] Discovery scan failed: %s", e, exc_info=True)
+        return ConciseResult(
+            query_id=query.query_id,
+            status=ResultStatus.FAILED,
+            intent=query.intent,
+            errors=[f"Discovery scan failed: {str(e)}"],
+        )
+
+
 # ══════════════════════════════════════════════════════════════════════
 # Intent → Handler dispatch table
 # ══════════════════════════════════════════════════════════════════════
@@ -758,6 +861,7 @@ _INTENT_HANDLERS = {
     Intent.SCORE_REFRESH: _execute_score_refresh,
     Intent.DATA_QUALITY_AUDIT: _execute_data_quality_audit,
     Intent.CAMPAIGN_STATUS: _execute_campaign_status,
+    Intent.DISCOVERY_SCAN: _execute_discovery_scan,
 }
 
 

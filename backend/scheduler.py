@@ -150,6 +150,17 @@ def init_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # ── Discovery scan — daily at 1am ────────────────────────────
+    scheduler.add_job(
+        _run_discovery_scan,
+        "cron",
+        hour=1,
+        minute=0,
+        id="discovery_scan",
+        name="Discovery Expansion Scan",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
@@ -330,3 +341,39 @@ def _run_osm() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] OSM job failed: %s", e)
+
+
+def _run_discovery_scan() -> None:
+    """Scheduled job: Discovery expansion scan.
+
+    Analyses collected data to find coverage gaps, stale leads, and
+    geographic clusters that need attention.  Logs a summary so operators
+    can review overnight.
+    """
+    try:
+        from backend.discovery import run_discovery, get_discovery_summary
+
+        logger.info("[Scheduler] Running discovery expansion scan")
+        scan = run_discovery(region="austin_tx", max_leads=50)
+        summary = get_discovery_summary(region="austin_tx")
+
+        logger.info(
+            "[Scheduler] Discovery scan complete: %d leads found "
+            "(coverage_gaps=%d, data_gaps=%d, stale=%d, geo=%d, local=%d)",
+            len(scan.leads),
+            sum(1 for l in scan.leads if l.lead_type == "coverage_gap"),
+            sum(1 for l in scan.leads if l.lead_type == "data_dimension_gap"),
+            sum(1 for l in scan.leads if l.lead_type == "stale_lead"),
+            sum(1 for l in scan.leads if l.lead_type == "geographic_cluster"),
+            sum(1 for l in scan.leads if l.lead_type == "local_opportunity"),
+        )
+
+        # Log top 5 highest-priority leads for operator review
+        for lead in scan.leads[:5]:
+            logger.info(
+                "[Scheduler] Discovery top lead: [%d] %s — %s",
+                lead.priority, lead.lead_type, lead.description,
+            )
+
+    except Exception as e:
+        logger.error("[Scheduler] Discovery scan failed: %s", e)

@@ -387,6 +387,221 @@ class RateBudget(Base):
         }
 
 
+class SourceFreshness(Base):
+    """Tracks when each source/intent/brand/industry/region combination was last collected.
+
+    The agent checks this before executing a query. If data is younger than
+    the freshness threshold for that intent, the query is skipped as redundant.
+
+    Thresholds (in days, configured in agent_interface/schemas.py):
+        job_posting_volume  → 14   (job boards change biweekly)
+        sentiment_check     → 14   (opinions shift slowly)
+        poi_chain_locations → 60   (locations rarely change)
+        poi_local_density   → 60
+        wage_baseline       → 90   (BLS quarterly)
+        economic_context    → 90
+        score_refresh       → 1    (always recompute)
+        data_quality_audit  → 0    (always runs)
+        campaign_status     → 0    (always runs)
+    """
+
+    __tablename__ = "source_freshness"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    intent = Column(String, nullable=False, index=True)           # e.g. 'poi_chain_locations'
+    region = Column(String, nullable=False, index=True)           # e.g. 'austin_tx'
+    brand = Column(String, nullable=True)                         # e.g. 'starbucks' (null for non-brand intents)
+    industry = Column(String, nullable=True)                      # e.g. 'coffee_cafe' (null when not applicable)
+    source_key = Column(String, nullable=True)                    # which API source was used
+    last_collected_at = Column(DateTime, nullable=False, index=True)
+    records_collected = Column(Integer, default=0)                # how many records were returned
+    status = Column(String, nullable=False, default="completed")  # completed | partial | failed
+    threshold_days = Column(Float, nullable=False, default=14.0)  # snapshot of threshold at collection time
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "intent", "region", "brand", "industry",
+            name="uq_freshness_intent_region_brand_industry",
+        ),
+    )
+
+    @property
+    def age_days(self) -> float:
+        """How many days since last collection."""
+        if not self.last_collected_at:
+            return float("inf")
+        return (datetime.utcnow() - self.last_collected_at).total_seconds() / 86400
+
+    @property
+    def is_stale(self) -> bool:
+        """True if data is older than threshold and should be re-collected."""
+        return self.age_days > self.threshold_days
+
+    @property
+    def next_due_at(self) -> datetime | None:
+        """When this data should next be collected."""
+        if not self.last_collected_at:
+            return None
+        from datetime import timedelta
+        return self.last_collected_at + timedelta(days=self.threshold_days)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "intent": self.intent,
+            "region": self.region,
+            "brand": self.brand,
+            "industry": self.industry,
+            "source_key": self.source_key,
+            "last_collected_at": self.last_collected_at.isoformat() if self.last_collected_at else None,
+            "records_collected": self.records_collected,
+            "status": self.status,
+            "threshold_days": self.threshold_days,
+            "age_days": round(self.age_days, 1),
+            "is_stale": self.is_stale,
+            "next_due_at": self.next_due_at.isoformat() if self.next_due_at else None,
+            "notes": self.notes,
+        }
+
+
+# ── Freshness helpers ─────────────────────────────────────────────────────────
+
+def upsert_freshness(
+    intent: str,
+    region: str,
+    brand: str | None,
+    industry: str | None,
+    records_collected: int,
+    status: str = "completed",
+    source_key: str | None = None,
+    threshold_days: float = 14.0,
+    notes: str | None = None,
+    db_session: Session | None = None,
+) -> SourceFreshness:
+    """Insert or update a freshness record after data collection.
+
+    Uses the composite key (intent, region, brand, industry) to upsert.
+    """
+    close_session = False
+    if db_session is None:
+        db_session = get_session(get_engine())
+        close_session = True
+
+    try:
+        existing = db_session.query(SourceFreshness).filter(
+            SourceFreshness.intent == intent,
+            SourceFreshness.region == region,
+            SourceFreshness.brand == (brand or None),
+            SourceFreshness.industry == (industry or None),
+        ).first()
+
+        if existing:
+            existing.last_collected_at = datetime.utcnow()
+            existing.records_collected = records_collected
+            existing.status = status
+            existing.source_key = source_key
+            existing.threshold_days = threshold_days
+            existing.notes = notes
+        else:
+            existing = SourceFreshness(
+                intent=intent,
+                region=region,
+                brand=brand or None,
+                industry=industry or None,
+                source_key=source_key,
+                last_collected_at=datetime.utcnow(),
+                records_collected=records_collected,
+                status=status,
+                threshold_days=threshold_days,
+                notes=notes,
+            )
+            db_session.add(existing)
+
+        db_session.commit()
+        # Eagerly load all attributes before the session might close
+        db_session.refresh(existing)
+        db_session.expunge(existing)
+        return existing
+
+    except Exception as e:
+        db_session.rollback()
+        logger.error("[Database] Freshness upsert failed: %s", e)
+        raise
+    finally:
+        if close_session:
+            db_session.close()
+
+
+def check_freshness(
+    intent: str,
+    region: str,
+    brand: str | None = None,
+    industry: str | None = None,
+    db_session: Session | None = None,
+) -> dict:
+    """Check how fresh existing data is for a given query.
+
+    Returns:
+        dict with keys: is_stale, age_days, last_collected_at,
+        records_collected, threshold_days, next_due_at
+    """
+    close_session = False
+    if db_session is None:
+        db_session = get_session(get_engine())
+        close_session = True
+
+    try:
+        record = db_session.query(SourceFreshness).filter(
+            SourceFreshness.intent == intent,
+            SourceFreshness.region == region,
+            SourceFreshness.brand == (brand or None),
+            SourceFreshness.industry == (industry or None),
+        ).first()
+
+        if record is None:
+            return {
+                "is_stale": True,
+                "age_days": None,
+                "last_collected_at": None,
+                "records_collected": 0,
+                "threshold_days": None,
+                "next_due_at": None,
+                "never_collected": True,
+            }
+
+        return {
+            "is_stale": record.is_stale,
+            "age_days": round(record.age_days, 1),
+            "last_collected_at": record.last_collected_at.isoformat() if record.last_collected_at else None,
+            "records_collected": record.records_collected,
+            "threshold_days": record.threshold_days,
+            "next_due_at": record.next_due_at.isoformat() if record.next_due_at else None,
+            "never_collected": False,
+        }
+
+    finally:
+        if close_session:
+            db_session.close()
+
+
+def get_all_freshness(db_session: Session | None = None) -> list[dict]:
+    """Return all freshness records, sorted by staleness (most stale first)."""
+    close_session = False
+    if db_session is None:
+        db_session = get_session(get_engine())
+        close_session = True
+
+    try:
+        records = db_session.query(SourceFreshness).order_by(
+            SourceFreshness.last_collected_at.asc()
+        ).all()
+        return [r.to_dict() for r in records]
+    finally:
+        if close_session:
+            db_session.close()
+
+
 # ── Engine + Session factory ─────────────────────────────────────────────────
 
 def get_engine(db_path: Path | None = None):

@@ -24,6 +24,7 @@ from backend.database import (
     get_session,
     init_db,
 )
+from backend.dedup import find_existing_match, resolve_alias
 from config.loader import get_chain
 from scrapers.base import ScraperSignal
 
@@ -67,6 +68,9 @@ def ingest_signals(
         store_nums_seen: set[str] = set()
 
         for sig in signals:
+            # ── Resolve alias if this store_num was merged ────────
+            sig.store_num = resolve_alias(session, sig.store_num)
+
             # ── Upsert Store ─────────────────────────────────────────
             if sig.store_num not in store_nums_seen:
                 store_nums_seen.add(sig.store_num)
@@ -78,38 +82,55 @@ def ingest_signals(
                     existing.last_seen = datetime.utcnow()
                     existing.is_active = True
                 else:
-                    # Try to get industry from chain config
-                    industry = "unknown"
-                    try:
-                        chain_cfg = get_chain(sig.chain)
-                        industry = chain_cfg.get("industry", "unknown")
-                    except (KeyError, TypeError):
-                        pass
-
-                    store = Store(
-                        store_num=sig.store_num,
-                        chain=sig.chain,
-                        industry=industry,
-                        store_name=sig.metadata.get("store_name", ""),
-                        address=sig.metadata.get("address", ""),
-                        lat=sig.metadata.get("lat"),
-                        lng=sig.metadata.get("lng"),
-                        region=region,
-                        first_seen=datetime.utcnow(),
-                        last_seen=datetime.utcnow(),
-                        is_active=True,
+                    # ── Dedup gate: check for spatial match ──────
+                    sig_lat = sig.metadata.get("lat")
+                    sig_lng = sig.metadata.get("lng")
+                    spatial_match = find_existing_match(
+                        session, sig.chain, sig_lat, sig_lng,
                     )
-                    # Auto-geocode if no coordinates provided
-                    if store.lat is None and store.address:
+                    if spatial_match:
+                        # Use the existing store instead of creating a new one
+                        spatial_match.last_seen = datetime.utcnow()
+                        spatial_match.is_active = True
+                        sig.store_num = spatial_match.store_num
+                        store_nums_seen.add(spatial_match.store_num)
+                        logger.debug(
+                            "[Ingest] Dedup: %s matched existing %s",
+                            sig.store_num, spatial_match.store_num,
+                        )
+                    else:
+                        # Try to get industry from chain config
+                        industry = "unknown"
                         try:
-                            from scrapers.geocoding import geocode
-                            store.lat, store.lng = geocode(store.address)
-                        except Exception as e:
-                            logger.warning(
-                                "[Ingest] Geocoding failed for %s: %s",
-                                store.store_num, e,
-                            )
-                    session.add(store)
+                            chain_cfg = get_chain(sig.chain)
+                            industry = chain_cfg.get("industry", "unknown")
+                        except (KeyError, TypeError):
+                            pass
+
+                        store = Store(
+                            store_num=sig.store_num,
+                            chain=sig.chain,
+                            industry=industry,
+                            store_name=sig.metadata.get("store_name", ""),
+                            address=sig.metadata.get("address", ""),
+                            lat=sig_lat,
+                            lng=sig_lng,
+                            region=region,
+                            first_seen=datetime.utcnow(),
+                            last_seen=datetime.utcnow(),
+                            is_active=True,
+                        )
+                        # Auto-geocode if no coordinates provided
+                        if store.lat is None and store.address:
+                            try:
+                                from scrapers.geocoding import geocode
+                                store.lat, store.lng = geocode(store.address)
+                            except Exception as e:
+                                logger.warning(
+                                    "[Ingest] Geocoding failed for %s: %s",
+                                    store.store_num, e,
+                                )
+                        session.add(store)
 
             # ── Insert Signal ────────────────────────────────────────
             signal_row = Signal(

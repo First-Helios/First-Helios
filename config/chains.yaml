@@ -49,6 +49,111 @@ industries:
         - "quick"
         - "well run"
         - "good team"
+  hair_beauty:
+    display_name: "Hair & Beauty Services"
+    search_terms:
+      - "hair stylist"
+      - "barber"
+      - "cosmetologist"
+      - "salon"
+      - "colorist"
+    local_search_terms:
+      - "hair stylist"
+      - "barber"
+      - "salon"
+      - "cosmetologist"
+    subreddits:
+      - "hairstylist"
+      - "Barber"
+      - "cosmetology"
+      - "Austin"
+    sentiment_keywords:
+      negative:
+        - "understaffed"
+        - "low pay"
+        - "commission split"
+        - "tips only"
+        - "toxic salon"
+        - "overbooked"
+        - "burnout"
+        - "high turnover"
+        - "walk-ins only"
+      positive:
+        - "great clientele"
+        - "flexible schedule"
+        - "booth rent freedom"
+        - "love my chair"
+        - "good tips"
+  auto_repair:
+    display_name: "Auto Repair & Maintenance"
+    search_terms:
+      - "auto mechanic"
+      - "automotive technician"
+      - "lube tech"
+      - "tire technician"
+      - "service advisor"
+    local_search_terms:
+      - "mechanic"
+      - "auto tech"
+      - "auto repair"
+    subreddits:
+      - "MechanicAdvice"
+      - "Justrolledintotheshop"
+      - "mechanics"
+      - "Austin"
+    sentiment_keywords:
+      negative:
+        - "flat rate scam"
+        - "flag hours"
+        - "no benefits"
+        - "tool costs"
+        - "toxic management"
+        - "parts shortage"
+        - "high turnover"
+        - "overworked"
+      positive:
+        - "good shop"
+        - "fair pay"
+        - "love wrenching"
+        - "career path"
+        - "ASE certified"
+        - "honest shop"
+  hvac_skilled_trades:
+    display_name: "HVAC & Skilled Trades"
+    search_terms:
+      - "HVAC technician"
+      - "plumber"
+      - "electrician"
+      - "maintenance technician"
+      - "apprentice"
+    local_search_terms:
+      - "HVAC tech"
+      - "plumber"
+      - "electrician"
+      - "handyman"
+    subreddits:
+      - "HVAC"
+      - "Plumbing"
+      - "electricians"
+      - "skilledtrades"
+      - "Austin"
+    sentiment_keywords:
+      negative:
+        - "on call 24/7"
+        - "burnout"
+        - "no work-life balance"
+        - "franchise fees"
+        - "commission based"
+        - "van stock costs"
+        - "overbooked"
+      positive:
+        - "great pay"
+        - "overtime"
+        - "apprenticeship"
+        - "union"
+        - "good benefits"
+        - "retirement"
+        - "tool allowance"
 
 chains:
   starbucks:
@@ -91,6 +196,283 @@ chains:
     standing_postings_per_store: 1
     standard_roles:
       - "broista"
+
+  # ── Hair & Beauty ──────────────────────────────────────────────────
+  great_clips:
+    display_name: "Great Clips"
+    industry: "hair_beauty"
+    careers_api:
+      base_url: "https://jobs.greatclips.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "GC"
+    maps_search_query: "Great Clips Austin TX"
+    target_roles:
+      - "hair stylist"
+      - "salon manager"
+      - "assistant salon manager"
+    standing_postings_per_store: 2
+    standard_roles:
+      - "hair stylist"
+
+  supercuts:
+    display_name: "Supercuts"
+    industry: "hair_beauty"
+    careers_api:
+      base_url: "https://jobs.supercuts.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "SC"
+    maps_search_query: "Supercuts Austin TX"
+    target_roles:
+      - "hair stylist"
+      - "salon manager"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "hair stylist"
+
+  sport_clips:
+    display_name: "Sport Clips"
+    industry: "hair_beauty"
+    careers_api:
+      base_url: "https://careers.sportclips.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "SPC"
+    maps_search_query: "Sport Clips Austin TX"
+    target_roles:
+      - "hair stylist"
+      - "store manager"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "hair stylist"
+
+  fantastic_sams:
+    display_name: "Fantastic Sams"
+    industry: "hair_beauty"
+    careers_api:
+      base_url: "https://www.fantasticsams.com/careers"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "FS"
+    maps_search_query: "Fantastic Sams Austin TX"
+    target_roles:
+      - "hair stylist"
+      - "salon manager"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "hair stylist"
+
+  # ── Auto Repair & Maintenance ─────────────────────────────────────
+  jiffy_lube:
+    display_name: "Jiffy Lube"
+    industry: "auto_repair"
+    careers_api:
+      base_url: "https://jobs.jiffylube.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "JL"
+    maps_search_query: "Jiffy Lube Austin TX"
+    target_roles:
+      - "lube tech"
+      - "service advisor"
+      - "assistant manager"
+    standing_postings_per_store: 2
+    standard_roles:
+      - "lube tech"
+
+  midas:
+    display_name: "Midas"
+    industry: "auto_repair"
+    careers_api:
+      base_url: "https://www.midas.com/careers"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "MD"
+    maps_search_query: "Midas Austin TX"
+    target_roles:
+      - "auto mechanic"
+      - "brake technician"
+      - "service advisor"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "auto mechanic"
+
+  firestone:
+    display_name: "Firestone Complete Auto Care"
+    industry: "auto_repair"
+    careers_api:
+      base_url: "https://jobs.firestonecompleteautocare.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "FRS"
+    maps_search_query: "Firestone Complete Auto Care Austin TX"
+    target_roles:
+      - "automotive technician"
+      - "tire technician"
+      - "service advisor"
+    standing_postings_per_store: 2
+    standard_roles:
+      - "automotive technician"
+
+  pep_boys:
+    display_name: "Pep Boys"
+    industry: "auto_repair"
+    careers_api:
+      base_url: "https://careers.pepboys.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "PB"
+    maps_search_query: "Pep Boys Austin TX"
+    target_roles:
+      - "auto mechanic"
+      - "tire technician"
+      - "service writer"
+    standing_postings_per_store: 2
+    standard_roles:
+      - "auto mechanic"
+
+  valvoline:
+    display_name: "Valvoline Instant Oil Change"
+    industry: "auto_repair"
+    careers_api:
+      base_url: "https://jobs.valvoline.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "VL"
+    maps_search_query: "Valvoline Instant Oil Change Austin TX"
+    target_roles:
+      - "lube tech"
+      - "service center manager"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "lube tech"
+
+  # ── HVAC & Skilled Trades ──────────────────────────────────────────
+  service_experts:
+    display_name: "Service Experts Heating & Air"
+    industry: "hvac_skilled_trades"
+    careers_api:
+      base_url: "https://careers.serviceexperts.com/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "SE"
+    maps_search_query: "Service Experts Austin TX"
+    target_roles:
+      - "HVAC technician"
+      - "HVAC installer"
+      - "service technician"
+    standing_postings_per_store: 2
+    standard_roles:
+      - "HVAC technician"
+
+  aire_serv:
+    display_name: "Aire Serv"
+    industry: "hvac_skilled_trades"
+    careers_api:
+      base_url: "https://www.aireserv.com/careers/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "AS"
+    maps_search_query: "Aire Serv Austin TX"
+    target_roles:
+      - "HVAC technician"
+      - "HVAC installer"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "HVAC technician"
+
+  one_hour_heating:
+    display_name: "One Hour Heating & Air Conditioning"
+    industry: "hvac_skilled_trades"
+    careers_api:
+      base_url: "https://www.onehourheatandair.com/careers"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "OH"
+    maps_search_query: "One Hour Heating Air Conditioning Austin TX"
+    target_roles:
+      - "HVAC service tech"
+      - "HVAC installer"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "HVAC service tech"
+
+  mr_electric:
+    display_name: "Mr. Electric"
+    industry: "hvac_skilled_trades"
+    careers_api:
+      base_url: "https://www.mrelectric.com/careers"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "ME"
+    maps_search_query: "Mr Electric Austin TX"
+    target_roles:
+      - "electrician"
+      - "journeyman electrician"
+      - "apprentice electrician"
+    standing_postings_per_store: 1
+    standard_roles:
+      - "electrician"
+
+  roto_rooter:
+    display_name: "Roto-Rooter"
+    industry: "hvac_skilled_trades"
+    careers_api:
+      base_url: "https://www.rotorooter.com/careers/"
+      search_url: null
+      api_url: null
+      location_filter: "Austin, TX"
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: "RR"
+    maps_search_query: "Roto-Rooter Austin TX"
+    target_roles:
+      - "plumber"
+      - "service plumber"
+      - "drain technician"
+    standing_postings_per_store: 2
+    standard_roles:
+      - "plumber"
 
 scoring:
   weights:
@@ -161,6 +543,30 @@ bls_series:
   national_food_service_employment:
     series_id: "CEU7072200001"
     description: "National Food Services and Drinking Places, All Employees (thousands)"
+  # ── Hair & Beauty (NAICS 812) ───────────────────────────────────────
+  national_personal_care_hourly:
+    series_id: "CEU6081200003"
+    description: "National Personal Care Services (NAICS 8121), Average Hourly Earnings"
+  national_personal_care_employment:
+    series_id: "CEU6081200001"
+    description: "National Personal Care Services (NAICS 8121), All Employees (thousands)"
+  # ── Auto Repair (NAICS 8111) ────────────────────────────────────────
+  national_auto_repair_hourly:
+    series_id: "CEU6081110003"
+    description: "National Automotive Repair & Maintenance (NAICS 8111), Average Hourly Earnings"
+  national_auto_repair_employment:
+    series_id: "CEU6081110001"
+    description: "National Automotive Repair & Maintenance (NAICS 8111), All Employees (thousands)"
+  # ── HVAC & Skilled Trades (NAICS 238) ───────────────────────────────
+  national_specialty_trades_hourly:
+    series_id: "CEU2023800003"
+    description: "National Specialty Trade Contractors (NAICS 238), Average Hourly Earnings"
+  national_specialty_trades_employment:
+    series_id: "CEU2023800001"
+    description: "National Specialty Trade Contractors (NAICS 238), All Employees (thousands)"
+  austin_construction_employment:
+    series_id: "SMU48124202000000001"
+    description: "Austin-Round Rock MSA, Construction, All Employees (thousands)"
 
 scheduler:
   careers_api:

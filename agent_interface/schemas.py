@@ -30,6 +30,7 @@ class Intent(str, Enum):
     SCORE_REFRESH = "score_refresh"                    # Recompute scores with latest data
     DATA_QUALITY_AUDIT = "data_quality_audit"          # What's stale, missing, conflicting?
     CAMPAIGN_STATUS = "campaign_status"                # What's the state of the queue?
+    DISCOVERY_SCAN = "discovery_scan"                  # What should we collect next?
 
 
 class Region(str, Enum):
@@ -43,17 +44,81 @@ class Industry(str, Enum):
     FAST_FOOD = "fast_food"
     FULL_SERVICE_RESTAURANT = "full_service_restaurant"
     RETAIL_GENERAL = "retail_general"
+    RETAIL_GROCERY = "retail_grocery"
+    HEALTHCARE_CLINIC = "healthcare_clinic"
+    PHARMACY = "pharmacy"
     ACCOMMODATION = "accommodation"
+    FITNESS_WELLNESS = "fitness_wellness"
+    CHILDCARE = "childcare"
+    HAIR_BEAUTY = "hair_beauty"
+    AUTO_REPAIR = "auto_repair"
+    HVAC_SKILLED_TRADES = "hvac_skilled_trades"
 
 
 class Brand(str, Enum):
     """Known chain brand keys matching ref_brands table."""
+    # Coffee & Café
     STARBUCKS = "starbucks"
     DUTCH_BROS = "dutch_bros"
+    PEETS = "peets"
+    DUNKIN = "dunkin"
+    # Fast food
     MCDONALDS = "mcdonalds"
     WHATABURGER = "whataburger"
     CHIPOTLE = "chipotle"
+    CHICKFILA = "chickfila"
+    WENDYS = "wendys"
+    # Full-service restaurant
+    APPLEBEES = "applebees"
+    CHILIS = "chilis"
+    OLIVE_GARDEN = "olive_garden"
+    IHOP = "ihop"
+    # Retail general
     TARGET = "target"
+    WALMART = "walmart"
+    COSTCO = "costco"
+    # Retail grocery
+    HEB = "heb"
+    KROGER = "kroger"
+    WHOLE_FOODS = "whole_foods"
+    TRADER_JOES = "trader_joes"
+    # Healthcare
+    CVS_MINUTECLINIC = "cvs_minuteclinic"
+    WALGREENS_CLINIC = "walgreens_clinic"
+    HCA = "hca"
+    ASCENSION = "ascension"
+    # Pharmacy
+    CVS = "cvs"
+    WALGREENS = "walgreens"
+    # Accommodation
+    MARRIOTT = "marriott"
+    HILTON = "hilton"
+    HYATT = "hyatt"
+    # Fitness & Wellness
+    PLANET_FITNESS = "planet_fitness"
+    LA_FITNESS = "la_fitness"
+    ORANGETHEORY = "orangetheory"
+    # Childcare
+    KINDERCARE = "kindercare"
+    BRIGHT_HORIZONS = "bright_horizons"
+    GODDARD_SCHOOL = "goddard_school"
+    # Hair & Beauty
+    GREAT_CLIPS = "great_clips"
+    SUPERCUTS = "supercuts"
+    SPORT_CLIPS = "sport_clips"
+    FANTASTIC_SAMS = "fantastic_sams"
+    # Auto Repair & Maintenance
+    JIFFY_LUBE = "jiffy_lube"
+    MIDAS = "midas"
+    FIRESTONE = "firestone"
+    PEP_BOYS = "pep_boys"
+    VALVOLINE = "valvoline"
+    # HVAC & Skilled Trades
+    SERVICE_EXPERTS = "service_experts"
+    AIRE_SERV = "aire_serv"
+    ONE_HOUR_HEATING = "one_hour_heating"
+    MR_ELECTRIC = "mr_electric"
+    ROTO_ROOTER = "roto_rooter"
 
 
 class DataSource(str, Enum):
@@ -104,15 +169,16 @@ class ResultStatus(str, Enum):
 # ══════════════════════════════════════════════════════════════════════
 
 FRESHNESS_THRESHOLDS: dict[str, float] = {
-    Intent.POI_CHAIN_LOCATIONS.value: 7.0,
-    Intent.POI_LOCAL_DENSITY.value: 7.0,
-    Intent.WAGE_BASELINE.value: 30.0,
-    Intent.JOB_POSTING_VOLUME.value: 1.0,
-    Intent.SENTIMENT_CHECK.value: 3.0,
-    Intent.ECONOMIC_CONTEXT.value: 90.0,
-    Intent.SCORE_REFRESH.value: 1.0,
-    Intent.DATA_QUALITY_AUDIT.value: 0.0,   # always runs
-    Intent.CAMPAIGN_STATUS.value: 0.0,       # always runs
+    Intent.POI_CHAIN_LOCATIONS.value: 60.0,   # locations rarely change
+    Intent.POI_LOCAL_DENSITY.value: 60.0,      # local employers stable
+    Intent.WAGE_BASELINE.value: 90.0,          # BLS data quarterly
+    Intent.JOB_POSTING_VOLUME.value: 14.0,     # job boards every ~2 weeks
+    Intent.SENTIMENT_CHECK.value: 14.0,        # sentiment shifts slowly
+    Intent.ECONOMIC_CONTEXT.value: 90.0,       # macro data quarterly
+    Intent.SCORE_REFRESH.value: 1.0,           # recompute daily is fine
+    Intent.DATA_QUALITY_AUDIT.value: 0.0,      # always runs
+    Intent.CAMPAIGN_STATUS.value: 0.0,         # always runs
+    Intent.DISCOVERY_SCAN.value: 0.0,          # always runs — analyzes DB, no API calls
 }
 
 # ══════════════════════════════════════════════════════════════════════
@@ -129,6 +195,7 @@ INTENT_REQUIRED_FIELDS: dict[str, list[str]] = {
     Intent.SCORE_REFRESH.value: [],
     Intent.DATA_QUALITY_AUDIT.value: [],
     Intent.CAMPAIGN_STATUS.value: [],
+    Intent.DISCOVERY_SCAN.value: [],
 }
 
 
@@ -326,6 +393,7 @@ _INTENT_DESCRIPTIONS: dict[str, str] = {
     "score_refresh": "Recompute composite staffing scores with latest data",
     "data_quality_audit": "Check for stale, missing, or conflicting data",
     "campaign_status": "Report on queue state and budget usage",
+    "discovery_scan": "Analyze collected data to discover what to collect next — finds coverage gaps, stale data, and expansion targets",
 }
 
 

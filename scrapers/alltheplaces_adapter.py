@@ -298,28 +298,42 @@ class AllThePlacesAdapter(BaseScraper):
                         addr_parts.append(state)
                     address = ", ".join(addr_parts) if addr_parts else props.get("name", "")
 
-                    # Upsert store
+                    # Upsert store (with dedup gate)
                     existing = session.query(Store).filter_by(store_num=store_num).first()
                     if existing:
                         existing.lat = f_lat
                         existing.lng = f_lng
                         existing.last_seen = datetime.utcnow()
                     else:
-                        session.add(
-                            Store(
-                                store_num=store_num,
-                                chain=self.chain,
-                                industry=chain_cfg.get("industry", "unknown"),
-                                store_name=props.get("name", self.chain.title()),
-                                address=address,
-                                lat=f_lat,
-                                lng=f_lng,
-                                region=region,
-                                first_seen=datetime.utcnow(),
-                                last_seen=datetime.utcnow(),
-                                is_active=True,
-                            )
+                        # Check for spatial duplicate from another source
+                        from backend.dedup import find_existing_match
+                        spatial_match = find_existing_match(
+                            session, self.chain, f_lat, f_lng,
                         )
+                        if spatial_match:
+                            spatial_match.last_seen = datetime.utcnow()
+                            # ATP is high-reputation — update address if better
+                            if address and len(address) > len(spatial_match.address or ""):
+                                spatial_match.address = address
+                            spatial_match.lat = f_lat
+                            spatial_match.lng = f_lng
+                            store_num = spatial_match.store_num
+                        else:
+                            session.add(
+                                Store(
+                                    store_num=store_num,
+                                    chain=self.chain,
+                                    industry=chain_cfg.get("industry", "unknown"),
+                                    store_name=props.get("name", self.chain.title()),
+                                    address=address,
+                                    lat=f_lat,
+                                    lng=f_lng,
+                                    region=region,
+                                    first_seen=datetime.utcnow(),
+                                    last_seen=datetime.utcnow(),
+                                    is_active=True,
+                                )
+                            )
 
                     signals.append(
                         ScraperSignal(

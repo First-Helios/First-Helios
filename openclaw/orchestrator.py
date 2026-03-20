@@ -109,6 +109,15 @@ If you want a term that doesn't exist, add it to your wishlist instead of using 
 ```
 Categories: new_source, new_term, new_industry, new_brand, tool_request
 
+### discovery — Run discovery scan to find expansion targets
+```json
+{{"action": "query", "intent": "discovery_scan", "region": "austin_tx",
+  "reason": "Find coverage gaps and new stores to investigate"}}
+```
+Returns: coverage statistics, prioritised leads (brands/industries with data gaps,
+stale records, geographic clusters needing attention), and suggested next queries.
+Use these leads to decide what to explore next in the session.
+
 ### status — Check budget and queue state
 ```json
 {{"action": "status"}}
@@ -120,15 +129,26 @@ Categories: new_source, new_term, new_industry, new_brand, tool_request
   "wishlist_reflection": "Would benefit from Indeed API access and 'matcha bar' as a POI term"}}
 ```
 
+## CRITICAL term-matching rules
+- For poi_chain_locations and poi_local_density → use ONLY poi_search_terms for that industry
+- For job_posting_volume and wage_baseline → use ONLY job_search_terms for that industry
+- For sentiment_check → use ONLY sentiment_keywords for that industry
+- NEVER mix terms across industries. "barista" is a coffee_cafe term, NOT retail_general.
+- Each industry block above lists its EXACT valid terms. Copy them exactly.
+
 ## Rules
 1. ALWAYS start with data_quality_audit
-2. After audit, explore industries systematically — start with the ones that have the most data gaps
-3. For each industry, check: chain locations → local density → wages → job postings → sentiment
-4. ONLY use search terms from the approved pools (job_search_terms, poi_search_terms)
-5. If you want a term that's missing, use the "wish" action — do NOT use unapproved terms
-6. Track your budget — check "status" if api_calls_remaining_today drops below 20
-7. At session end, generate wishes for any tools/data/terms you wanted but didn't have
-8. Output ONLY valid JSON per response — no surrounding text
+2. After audit, run discovery_scan to find coverage gaps and prioritised expansion targets
+3. Use discovery leads to decide which industries and brands to explore next — highest priority leads first
+4. For each industry, check: chain locations → local density → wages → job postings → sentiment
+5. ONLY use search terms from the approved pools listed above — match term type to intent
+6. If a query is REJECTED, you MUST use "wish" to request the missing term/brand — do NOT retry with the same invalid term
+7. Track your budget — check "status" if api_calls_remaining_today drops below 20
+8. When your goal is met OR you have explored all requested industries, use "done" to end the session
+9. At session end in the "done" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have
+10. Output ONLY valid JSON per response — no surrounding text
+11. Do NOT repeat the exact same query you already executed — check previous results first
+12. Run discovery_scan again mid-session after completing a batch of queries to check for newly exposed gaps
 
 ## Current Context
 {context}
@@ -349,6 +369,50 @@ class OpenClawOrchestrator:
             context += f"\nGoal: {goal}"
         if industries:
             context += f"\nFocus industries: {industries}"
+
+        # ── Freshness context ───────────────────────────────────────
+        # Tell the agent what data is stale/fresh so it prioritises wisely
+        try:
+            from backend.database import get_all_freshness
+            from agent_interface.schemas import FRESHNESS_THRESHOLDS
+
+            freshness_records = get_all_freshness()
+            if freshness_records:
+                stale = [r for r in freshness_records if r.get("is_stale", True)]
+                fresh = [r for r in freshness_records if not r.get("is_stale", True)]
+
+                context += f"\n\n## Source Freshness ({len(freshness_records)} tracked)"
+                context += f"\nStale (need re-collection): {len(stale)}"
+                context += f"\nFresh (skip these): {len(fresh)}"
+
+                if stale:
+                    context += "\n\nSTALE data — prioritize these:"
+                    for r in stale[:15]:
+                        brand_str = f" brand={r['brand']}" if r.get("brand") else ""
+                        ind_str = f" industry={r['industry']}" if r.get("industry") else ""
+                        context += (
+                            f"\n  - {r['intent']}{brand_str}{ind_str}: "
+                            f"{r['age_days']}d old (threshold: {r['threshold_days']}d), "
+                            f"{r['records_collected']} records"
+                        )
+
+                if fresh:
+                    context += "\n\nFRESH data — DO NOT re-collect:"
+                    for r in fresh[:15]:
+                        brand_str = f" brand={r['brand']}" if r.get("brand") else ""
+                        ind_str = f" industry={r['industry']}" if r.get("industry") else ""
+                        context += (
+                            f"\n  - {r['intent']}{brand_str}{ind_str}: "
+                            f"{r['age_days']}d old (threshold: {r['threshold_days']}d) ✓"
+                        )
+            else:
+                context += "\n\n## Source Freshness: No data collected yet — everything is stale."
+
+            context += f"\n\nFreshness thresholds (days): {json.dumps(FRESHNESS_THRESHOLDS)}"
+
+        except Exception as e:
+            logger.warning("[OpenClaw] Could not load freshness context: %s", e)
+            context += "\n\n## Source Freshness: unavailable"
 
         system = SYSTEM_PROMPT.format(
             industries=industries_compact,
@@ -574,17 +638,23 @@ class OpenClawOrchestrator:
             self._session.results.append(result_dict)
             executed_results.append(result_dict)
 
-            # Log to tracker
+            # Log to tracker — treat partial as success but annotate
+            status_val = result.status.value
+            is_success = status_val == "completed"
+            is_partial = status_val == "partial"
+            error_msg = "; ".join(result.errors) if result.errors else None
+            if is_partial:
+                error_msg = (error_msg + "; " if error_msg else "") + "PARTIAL: no live API call, used cached DB data"
             request_tracker.log_request(
                 intent=raw.get("intent", ""),
                 source="agent_queue",
-                success=result.status.value in ("completed", "partial"),
+                success=is_success or is_partial,
                 industry=raw.get("industry", ""),
                 brand=raw.get("brand", ""),
                 search_term=str(raw.get("search_terms", "")),
                 records_returned=result.records_found,
                 latency_ms=latency_ms,
-                error_message="; ".join(result.errors) if result.errors else None,
+                error_message=error_msg,
             )
 
         return {
@@ -616,15 +686,21 @@ class OpenClawOrchestrator:
         result_dict = result.to_dict()
         self._session.results.append(result_dict)
 
+        status_val = result.status.value
+        is_success = status_val == "completed"
+        is_partial = status_val == "partial"
+        error_msg = "; ".join(result.errors) if result.errors else None
+        if is_partial:
+            error_msg = (error_msg + "; " if error_msg else "") + "PARTIAL: no live API call, used cached DB data"
         request_tracker.log_request(
             intent=data.get("intent", ""),
             source="agent_queue",
-            success=result.status.value in ("completed", "partial"),
+            success=is_success or is_partial,
             industry=data.get("industry", ""),
             brand=data.get("brand", ""),
             records_returned=result.records_found,
             latency_ms=latency_ms,
-            error_message="; ".join(result.errors) if result.errors else None,
+            error_message=error_msg,
         )
 
         return result_dict
