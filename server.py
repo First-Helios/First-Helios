@@ -738,6 +738,283 @@ def rate_budget_scalability():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ── Agent Interface endpoints ────────────────────────────────────────────────
+
+@app.route("/api/agent/options")
+def agent_options():
+    """Return all valid enum values the agent can use.
+
+    This is the first thing an LLM agent should call to learn
+    the valid intents, regions, brands, industries, and priorities.
+    """
+    try:
+        from agent_interface.schemas import get_all_options
+        return jsonify({"status": "ok", **get_all_options()})
+    except Exception as e:
+        logger.error("[Server] Agent options failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/query", methods=["POST"])
+def agent_query():
+    """Submit one structured query from the agent.
+
+    Body: {
+        "intent": "data_quality_audit",
+        "region": "austin_tx",
+        "brand": "starbucks",          // optional, depends on intent
+        "industry": "coffee_cafe",     // optional, depends on intent
+        "priority": "normal",          // optional
+        "source_preference": "auto",   // optional
+        "max_results": 500,            // optional, cap 5000
+        "max_budget_spend": 5,         // optional, cap 50
+        "known_count": null,           // optional
+        "reason": "Initial audit"      // optional logging note
+    }
+
+    Returns ConciseResult JSON with status, records found/new, anomalies,
+    and suggested_next actions.
+
+    On invalid enum values, returns HTTP 422 with valid_options dict
+    so the agent can self-correct.
+    """
+    data = request.get_json(silent=True) or {}
+
+    try:
+        from agent_interface.schemas import parse_agent_query, get_all_options
+        from agent_interface.queue_manager import agent_queue
+
+        query, errors = parse_agent_query(data)
+        if errors:
+            return jsonify({
+                "status": "rejected",
+                "errors": errors,
+                "valid_options": get_all_options(),
+            }), 422
+
+        result = agent_queue.submit(query)
+        return jsonify({"status": "ok", **result.to_dict()})
+
+    except Exception as e:
+        logger.error("[Server] Agent query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/batch", methods=["POST"])
+def agent_batch():
+    """Submit multiple structured queries in one request.
+
+    Body: {
+        "queries": [
+            {"intent": "poi_chain_locations", "brand": "starbucks", "region": "austin_tx"},
+            {"intent": "wage_baseline", "industry": "coffee_cafe", "region": "austin_tx"}
+        ]
+    }
+
+    Later queries benefit from earlier ones (freshness dedup).
+    Returns a list of ConciseResult objects.
+    """
+    data = request.get_json(silent=True) or {}
+    raw_queries = data.get("queries", [])
+
+    if not raw_queries:
+        return jsonify({"status": "error", "message": "No queries provided"}), 400
+    if len(raw_queries) > 20:
+        return jsonify({"status": "error", "message": "Max 20 queries per batch"}), 400
+
+    try:
+        from agent_interface.schemas import parse_agent_query, get_all_options
+        from agent_interface.queue_manager import agent_queue
+
+        parsed_queries = []
+        all_errors = []
+
+        for i, raw in enumerate(raw_queries):
+            query, errors = parse_agent_query(raw)
+            if errors:
+                all_errors.append({"index": i, "errors": errors})
+            else:
+                parsed_queries.append(query)
+
+        if all_errors and not parsed_queries:
+            return jsonify({
+                "status": "rejected",
+                "errors": all_errors,
+                "valid_options": get_all_options(),
+            }), 422
+
+        results = agent_queue.submit_batch(parsed_queries)
+
+        return jsonify({
+            "status": "ok",
+            "count": len(results),
+            "results": [r.to_dict() for r in results],
+            "parse_errors": all_errors if all_errors else None,
+        })
+
+    except Exception as e:
+        logger.error("[Server] Agent batch failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/queue/status")
+def agent_queue_status():
+    """Return current queue state + budget summary."""
+    try:
+        from agent_interface.queue_manager import agent_queue
+        status = agent_queue.status()
+        return jsonify({"status": "ok", **status.to_dict()})
+    except Exception as e:
+        logger.error("[Server] Agent queue status failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/queue/pause", methods=["POST"])
+def agent_queue_pause():
+    """Pause the agent execution queue.
+
+    Body: {"reason": "BLS budget exhausted"}
+    """
+    data = request.get_json(silent=True) or {}
+    reason = data.get("reason", "")
+
+    try:
+        from agent_interface.queue_manager import agent_queue
+        result = agent_queue.pause(reason)
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.error("[Server] Agent queue pause failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/queue/resume", methods=["POST"])
+def agent_queue_resume():
+    """Resume the agent execution queue."""
+    try:
+        from agent_interface.queue_manager import agent_queue
+        result = agent_queue.resume()
+        return jsonify({"status": "ok", **result})
+    except Exception as e:
+        logger.error("[Server] Agent queue resume failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/history")
+def agent_history():
+    """Return recent agent query results.
+
+    Query params:
+      - limit (optional, default 20, max 100)
+    """
+    limit = request.args.get("limit", 20, type=int)
+    limit = min(limit, 100)
+
+    try:
+        from agent_interface.queue_manager import agent_queue
+        history = agent_queue.get_recent_history(limit=limit)
+        return jsonify({"status": "ok", "count": len(history), "results": history})
+    except Exception as e:
+        logger.error("[Server] Agent history failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── Ollama Agent endpoints ───────────────────────────────────────────────────
+
+@app.route("/api/agent/ollama/status")
+def ollama_status():
+    """Check Ollama availability, listed models, and session state.
+
+    Returns setup instructions if Ollama is not available.
+    """
+    try:
+        from agent_interface.ollama_agent import get_agent_status
+        status = get_agent_status()
+        return jsonify({"status": "ok", **status})
+    except Exception as e:
+        logger.error("[Server] Ollama status failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/ollama/models")
+def ollama_models():
+    """List available Ollama models."""
+    try:
+        from agent_interface.ollama_agent import get_or_create_agent
+        agent = get_or_create_agent()
+        models = agent.list_models()
+        return jsonify({"status": "ok", "models": models, "count": len(models)})
+    except Exception as e:
+        logger.error("[Server] Ollama models failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/ollama/pull", methods=["POST"])
+def ollama_pull():
+    """Pull a model from the Ollama registry.
+
+    Body: {"model": "llama3.2"}
+    """
+    data = request.get_json(silent=True) or {}
+    model = data.get("model", "llama3.2")
+
+    try:
+        from agent_interface.ollama_agent import get_or_create_agent
+        agent = get_or_create_agent()
+        result = agent.pull_model(model)
+        return jsonify({"status": "ok", "model": model, **result})
+    except Exception as e:
+        logger.error("[Server] Ollama pull failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/ollama/research", methods=["POST"])
+def ollama_research():
+    """Start an autonomous research session with the Ollama agent.
+
+    Body: {
+        "model": "llama3.2",           // optional, default: openclaw
+        "region": "austin_tx",         // optional, default: austin_tx
+        "goal": "Analyze coffee labor" // optional research goal
+    }
+
+    Returns the session results after completion.
+    WARNING: This is a blocking call — may take minutes depending on model.
+    """
+    data = request.get_json(silent=True) or {}
+    model = data.get("model", "openclaw")
+    region = data.get("region", "austin_tx")
+    goal = data.get("goal")
+
+    try:
+        from agent_interface.ollama_agent import OllamaAgent
+
+        agent = OllamaAgent(model=model)
+        if not agent.is_available():
+            return jsonify({
+                "status": "error",
+                "message": f"Model '{model}' not available. "
+                f"Pull it first: ollama pull {model}",
+                "available_models": agent.list_models(),
+            }), 503
+
+        session = agent.run_research_session(region=region, goal=goal)
+
+        return jsonify({
+            "status": "ok",
+            "model": model,
+            "region": region,
+            "iterations": session.iterations,
+            "queries_submitted": session.queries_submitted,
+            "is_complete": session.is_complete,
+            "summary": session.final_summary,
+            "results": session.results,
+        })
+
+    except Exception as e:
+        logger.error("[Server] Ollama research failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ── Server startup ───────────────────────────────────────────────────────────
 
 def create_app() -> Flask:

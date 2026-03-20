@@ -1,0 +1,802 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  First-Helios Agent Configuration                                   ║
+# ║  OpenClaw / Ollama LLM reference for input/output constraints       ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# This file is the single source of truth the agent reads before
+# planning any research session.  Every enum value, field constraint,
+# budget rule, and output schema is documented here so the LLM can
+# self-correct without round-tripping to the server.
+#
+# Updated: 2026-03-20
+
+# ──────────────────────────────────────────────────────────────────────
+# 1. PLATFORM OVERVIEW
+# ──────────────────────────────────────────────────────────────────────
+platform:
+  name: "First-Helios"
+  purpose: >
+    Labor-market intelligence platform that collects chain store locations,
+    local employer data, wage benchmarks, job posting volumes, and worker
+    sentiment for a target region, then scores each store for staffing
+    stress.  The agent plans what data to collect, in what order, within
+    API budget limits.
+  database: "SQLite (data/tracker.db)"
+  server: "Flask on port 8765"
+  base_url: "http://localhost:8765"
+
+# ──────────────────────────────────────────────────────────────────────
+# 2. ACTIONS  —  the JSON verbs the agent may emit
+# ──────────────────────────────────────────────────────────────────────
+actions:
+  query:
+    description: "Submit a single research query"
+    format: >
+      {"action":"query", "intent":"<intent>", "region":"<region>",
+       "brand":"<brand>", "industry":"<industry>", "reason":"<why>"}
+    notes:
+      - brand and industry may be omitted when the intent does not require them
+      - reason is encouraged but optional
+
+  batch:
+    description: "Submit multiple queries in one call"
+    format: >
+      {"action":"batch", "queries":[{...}, {...}]}
+    notes:
+      - Each item in queries follows the same schema as a single query
+      - Queries execute sequentially; later ones benefit from freshness dedup
+      - Maximum 10 queries per batch
+
+  pause:
+    description: "Pause the execution queue"
+    format: '{"action":"pause", "reason":"<why>"}'
+    notes:
+      - All subsequent queries return status "paused" until resumed
+      - Use when budget is low or anomalies require human review
+
+  resume:
+    description: "Resume a paused queue"
+    format: '{"action":"resume"}'
+
+  status:
+    description: "Check queue state and budget"
+    format: '{"action":"status"}'
+    notes:
+      - Returns is_paused, completed_today, failed_today, budget_summary
+
+  done:
+    description: "Signal the research session is complete"
+    format: '{"action":"done", "summary":"<what was accomplished>"}'
+    notes:
+      - Required to end the agent loop; omitting this wastes iterations
+
+# ──────────────────────────────────────────────────────────────────────
+# 3. INTENTS  —  what question the agent is asking
+# ──────────────────────────────────────────────────────────────────────
+intents:
+  poi_chain_locations:
+    description: "Find all locations for a chain brand in the region"
+    required_fields: [brand]
+    optional_fields: [source_preference, max_results]
+    data_sources: [alltheplaces, overture, osm]
+    freshness_threshold_days: 7
+    typical_api_calls: 1-3
+    budget_keys: [atp_geojson, overture_s3, overpass_api]
+    suggested_follow_up: [poi_local_density, score_refresh]
+    example:
+      intent: poi_chain_locations
+      region: austin_tx
+      brand: starbucks
+      reason: "Refresh Starbucks store list for Austin"
+
+  poi_local_density:
+    description: "Count non-chain employers in an industry near chain stores"
+    required_fields: [industry]
+    optional_fields: [source_preference, max_results]
+    data_sources: [overture, osm]
+    freshness_threshold_days: 7
+    typical_api_calls: 1-2
+    budget_keys: [overture_s3, overpass_api]
+    suggested_follow_up: [wage_baseline, score_refresh]
+    example:
+      intent: poi_local_density
+      region: austin_tx
+      industry: coffee_cafe
+      reason: "Map independent coffee shops near chains"
+
+  wage_baseline:
+    description: "Fetch BLS wage data for an industry/region"
+    required_fields: [industry]
+    optional_fields: [source_preference]
+    data_sources: [bls]
+    freshness_threshold_days: 30
+    typical_api_calls: 1
+    budget_keys: [bls_v1]
+    suggested_follow_up: [score_refresh]
+    example:
+      intent: wage_baseline
+      region: austin_tx
+      industry: coffee_cafe
+      reason: "Get current food-service wage benchmarks for Austin"
+
+  job_posting_volume:
+    description: "Count open job postings for a brand in the region"
+    required_fields: [brand]
+    optional_fields: [source_preference, max_results]
+    data_sources: [workday, jobspy]
+    freshness_threshold_days: 1
+    typical_api_calls: 1-2
+    budget_keys: [careers_workday, jobspy]
+    suggested_follow_up: [score_refresh]
+    example:
+      intent: job_posting_volume
+      region: austin_tx
+      brand: starbucks
+      reason: "Count active Starbucks hiring posts"
+
+  sentiment_check:
+    description: "Gather worker sentiment from Reddit/reviews for a brand"
+    required_fields: [brand]
+    optional_fields: [source_preference]
+    data_sources: [reddit]
+    freshness_threshold_days: 3
+    typical_api_calls: 1
+    budget_keys: [reddit_json, reddit_oauth]
+    suggested_follow_up: [score_refresh]
+    example:
+      intent: sentiment_check
+      region: austin_tx
+      brand: starbucks
+      reason: "Check barista morale on Reddit"
+
+  economic_context:
+    description: "Fetch unemployment, CPI, and macro indicators for the region"
+    required_fields: []
+    optional_fields: [industry]
+    data_sources: [bls]
+    freshness_threshold_days: 90
+    typical_api_calls: 1
+    budget_keys: [bls_v1]
+    suggested_follow_up: [wage_baseline]
+    example:
+      intent: economic_context
+      region: austin_tx
+      reason: "Update macro-economic context for Austin"
+
+  score_refresh:
+    description: "Recompute composite staffing scores with latest data"
+    required_fields: []
+    optional_fields: [brand]
+    data_sources: []
+    freshness_threshold_days: 1
+    typical_api_calls: 0
+    budget_keys: []
+    notes: "Purely internal computation — no external API calls"
+    suggested_follow_up: [data_quality_audit]
+    example:
+      intent: score_refresh
+      region: austin_tx
+      reason: "Recalculate scores after new wage data"
+
+  data_quality_audit:
+    description: "Check for stale, missing, or conflicting data"
+    required_fields: []
+    optional_fields: []
+    data_sources: []
+    freshness_threshold_days: 0  # always runs
+    typical_api_calls: 0
+    budget_keys: []
+    notes: >
+      Always start a research session with this intent.
+      Returns: chain store counts per brand, local employer count,
+      score coverage %, wage observation count, freshest signal age,
+      snapshot history, and suggested next steps for gaps.
+    suggested_follow_up: "dynamic — depends on what gaps are found"
+    example:
+      intent: data_quality_audit
+      region: austin_tx
+      reason: "Assess data state before planning collection"
+
+  campaign_status:
+    description: "Report on queue state and API budget usage"
+    required_fields: []
+    optional_fields: []
+    data_sources: []
+    freshness_threshold_days: 0  # always runs
+    typical_api_calls: 0
+    budget_keys: []
+    notes: >
+      Returns total API calls used/remaining today, per-source
+      utilization, and flagged bottleneck sources (>80% used).
+    suggested_follow_up: [data_quality_audit]
+    example:
+      intent: campaign_status
+      region: austin_tx
+      reason: "Check remaining budget before more queries"
+
+# ──────────────────────────────────────────────────────────────────────
+# 4. ENUMERATIONS  —  all valid values for constrained fields
+# ──────────────────────────────────────────────────────────────────────
+enums:
+
+  region:
+    values:
+      - value: austin_tx
+        display: "Austin, TX"
+        bbox:
+          west: -97.9383
+          east: -97.4104
+          south: 30.0986
+          north: 30.5168
+        center_lat: 30.2672
+        center_lng: -97.7431
+    notes: "Only one region is currently supported"
+
+  brand:
+    values:
+      - value: starbucks
+        display: "Starbucks"
+        industry: coffee_cafe
+        store_prefix: "SB"
+        wikidata: "Q37158"
+        atp_spider: starbucks_us
+      - value: dutch_bros
+        display: "Dutch Bros"
+        industry: coffee_cafe
+        store_prefix: "DB"
+        wikidata: "Q5765571"
+        atp_spider: dutch_bros
+      - value: mcdonalds
+        display: "McDonald's"
+        industry: fast_food
+        store_prefix: "MC"
+        wikidata: "Q38076"
+        atp_spider: mcdonalds
+      - value: whataburger
+        display: "Whataburger"
+        industry: fast_food
+        store_prefix: "WB"
+        wikidata: "Q376525"
+        atp_spider: whataburger
+      - value: chipotle
+        display: "Chipotle"
+        industry: fast_food
+        store_prefix: "CM"
+        wikidata: "Q465751"
+        atp_spider: chipotle
+      - value: target
+        display: "Target"
+        industry: retail_general
+        store_prefix: "TG"
+        wikidata: "Q137078"
+        atp_spider: target
+    notes: >
+      brand is REQUIRED for intents: poi_chain_locations, job_posting_volume,
+      sentiment_check.  Optional for score_refresh (to scope scoring to one brand).
+
+  industry:
+    values:
+      - value: coffee_cafe
+        display: "Coffee & Café"
+      - value: fast_food
+        display: "Fast Food"
+      - value: full_service_restaurant
+        display: "Full Service Restaurant"
+      - value: retail_general
+        display: "Retail General"
+      - value: accommodation
+        display: "Accommodation"
+    notes: >
+      industry is REQUIRED for intents: poi_local_density, wage_baseline.
+
+  data_source:
+    values:
+      - value: auto
+        description: "System picks the best available sources (recommended default)"
+      - value: alltheplaces
+        description: "AllThePlaces GeoJSON — chain store locations"
+        budget_key: atp_geojson
+      - value: overture
+        description: "Overture Maps Foundation — POI data via S3/DuckDB"
+        budget_key: overture_s3
+      - value: osm
+        description: "OpenStreetMap Overpass API — POI and amenity data"
+        budget_key: overpass_api
+      - value: bls
+        description: "Bureau of Labor Statistics — wage and employment data"
+        budget_key: bls_v1
+      - value: jobspy
+        description: "JobSpy — aggregated job board scraper"
+        budget_key: jobspy
+      - value: reddit
+        description: "Reddit — worker sentiment and discussions"
+        budget_key: reddit_json
+      - value: workday
+        description: "Workday Careers API — direct employer job listings"
+        budget_key: careers_workday
+    notes: >
+      Default is "auto" which lets the executor try sources in priority order.
+      Only override if you need data from a specific source.
+
+  priority:
+    values:
+      - value: critical
+        weight: 10
+        description: "Urgent — fills a blocking data gap"
+      - value: high
+        weight: 25
+        description: "Important — needed for current research plan"
+      - value: normal
+        weight: 50
+        description: "Standard priority (default)"
+      - value: low
+        weight: 75
+        description: "Nice to have — collect if budget allows"
+      - value: backfill
+        weight: 90
+        description: "Background — fill gaps when idle"
+    notes: "Lower weight = higher priority.  Default is 'normal'."
+
+# ──────────────────────────────────────────────────────────────────────
+# 5. QUERY INPUT CONSTRAINTS
+# ──────────────────────────────────────────────────────────────────────
+query_constraints:
+  intent:
+    type: string
+    required: true
+    valid_values: "See intents section above"
+    error_on_invalid: >
+      HTTP 422 with body {"errors":["Invalid intent '...' ..."], "valid_options":{...}}
+
+  region:
+    type: string
+    required: true
+    valid_values: [austin_tx]
+    error_on_invalid: "HTTP 422 with valid region list"
+
+  brand:
+    type: string
+    required: "Depends on intent (see intents.*.required_fields)"
+    valid_values: [starbucks, dutch_bros, mcdonalds, whataburger, chipotle, target]
+    error_on_invalid: "HTTP 422 with valid brand list"
+
+  industry:
+    type: string
+    required: "Depends on intent (see intents.*.required_fields)"
+    valid_values: [coffee_cafe, fast_food, full_service_restaurant, retail_general, accommodation]
+    error_on_invalid: "HTTP 422 with valid industry list"
+
+  priority:
+    type: string
+    required: false
+    default: normal
+    valid_values: [critical, high, normal, low, backfill]
+
+  source_preference:
+    type: string
+    required: false
+    default: auto
+    valid_values: [auto, alltheplaces, overture, osm, bls, jobspy, reddit, workday]
+
+  max_results:
+    type: integer
+    required: false
+    default: 500
+    min: 1
+    max: 5000
+
+  max_budget_spend:
+    type: integer
+    required: false
+    default: 5
+    min: 1
+    max: 50
+    description: "Maximum number of API calls this single query is allowed to make"
+
+  known_count:
+    type: integer
+    required: false
+    default: null
+    description: >
+      How many records the agent already knows about for this intent.
+      Used by the freshness dedup: if DB count >= known_count and data
+      is within the freshness threshold, the query returns DUPLICATE.
+
+  reason:
+    type: string
+    required: false
+    default: ""
+    description: "Free-text explanation of why this query is being submitted (for logging)"
+
+# ──────────────────────────────────────────────────────────────────────
+# 6. RESULT OUTPUT SCHEMA  —  what comes back from every query
+# ──────────────────────────────────────────────────────────────────────
+result_schema:
+  query_id:
+    type: string
+    description: "12-char UUID assigned at submission"
+
+  status:
+    type: string
+    possible_values:
+      - completed:  "Query ran successfully and returned data"
+      - partial:    "Ran but some sources failed — data may be incomplete"
+      - queued:     "Accepted but not yet executed (future async mode)"
+      - rejected:   "Input validation failed — check errors and valid_options"
+      - duplicate:  "Data is already fresh enough — no collection needed"
+      - paused:     "Queue is paused — resume before retrying"
+      - no_budget:  "All relevant API sources are budget-exhausted today"
+      - failed:     "Execution error — check errors list"
+
+  records_found:
+    type: integer
+    description: "Total records matching this query (includes pre-existing)"
+
+  records_new:
+    type: integer
+    description: "Newly collected records from this execution"
+
+  records_updated:
+    type: integer
+    description: "Existing records that were updated"
+
+  staleness_days:
+    type: float
+    nullable: true
+    description: "Age of the freshest existing data in days (null if no data)"
+
+  coverage_pct:
+    type: float
+    nullable: true
+    description: "Estimated data coverage 0-100% (null if not applicable)"
+
+  source_agreement:
+    type: float
+    nullable: true
+    description: "0.0-1.0 score of how well multiple sources agree (null if single source)"
+
+  api_calls_used:
+    type: integer
+    description: "How many external API calls this query consumed"
+
+  api_calls_remaining_today:
+    type: integer
+    nullable: true
+    description: "Total API calls remaining across all sources for today"
+
+  estimated_seconds:
+    type: float
+    description: "Wall-clock time the query took"
+
+  anomalies:
+    type: "list[string]"
+    description: >
+      Observations about the data — warnings, summaries, comparisons.
+      Always read these.  They contain actionable intelligence like
+      "Only 89 starbucks stores — expected 300+" or
+      "Wage gap: local avg $18.50/hr vs chain avg $15.20/hr (+21.7%)".
+
+  suggested_next:
+    type: "list[object]"
+    description: >
+      Recommended follow-up queries.  Each entry has:
+        action: string   — the intent name to use next
+        query: object    — pre-filled query body you can submit directly
+        description: str — human-readable explanation
+      ALWAYS follow these suggestions unless you have a better plan.
+
+  errors:
+    type: "list[string]"
+    description: "Error messages when status is rejected/failed/no_budget"
+
+  valid_options:
+    type: object
+    nullable: true
+    description: >
+      Only present when status is 'rejected'.  Contains the valid
+      enum values for brands, industries, and regions so the agent
+      can self-correct without another round trip.
+
+# ──────────────────────────────────────────────────────────────────────
+# 7. PRE-FLIGHT VALIDATION RULES
+# ──────────────────────────────────────────────────────────────────────
+validation_rules:
+  freshness_dedup:
+    description: >
+      Before executing, the validator checks if existing data is newer
+      than the intent's freshness_threshold_days.  If so, the query
+      returns DUPLICATE with records_found and staleness_days, plus
+      suggested_next alternatives.
+    thresholds:
+      poi_chain_locations: 7 days
+      poi_local_density: 7 days
+      wage_baseline: 30 days
+      job_posting_volume: 1 day
+      sentiment_check: 3 days
+      economic_context: 90 days
+      score_refresh: 1 day
+      data_quality_audit: 0 (always runs)
+      campaign_status: 0 (always runs)
+
+  budget_check:
+    description: >
+      Checks rate_manager for whether API sources have remaining daily
+      budget.  If ALL sources for an intent are exhausted, returns
+      NO_BUDGET with budget details and reset time.
+    budget_keys_per_intent:
+      poi_chain_locations: [atp_geojson, overture_s3, overpass_api]
+      poi_local_density: [overture_s3, overpass_api]
+      wage_baseline: [bls_v1]
+      job_posting_volume: [jobspy, careers_workday]
+      sentiment_check: [reddit_json, reddit_oauth]
+      economic_context: [bls_v1]
+      score_refresh: []
+      data_quality_audit: []
+      campaign_status: []
+    notes: >
+      Budget resets at midnight UTC.  If budget is low, the agent
+      should use the 'pause' action and explain why.
+
+  schema_validation:
+    description: >
+      Missing required fields for an intent return REJECTED.
+      Invalid enum values return REJECTED with valid_options
+      for self-correction.
+
+# ──────────────────────────────────────────────────────────────────────
+# 8. DATA MODEL REFERENCE  —  what lives in the database
+# ──────────────────────────────────────────────────────────────────────
+data_model:
+  stores:
+    description: "Chain store locations"
+    key_fields: [store_num]
+    important_columns:
+      - store_num: "Unique ID (e.g. SB-30.267-97.743)"
+      - chain: "Brand key (starbucks, dutch_bros, ...)"
+      - region: "Region key (austin_tx)"
+      - name: "Store display name"
+      - address: "Full street address"
+      - lat: "Latitude"
+      - lng: "Longitude"
+      - is_active: "Boolean — currently operating"
+      - source: "Data source (atp, overture, osm)"
+      - last_seen: "Datetime of most recent observation"
+
+  local_employers:
+    description: "Non-chain businesses (independent coffee shops, etc.)"
+    key_fields: [employer_id]
+    important_columns:
+      - employer_id: "Generated unique ID"
+      - name: "Business name"
+      - industry: "Industry key"
+      - region: "Region key"
+      - lat: "Latitude"
+      - lng: "Longitude"
+      - is_active: "Boolean"
+      - last_seen: "Datetime"
+
+  signals:
+    description: "Time-series observations (job postings, sentiment, reviews)"
+    key_fields: [id]
+    important_columns:
+      - store_num: "FK to stores"
+      - signal_type: "listing | sentiment | review_score | closure_flag | wage_report"
+      - value: "Numeric value"
+      - observed_at: "When the signal was captured"
+      - source: "Data source name"
+    signal_types:
+      listing: "A job posting for this store"
+      sentiment: "Reddit/social media mention with sentiment score"
+      review_score: "Google Maps or Yelp review rating"
+      closure_flag: "Indicator of a store closure or reduced hours"
+      wage_report: "Reported wage or salary data point"
+
+  wage_index:
+    description: "BLS and computed wage benchmarks"
+    key_fields: [id]
+    important_columns:
+      - region: "Region key"
+      - industry: "Industry key"
+      - is_chain: "Chain vs local wage"
+      - wage_min: "Minimum hourly rate"
+      - wage_max: "Maximum hourly rate"
+      - observed_at: "When data was captured"
+
+  scores:
+    description: "Computed staffing stress scores per store"
+    key_fields: [id]
+    important_columns:
+      - store_num: "FK to stores"
+      - score_type: "composite | career_score | board_score | sentiment_score"
+      - value: "0.0-1.0 normalized score"
+      - tier: "critical | elevated | adequate"
+      - computed_at: "When score was calculated"
+    scoring_weights:
+      careers_api: 0.40
+      job_boards: 0.35
+      sentiment: 0.25
+    tier_thresholds:
+      critical: ">= 67th percentile"
+      elevated: ">= 33rd percentile"
+      adequate: "< 33rd percentile"
+
+  snapshots:
+    description: "Historical scan records for tracking data collection runs"
+    key_fields: [id]
+
+# ──────────────────────────────────────────────────────────────────────
+# 9. COLLECTOR OUTPUT SCHEMAS  —  raw records before storage
+# ──────────────────────────────────────────────────────────────────────
+collector_schemas:
+  POIRecord:
+    description: "Point-of-interest from any location source"
+    fields:
+      source: "string — alltheplaces | overture | osm"
+      source_id: "string — unique within source"
+      name: string
+      lat: float
+      lng: float
+      address: "string (may be empty)"
+      brand: "string | null — normalized brand key"
+      is_chain: bool
+      confidence: "float 0.0-1.0"
+      category: "string | null — raw source category"
+      industry: "string | null — mapped industry key"
+    dedup_key: "source-brand_prefix-source_id_prefix"
+
+  WageRecord:
+    description: "Wage or salary observation"
+    fields:
+      source: "string — bls | jobspy | indeed"
+      region: string
+      brand: "string | null"
+      role_title: "string | null"
+      hourly_wage: "float | null"
+      wage_min: "float | null"
+      wage_max: "float | null"
+      wage_period: "hourly | yearly"
+      industry: "string | null"
+      is_chain: bool
+
+  JobPostingRecord:
+    description: "Job listing observation"
+    fields:
+      source: "string — workday | jobspy | indeed"
+      brand: "string | null"
+      job_title: string
+      location: string
+      salary_min: "float | null"
+      salary_max: "float | null"
+      posted_date: "datetime | null"
+      url: "string | null"
+
+  SentimentRecord:
+    description: "Social media or review sentiment"
+    fields:
+      source: "string — reddit | google_maps"
+      brand: "string | null"
+      text: string
+      sentiment_score: "float -1.0 to 1.0 | null"
+      rating: "float 1-5 | null"
+      topic: "string | null — staffing | wages | management"
+
+  EconomicIndicatorRecord:
+    description: "Macro-economic data point"
+    fields:
+      source: "string — bls"
+      region: string
+      indicator_type: "unemployment | wage | employment | cpi"
+      value: float
+      period: "string — e.g. 2025-Q4, 2025-M12"
+      unit: "string — thousands | dollars | percent"
+
+# ──────────────────────────────────────────────────────────────────────
+# 10. API ENDPOINTS REFERENCE
+# ──────────────────────────────────────────────────────────────────────
+endpoints:
+  agent:
+    GET /api/agent/options:
+      description: "Returns all valid enum values and intent requirements"
+      response: "{intents, regions, industries, brands, data_sources, priorities, intent_required_fields, freshness_thresholds_days}"
+      notes: "Call this at session start to bootstrap your knowledge"
+
+    POST /api/agent/query:
+      description: "Submit a single research query"
+      body: "{intent, region, brand?, industry?, priority?, source_preference?, max_results?, max_budget_spend?, known_count?, reason?}"
+      response: "ConciseResult (see result_schema)"
+
+    POST /api/agent/batch:
+      description: "Submit multiple queries"
+      body: "{queries: [{...}, ...]}"
+      response: "{results: [ConciseResult, ...]}"
+
+    GET /api/agent/queue/status:
+      description: "Queue state and budget summary"
+      response: "{is_paused, completed_today, failed_today, budget_summary}"
+
+    POST /api/agent/queue/pause:
+      description: "Pause the queue"
+      body: "{reason?: string}"
+
+    POST /api/agent/queue/resume:
+      description: "Resume the queue"
+
+    GET /api/agent/history:
+      description: "Last 100 query results"
+      response: "{history: [...], total: int}"
+
+  ollama:
+    GET /api/agent/ollama/status:
+      description: "Ollama server status and model availability"
+    GET /api/agent/ollama/models:
+      description: "List all pulled Ollama models"
+    POST /api/agent/ollama/pull:
+      description: "Pull a model by name"
+      body: "{model: string}"
+    POST /api/agent/ollama/research:
+      description: "Start an LLM-driven research session"
+      body: "{model?: string, region?: string, goal?: string}"
+
+# ──────────────────────────────────────────────────────────────────────
+# 11. AGENT BEHAVIORAL RULES
+# ──────────────────────────────────────────────────────────────────────
+agent_rules:
+  session_flow:
+    - "1. ALWAYS begin with data_quality_audit to assess current state"
+    - "2. Read anomalies and suggested_next from the audit result"
+    - "3. Follow suggested_next unless you have a better justified plan"
+    - "4. Check campaign_status if you suspect budget is low"
+    - "5. After collection intents, run score_refresh to update scores"
+    - "6. End with a data_quality_audit to confirm improvements"
+    - "7. Emit the 'done' action with a summary"
+
+  error_handling:
+    - "If status is 'rejected': read valid_options and resubmit with corrected values"
+    - "If status is 'duplicate': skip to suggested_next (data is already fresh)"
+    - "If status is 'no_budget': pause the queue, explain which sources are exhausted"
+    - "If status is 'failed': log the error, try an alternative source_preference"
+    - "If status is 'paused': do NOT keep submitting — resume first or end the session"
+
+  budget_awareness:
+    - "Check api_calls_remaining_today in every result"
+    - "If remaining < 10, switch to low-cost intents (audit, status, score_refresh)"
+    - "If remaining == 0, pause and report"
+    - "Never set max_budget_spend > 10 for a single query unless critical"
+    - "Prefer source_preference: auto to let the executor optimize"
+
+  output_format:
+    - "Output ONLY valid JSON — no markdown, no explanations outside JSON"
+    - "One JSON object per response"
+    - "Use the 'reason' field for your thinking, not surrounding text"
+
+# ──────────────────────────────────────────────────────────────────────
+# 12. SAFETY LIMITS
+# ──────────────────────────────────────────────────────────────────────
+safety:
+  max_iterations_per_session: 10
+  max_queries_per_batch: 10
+  max_results_per_query: 5000
+  max_budget_spend_per_query: 50
+  ollama_temperature: 0.3
+  ollama_max_predict_tokens: 512
+  ollama_context_window: 4096
+
+# ──────────────────────────────────────────────────────────────────────
+# 13. BLS SERIES REFERENCES  —  pre-mapped economic data series
+# ──────────────────────────────────────────────────────────────────────
+bls_series:
+  austin_food_service_employment:
+    series_id: "SMU48124207072200001"
+    description: "Austin-Round Rock MSA, Food Services and Drinking Places, All Employees (thousands)"
+  austin_leisure_hospitality:
+    series_id: "SMU48124207000000001"
+    description: "Austin-Round Rock MSA, Leisure and Hospitality, All Employees (thousands)"
+  austin_accommodation_food:
+    series_id: "SMU48124207072000001"
+    description: "Austin-Round Rock MSA, Accommodation and Food Services, All Employees (thousands)"
+  national_food_hourly:
+    series_id: "CEU7072200003"
+    description: "National Food Services and Drinking Places, Average Hourly Earnings"
+  national_food_employment:
+    series_id: "CEU7072200001"
+    description: "National Food Services and Drinking Places, All Employees (thousands)"
