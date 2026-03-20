@@ -1,0 +1,1474 @@
+[
+  {
+    "location": "Seattle, WA, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:23:38.869133+00:00",
+    "total_raw_positions": 264,
+    "total_parsed_listings": 231,
+    "total_stores": 122,
+    "level_distribution": {
+      "critical": 109,
+      "low": 13
+    },
+    "critical_pct": 89.3,
+    "listing_count_distribution": {
+      "1": 13,
+      "2": 109
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.89,
+      "median": 2.0,
+      "stdev": 0.31
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.88,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Shift Supervisor": 120,
+      "Barista": 111
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 109,
+    "standard_pair_pct": 89.3,
+    "non_standard_stores": [
+      {
+        "store_num": "00101",
+        "store_name": "COLUMBIA CENTER  4TH & CHERRY",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "02937",
+        "store_name": "PIER 55",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "84480",
+        "store_name": "LEARY WAY & 11TH BALLARD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "19991",
+        "store_name": "BALLARD - 15TH AVE & NW 53RD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "00324",
+        "store_name": "120TH & NE 8TH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "03333",
+        "store_name": "HOUGHTON II",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "09319",
+        "store_name": "INTERURBAN AVENUE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "52763",
+        "store_name": "AURORA AVE N & N 155TH ST",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "00331",
+        "store_name": "SOUTHCENTER            (FRESH)",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "03282",
+        "store_name": "KENMORE SQUARE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "08797",
+        "store_name": "FAIRWOOD - SBC CONVERSION",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "03324",
+        "store_name": "12TH AND COLUMBIA",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "00302",
+        "store_name": "UNIVERSITY VILLAGE - MAIN",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 3.9,
+      "max_days": 89.9,
+      "mean_days": 54.0,
+      "median_days": 77.9
+    }
+  },
+  {
+    "location": "Chicago, IL, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:24:32.842625+00:00",
+    "total_raw_positions": 319,
+    "total_parsed_listings": 298,
+    "total_stores": 156,
+    "level_distribution": {
+      "critical": 142,
+      "low": 14
+    },
+    "critical_pct": 91.0,
+    "listing_count_distribution": {
+      "1": 14,
+      "2": 142
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.91,
+      "median": 2.0,
+      "stdev": 0.29
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.88,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Shift Supervisor": 152,
+      "Barista": 146
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 142,
+    "standard_pair_pct": 91.0,
+    "non_standard_stores": [
+      {
+        "store_num": "13319",
+        "store_name": "MADISON & WELLS",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "13710",
+        "store_name": "RIVER NORTH-ERIE & DEARBORN",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "19549",
+        "store_name": "CHICAGO - HYATT HOTEL",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "71124",
+        "store_name": "N RUSH AND E PEARSON",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "57238",
+        "store_name": "OGDEN & DAMEN - IMD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "14256",
+        "store_name": "BUCKTOWN-ARMITAGE & HOYNE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "64839",
+        "store_name": "NORTH & CICERO - CHICAGO",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "61845",
+        "store_name": "34TH & CICERO",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "66370",
+        "store_name": "58TH & WESTERN",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "58415",
+        "store_name": "NORTH AVE. & 7TH AVE. - MELROSE PK",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "47593",
+        "store_name": "HARLEM & NORTHWEST HIGHWAY",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "15752",
+        "store_name": "NILES - SEC MILWAUKEE & TOUHY",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "48457",
+        "store_name": "Mannheim Rd. & Grand Ave.",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "65138",
+        "store_name": "HICKORY HILLS - 95TH & 76TH",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 1.9,
+      "max_days": 89.9,
+      "mean_days": 40.8,
+      "median_days": 17.9
+    }
+  },
+  {
+    "location": "New York, NY, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:26:01.002933+00:00",
+    "total_raw_positions": 575,
+    "total_parsed_listings": 554,
+    "total_stores": 291,
+    "level_distribution": {
+      "critical": 263,
+      "low": 28
+    },
+    "critical_pct": 90.4,
+    "listing_count_distribution": {
+      "1": 28,
+      "2": 263
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.9,
+      "median": 2,
+      "stdev": 0.3
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.89,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Shift Supervisor": 287,
+      "Barista": 267
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 263,
+    "standard_pair_pct": 90.4,
+    "non_standard_stores": [
+      {
+        "store_num": "07878",
+        "store_name": "WATER & MAIDEN",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "10044",
+        "store_name": "ALLEN & DELANCEY",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "15461",
+        "store_name": "JACKSON SQUARE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "13539",
+        "store_name": "23RD BTWN 5TH & 6TH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "07427",
+        "store_name": "29TH & PARK",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "07403",
+        "store_name": "35TH & 7TH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "48170",
+        "store_name": "4TH AVE. & 11TH ST.-PARK SLOPE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "49550",
+        "store_name": "Broadway & 45th",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "11736",
+        "store_name": "50TH & MADISON",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "07525",
+        "store_name": "135 E. 57TH STREET",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "11765",
+        "store_name": "SIXTH & 58TH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "53836",
+        "store_name": "INDUSTRY CITY",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "50611",
+        "store_name": "61st & West End Ave",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "10751",
+        "store_name": "ROOSEVELT ISLAND",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "77655",
+        "store_name": "71ST & YORK (SEC)",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "84386",
+        "store_name": "2101 CHURCH AVE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "20679",
+        "store_name": "87TH AND THIRD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "13983",
+        "store_name": "BENSONHURST, 1973 86TH ST.",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "08131",
+        "store_name": "CROPSEY AVENUE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "10392",
+        "store_name": "EAST RUTHERFORD, RT. 17",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "25685",
+        "store_name": "SUTPHIN BLVD & 89 AVE- JAMAICA",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "52530",
+        "store_name": "FRANCIS LEWIS BLVD & 32ND AVE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "00846",
+        "store_name": "ENGLEWOOD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "13856",
+        "store_name": "MONTCLAIR - CHURCH & SOUTH PARK",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "63901",
+        "store_name": "PICKUP - 5TH\u00c2\u00a0AVE BTWN 41ST\u00c2\u00a0& 42ND",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "22420",
+        "store_name": "425 LEXINGTON",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "24165",
+        "store_name": "QUEENS BLVD & 63RD DR",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "07492",
+        "store_name": "CROSS BAY BLVD & 157TH AVE",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 1.9,
+      "max_days": 89.9,
+      "mean_days": 41.1,
+      "median_days": 17.9
+    }
+  },
+  {
+    "location": "Los Angeles, CA, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:27:36.029416+00:00",
+    "total_raw_positions": 591,
+    "total_parsed_listings": 586,
+    "total_stores": 310,
+    "level_distribution": {
+      "critical": 276,
+      "low": 34
+    },
+    "critical_pct": 89.0,
+    "listing_count_distribution": {
+      "1": 34,
+      "2": 276
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.89,
+      "median": 2.0,
+      "stdev": 0.31
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.88,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Shift Supervisor": 307,
+      "Barista": 279
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 276,
+    "standard_pair_pct": 89.0,
+    "non_standard_stores": [
+      {
+        "store_num": "52257",
+        "store_name": "FIGUEROA & 31ST",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "58623",
+        "store_name": "VERMONT & WEST 2ND",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "54501",
+        "store_name": "6TH & KENMORE (CHAPMAN MARKET)",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05683",
+        "store_name": "GLENDALE & FLETCHER",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05911",
+        "store_name": "WILSHIRE & SERRANO",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "65084",
+        "store_name": "PICKUP - WESTERN & VENICE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "57460",
+        "store_name": "SAN FERNANDO & BRAND BLVD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "00507",
+        "store_name": "HANCOCK PARK",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "22601",
+        "store_name": "HIGHLAND & WILLOUGHBY, LOS ANGELES",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05995",
+        "store_name": "WESTERN & SLAUSON - LOS ANGELES",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "06897",
+        "store_name": "CITADEL OUTLETS",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "12900",
+        "store_name": "WILSHIRE & CURSON",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "06510",
+        "store_name": "ATLANTIC & FLORENCE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "61890",
+        "store_name": "CENTRAL & CALIFORNIA",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "69397",
+        "store_name": "FIRESTONE & ALAMEDA",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "67663",
+        "store_name": "ATLANTIC & ELIZABETH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "57356",
+        "store_name": "GLENOAKS & GRANDVIEW",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "11991",
+        "store_name": "CAHUENGA & BARHAM, LOS ANGELES",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "10659",
+        "store_name": "LAKEWOOD & TELEGRAPH, DOWNEY",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "69280",
+        "store_name": "SLAUSON & REEVE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "59109",
+        "store_name": "CENTURY & CONCOURSE WAY",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "47697",
+        "store_name": "Santa Anita & Garvey",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "22640",
+        "store_name": "VENICE BLVD. & CENTINELA, LOS ANGELES",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "00577",
+        "store_name": "HASTINGS RANCH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05502",
+        "store_name": "PCH & MARIPOSA, EL SEGUNDO",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05266",
+        "store_name": "SIERRA MADRE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "27293",
+        "store_name": "Sunland & I-5",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "22065",
+        "store_name": "LINCOLN & PICO",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "51180",
+        "store_name": "Sherman Way & Woodman",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "10140",
+        "store_name": "ROSECRANS & SHOEMAKER, NORWALK",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05680",
+        "store_name": "WHITTIER & LASERNA",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "27886",
+        "store_name": "SANTA ANITA & LIVE OAK, ARCADIA",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "09351",
+        "store_name": "WASHINGTON & LAMBERT",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "64612",
+        "store_name": "BELLFLOWER & CEDAR",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 1.9,
+      "max_days": 89.9,
+      "mean_days": 43.1,
+      "median_days": 17.9
+    }
+  },
+  {
+    "location": "Denver, CO, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:28:15.765936+00:00",
+    "total_raw_positions": 223,
+    "total_parsed_listings": 222,
+    "total_stores": 118,
+    "level_distribution": {
+      "critical": 104,
+      "low": 14
+    },
+    "critical_pct": 88.1,
+    "listing_count_distribution": {
+      "1": 14,
+      "2": 104
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.88,
+      "median": 2.0,
+      "stdev": 0.32
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.82,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Barista": 111,
+      "Shift Supervisor": 111
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 104,
+    "standard_pair_pct": 88.1,
+    "non_standard_stores": [
+      {
+        "store_num": "10862",
+        "store_name": "LOWRY TOWN CENTER",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "13490",
+        "store_name": "BELLEVIEW AND PRINCE- LITTLETON",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "17748",
+        "store_name": "ARAPAHOE & BOSTON - GREENWOOD VILLAGE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "58392",
+        "store_name": "GREEN VALLEY RANCH AND WALDEN",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05358",
+        "store_name": "120TH AND LAMAR",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "11995",
+        "store_name": "TOWN CENTER & SANTA FE, HIGHLANDS RANCH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "13604",
+        "store_name": "104TH & TOWER, COMMERCE CITY",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "05640",
+        "store_name": "16TH & TREMONT",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "53829",
+        "store_name": "CENTRAL PARK AND MOUNTVIEW",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "65148",
+        "store_name": "W COLFAX AND KIPLING ST.",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "24213",
+        "store_name": "MISSISSIPPI & ABILENE, AURORA",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "54555",
+        "store_name": "120TH AVE AND HOLLY ST.",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "11479",
+        "store_name": "136TH & COLORADO - THORNTON",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "52481",
+        "store_name": "QUINCY & PICADILLY",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 1.9,
+      "max_days": 89.9,
+      "mean_days": 42.9,
+      "median_days": 17.9
+    }
+  },
+  {
+    "location": "Miami, FL, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:28:38.387980+00:00",
+    "total_raw_positions": 132,
+    "total_parsed_listings": 131,
+    "total_stores": 69,
+    "level_distribution": {
+      "critical": 62,
+      "low": 7
+    },
+    "critical_pct": 89.9,
+    "listing_count_distribution": {
+      "1": 7,
+      "2": 62
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.9,
+      "median": 2,
+      "stdev": 0.3
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.87,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Shift Supervisor": 67,
+      "Barista": 64
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 62,
+    "standard_pair_pct": 89.9,
+    "non_standard_stores": [
+      {
+        "store_num": "13736",
+        "store_name": "CORAL WAY AND SW 27 AVE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "13824",
+        "store_name": "BISCAYNE BLVD & 30TH",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "24721",
+        "store_name": "LEJEUNE RD & NW 1ST ST",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "11749",
+        "store_name": "KENDALL DR & SW 107 AVE",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "08446",
+        "store_name": "14795 S DIXIE HIGHWAY",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "22268",
+        "store_name": "BISCAYNE BLVD & NE 121ST ST",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "10901",
+        "store_name": "BIRD RD & 144TH AVE",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 1.9,
+      "max_days": 89.9,
+      "mean_days": 44.9,
+      "median_days": 36.9
+    }
+  },
+  {
+    "location": "Atlanta, GA, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:28:53.443861+00:00",
+    "total_raw_positions": 83,
+    "total_parsed_listings": 82,
+    "total_stores": 43,
+    "level_distribution": {
+      "critical": 39,
+      "low": 4
+    },
+    "critical_pct": 90.7,
+    "listing_count_distribution": {
+      "1": 4,
+      "2": 39
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.91,
+      "median": 2,
+      "stdev": 0.29
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.86,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Barista": 41,
+      "Shift Supervisor": 41
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 39,
+    "standard_pair_pct": 90.7,
+    "non_standard_stores": [
+      {
+        "store_num": "14135",
+        "store_name": "MONROE DR & 8TH ST",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "11788",
+        "store_name": "I-285 @ PACES FERRY RD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "49980",
+        "store_name": "SPRING AND 4TH ST NW",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "13318",
+        "store_name": "100 COLONY SQUARE",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 1.9,
+      "max_days": 89.9,
+      "mean_days": 49.2,
+      "median_days": 63.9
+    }
+  },
+  {
+    "location": "Dallas, TX, US",
+    "radius": 25,
+    "scanned_at": "2026-03-16T02:29:23.852383+00:00",
+    "total_raw_positions": 175,
+    "total_parsed_listings": 170,
+    "total_stores": 88,
+    "level_distribution": {
+      "critical": 82,
+      "low": 6
+    },
+    "critical_pct": 93.2,
+    "listing_count_distribution": {
+      "1": 6,
+      "2": 82
+    },
+    "listing_count_stats": {
+      "min": 1,
+      "max": 2,
+      "mean": 1.93,
+      "median": 2.0,
+      "stdev": 0.25
+    },
+    "score_stats": {
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 2.9,
+      "median": 3.0
+    },
+    "role_totals": {
+      "Barista": 85,
+      "Shift Supervisor": 85
+    },
+    "unique_roles": [
+      "Barista",
+      "Shift Supervisor"
+    ],
+    "standard_pair_count": 82,
+    "standard_pair_pct": 93.2,
+    "non_standard_stores": [
+      {
+        "store_num": "22380",
+        "store_name": "Hall & 75",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "09850",
+        "store_name": "I-30 & COCKRELL HILL",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "84961",
+        "store_name": "635 & ELAM RD",
+        "listing_count": 1,
+        "open_roles": {
+          "Shift Supervisor": 1
+        },
+        "vacancy_score": 2.0
+      },
+      {
+        "store_num": "56298",
+        "store_name": "HWY 80 & BELTLINE",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "62185",
+        "store_name": "HWY 114 & 161",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      },
+      {
+        "store_num": "70230",
+        "store_name": "PRESTON & MCCALLUM BLVD",
+        "listing_count": 1,
+        "open_roles": {
+          "Barista": 1
+        },
+        "vacancy_score": 1.0
+      }
+    ],
+    "unusual_role_stores": [],
+    "posting_age_stats": {
+      "min_days": 1.9,
+      "max_days": 89.9,
+      "mean_days": 49.8,
+      "median_days": 63.9
+    }
+  }
+]

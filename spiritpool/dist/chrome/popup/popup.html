@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=360">
+  <title>SpiritPool</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Consent gate: shown until user opts in -->
+  <div id="consent-gate" class="hidden">
+    <div class="consent-modal">
+      <h2>Welcome to SpiritPool</h2>
+      <p>SpiritPool collects <strong>job listing data</strong> from sites you browse to help build staffing intelligence.</p>
+      <div class="consent-details">
+        <h3>What we collect</h3>
+        <ul>
+          <li>Job title, company, location, salary range</li>
+          <li>Posting date, applicant count, urgency badges</li>
+          <li>Store ratings &amp; review counts (Google Maps)</li>
+        </ul>
+        <h3>What we <em>never</em> collect</h3>
+        <ul>
+          <li>Passwords, cookies, or session tokens</li>
+          <li>Your browsing history beyond allowed job sites</li>
+          <li>Personal information (name, email, resume)</li>
+        </ul>
+        <h3>Allowed sites</h3>
+        <ul class="site-list">
+          <li>indeed.com</li>
+          <li>linkedin.com/jobs</li>
+          <li>glassdoor.com</li>
+          <li>google.com/maps</li>
+          <li>apply.starbucks.com</li>
+        </ul>
+      </div>
+      <label class="consent-checkbox">
+        <input type="checkbox" id="consent-check">
+        I understand and agree to share this data
+      </label>
+      <button id="consent-accept" disabled>Enable SpiritPool</button>
+    </div>
+  </div>
+
+  <!-- Main popup: shown after consent -->
+  <div id="main-popup" class="hidden">
+    <header>
+      <h1>🌊 SpiritPool</h1>
+      <span class="status" id="status-badge">Active</span>
+    </header>
+
+    <section class="tracking-toggle">
+      <div class="tracking-row">
+        <span class="tracking-label">Tracking</span>
+        <span class="tracking-timer" id="pause-timer"></span>
+        <label class="toggle">
+          <input type="checkbox" id="tracking-switch" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat">
+        <span class="stat-value" id="stat-today">0</span>
+        <span class="stat-label">Today</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-total">0</span>
+        <span class="stat-label">All time</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-queued">0</span>
+        <span class="stat-label">Queued</span>
+      </div>
+    </section>
+
+    <section class="sites">
+      <h2>Monitored Sites</h2>
+      <ul id="site-toggles"></ul>
+    </section>
+
+    <section class="cache-info">
+      <h2>Cached Signals</h2>
+      <ul id="cache-list"></ul>
+    </section>
+
+    <section class="flush-section">
+      <button id="btn-flush" class="btn-primary">⚡ Flush Now</button>
+      <button id="btn-burn" class="btn-burn">🔥 Burn</button>
+      <span id="flush-status" class="flush-status"></span>
+    </section>
+
+    <section class="backend-stats">
+      <h2>Server Database</h2>
+      <div id="backend-stats-content">
+        <span class="backend-offline">Checking...</span>
+      </div>
+    </section>
+
+    <footer>
+      <button id="btn-options" class="btn-link">Settings</button>
+      <button id="btn-revoke" class="btn-link btn-danger">Revoke Consent</button>
+    </footer>
+  </div>
+
+  <script src="../compat/browser-polyfill.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
