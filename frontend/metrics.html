@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Source Metrics — ChainStaffingTracker</title>
+    <link rel="stylesheet" href="css/openclaw.css" />
+    <style>
+        /* ── Metrics-specific overrides ─────────────────────── */
+        #kpi-row { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+        .source-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .source-table th,
+        .source-table td {
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .source-table th {
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .source-table th:hover { color: var(--text); }
+        .source-table th.sorted-asc::after  { content: ' ▲'; color: var(--green); }
+        .source-table th.sorted-desc::after { content: ' ▼'; color: var(--accent); }
+        .source-table td.num { text-align: right; font-family: 'Fira Code', monospace; font-size: 0.82rem; }
+
+        .grade { display: inline-block; width: 24px; height: 24px; border-radius: 4px;
+                  text-align: center; line-height: 24px; font-weight: 700; font-size: 0.75rem; }
+        .grade-A { background: var(--green); color: #111; }
+        .grade-B { background: var(--blue);  color: #fff; }
+        .grade-C { background: var(--yellow); color: #111; }
+        .grade-D { background: var(--orange); color: #111; }
+        .grade-F { background: var(--accent); color: #fff; }
+
+        .sparkline { display: flex; align-items: flex-end; gap: 1px; height: 28px; }
+        .sparkline .bar { min-width: 3px; background: var(--blue); border-radius: 1px 1px 0 0;
+                          transition: background 0.15s; }
+        .sparkline .bar:hover { background: var(--green); }
+
+        .progress-bar { background: var(--bg); border-radius: 3px; height: 6px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+        .fill-green  { background: var(--green); }
+        .fill-yellow { background: var(--yellow); }
+        .fill-red    { background: var(--accent); }
+
+        .detail-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center;
+        }
+        .detail-overlay.active { display: flex; }
+        .detail-card {
+            background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 24px; max-width: 900px; width: 95%; max-height: 85vh; overflow-y: auto;
+        }
+        .detail-card h2 { margin-bottom: 16px; }
+        .detail-close { float: right; background: none; border: 1px solid var(--border);
+                         color: var(--text); cursor: pointer; padding: 4px 10px; border-radius: var(--radius); }
+        .detail-close:hover { border-color: var(--accent); }
+
+        .req-type-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 8px; margin: 12px 0;
+        }
+        .req-type-card { background: var(--bg-card); padding: 10px; border-radius: var(--radius);
+                          border: 1px solid var(--border); }
+        .req-type-card .label { font-size: 0.78rem; color: var(--text-muted); }
+        .req-type-card .val { font-size: 1.1rem; font-weight: 600; }
+
+        .daily-chart { display: flex; align-items: flex-end; gap: 2px; height: 80px;
+                        padding: 8px 0; overflow-x: auto; }
+        .daily-chart .col { display: flex; flex-direction: column; align-items: center; gap: 1px;
+                             min-width: 16px; }
+        .daily-chart .col-bar { min-width: 14px; border-radius: 2px 2px 0 0; }
+        .daily-chart .col-lbl { font-size: 0.6rem; color: var(--text-dim); writing-mode: vertical-lr;
+                                  transform: rotate(180deg); height: 40px; }
+
+        .log-table { width: 100%; font-size: 0.78rem; border-collapse: collapse; margin-top: 12px; }
+        .log-table th, .log-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+        .log-table th { text-align: left; color: var(--text-muted); }
+
+        .badge-ok   { color: var(--green); }
+        .badge-fail { color: var(--accent); }
+
+        .dedup-section { margin-top: var(--gap); }
+        .dedup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+        .dedup-card { background: var(--bg-card); padding: 10px; border-radius: var(--radius);
+                       border: 1px solid var(--border); text-align: center; }
+        .dedup-card .val { font-size: 1.3rem; font-weight: 700; }
+        .dedup-card .lbl { font-size: 0.75rem; color: var(--text-muted); }
+
+        #dedup-run-btn { background: var(--purple); color: #fff; border: none; padding: 8px 16px;
+                          border-radius: var(--radius); cursor: pointer; margin-top: 8px; font-size: 0.85rem; }
+        #dedup-run-btn:hover { opacity: 0.85; }
+        #dedup-dry-run-btn { background: var(--bg); color: var(--text); border: 1px solid var(--border);
+                              padding: 8px 16px; border-radius: var(--radius); cursor: pointer;
+                              margin-top: 8px; font-size: 0.85rem; margin-right: 8px; }
+        #dedup-dry-run-btn:hover { border-color: var(--purple); }
+        #dedup-result { margin-top: 10px; font-size: 0.82rem; max-height: 200px; overflow-y: auto;
+                         background: var(--bg); padding: 8px; border-radius: var(--radius); display: none; }
+    </style>
+</head>
+<body>
+    <!-- ── Top bar ────────────────────────────────────────────── -->
+    <header id="topbar">
+        <div class="topbar-left">
+            <h1>📊 Source Metrics</h1>
+            <span class="subtitle">Data Source Effectiveness Dashboard</span>
+        </div>
+        <div class="topbar-right">
+            <select id="period-select" title="Lookback period">
+                <option value="7">7 days</option>
+                <option value="14">14 days</option>
+                <option value="30" selected>30 days</option>
+                <option value="90">90 days</option>
+            </select>
+            <button id="refresh-all" title="Refresh all panels">↻ Refresh</button>
+            <a href="/openclaw" class="link-back" title="OpenClaw dashboard">← OpenClaw</a>
+            <a href="/" class="link-back" title="Back to map">← Map</a>
+        </div>
+    </header>
+
+    <!-- ── Main grid ──────────────────────────────────────────── -->
+    <main id="grid">
+
+        <!-- Row 1: KPI cards -->
+        <section id="kpi-row">
+            <div class="kpi" id="kpi-queries">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Total Queries</div>
+            </div>
+            <div class="kpi" id="kpi-records">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Records Collected</div>
+            </div>
+            <div class="kpi" id="kpi-yield">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Avg Records/Query</div>
+            </div>
+            <div class="kpi" id="kpi-success">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Success Rate</div>
+            </div>
+            <div class="kpi" id="kpi-latency">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Avg Latency</div>
+            </div>
+            <div class="kpi" id="kpi-sources">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Active Sources</div>
+            </div>
+        </section>
+
+        <!-- Row 2: Effectiveness rankings table -->
+        <section class="panel" id="rankings-panel">
+            <h2>Source Effectiveness Rankings</h2>
+            <p class="panel-hint">Click any source row for detailed breakdown</p>
+            <div id="rankings-table-wrap">
+                <table class="source-table" id="rankings-table">
+                    <thead>
+                        <tr>
+                            <th data-col="grade">Grade</th>
+                            <th data-col="source_key">Source</th>
+                            <th data-col="queries">Queries</th>
+                            <th data-col="records">Records</th>
+                            <th data-col="records_per_query">Yield</th>
+                            <th data-col="success_rate">Success %</th>
+                            <th data-col="error_rate">Error %</th>
+                            <th data-col="avg_latency_ms">Latency</th>
+                            <th>Trend</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rankings-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Row 3: Dedup summary -->
+        <div id="bottom-row">
+            <section class="panel dedup-section" id="dedup-panel">
+                <h2>Store Deduplication</h2>
+                <p class="panel-hint">Cross-source store merge status</p>
+                <div class="dedup-grid" id="dedup-grid"></div>
+                <div style="margin-top:12px">
+                    <button id="dedup-dry-run-btn">🔍 Dry Run</button>
+                    <button id="dedup-run-btn">🧹 Run Dedup</button>
+                    <span id="dedup-status" style="color:var(--text-muted);font-size:0.82rem;margin-left:8px"></span>
+                </div>
+                <pre id="dedup-result"></pre>
+            </section>
+        </div>
+    </main>
+
+    <!-- ── Detail overlay ─────────────────────────────────────── -->
+    <div class="detail-overlay" id="detail-overlay">
+        <div class="detail-card" id="detail-card">
+            <button class="detail-close" id="detail-close">✕</button>
+            <h2 id="detail-title">Source Detail</h2>
+            <div id="detail-summary"></div>
+            <h3 style="margin-top:16px;color:var(--text-muted);font-size:0.85rem">Daily Activity</h3>
+            <div class="daily-chart" id="detail-daily"></div>
+            <h3 style="margin-top:16px;color:var(--text-muted);font-size:0.85rem">Request Types</h3>
+            <div class="req-type-grid" id="detail-types"></div>
+            <h3 style="margin-top:16px;color:var(--text-muted);font-size:0.85rem">Recent Requests</h3>
+            <table class="log-table" id="detail-log">
+                <thead><tr><th>Time</th><th>Type</th><th>Status</th><th>Items</th><th>Latency</th></tr></thead>
+                <tbody id="detail-log-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <footer id="footer">
+        <span>Source Metrics v0.1 — auto-refreshes every 30 s</span>
+        <span id="last-refresh">—</span>
+    </footer>
+
+    <script src="js/metrics.js"></script>
+</body>
+</html>

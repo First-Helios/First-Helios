@@ -75,6 +75,12 @@ def openclaw_session_view():
     return send_from_directory(app.static_folder, "openclaw_session.html")
 
 
+@app.route("/metrics")
+def metrics_dashboard():
+    """Serve the data source metrics dashboard."""
+    return send_from_directory(app.static_folder, "metrics.html")
+
+
 @app.route("/<path:path>")
 def static_files(path):
     """Serve static frontend files."""
@@ -1001,6 +1007,104 @@ def discovery_leads():
         })
     except Exception as e:
         logger.error("[Server] Discovery leads failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── Dedup endpoints ──────────────────────────────────────────────────────────
+
+@app.route("/api/dedup/summary")
+def dedup_summary():
+    """Return dedup status for a region.
+
+    Query params:
+      - region (optional, default: austin_tx)
+    """
+    region = request.args.get("region", "austin_tx")
+    try:
+        from backend.dedup import get_dedup_summary
+        summary = get_dedup_summary(region=region)
+        return jsonify({"status": "ok", **summary})
+    except Exception as e:
+        logger.error("[Server] Dedup summary failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/dedup/run", methods=["POST"])
+def dedup_run():
+    """Run bulk store deduplication.
+
+    JSON body:
+      - region (optional, default: austin_tx)
+      - dry_run (optional, default: true)
+    """
+    data = request.get_json(silent=True) or {}
+    region = data.get("region", "austin_tx")
+    dry_run = data.get("dry_run", True)
+
+    try:
+        from backend.dedup import deduplicate_stores
+        report = deduplicate_stores(region=region, dry_run=dry_run)
+        return jsonify({"status": "ok", **report.to_dict()})
+    except Exception as e:
+        logger.error("[Server] Dedup run failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── Source Metrics endpoints ─────────────────────────────────────────────────
+
+@app.route("/api/metrics/sources")
+def metrics_sources():
+    """Per-source effectiveness metrics — queries, records, yield, trends.
+
+    Query params:
+      - days (optional, default: 30): lookback period
+    """
+    days = request.args.get("days", 30, type=int)
+
+    try:
+        from backend.source_metrics import get_source_effectiveness
+        data = get_source_effectiveness(days=days)
+        return jsonify({"status": "ok", **data})
+    except Exception as e:
+        logger.error("[Server] Source metrics failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/metrics/sources/<source_key>")
+def metrics_source_detail(source_key):
+    """Detail view for one data source — daily breakdown + recent requests.
+
+    Query params:
+      - days (optional, default: 30)
+      - log_limit (optional, default: 50)
+    """
+    days = request.args.get("days", 30, type=int)
+    log_limit = request.args.get("log_limit", 50, type=int)
+
+    try:
+        from backend.source_metrics import get_source_detail
+        data = get_source_detail(source_key, days=days, log_limit=log_limit)
+        return jsonify({"status": "ok", **data})
+    except Exception as e:
+        logger.error("[Server] Source detail failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/metrics/effectiveness")
+def metrics_effectiveness():
+    """Cross-source comparison — ranked by data yield per query.
+
+    Query params:
+      - days (optional, default: 7): lookback window
+    """
+    days = request.args.get("days", 7, type=int)
+
+    try:
+        from backend.source_metrics import get_effectiveness_ranking
+        data = get_effectiveness_ranking(days=days)
+        return jsonify({"status": "ok", **data})
+    except Exception as e:
+        logger.error("[Server] Effectiveness ranking failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

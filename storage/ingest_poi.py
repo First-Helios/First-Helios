@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from backend.database import LocalEmployer, Store, get_session, init_db
+from backend.dedup import find_existing_match
 from collectors.schema import POIRecord
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,14 @@ def _ingest_chain_pois(
             store_num = rec.stable_id
             industry = _resolve_industry(rec, industry_map)
 
+            # ── Dedup gate: check for spatial match first ────────
             existing = session.query(Store).filter_by(store_num=store_num).first()
+            if not existing and rec.brand and rec.lat and rec.lng:
+                existing = find_existing_match(
+                    session, rec.brand, rec.lat, rec.lng, name=rec.name,
+                )
+                if existing:
+                    store_num = existing.store_num  # redirect to canonical
 
             if existing:
                 # Update if new data is more complete
