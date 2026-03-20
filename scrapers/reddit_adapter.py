@@ -137,9 +137,12 @@ class RedditAdapter(BaseScraper):
         """Fetch posts using PRAW."""
         posts: list[dict] = []
         try:
+            import time as _t
+            from backend.tracked_request import log_external
             sub = reddit.subreddit(subreddit)
             query = " OR ".join(search_terms[:5])
 
+            _t0 = _t.time()
             for submission in sub.search(query, sort="new", time_filter="month", limit=50):
                 posts.append({
                     "title": submission.title,
@@ -150,7 +153,18 @@ class RedditAdapter(BaseScraper):
                     "url": f"https://reddit.com{submission.permalink}",
                     "subreddit": subreddit,
                 })
+            _lat_ms = int((_t.time() - _t0) * 1000)
+            log_external(
+                "reddit_oauth", "praw_search",
+                url=f"https://oauth.reddit.com/r/{subreddit}/search",
+                success=True, latency_ms=_lat_ms, data_items=len(posts),
+            )
         except Exception as e:
+            log_external(
+                "reddit_oauth", "praw_search",
+                url=f"https://oauth.reddit.com/r/{subreddit}/search",
+                success=False, error_message=str(e)[:500],
+            )
             logger.error("[%s] PRAW fetch failed for r/%s: %s", self.name, subreddit, e)
 
         return posts
@@ -161,8 +175,10 @@ class RedditAdapter(BaseScraper):
         query = " OR ".join(search_terms[:3])
 
         try:
+            from backend.tracked_request import tracked_get
             url = f"https://www.reddit.com/r/{subreddit}/search.json"
-            resp = requests.get(
+            resp = tracked_get(
+                "reddit_json", "subreddit_search",
                 url,
                 params={
                     "q": query,

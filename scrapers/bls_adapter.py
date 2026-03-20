@@ -116,9 +116,16 @@ class BLSAdapter(BaseScraper):
 
     def _fetch_series(self, series_id: str) -> list[dict]:
         """Fetch time series data from BLS V1 API."""
+        from backend.tracked_request import check_budget, tracked_get
+
+        if not check_budget("bls_v1"):
+            logger.warning("[%s] BLS daily budget exhausted — skipping %s", self.name, series_id)
+            return []
+
         try:
             url = f"{BLS_V1_URL}{series_id}"
-            resp = requests.get(
+            resp = tracked_get(
+                "bls_v1", "series_fetch",
                 url,
                 headers={"User-Agent": self.http_cfg["user_agent"]},
                 timeout=self.http_cfg["timeout_seconds"],
@@ -127,7 +134,11 @@ class BLSAdapter(BaseScraper):
             data = resp.json()
 
             if data.get("status") != "REQUEST_SUCCEEDED":
-                logger.warning("[%s] BLS API status: %s", self.name, data.get("status"))
+                messages = data.get("message", [])
+                logger.warning("[%s] BLS API status: %s — %s", self.name, data.get("status"), messages)
+                # Detect server-side rate limit hit
+                if any("threshold" in str(m).lower() for m in messages):
+                    logger.error("[%s] BLS daily limit reached server-side", self.name)
                 return []
 
             series_data = data.get("Results", {}).get("series", [])

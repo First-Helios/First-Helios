@@ -637,6 +637,107 @@ def scheduler_status():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ── Rate Budget / Metrics endpoints ──────────────────────────────────────────
+
+@app.route("/api/rate-budget")
+def rate_budget_status():
+    """Return rate-limit budget status for all API sources.
+
+    Query params:
+      - source (optional): one source_key for detailed view
+    """
+    try:
+        from backend.rate_manager import rate_manager
+
+        source = request.args.get("source")
+        if source:
+            status = rate_manager.get_source_status(source)
+            return jsonify({"status": "ok", **status})
+
+        all_status = rate_manager.get_all_status()
+        return jsonify({
+            "status": "ok",
+            "count": len(all_status),
+            "budgets": all_status,
+        })
+    except Exception as e:
+        logger.error("[Server] Rate budget query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/rate-budget/history")
+def rate_budget_history():
+    """Return daily budget history for a source (scalability metrics).
+
+    Query params:
+      - source (required): source_key
+      - days (optional, default 30): how far back
+    """
+    source = request.args.get("source")
+    if not source:
+        return jsonify({"status": "error", "message": "source param required"}), 400
+
+    days = request.args.get("days", 30, type=int)
+
+    try:
+        from backend.rate_manager import rate_manager
+        history = rate_manager.get_source_history(source, days=days)
+        return jsonify({
+            "status": "ok",
+            "source": source,
+            "days": days,
+            "history": history,
+        })
+    except Exception as e:
+        logger.error("[Server] Rate history query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/rate-budget/log")
+def rate_budget_log():
+    """Return recent individual request log entries.
+
+    Query params:
+      - source (optional): filter to one source_key
+      - limit (optional, default 100)
+      - failures_only (optional): if 'true', only failed requests
+    """
+    source = request.args.get("source")
+    limit = request.args.get("limit", 100, type=int)
+    failures_only = request.args.get("failures_only", "false").lower() == "true"
+
+    try:
+        from backend.rate_manager import rate_manager
+        success_filter = False if failures_only else None
+        logs = rate_manager.get_request_log(
+            source_key=source, limit=limit, success_only=success_filter
+        )
+        return jsonify({
+            "status": "ok",
+            "count": len(logs),
+            "requests": logs,
+        })
+    except Exception as e:
+        logger.error("[Server] Rate log query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/rate-budget/scalability")
+def rate_budget_scalability():
+    """Return scalability planning report.
+
+    Shows bottlenecks (>80% utilization), expandable sources (<20%),
+    and failing sources (<80% success rate).
+    """
+    try:
+        from backend.rate_manager import rate_manager
+        report = rate_manager.get_scalability_report()
+        return jsonify({"status": "ok", **report})
+    except Exception as e:
+        logger.error("[Server] Scalability report failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ── Server startup ───────────────────────────────────────────────────────────
 
 def create_app() -> Flask:

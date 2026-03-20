@@ -97,7 +97,19 @@ class ReviewsAdapter(BaseScraper):
             async def _do_scrape():
                 signals: list[ScraperSignal] = []
                 async with GoogleMapsScraper(config) as scraper:
+                    import time as _t
+                    from backend.tracked_request import log_external
+                    _t0 = _t.time()
                     result = await scraper.scrape_search(search_query)
+                    _lat_ms = int((_t.time() - _t0) * 1000)
+                    _place_count = len(result.places) if result and result.places else 0
+                    log_external(
+                        "gmaps_scraper", "search_scrape",
+                        url="https://maps.google.com/",
+                        success=_place_count > 0, latency_ms=_lat_ms,
+                        data_items=_place_count,
+                        params={"query": search_query},
+                    )
                     if not result or not result.places:
                         return signals
 

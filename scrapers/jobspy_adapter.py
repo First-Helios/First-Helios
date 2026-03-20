@@ -102,6 +102,9 @@ class JobSpyAdapter(BaseScraper):
             logger.info("[%s] Searching: '%s' near %s", self.name, search_term, location)
 
             try:
+                import time as _t
+                from backend.tracked_request import log_external
+                _t0 = _t.time()
                 df = scrape_jobs(
                     site_name=["indeed", "glassdoor"],
                     search_term=search_term,
@@ -111,7 +114,21 @@ class JobSpyAdapter(BaseScraper):
                     results_wanted=100,
                     country_indeed="USA",
                 )
+                _lat_ms = int((_t.time() - _t0) * 1000)
+                _count = len(df) if df is not None and not df.empty else 0
+                log_external(
+                    "jobspy", "chain_search",
+                    url="https://www.indeed.com/",
+                    success=_count > 0, latency_ms=_lat_ms,
+                    data_items=_count,
+                    params={"search_term": search_term, "location": location},
+                )
             except Exception as e:
+                log_external(
+                    "jobspy", "chain_search",
+                    url="https://www.indeed.com/",
+                    success=False, error_message=str(e)[:500],
+                )
                 logger.error("[%s] scrape_jobs failed for '%s': %s", self.name, search_term, e)
                 continue
 
@@ -142,6 +159,9 @@ class JobSpyAdapter(BaseScraper):
             logger.info("[%s] Wage search: '%s' near %s", self.name, term, location)
 
             try:
+                import time as _t
+                from backend.tracked_request import log_external
+                _t0 = _t.time()
                 df = scrape_jobs(
                     site_name=["indeed", "glassdoor"],
                     search_term=term,
@@ -151,7 +171,21 @@ class JobSpyAdapter(BaseScraper):
                     results_wanted=100,
                     country_indeed="USA",
                 )
+                _lat_ms = int((_t.time() - _t0) * 1000)
+                _count = len(df) if df is not None and not df.empty else 0
+                log_external(
+                    "jobspy", "wage_search",
+                    url="https://www.indeed.com/",
+                    success=_count > 0, latency_ms=_lat_ms,
+                    data_items=_count,
+                    params={"search_term": term, "location": location},
+                )
             except Exception as e:
+                log_external(
+                    "jobspy", "wage_search",
+                    url="https://www.indeed.com/",
+                    success=False, error_message=str(e)[:500],
+                )
                 logger.error("[%s] scrape_jobs failed for '%s': %s", self.name, term, e)
                 continue
 

@@ -85,7 +85,9 @@ class OSMAdapter(BaseScraper):
             """
 
             logger.info("[OSM] Querying Overpass for %s in %s", brand, region)
-            resp = requests.post(
+            from backend.tracked_request import tracked_post
+            resp = tracked_post(
+                "overpass_api", "brand_query",
                 OVERPASS_URL,
                 data={"data": query},
                 timeout=90,

@@ -21,6 +21,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -243,6 +244,146 @@ class LocalEmployer(Base):
             "region": self.region,
             "confidence": self.confidence,
             "is_active": self.is_active,
+        }
+
+
+# ── API Rate Tracking Models ────────────────────────────────────────────────
+
+class ApiSource(Base):
+    """Registry of every external API / data source the system touches.
+
+    Every source gets a row regardless of whether it has hard rate limits.
+    daily_limit is REQUIRED — set to 10000 for uncapped sources so we have
+    a metric baseline for scalability planning.
+    """
+
+    __tablename__ = "api_sources"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_key = Column(String, unique=True, nullable=False, index=True)
+    display_name = Column(String, nullable=False)
+    base_url = Column(String, nullable=True)
+    auth_type = Column(String, default="none")          # none | api_key | oauth | browser
+    daily_limit = Column(Integer, nullable=False)        # REQUIRED — 10000 default for uncapped
+    min_delay_seconds = Column(Float, default=1.0)
+    reset_hour_utc = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "source_key": self.source_key,
+            "display_name": self.display_name,
+            "base_url": self.base_url,
+            "auth_type": self.auth_type,
+            "daily_limit": self.daily_limit,
+            "min_delay_seconds": self.min_delay_seconds,
+            "reset_hour_utc": self.reset_hour_utc,
+            "is_active": self.is_active,
+            "notes": self.notes,
+        }
+
+
+class ApiRequestLog(Base):
+    """Every individual external HTTP request the system makes.
+
+    Granular request-level tracking for success/fail rates,
+    latency percentiles, and data-yield metrics.
+    """
+
+    __tablename__ = "api_request_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_key = Column(String, nullable=False, index=True)
+    request_type = Column(String, nullable=False)           # e.g. 'series_fetch', 'geocode', 'search'
+    url = Column(String, nullable=True)
+    method = Column(String, default="GET")                  # GET | POST
+    status_code = Column(Integer, nullable=True)            # HTTP status or 0 for network error
+    success = Column(Boolean, nullable=False)
+    error_message = Column(String, nullable=True)
+    latency_ms = Column(Integer, nullable=True)             # round-trip time
+    response_bytes = Column(Integer, nullable=True)         # response size
+    data_items_returned = Column(Integer, nullable=True)    # records / rows / signals yielded
+    request_params_json = Column(Text, nullable=True)       # JSON — what was asked for
+    requested_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "source_key": self.source_key,
+            "request_type": self.request_type,
+            "url": self.url,
+            "method": self.method,
+            "status_code": self.status_code,
+            "success": self.success,
+            "error_message": self.error_message,
+            "latency_ms": self.latency_ms,
+            "response_bytes": self.response_bytes,
+            "data_items_returned": self.data_items_returned,
+            "requested_at": self.requested_at.isoformat() if self.requested_at else None,
+        }
+
+
+class RateBudget(Base):
+    """Daily usage rollup per API source.
+
+    One row per (source_key, date). Tracks how much of the daily_limit
+    has been consumed and how many requests succeeded vs failed.
+    Used for pacing, exhaustion prediction, and scalability metrics.
+    """
+
+    __tablename__ = "rate_budgets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_key = Column(String, nullable=False, index=True)
+    date = Column(String, nullable=False)                     # ISO 'YYYY-MM-DD'
+    daily_limit = Column(Integer, nullable=False)
+    used = Column(Integer, default=0)
+    succeeded = Column(Integer, default=0)
+    failed = Column(Integer, default=0)
+    total_latency_ms = Column(Integer, default=0)             # sum for avg calculation
+    total_data_items = Column(Integer, default=0)             # total records fetched
+    total_bytes = Column(Integer, default=0)                  # total response size
+    last_request_at = Column(DateTime, nullable=True)
+    last_error = Column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("source_key", "date", name="uq_rate_budget_source_date"),
+    )
+
+    @property
+    def remaining(self) -> int:
+        return max(0, self.daily_limit - self.used)
+
+    @property
+    def success_rate(self) -> float:
+        if self.used == 0:
+            return 0.0
+        return round(self.succeeded / self.used * 100, 1)
+
+    @property
+    def avg_latency_ms(self) -> float:
+        if self.used == 0:
+            return 0.0
+        return round(self.total_latency_ms / self.used, 1)
+
+    def to_dict(self) -> dict:
+        return {
+            "source_key": self.source_key,
+            "date": self.date,
+            "daily_limit": self.daily_limit,
+            "used": self.used,
+            "remaining": self.remaining,
+            "succeeded": self.succeeded,
+            "failed": self.failed,
+            "success_rate": self.success_rate,
+            "avg_latency_ms": self.avg_latency_ms,
+            "total_data_items": self.total_data_items,
+            "total_bytes": self.total_bytes,
+            "utilization_pct": round(self.used / self.daily_limit * 100, 1) if self.daily_limit else 0,
+            "last_request_at": self.last_request_at.isoformat() if self.last_request_at else None,
+            "last_error": self.last_error,
         }
 
 

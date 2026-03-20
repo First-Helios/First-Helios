@@ -84,7 +84,9 @@ class AllThePlacesAdapter(BaseScraper):
         #   GET {output_url_base}/output/{spider_name}.geojson
         urls_to_try: list[str] = [redirect_url]
         try:
-            meta_resp = requests.get(
+            from backend.tracked_request import tracked_get
+            meta_resp = tracked_get(
+                "atp_geojson", "latest_json",
                 f"{ATP_API_ROOT}/runs/latest.json",
                 timeout=15,
                 headers={"User-Agent": "ChainStaffingTracker/1.0"},
@@ -103,7 +105,9 @@ class AllThePlacesAdapter(BaseScraper):
         for url in urls_to_try:
             try:
                 logger.info("[ATP] Trying %s", url)
-                resp = requests.get(
+                from backend.tracked_request import tracked_get
+                resp = tracked_get(
+                    "atp_geojson", "geojson_download",
                     url,
                     timeout=120,
                     headers={"User-Agent": "ChainStaffingTracker/1.0"},
@@ -164,7 +168,9 @@ class AllThePlacesAdapter(BaseScraper):
 
         # Resolve parquet URL from latest.json
         try:
-            meta_resp = requests.get(
+            from backend.tracked_request import tracked_get, log_external
+            meta_resp = tracked_get(
+                "atp_parquet", "latest_json",
                 f"{ATP_API_ROOT}/runs/latest.json",
                 timeout=15,
                 headers={"User-Agent": "ChainStaffingTracker/1.0"},
@@ -195,12 +201,21 @@ class AllThePlacesAdapter(BaseScraper):
         ]
 
         try:
+            import time as _t
             logger.info("[ATP] Querying parquet for spider=%s in %s", filename, region)
             conn = duckdb.connect()
             conn.execute("INSTALL httpfs; LOAD httpfs;")
+            _t0 = _t.time()
             result = conn.execute(query, params).fetchall()
             columns = [desc[0] for desc in conn.description]
+            _lat_ms = int((_t.time() - _t0) * 1000)
             conn.close()
+
+            log_external(
+                "atp_parquet", "parquet_query",
+                url=parquet_url, success=True,
+                latency_ms=_lat_ms, data_items=len(result),
+            )
 
             # Convert rows back to GeoJSON-like feature dicts
             features: list[dict] = []

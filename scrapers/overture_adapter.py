@@ -176,8 +176,17 @@ class OvertureChainAdapter(BaseScraper):
             logger.info("[Overture] Connecting to S3 for chain=%s region=%s", self.chain, region)
             conn = _get_duckdb_conn()
             logger.info("[Overture] Querying (first run installs extensions, ~30s)...")
+            import time as _t
+            from backend.tracked_request import log_external
+            _t0 = _t.time()
             rows = conn.execute(query).fetchall()
+            _lat_ms = int((_t.time() - _t0) * 1000)
             conn.close()
+            log_external(
+                "overture_s3", "chain_query",
+                url=s3_path, success=True,
+                latency_ms=_lat_ms, data_items=len(rows),
+            )
 
             cols = ["overture_id", "name", "category", "address", "lng", "lat", "confidence"]
             places = [dict(zip(cols, r)) for r in rows]
@@ -289,8 +298,17 @@ class OvertureLocalAdapter(BaseScraper):
 
             logger.info("[Overture] Querying local employers for region=%s", region)
             conn = _get_duckdb_conn()
+            import time as _t
+            from backend.tracked_request import log_external
+            _t0 = _t.time()
             rows = conn.execute(query).fetchall()
+            _lat_ms = int((_t.time() - _t0) * 1000)
             conn.close()
+            log_external(
+                "overture_s3", "local_query",
+                url=s3_path, success=True,
+                latency_ms=_lat_ms, data_items=len(rows),
+            )
 
             cols = ["overture_id", "name", "category", "address", "lng", "lat", "confidence"]
             places = [dict(zip(cols, r)) for r in rows]

@@ -147,7 +147,15 @@ class CareersAPIScraper(BaseScraper):
         search_url = self.api_cfg.get("search_url", "")
         if search_url:
             try:
+                from backend.tracked_request import log_external
+                import time as _t
+                _t0 = _t.time()
                 session.get(search_url, timeout=self.http_cfg["timeout_seconds"])
+                log_external(
+                    "careers_workday", "session_warmup",
+                    url=search_url, success=True,
+                    latency_ms=int((_t.time() - _t0) * 1000),
+                )
             except requests.RequestException:
                 pass  # proceed anyway
 
@@ -160,13 +168,23 @@ class CareersAPIScraper(BaseScraper):
             }
 
             try:
+                import time as _t
+                from backend.tracked_request import log_external
+                _t0 = _t.time()
                 resp = session.post(
                     api_url,
                     json=payload,
                     timeout=self.http_cfg["timeout_seconds"],
                 )
+                _lat = int((_t.time() - _t0) * 1000)
 
                 if resp.status_code == 422:
+                    log_external(
+                        "careers_workday", "job_listing_page",
+                        url=api_url, method="POST",
+                        success=False, error_message="HTTP 422 — browser JS required",
+                        latency_ms=_lat,
+                    )
                     logger.warning(
                         "[%s] Workday API returned 422 — site may require "
                         "browser JS execution. Use JobSpy adapter as primary "
@@ -177,6 +195,14 @@ class CareersAPIScraper(BaseScraper):
 
                 resp.raise_for_status()
                 data = resp.json()
+                _items = len(data.get("jobPostings", []))
+                log_external(
+                    "careers_workday", "job_listing_page",
+                    url=api_url, method="POST",
+                    success=True, latency_ms=_lat,
+                    data_items=_items,
+                    response_bytes=len(resp.content) if resp.content else 0,
+                )
             except requests.RequestException as e:
                 logger.error("[%s] API request failed (page %d): %s", self.name, page, e)
                 break

@@ -278,7 +278,9 @@ def enrich_brands_from_wikidata(session) -> None:
     }}
     """
     try:
-        resp = requests.get(
+        from backend.tracked_request import tracked_get
+        resp = tracked_get(
+            "wikidata_sparql", "brand_enrichment",
             "https://query.wikidata.org/sparql",
             params={"query": sparql, "format": "json"},
             headers={"User-Agent": "ChainStaffingTracker/1.0"},
@@ -467,9 +469,11 @@ def pull_bls_wages(session) -> None:
         return
 
     try:
-        resp = requests.post(
+        from backend.tracked_request import tracked_post
+        resp = tracked_post(
+            "bls_v1_post", "wage_series_batch",
             "https://api.bls.gov/publicAPI/v1/timeseries/data/",
-            json={
+            json_body={
                 "seriesid": series_ids,
                 "startyear": "2024",
                 "endyear": "2025",

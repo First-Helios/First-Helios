@@ -72,31 +72,65 @@ def geocode(address: str) -> tuple[float | None, float | None]:
 
     # Query Nominatim
     try:
+        import time as _time_mod
+        from backend.tracked_request import log_external
+
         time.sleep(1.1)  # Nominatim hard rate limit: 1 req/sec
+        _t0 = _time_mod.time()
         location = _geolocator.geocode(address, timeout=10)
+        _lat_ms = int((_time_mod.time() - _t0) * 1000)
+
         if location:
+            log_external(
+                "nominatim", "geocode",
+                url="https://nominatim.openstreetmap.org/search",
+                success=True, latency_ms=_lat_ms, data_items=1,
+            )
             logger.info(
                 "[Geocoding] OK: %r → (%.4f, %.4f)",
                 address, location.latitude, location.longitude,
             )
             return location.latitude, location.longitude
 
+        log_external(
+            "nominatim", "geocode",
+            url="https://nominatim.openstreetmap.org/search",
+            success=True, latency_ms=_lat_ms, data_items=0,
+        )
+
         # Nominatim couldn't resolve — try a simplified version
         simplified = _simplify_address(address)
         if simplified != address:
             time.sleep(1.1)
+            _t0 = _time_mod.time()
             location = _geolocator.geocode(simplified, timeout=10)
+            _lat_ms2 = int((_time_mod.time() - _t0) * 1000)
             if location:
+                log_external(
+                    "nominatim", "geocode_simplified",
+                    url="https://nominatim.openstreetmap.org/search",
+                    success=True, latency_ms=_lat_ms2, data_items=1,
+                )
                 logger.info(
                     "[Geocoding] OK (simplified): %r → (%.4f, %.4f)",
                     simplified, location.latitude, location.longitude,
                 )
                 return location.latitude, location.longitude
+            log_external(
+                "nominatim", "geocode_simplified",
+                url="https://nominatim.openstreetmap.org/search",
+                success=True, latency_ms=_lat_ms2, data_items=0,
+            )
 
         logger.warning("[Geocoding] No result for: %r", address)
         return None, None
 
     except (GeocoderTimedOut, GeocoderServiceError) as e:
+        log_external(
+            "nominatim", "geocode",
+            url="https://nominatim.openstreetmap.org/search",
+            success=False, error_message=str(e)[:500],
+        )
         logger.error("[Geocoding] Service error for %r: %s", address, e)
         return None, None
     except Exception as e:

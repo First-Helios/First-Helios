@@ -74,6 +74,9 @@ class WorkdayScraper(BaseScraper):
     async def _scrape_async(
         self, region: str, radius_mi: int = 25
     ) -> list[ScraperSignal]:
+        import time as _pw_t
+        from backend.tracked_request import log_external
+        _pw_t0 = _pw_t.time()
         signals: list[ScraperSignal] = []
         try:
             region_cfg = get_region(region)
@@ -204,6 +207,14 @@ class WorkdayScraper(BaseScraper):
         except Exception as e:
             logger.error("[WorkdayScraper] Browser launch failed: %s", e)
 
+        _pw_lat = int((_pw_t.time() - _pw_t0) * 1000)
+        log_external(
+            "workday_playwright", "spa_scrape",
+            url=self.WORKDAY_URL,
+            success=len(signals) > 0, latency_ms=_pw_lat,
+            data_items=len(signals),
+            params={"region": region, "location_filter": location_filter},
+        )
         logger.info(
             "[WorkdayScraper] Total: %d listings extracted", len(signals)
         )
@@ -368,6 +379,9 @@ class GoogleMapsStoreFinder(BaseScraper):
 
     async def _scrape_async(self, region: str) -> list[dict]:
         """Returns list of store dicts with coordinates and metadata."""
+        import time as _gm_t
+        from backend.tracked_request import log_external
+        _gm_t0 = _gm_t.time()
         try:
             region_cfg = get_region(region)
         except KeyError:
@@ -468,6 +482,14 @@ class GoogleMapsStoreFinder(BaseScraper):
                 "[GoogleMapsStoreFinder] Browser launch failed: %s", e
             )
 
+        _gm_lat = int((_gm_t.time() - _gm_t0) * 1000)
+        log_external(
+            "gmaps_playwright", "store_search",
+            url=search_url,
+            success=len(stores) > 0, latency_ms=_gm_lat,
+            data_items=len(stores),
+            params={"region": region, "chain": self.chain_key},
+        )
         logger.info(
             "[GoogleMapsStoreFinder] Total: %d stores found", len(stores)
         )
