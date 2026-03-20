@@ -70,19 +70,38 @@
             }
             mdl.textContent = d.configured_model || '';
 
-            // Populate industry checkboxes (once)
+            // Populate industry checkboxes from /api/meta (source of truth)
             const grid = $('#industry-checkboxes');
-            if (grid && grid.children.length === 0 && d.industries) {
-                d.industries.forEach(function (key) {
-                    const lbl = document.createElement('label');
-                    const cb = document.createElement('input');
-                    cb.type = 'checkbox';
-                    cb.value = key;
-                    cb.checked = true;
-                    lbl.appendChild(cb);
-                    lbl.appendChild(document.createTextNode(' ' + key.replace(/_/g, ' ')));
-                    grid.appendChild(lbl);
-                });
+            if (grid && grid.children.length === 0) {
+                try {
+                    const meta = await window.heliosMeta;
+                    if (meta && meta.industries) {
+                        meta.industries.forEach(function (ind) {
+                            const lbl = document.createElement('label');
+                            const cb = document.createElement('input');
+                            cb.type = 'checkbox';
+                            cb.value = ind.key;
+                            cb.checked = true;
+                            lbl.appendChild(cb);
+                            lbl.appendChild(document.createTextNode(' ' + ind.display_name));
+                            grid.appendChild(lbl);
+                        });
+                    }
+                } catch (_) {
+                    // Fallback: use raw keys from status endpoint
+                    if (d.industries) {
+                        d.industries.forEach(function (key) {
+                            const lbl = document.createElement('label');
+                            const cb = document.createElement('input');
+                            cb.type = 'checkbox';
+                            cb.value = key;
+                            cb.checked = true;
+                            lbl.appendChild(cb);
+                            lbl.appendChild(document.createTextNode(' ' + key.replace(/_/g, ' ')));
+                            grid.appendChild(lbl);
+                        });
+                    }
+                }
             }
         } catch (e) {
             $('#status-dot').className = 'dot dot-error';

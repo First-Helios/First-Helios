@@ -44,35 +44,40 @@
     let storeMarkers = [];
     let localMarkers = [];
 
-    // ── Populate filter dropdowns from reference data ───────────────
+    // ── Populate filter dropdowns from /api/meta (source of truth) ────
     async function loadFilters() {
         try {
-            const resp = await fetch(API_BASE + '/api/ref/summary');
-            const data = await resp.json();
+            const data = await window.heliosMeta;
             if (data.status !== 'ok') return;
 
-            // Chain filter
+            // Chain filter — flat brand list grouped under optgroups by industry
             const chainSel = document.getElementById('chain-filter');
-            (data.brands || []).forEach(function (b) {
-                const opt = document.createElement('option');
-                opt.value = b.brand_key;
-                opt.textContent = b.display_name + (b.store_count ? ' (' + b.store_count + ')' : '');
-                chainSel.appendChild(opt);
+            (data.industries || []).forEach(function (ind) {
+                if (!ind.brands || ind.brands.length === 0) return;
+                var group = document.createElement('optgroup');
+                group.label = ind.display_name;
+                ind.brands.forEach(function (b) {
+                    var opt = document.createElement('option');
+                    opt.value = b.key;
+                    opt.textContent = b.display_name + (b.store_count ? ' (' + b.store_count + ')' : '');
+                    group.appendChild(opt);
+                });
+                chainSel.appendChild(group);
             });
 
             // Industry filter
             const indSel = document.getElementById('industry-filter');
             (data.industries || []).forEach(function (ind) {
                 const opt = document.createElement('option');
-                opt.value = ind.internal_key;
-                opt.textContent = ind.naics_title;
+                opt.value = ind.key;
+                opt.textContent = ind.display_name;
                 indSel.appendChild(opt);
             });
 
             // Store count badge
             updateCountBadge(data.store_total, data.local_employer_total);
         } catch (err) {
-            console.warn('Could not load reference data — using defaults', err);
+            console.warn('Could not load meta data — using defaults', err);
         }
     }
 

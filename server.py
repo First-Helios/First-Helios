@@ -462,6 +462,94 @@ def get_local_employers():
         session.close()
 
 
+# ── Meta endpoint — single source of truth for all frontends ─────────────────
+
+@app.route("/api/meta")
+def api_meta():
+    """Single source of truth for frontend filter population.
+
+    Merges the authoritative INDUSTRY_REGISTRY (display names, brands,
+    search terms) with live DB counts (stores per chain, local employers).
+    Every frontend page should call this once on load to populate dropdowns,
+    nav links, and industry/brand selectors.
+
+    Returns:
+      - industries: [{key, display_name, brand_count, brands: [{key, display_name}]}]
+      - brands: [{key, display_name, industry}]  (flat list, all brands)
+      - regions: [{key, display_name}]
+      - pages: [{path, label, description}]
+      - store_total, local_employer_total
+      - store_counts: {chain_key: count}
+    """
+    try:
+        from openclaw.industries import INDUSTRY_REGISTRY
+        from agent_interface.schemas import Region
+
+        engine = init_db()
+        session = get_session(engine)
+
+        # Live store counts per chain key
+        from sqlalchemy import func as sqlfunc
+        chain_counts = dict(
+            session.query(Store.chain, sqlfunc.count(Store.store_num))
+            .filter(Store.is_active.is_(True))
+            .group_by(Store.chain)
+            .all()
+        )
+        local_count = session.query(LocalEmployer).filter(
+            LocalEmployer.is_active.is_(True)
+        ).count()
+
+        # Build industry list with nested brands
+        industries = []
+        all_brands = []
+        for key, dim in INDUSTRY_REGISTRY.items():
+            brands = []
+            for mc in dim.mega_corps:
+                b = {
+                    "key": mc.key,
+                    "display_name": mc.display_name,
+                    "industry": key,
+                    "store_count": chain_counts.get(mc.key, 0),
+                }
+                brands.append(b)
+                all_brands.append(b)
+            industries.append({
+                "key": key,
+                "display_name": dim.display_name,
+                "description": dim.description,
+                "brand_count": len(brands),
+                "brands": brands,
+            })
+
+        # Regions
+        regions = [{"key": r.value, "display_name": r.value.replace("_", " ").title()} for r in Region]
+
+        # Pages — so nav can be built dynamically
+        pages = [
+            {"path": "/", "label": "Map", "icon": "🗺️", "description": "Leaflet store map with targeting"},
+            {"path": "/openclaw", "label": "OpenClaw", "icon": "🦀", "description": "Agent query monitor"},
+            {"path": "/openclaw/session", "label": "Session", "icon": "⚡", "description": "Live agent session viewer"},
+            {"path": "/metrics", "label": "Metrics", "icon": "📊", "description": "Data source effectiveness"},
+        ]
+
+        session.close()
+
+        return jsonify({
+            "status": "ok",
+            "industries": industries,
+            "brands": all_brands,
+            "regions": regions,
+            "pages": pages,
+            "store_total": sum(chain_counts.values()),
+            "local_employer_total": local_count,
+            "store_counts": chain_counts,
+        })
+    except Exception as e:
+        logger.error("[Server] Meta endpoint failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ── Reference Data endpoints ──────────────────────────────────────────────────
 
 @app.route("/api/ref/brands")
