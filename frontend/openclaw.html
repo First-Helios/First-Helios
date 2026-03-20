@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Dashboard — Agent Monitor</title>
+    <link rel="stylesheet" href="css/openclaw.css" />
+</head>
+<body>
+    <!-- ── Top bar ────────────────────────────────────────────── -->
+    <header id="topbar">
+        <div class="topbar-left">
+            <h1>🦀 OpenClaw</h1>
+            <span class="subtitle">Agent Query Monitor</span>
+        </div>
+        <div class="topbar-right">
+            <span id="status-dot" class="dot dot-unknown" title="Ollama status"></span>
+            <span id="status-label">Checking…</span>
+            <span id="model-label" class="tag"></span>
+            <button id="refresh-all" title="Refresh all panels">↻ Refresh</button>
+            <a href="/" class="link-back" title="Back to map">← Map</a>
+        </div>
+    </header>
+
+    <!-- ── Main grid ──────────────────────────────────────────── -->
+    <main id="grid">
+
+        <!-- Row 1: KPI cards -->
+        <section id="kpi-row">
+            <div class="kpi" id="kpi-total">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Total Requests</div>
+            </div>
+            <div class="kpi" id="kpi-success">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Successful</div>
+            </div>
+            <div class="kpi" id="kpi-failed">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Failed</div>
+            </div>
+            <div class="kpi" id="kpi-rejected">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Pre-validation Rejected</div>
+            </div>
+            <div class="kpi" id="kpi-records">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Records Returned</div>
+            </div>
+            <div class="kpi" id="kpi-latency">
+                <div class="kpi-value">—</div>
+                <div class="kpi-label">Avg Latency</div>
+            </div>
+        </section>
+
+        <!-- Row 2: Charts + Feed side by side -->
+        <div id="mid-row">
+            <!-- Left: breakdown charts -->
+            <section id="charts-col">
+                <div class="panel" id="intent-panel">
+                    <h2>By Intent</h2>
+                    <div class="bar-chart" id="intent-chart"></div>
+                </div>
+                <div class="panel" id="source-panel">
+                    <h2>By Source</h2>
+                    <div class="bar-chart" id="source-chart"></div>
+                </div>
+                <div class="panel" id="industry-panel">
+                    <h2>By Industry</h2>
+                    <div class="bar-chart" id="industry-chart"></div>
+                </div>
+            </section>
+
+            <!-- Right: live request feed -->
+            <section class="panel" id="feed-panel">
+                <h2>Recent Requests <span id="feed-count" class="badge">0</span></h2>
+                <div id="feed-list"></div>
+            </section>
+        </div>
+
+        <!-- Row 3: Wishlist + Session launcher -->
+        <div id="bottom-row">
+            <section class="panel" id="wishlist-panel">
+                <h2>Agent Wishlist <span id="wish-count" class="badge">0</span></h2>
+                <p class="panel-hint">Items the agent thinks would improve data collection</p>
+                <div id="wishlist-items"></div>
+            </section>
+
+            <section class="panel" id="session-panel">
+                <h2>Launch Session</h2>
+                <p class="panel-hint">Start a new OpenClaw research session — <a href="/openclaw/session" style="color:var(--purple)">or open the live session viewer →</a></p>
+                <form id="session-form">
+                    <label>
+                        Goal
+                        <textarea id="session-goal" rows="2" placeholder="e.g. Survey coffee and healthcare labor markets in Austin"></textarea>
+                    </label>
+                    <label>
+                        Industries
+                        <div id="industry-checkboxes" class="checkbox-grid"></div>
+                    </label>
+                    <label>
+                        Region
+                        <input type="text" id="session-region" value="austin_tx" />
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" id="launch-btn">🚀 Launch</button>
+                        <span id="session-status" class="session-msg"></span>
+                    </div>
+                </form>
+                <div id="session-result" class="hidden"></div>
+            </section>
+
+            <!-- Top errors -->
+            <section class="panel" id="errors-panel">
+                <h2>Top Errors</h2>
+                <div id="errors-list">
+                    <p class="empty-state">No errors today</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer id="footer">
+        <span>OpenClaw v0.1 — auto-refreshes every 15 s</span>
+        <span id="last-refresh">—</span>
+    </footer>
+
+    <script src="js/openclaw.js"></script>
+</body>
+</html>

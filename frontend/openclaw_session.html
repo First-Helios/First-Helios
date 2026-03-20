@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw — Live Session</title>
+    <style>
+        /* ── Reset ─────────────────────────────────────────────── */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg:         #0d1117;
+            --bg-surface: #161b22;
+            --bg-card:    #1c2333;
+            --border:     #30363d;
+            --accent:     #e94560;
+            --green:      #4ecca3;
+            --yellow:     #f0a500;
+            --blue:       #58a6ff;
+            --purple:     #bc8cff;
+            --orange:     #e67e22;
+            --text:       #c9d1d9;
+            --text-muted: #8b949e;
+            --text-dim:   #484f58;
+            --radius:     6px;
+        }
+
+        body {
+            font-family: 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Header ────────────────────────────────────────────── */
+        #header {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .hdr-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .hdr-left h1 {
+            font-size: 1.1rem;
+            color: var(--accent);
+        }
+
+        #session-state {
+            font-size: 0.78rem;
+            padding: 2px 10px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .state-idle     { background: #30363d; color: var(--text-muted); }
+        .state-running  { background: #1b4332; color: var(--green); }
+        .state-complete { background: #0f3460; color: var(--blue); }
+        .state-error    { background: #3d1c1c; color: var(--accent); }
+
+        .hdr-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .hdr-right a, .hdr-right button {
+            font-size: 0.8rem;
+            padding: 5px 12px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            text-decoration: none;
+            background: none;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+        .hdr-right a:hover, .hdr-right button:hover {
+            color: var(--text);
+            border-color: var(--text-muted);
+        }
+
+        /* ── Stats bar ─────────────────────────────────────────── */
+        #stats-bar {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            padding: 6px 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            flex-wrap: wrap;
+        }
+
+        .stat { display: flex; gap: 4px; align-items: center; }
+        .stat-value { color: var(--text); font-weight: 600; }
+        .stat-value.green  { color: var(--green); }
+        .stat-value.red    { color: var(--accent); }
+        .stat-value.yellow { color: var(--yellow); }
+        .stat-value.blue   { color: var(--blue); }
+
+        /* ── Main stream ───────────────────────────────────────── */
+        #stream {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .entry {
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            border-left: 3px solid transparent;
+            animation: entrySlide 0.2s ease;
+        }
+
+        @keyframes entrySlide {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Kind-based styling */
+        .entry-system {
+            border-left-color: var(--blue);
+            color: var(--blue);
+            font-size: 0.78rem;
+        }
+
+        .entry-thinking {
+            border-left-color: var(--purple);
+            background: #1c1c3a;
+        }
+
+        .entry-thinking .entry-label {
+            color: var(--purple);
+        }
+
+        .entry-action {
+            border-left-color: var(--green);
+            background: #1a2e26;
+        }
+
+        .entry-action .entry-label {
+            color: var(--green);
+        }
+
+        .entry-action.action-rejected {
+            border-left-color: var(--yellow);
+            background: #2e2a1a;
+        }
+
+        .entry-action.action-rejected .entry-label {
+            color: var(--yellow);
+        }
+
+        .entry-result {
+            border-left-color: var(--text-dim);
+            background: var(--bg-surface);
+            font-size: 0.78rem;
+        }
+
+        .entry-error {
+            border-left-color: var(--accent);
+            background: #2d1a1a;
+            color: var(--accent);
+        }
+
+        .entry-done {
+            border-left-color: var(--green);
+            background: #1a2e26;
+            font-weight: 600;
+        }
+
+        .entry-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .entry-label .ts {
+            color: var(--text-dim);
+            font-size: 0.65rem;
+            font-weight: normal;
+        }
+
+        .entry-label .meta-tag {
+            font-size: 0.65rem;
+            padding: 0 5px;
+            border-radius: 3px;
+            background: #30363d;
+            color: var(--text-muted);
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .entry-body {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .entry-body.collapsed {
+            max-height: 120px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .entry-body.collapsed::after {
+            content: '▼ click to expand';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            padding: 2px;
+            background: linear-gradient(transparent, var(--bg) 60%);
+            color: var(--text-dim);
+            font-size: 0.7rem;
+            cursor: pointer;
+        }
+
+        /* JSON syntax highlighting (simple) */
+        .json-key   { color: var(--blue); }
+        .json-str   { color: var(--green); }
+        .json-num   { color: var(--orange); }
+        .json-bool  { color: var(--purple); }
+        .json-null  { color: var(--text-dim); }
+
+        /* ── Launch bar (shown when idle) ──────────────────────── */
+        #launch-bar {
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        #launch-bar.hidden { display: none; }
+
+        #launch-bar input, #launch-bar select {
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 6px 10px;
+            border-radius: var(--radius);
+            font-family: inherit;
+            font-size: 0.82rem;
+        }
+
+        #launch-bar input:focus, #launch-bar select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        #launch-goal {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        #launch-btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 7px 18px;
+            border-radius: var(--radius);
+            font-family: inherit;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #launch-btn:hover { background: #c73a52; }
+        #launch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #launch-msg {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Empty state ───────────────────────────────────────── */
+        .empty-splash {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-dim);
+            gap: 8px;
+        }
+        .empty-splash .big { font-size: 2.5rem; }
+        .empty-splash .hint { font-size: 0.85rem; }
+
+        /* ── Pulse indicator ───────────────────────────────────── */
+        .pulse {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: pulse 1.2s ease infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(78, 204, 163, 0.5); }
+            50%      { opacity: 0.6; box-shadow: 0 0 0 6px rgba(78, 204, 163, 0); }
+        }
+
+        /* ── Responsive ────────────────────────────────────────── */
+        @media (max-width: 700px) {
+            #stream { padding: 8px 10px; }
+            .entry { font-size: 0.78rem; }
+            #stats-bar { gap: 10px; }
+        }
+
+        /* ── Scrollbar ─────────────────────────────────────────── */
+        #stream::-webkit-scrollbar { width: 6px; }
+        #stream::-webkit-scrollbar-track { background: var(--bg); }
+        #stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div id="header">
+        <div class="hdr-left">
+            <h1>🦀 OpenClaw Session</h1>
+            <span id="session-state" class="state-idle">idle</span>
+            <span id="session-id" style="font-size:0.72rem;color:var(--text-dim)"></span>
+        </div>
+        <div class="hdr-right">
+            <button id="scroll-toggle" title="Toggle auto-scroll">⬇ Auto-scroll</button>
+            <a href="/openclaw">← Dashboard</a>
+            <a href="/">← Map</a>
+        </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="stats-bar">
+        <div class="stat">Iteration <span class="stat-value blue" id="st-iter">0</span></div>
+        <div class="stat">Proposed <span class="stat-value" id="st-proposed">0</span></div>
+        <div class="stat">Executed <span class="stat-value green" id="st-executed">0</span></div>
+        <div class="stat">Rejected <span class="stat-value yellow" id="st-rejected">0</span></div>
+        <div class="stat">Wishes <span class="stat-value" id="st-wishes">0</span></div>
+        <div class="stat">Entries <span class="stat-value" id="st-entries">0</span></div>
+        <div class="stat" id="st-duration-wrap" style="display:none">Duration <span class="stat-value blue" id="st-duration">0s</span></div>
+    </div>
+
+    <!-- Stream -->
+    <div id="stream">
+        <div class="empty-splash" id="empty-splash">
+            <div class="big">🦀</div>
+            <div class="hint">No active session — launch one below or from the dashboard</div>
+        </div>
+    </div>
+
+    <!-- Launch bar -->
+    <div id="launch-bar">
+        <input type="text" id="launch-goal" placeholder="Research goal — e.g. Survey coffee labor market in Austin" />
+        <input type="text" id="launch-region" value="austin_tx" style="width:100px" />
+        <button id="launch-btn">🚀 Launch</button>
+        <span id="launch-msg"></span>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        const API = '';
+        const POLL_MS = 1200;   // poll every 1.2 s while running
+        const IDLE_POLL_MS = 5000;  // poll every 5 s when idle/complete
+        let lastSeq = 0;
+        let autoScroll = true;
+        let pollTimer = null;
+        let sessionStartTime = null;
+        let durationTimer = null;
+
+        // ── DOM shortcuts ────────────────────────────────────
+        const $ = (s) => document.querySelector(s);
+        const stream = $('#stream');
+        const emptySplash = $('#empty-splash');
+
+        // ── State badge ──────────────────────────────────────
+        function setStateBadge(state) {
+            const el = $('#session-state');
+            el.textContent = state;
+            el.className = 'state-' + state;
+        }
+
+        // ── Time formatting ──────────────────────────────────
+        function fmtTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso + 'Z');
+            return d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        }
+
+        // ── Simple JSON syntax highlight ─────────────────────
+        function highlightJSON(str) {
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/"([^"\\]*(\\.[^"\\]*)*)"\s*:/g, '<span class="json-key">"$1"</span>:')
+                .replace(/:\s*"([^"\\]*(\\.[^"\\]*)*)"/g, ': <span class="json-str">"$1"</span>')
+                .replace(/:\s*(-?\d+\.?\d*)/g, ': <span class="json-num">$1</span>')
+                .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
+                .replace(/:\s*(null)/g, ': <span class="json-null">null</span>');
+        }
+
+        // ── Render a single entry ────────────────────────────
+        function renderEntry(e) {
+            const div = document.createElement('div');
+
+            let cls = 'entry entry-' + e.kind;
+            let label = e.kind;
+            let body = e.content;
+            let bodyClass = 'entry-body';
+            let metaTags = '';
+
+            // Meta tags
+            if (e.meta) {
+                if (e.meta.action) {
+                    metaTags += '<span class="meta-tag">' + esc(e.meta.action) + '</span>';
+                    if (e.meta.action === 'rejected' || (body && body.includes('"rejected"'))) {
+                        cls += ' action-rejected';
+                    }
+                }
+                if (e.meta.iteration) {
+                    metaTags += '<span class="meta-tag">iter ' + e.meta.iteration + '</span>';
+                }
+                if (e.meta.model) {
+                    metaTags += '<span class="meta-tag">' + esc(e.meta.model) + '</span>';
+                }
+            }
+
+            // Kind-specific rendering
+            switch (e.kind) {
+                case 'thinking':
+                    label = '🧠 Thinking';
+                    // Try to pretty-format JSON inside the thinking
+                    try {
+                        const parsed = JSON.parse(body);
+                        body = JSON.stringify(parsed, null, 2);
+                        body = highlightJSON(body);
+                    } catch (_) {
+                        body = esc(body);
+                    }
+                    // Collapse long entries
+                    if (body.split('\n').length > 8) {
+                        bodyClass += ' collapsed';
+                    }
+                    break;
+                case 'action':
+                    label = '⚡ Result';
+                    try {
+                        // already JSON string
+                        body = highlightJSON(esc(body));
+                    } catch(_) {
+                        body = esc(body);
+                    }
+                    if (body.split('\n').length > 8) {
+                        bodyClass += ' collapsed';
+                    }
+                    break;
+                case 'system':
+                    label = '📡 System';
+                    body = esc(body);
+                    break;
+                case 'error':
+                    label = '❌ Error';
+                    body = esc(body);
+                    break;
+                case 'done':
+                    label = '✅ Session Complete';
+                    body = esc(body);
+                    break;
+                default:
+                    body = esc(body);
+            }
+
+            div.className = cls;
+            div.innerHTML =
+                '<div class="entry-label">' +
+                    label +
+                    ' <span class="ts">' + fmtTime(e.ts) + '</span>' +
+                    metaTags +
+                '</div>' +
+                '<div class="' + bodyClass + '">' + body + '</div>';
+
+            // Click to expand/collapse
+            const bodyEl = div.querySelector('.entry-body');
+            if (bodyEl && bodyEl.classList.contains('collapsed')) {
+                bodyEl.addEventListener('click', function () {
+                    this.classList.toggle('collapsed');
+                });
+            }
+
+            return div;
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        // ── Poll the live endpoint ───────────────────────────
+        async function poll() {
+            try {
+                const r = await fetch(API + '/api/openclaw/session/live?after=' + lastSeq);
+                const d = await r.json();
+                if (d.status !== 'ok') return;
+
+                // Update state
+                setStateBadge(d.state);
+                $('#session-id').textContent = d.session_id || '';
+                $('#st-entries').textContent = d.entry_count;
+
+                // Hide splash once entries arrive
+                if (d.entry_count > 0 && emptySplash) {
+                    emptySplash.style.display = 'none';
+                }
+
+                // Append new entries
+                if (d.entries && d.entries.length > 0) {
+                    d.entries.forEach(function (e) {
+                        stream.appendChild(renderEntry(e));
+                        lastSeq = Math.max(lastSeq, e.seq);
+
+                        // Update stat counters from meta
+                        updateStatsFromEntry(e);
+                    });
+
+                    if (autoScroll) {
+                        stream.scrollTop = stream.scrollHeight;
+                    }
+                }
+
+                // If complete/error + launch bar visible
+                if (d.state === 'complete' || d.state === 'error') {
+                    $('#launch-btn').disabled = false;
+                    $('#launch-msg').textContent = '';
+                    stopDurationClock();
+                }
+
+                // Adjust poll rate
+                schedulePoll(d.state === 'running' ? POLL_MS : IDLE_POLL_MS);
+
+            } catch (e) {
+                console.warn('Poll error', e);
+                schedulePoll(IDLE_POLL_MS);
+            }
+        }
+
+        function schedulePoll(ms) {
+            if (pollTimer) clearTimeout(pollTimer);
+            pollTimer = setTimeout(poll, ms);
+        }
+
+        // ── Update stats from entry metadata ─────────────────
+        function updateStatsFromEntry(e) {
+            if (e.kind === 'system' && e.content && e.content.startsWith('Iteration')) {
+                const m = e.content.match(/Iteration (\d+)/);
+                if (m) $('#st-iter').textContent = m[1];
+            }
+            if (e.kind === 'done' && e.meta) {
+                if (e.meta.queries_proposed != null) $('#st-proposed').textContent = e.meta.queries_proposed;
+                if (e.meta.queries_executed != null) $('#st-executed').textContent = e.meta.queries_executed;
+                if (e.meta.queries_rejected != null) $('#st-rejected').textContent = e.meta.queries_rejected;
+                if (e.meta.wishes_added != null) $('#st-wishes').textContent = e.meta.wishes_added;
+                if (e.meta.duration_seconds != null) {
+                    $('#st-duration').textContent = e.meta.duration_seconds + 's';
+                    $('#st-duration-wrap').style.display = '';
+                }
+            }
+            if (e.kind === 'action' && e.meta) {
+                // Incremental counting from action results
+                try {
+                    const parsed = JSON.parse(e.content);
+                    if (parsed.proposed != null) {
+                        const cur = parseInt($('#st-proposed').textContent) || 0;
+                        $('#st-proposed').textContent = cur + parsed.proposed;
+                    }
+                    if (parsed.validated != null) {
+                        const cur = parseInt($('#st-executed').textContent) || 0;
+                        $('#st-executed').textContent = cur + parsed.validated;
+                    }
+                    if (parsed.rejected != null) {
+                        const cur = parseInt($('#st-rejected').textContent) || 0;
+                        $('#st-rejected').textContent = cur + parsed.rejected;
+                    }
+                } catch (_) {}
+            }
+        }
+
+        // ── Duration clock ───────────────────────────────────
+        function startDurationClock() {
+            sessionStartTime = Date.now();
+            $('#st-duration-wrap').style.display = '';
+            durationTimer = setInterval(function () {
+                const s = Math.round((Date.now() - sessionStartTime) / 1000);
+                $('#st-duration').textContent = s + 's';
+            }, 1000);
+        }
+
+        function stopDurationClock() {
+            if (durationTimer) {
+                clearInterval(durationTimer);
+                durationTimer = null;
+            }
+        }
+
+        // ── Launch session ───────────────────────────────────
+        async function launch() {
+            const goal = $('#launch-goal').value.trim();
+            if (!goal) {
+                $('#launch-msg').textContent = 'Enter a goal';
+                return;
+            }
+            const region = $('#launch-region').value.trim() || 'austin_tx';
+
+            $('#launch-btn').disabled = true;
+            $('#launch-msg').textContent = 'Starting…';
+
+            // Reset stream
+            stream.innerHTML = '';
+            lastSeq = 0;
+            $('#st-iter').textContent = '0';
+            $('#st-proposed').textContent = '0';
+            $('#st-executed').textContent = '0';
+            $('#st-rejected').textContent = '0';
+            $('#st-wishes').textContent = '0';
+
+            try {
+                const r = await fetch(API + '/api/openclaw/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'qwen2.5:7b-instruct',
+                        region: region,
+                        goal: goal,
+                    }),
+                });
+                const d = await r.json();
+                if (d.status === 'ok') {
+                    $('#launch-msg').textContent = 'Session running — watching…';
+                    startDurationClock();
+                    schedulePoll(500); // fast first poll
+                } else {
+                    $('#launch-msg').textContent = d.message || 'Failed';
+                    $('#launch-btn').disabled = false;
+                }
+            } catch (e) {
+                $('#launch-msg').textContent = 'Request failed: ' + e.message;
+                $('#launch-btn').disabled = false;
+            }
+        }
+
+        // ── Auto-scroll toggle ───────────────────────────────
+        function initScrollToggle() {
+            const btn = $('#scroll-toggle');
+            btn.addEventListener('click', function () {
+                autoScroll = !autoScroll;
+                btn.textContent = autoScroll ? '⬇ Auto-scroll' : '⏸ Scroll paused';
+                btn.style.borderColor = autoScroll ? 'var(--green)' : 'var(--yellow)';
+            });
+        }
+
+        // ── Init ─────────────────────────────────────────────
+        function init() {
+            initScrollToggle();
+            $('#launch-btn').addEventListener('click', launch);
+            $('#launch-goal').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') launch();
+            });
+            poll(); // first poll
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    })();
+    </script>
+</body>
+</html>

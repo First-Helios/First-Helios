@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -60,6 +61,18 @@ CORS(app)
 def index():
     """Serve the Leaflet map frontend."""
     return send_from_directory(app.static_folder, "index.html")
+
+
+@app.route("/openclaw")
+def openclaw_dashboard():
+    """Serve the OpenClaw monitoring dashboard."""
+    return send_from_directory(app.static_folder, "openclaw.html")
+
+
+@app.route("/openclaw/session")
+def openclaw_session_view():
+    """Serve the live OpenClaw session viewer."""
+    return send_from_directory(app.static_folder, "openclaw_session.html")
 
 
 @app.route("/<path:path>")
@@ -1012,6 +1025,193 @@ def ollama_research():
 
     except Exception as e:
         logger.error("[Server] Ollama research failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── OpenClaw endpoints ───────────────────────────────────────────────────────
+
+@app.route("/api/openclaw/status")
+def openclaw_status():
+    """OpenClaw orchestrator status, model availability, and industry registry."""
+    try:
+        from openclaw.orchestrator import get_claw_status
+        return jsonify({"status": "ok", **get_claw_status()})
+    except Exception as e:
+        logger.error("[Server] OpenClaw status failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/industries")
+def openclaw_industries():
+    """List all industry dimensions the agent can explore."""
+    try:
+        from openclaw.industries import get_all_industries, get_all_mega_corps
+        industries = get_all_industries()
+        corps = get_all_mega_corps()
+        return jsonify({
+            "status": "ok",
+            "industries": industries,
+            "mega_corps": corps,
+            "industry_count": len(industries),
+            "mega_corp_count": len(corps),
+        })
+    except Exception as e:
+        logger.error("[Server] OpenClaw industries failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/prevalidate", methods=["POST"])
+def openclaw_prevalidate():
+    """Pre-validate proposed queries without executing them.
+
+    Body: {"queries": [{"intent": "...", "brand": "...", ...}]}
+    """
+    data = request.get_json(silent=True) or {}
+    queries = data.get("queries", [])
+    if not queries:
+        return jsonify({"status": "error", "message": "Provide 'queries' list"}), 400
+    try:
+        from openclaw.prevalidate import prevalidate_agent_plan
+        result = prevalidate_agent_plan(queries)
+        return jsonify({"status": "ok", **result.to_dict()})
+    except Exception as e:
+        logger.error("[Server] OpenClaw prevalidate failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/tracker")
+def openclaw_tracker():
+    """Today's request success/fail rollup."""
+    try:
+        from openclaw.tracker import request_tracker
+        limit = request.args.get("limit", 50, type=int)
+        rollup = request_tracker.get_today_rollup()
+        recent = request_tracker.get_recent_records(limit=limit)
+        return jsonify({
+            "status": "ok",
+            "rollup": rollup.to_dict(),
+            "recent_requests": recent,
+        })
+    except Exception as e:
+        logger.error("[Server] OpenClaw tracker failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/wishlist")
+def openclaw_wishlist():
+    """Today's agent wishlist."""
+    try:
+        from openclaw.wishlist import wishlist_manager
+        wl = wishlist_manager.get_today()
+        return jsonify({"status": "ok", **wl.to_dict()})
+    except Exception as e:
+        logger.error("[Server] OpenClaw wishlist failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/wishlist/review", methods=["POST"])
+def openclaw_wishlist_review():
+    """Approve or reject a wish item.
+
+    Body: {"wish_id": "wish-2026-03-20-001", "approved": true, "note": "Looks good"}
+    """
+    data = request.get_json(silent=True) or {}
+    wish_id = data.get("wish_id", "")
+    approved = data.get("approved", False)
+    note = data.get("note", "")
+
+    if not wish_id:
+        return jsonify({"status": "error", "message": "Provide 'wish_id'"}), 400
+
+    try:
+        from openclaw.wishlist import wishlist_manager
+        result = wishlist_manager.review_wish(wish_id, approved, note)
+        if result:
+            return jsonify({"status": "ok", "wish": result})
+        return jsonify({"status": "error", "message": f"Wish '{wish_id}' not found"}), 404
+    except Exception as e:
+        logger.error("[Server] OpenClaw wishlist review failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/run", methods=["POST"])
+def openclaw_run():
+    """Start an OpenClaw research session (non-blocking).
+
+    Body: {
+        "model": "qwen2.5:7b-instruct",
+        "region": "austin_tx",
+        "goal": "Survey coffee and healthcare labor markets",
+        "industries": ["coffee_cafe", "healthcare_clinic"]
+    }
+
+    Returns immediately.  Poll /api/openclaw/session/live to watch progress.
+    """
+    data = request.get_json(silent=True) or {}
+    model = data.get("model", "qwen2.5:7b-instruct")
+    region = data.get("region", "austin_tx")
+    goal = data.get("goal", "")
+    industries = data.get("industries")
+
+    try:
+        from openclaw.orchestrator import OpenClawOrchestrator, session_log
+        orch = OpenClawOrchestrator(model=model)
+        if not orch.is_available():
+            return jsonify({
+                "status": "error",
+                "message": f"Model '{model}' not available. Pull it: ollama pull {model}",
+                "available_models": orch.list_models(),
+            }), 503
+
+        # If session already running, reject
+        if session_log.state == "running":
+            return jsonify({
+                "status": "error",
+                "message": "A session is already running. Wait for it to finish or view it at /openclaw/session",
+                "session": session_log.snapshot(),
+            }), 409
+
+        # Run in background thread
+        def _run():
+            try:
+                orch.run(region=region, goal=goal, industries=industries)
+            except Exception as exc:
+                logger.error("[Server] Background OpenClaw run failed: %s", exc)
+                session_log.append("error", f"Session crashed: {exc}")
+                session_log.finish("error")
+
+        t = threading.Thread(target=_run, daemon=True, name="openclaw-session")
+        t.start()
+
+        return jsonify({
+            "status": "ok",
+            "message": "Session started.  Poll /api/openclaw/session/live to follow progress.",
+            "session": session_log.snapshot(),
+        })
+    except Exception as e:
+        logger.error("[Server] OpenClaw run failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/openclaw/session/live")
+def openclaw_session_live():
+    """Poll the live session thought log.
+
+    Query params:
+        after: int — only return entries with seq > after (for incremental polling)
+    """
+    try:
+        from openclaw.orchestrator import session_log
+        after = request.args.get("after", 0, type=int)
+        entries = session_log.get_since(after)
+        snap = session_log.snapshot()
+        return jsonify({
+            "status": "ok",
+            **snap,
+            "entries": entries,
+        })
+    except Exception as e:
+        logger.error("[Server] Session live failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
