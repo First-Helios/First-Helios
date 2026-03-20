@@ -1,27 +1,0 @@
-22:08:38 [INFO] Fetching first page for 'austin' (radius 25 mi)…
-22:08:39 [INFO] Total positions: 106 | Actual page size: 10
-Fetching pages:   0%|          | 0/10 [00:00<?, ?page/s]Fetching pages:  10%|█         | 1/10 [00:01<00:11,  1.31s/page]Fetching pages:  20%|██        | 2/10 [00:02<00:11,  1.39s/page]Fetching pages:  30%|███       | 3/10 [00:04<00:09,  1.41s/page]Fetching pages:  40%|████      | 4/10 [00:05<00:08,  1.46s/page]Fetching pages:  50%|█████     | 5/10 [00:07<00:07,  1.41s/page]Fetching pages:  60%|██████    | 6/10 [00:08<00:05,  1.42s/page]Fetching pages:  70%|███████   | 7/10 [00:09<00:04,  1.43s/page]Fetching pages:  80%|████████  | 8/10 [00:11<00:02,  1.43s/page]Fetching pages:  90%|█████████ | 9/10 [00:13<00:01,  1.56s/page]Fetching pages: 100%|██████████| 10/10 [00:14<00:00,  1.52s/page]Fetching pages: 100%|██████████| 10/10 [00:14<00:00,  1.46s/page]
-22:08:54 [INFO] Collected 106 raw listings.
-22:08:54 [INFO] Parsed 104 store-level listings (2 skipped).
-22:08:54 [INFO] Found 53 unique stores with at least one open position.
-22:08:54 [INFO] Vacancy summary: {'critical': 51, 'low': 2, 'unknown': 0}
-22:08:54 [INFO] Applied 6 geocode overrides from geocode_overrides.json.
-22:08:54 [INFO] Geocoding 47 store addresses…
-Geocoding:   0%|          | 0/47 [00:00<?, ?store/s]Geocoding:   2%|▏         | 1/47 [00:01<00:53,  1.16s/store]Geocoding:   4%|▍         | 2/47 [00:03<01:23,  1.85s/store]Geocoding:   6%|▋         | 3/47 [00:05<01:31,  2.07s/store]Geocoding:   9%|▊         | 4/47 [00:06<01:13,  1.71s/store]Geocoding:  11%|█         | 5/47 [00:08<01:03,  1.52s/store]Geocoding:  13%|█▎        | 6/47 [00:10<01:13,  1.80s/store]Geocoding:  15%|█▍        | 7/47 [00:12<01:19,  1.98s/store]Geocoding:  17%|█▋        | 8/47 [00:15<01:21,  2.09s/store]Geocoding:  19%|█▉        | 9/47 [00:16<01:08,  1.80s/store]Geocoding:  21%|██▏       | 10/47 [00:23<02:10,  3.52s/store]Geocoding:  23%|██▎       | 11/47 [00:24<01:40,  2.80s/store]Geocoding:  26%|██▌       | 12/47 [00:32<02:27,  4.20s/store]Geocoding:  28%|██▊       | 13/47 [00:34<02:03,  3.63s/store]Geocoding:  30%|██▉       | 14/47 [00:35<01:35,  2.88s/store]Geocoding:  32%|███▏      | 15/47 [00:38<01:26,  2.72s/store]Geocoding:  34%|███▍      | 16/47 [00:40<01:20,  2.60s/store]Geocoding:  36%|███▌      | 17/47 [00:41<01:04,  2.17s/store]Geocoding:  38%|███▊      | 18/47 [00:42<00:54,  1.87s/store]Geocoding:  40%|████      | 19/47 [00:45<00:56,  2.01s/store]Geocoding:  43%|████▎     | 20/47 [00:46<00:47,  1.76s/store]Geocoding:  45%|████▍     | 21/47 [00:47<00:41,  1.59s/store]Geocoding:  47%|████▋     | 22/47 [00:48<00:36,  1.46s/store]Geocoding:  49%|████▉     | 23/47 [00:49<00:33,  1.38s/store]Geocoding:  51%|█████     | 24/47 [00:52<00:38,  1.66s/store]Geocoding:  53%|█████▎    | 25/47 [00:53<00:33,  1.51s/store]Geocoding:  55%|█████▌    | 26/47 [00:54<00:29,  1.41s/store]Geocoding:  57%|█████▋    | 27/47 [00:56<00:33,  1.68s/store]Geocoding:  60%|█████▉    | 28/47 [00:59<00:35,  1.88s/store]Geocoding:  62%|██████▏   | 29/47 [01:00<00:30,  1.67s/store]Geocoding:  64%|██████▍   | 30/47 [01:02<00:31,  1.87s/store]Geocoding:  66%|██████▌   | 31/47 [01:03<00:26,  1.66s/store]Geocoding:  68%|██████▊   | 32/47 [01:06<00:27,  1.87s/store]Geocoding:  70%|███████   | 33/47 [01:07<00:23,  1.66s/store]Geocoding:  72%|███████▏  | 34/47 [01:09<00:24,  1.87s/store]Geocoding:  74%|███████▍  | 35/47 [01:12<00:24,  2.01s/store]Geocoding:  77%|███████▋  | 36/47 [01:13<00:19,  1.76s/store]Geocoding:  79%|███████▊  | 37/47 [01:14<00:15,  1.59s/store]Geocoding:  81%|████████  | 38/47 [01:16<00:15,  1.78s/store]Geocoding:  83%|████████▎ | 39/47 [01:17<00:12,  1.59s/store]Geocoding:  85%|████████▌ | 40/47 [01:20<00:12,  1.82s/store]Geocoding:  87%|████████▋ | 41/47 [01:22<00:11,  1.98s/store]Geocoding:  89%|████████▉ | 42/47 [01:23<00:08,  1.73s/store]Geocoding:  91%|█████████▏| 43/47 [01:25<00:07,  1.92s/store]Geocoding:  94%|█████████▎| 44/47 [01:28<00:06,  2.05s/store]Geocoding:  96%|█████████▌| 45/47 [01:29<00:03,  1.79s/store]Geocoding:  98%|█████████▊| 46/47 [01:30<00:01,  1.60s/store]Geocoding: 100%|██████████| 47/47 [01:31<00:00,  1.47s/store]Geocoding: 100%|██████████| 47/47 [01:31<00:00,  1.95s/store]
-22:10:25 [INFO] Merged with existing data (109 total stores).
-22:10:25 [INFO] Written to frontend/data/vacancies.json  (109 stores)
-22:10:25 [INFO] History snapshot appended to frontend/data/history.json  (7 total snapshots)
-
-── Top 10 most vacant stores ──────────────────────────────
-Store#   Level       Score  Listings  Name
-─────────────────────────────────────────────────────────────────
-19801    critical      3.0         2  3RD & LAVACA
-06319    critical      3.0         2  5TH & LAMAR
-06368    critical      3.0         2  15TH & SAN ANTONIO
-49678    critical      3.0         2  Barton Springs & S. Lamar
-65081    critical      3.0         2  22ND & RIO GRANDE WEST CAMPUS
-06284    critical      3.0         2  W. 24TH & NUECES
-06356    critical      3.0         2  SOUTH LAMAR & COLLIER
-20458    critical      3.0         2  RIVERSIDE & ARENA
-20588    critical      3.0         2  1ST & OLTORF
-08632    critical      3.0         2  OLTORF & I-35
