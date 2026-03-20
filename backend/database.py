@@ -30,6 +30,17 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path(__file__).parent.parent / "data" / "tracker.db"
 
 
+def _import_reference_models() -> None:
+    """Import reference models so their tables register with Base.metadata.
+
+    Called lazily in init_db() to avoid circular-import issues.
+    """
+    try:
+        import backend.models.reference  # noqa: F401
+    except ImportError:
+        logger.debug("[Database] backend.models.reference not found — skipping")
+
+
 class Base(DeclarativeBase):
     """Declarative base for all tracker models."""
     pass
@@ -196,6 +207,45 @@ class WageIndex(Base):
         }
 
 
+class LocalEmployer(Base):
+    """Local (non-chain) employer POI.
+
+    Populated by OvertureLocalAdapter and OSM adapter.
+    Used by targeting.py for local_alternatives score component.
+    """
+
+    __tablename__ = "local_employers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    overture_id = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    category = Column(String, nullable=True)
+    industry = Column(String, nullable=True)
+    address = Column(String, nullable=True, default="")
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    region = Column(String, nullable=True)
+    confidence = Column(Float, nullable=True)
+    is_active = Column(Boolean, default=True)
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "overture_id": self.overture_id,
+            "name": self.name,
+            "category": self.category,
+            "industry": self.industry,
+            "address": self.address,
+            "lat": self.lat,
+            "lng": self.lng,
+            "region": self.region,
+            "confidence": self.confidence,
+            "is_active": self.is_active,
+        }
+
+
 # ── Engine + Session factory ─────────────────────────────────────────────────
 
 def get_engine(db_path: Path | None = None):
@@ -208,6 +258,7 @@ def get_engine(db_path: Path | None = None):
 
 def init_db(db_path: Path | None = None):
     """Create all tables if they don't exist."""
+    _import_reference_models()
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
     logger.info("[Database] Initialized tracker.db at %s", db_path or DB_PATH)

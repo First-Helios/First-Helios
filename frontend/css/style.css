@@ -63,6 +63,34 @@ body {
     background: #c73a52;
 }
 
+/* Local employer toggle */
+#local-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.82rem;
+    color: #6c5ce7;
+    cursor: pointer;
+    user-select: none;
+}
+
+#local-toggle input[type="checkbox"] {
+    accent-color: #6c5ce7;
+    cursor: pointer;
+}
+
+/* Store count badge */
+#store-count {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    background: #0f3460;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    color: #aaa;
+    white-space: nowrap;
+}
+
 #map {
     flex: 1;
     min-height: 400px;

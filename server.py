@@ -25,6 +25,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from backend.database import (
+    LocalEmployer,
     Score,
     Signal,
     Snapshot,
@@ -32,6 +33,12 @@ from backend.database import (
     WageIndex,
     get_session,
     init_db,
+)
+from backend.models.reference import (
+    BrandProfile,
+    CategoryMapping,
+    IndustryCategory,
+    RegionProfile,
 )
 from backend.scheduler import get_scheduler_status, init_scheduler
 from backend.scoring.engine import compute_all_scores
@@ -325,6 +332,294 @@ def get_wage_index():
 
     except Exception as e:
         logger.error("[Server] Wage index query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ── Stores endpoint ──────────────────────────────────────────────────────────
+
+@app.route("/api/stores")
+def get_stores():
+    """Return all stores with coordinates and scores.
+
+    Query params:
+      - region (default: austin_tx)
+      - chain (optional): filter to one chain
+      - industry (optional): filter to one industry
+    """
+    region = request.args.get("region", "austin_tx")
+    chain = request.args.get("chain")
+    industry = request.args.get("industry")
+
+    engine = init_db()
+    session = get_session(engine)
+
+    try:
+        q = session.query(Store).filter(
+            Store.region == region,
+            Store.is_active.is_(True),
+            Store.lat.isnot(None),
+        )
+        if chain:
+            q = q.filter(Store.chain == chain)
+        if industry:
+            q = q.filter(Store.industry == industry)
+        stores = q.all()
+
+        result = []
+        for s in stores:
+            score_row = (
+                session.query(Score)
+                .filter_by(store_num=s.store_num, score_type="composite")
+                .first()
+            )
+            result.append({
+                "store_num": s.store_num,
+                "chain": s.chain,
+                "name": s.store_name,
+                "address": s.address,
+                "lat": s.lat,
+                "lng": s.lng,
+                "industry": s.industry,
+                "score": score_row.value if score_row else None,
+                "tier": score_row.tier if score_row else "unknown",
+            })
+
+        return jsonify({"status": "ok", "stores": result, "count": len(result)})
+
+    except Exception as e:
+        logger.error("[Server] Stores query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ── Local Employers endpoint ─────────────────────────────────────────────────
+
+@app.route("/api/local-employers")
+def get_local_employers():
+    """Return local (non-chain) employer POIs.
+
+    Query params:
+      - region (default: austin_tx)
+      - industry (optional): filter to one industry
+    """
+    region = request.args.get("region", "austin_tx")
+    industry = request.args.get("industry")
+
+    engine = init_db()
+    session = get_session(engine)
+
+    try:
+        q = session.query(LocalEmployer).filter_by(
+            region=region, is_active=True
+        )
+        if industry:
+            q = q.filter_by(industry=industry)
+        employers = q.all()
+
+        return jsonify({
+            "status": "ok",
+            "employers": [
+                {
+                    "name": e.name,
+                    "category": e.category,
+                    "industry": e.industry,
+                    "address": e.address,
+                    "lat": e.lat,
+                    "lng": e.lng,
+                }
+                for e in employers
+                if e.lat and e.lng
+            ],
+            "count": len(employers),
+        })
+
+    except Exception as e:
+        logger.error("[Server] Local employers query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ── Reference Data endpoints ──────────────────────────────────────────────────
+
+@app.route("/api/ref/brands")
+def ref_brands():
+    """Return all known brand profiles.
+
+    Query params:
+      - industry (optional): filter to one internal_industry key
+      - chain_only (optional): if 'true', only return is_chain=True
+    """
+    industry = request.args.get("industry")
+    chain_only = request.args.get("chain_only", "false").lower() == "true"
+
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        q = session.query(BrandProfile)
+        if industry:
+            q = q.filter(BrandProfile.internal_industry == industry)
+        if chain_only:
+            q = q.filter(BrandProfile.is_chain.is_(True))
+        brands = q.order_by(BrandProfile.display_name).all()
+        return jsonify({
+            "status": "ok",
+            "count": len(brands),
+            "brands": [b.to_dict() for b in brands],
+        })
+    except Exception as e:
+        logger.error("[Server] Ref brands query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/ref/industries")
+def ref_industries():
+    """Return the NAICS-based industry hierarchy.
+
+    Query params:
+      - leaf_only (optional): if 'true', only return deepest-level codes
+    """
+    leaf_only = request.args.get("leaf_only", "false").lower() == "true"
+
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        cats = session.query(IndustryCategory).order_by(IndustryCategory.naics_code).all()
+        if leaf_only:
+            # A leaf node is one whose naics_code is not the parent_naics of another
+            parent_codes = {c.parent_naics for c in cats if c.parent_naics}
+            cats = [c for c in cats if c.naics_code not in parent_codes]
+        return jsonify({
+            "status": "ok",
+            "count": len(cats),
+            "industries": [c.to_dict() for c in cats],
+        })
+    except Exception as e:
+        logger.error("[Server] Ref industries query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/ref/regions")
+def ref_regions():
+    """Return regional economic profiles."""
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        regions = session.query(RegionProfile).order_by(RegionProfile.region_key).all()
+        return jsonify({
+            "status": "ok",
+            "count": len(regions),
+            "regions": [r.to_dict() for r in regions],
+        })
+    except Exception as e:
+        logger.error("[Server] Ref regions query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/ref/categories")
+def ref_categories():
+    """Return category crosswalk mappings.
+
+    Query params:
+      - source (optional): filter to one source_system (overture, osm, indeed, etc.)
+    """
+    source = request.args.get("source")
+
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        q = session.query(CategoryMapping)
+        if source:
+            q = q.filter(CategoryMapping.source_system == source)
+        mappings = q.order_by(CategoryMapping.source_system, CategoryMapping.source_value).all()
+        return jsonify({
+            "status": "ok",
+            "count": len(mappings),
+            "categories": [m.to_dict() for m in mappings],
+        })
+    except Exception as e:
+        logger.error("[Server] Ref categories query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/ref/summary")
+def ref_summary():
+    """Return a combined summary: brands + industries + region + store counts.
+
+    Used by the frontend to populate all filter dropdowns in a single request.
+    """
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        brands = session.query(BrandProfile).filter(
+            BrandProfile.is_chain.is_(True)
+        ).order_by(BrandProfile.display_name).all()
+
+        industries = session.query(IndustryCategory).order_by(
+            IndustryCategory.naics_code
+        ).all()
+        # Only leaf industries
+        parent_codes = {c.parent_naics for c in industries if c.parent_naics}
+        leaf_industries = [c for c in industries if c.naics_code not in parent_codes]
+
+        regions = session.query(RegionProfile).all()
+
+        # Store count per chain
+        from sqlalchemy import func
+        chain_counts = dict(
+            session.query(Store.chain, func.count(Store.store_num))
+            .filter(Store.is_active.is_(True))
+            .group_by(Store.chain)
+            .all()
+        )
+
+        # Local employer count
+        local_count = session.query(LocalEmployer).filter(
+            LocalEmployer.is_active.is_(True)
+        ).count()
+
+        return jsonify({
+            "status": "ok",
+            "brands": [
+                {
+                    "brand_key": b.brand_key,
+                    "display_name": b.display_name,
+                    "internal_industry": b.internal_industry,
+                    "store_count": chain_counts.get(b.brand_key, 0),
+                }
+                for b in brands
+            ],
+            "industries": [
+                {
+                    "internal_key": c.internal_key,
+                    "naics_title": c.naics_title,
+                    "naics_code": c.naics_code,
+                }
+                for c in leaf_industries
+            ],
+            "regions": [
+                {
+                    "region_key": r.region_key,
+                    "display_name": r.display_name,
+                }
+                for r in regions
+            ],
+            "store_total": sum(chain_counts.values()),
+            "local_employer_total": local_count,
+        })
+    except Exception as e:
+        logger.error("[Server] Ref summary query failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         session.close()

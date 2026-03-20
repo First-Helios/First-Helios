@@ -12,10 +12,11 @@
         <h1>ChainStaffingTracker</h1>
         <p>Community Job Fair Targeting — Austin, TX</p>
         <div id="controls">
-            <select id="chain-filter">
+            <select id="industry-filter" title="Filter by industry">
+                <option value="">All Industries</option>
+            </select>
+            <select id="chain-filter" title="Filter by chain">
                 <option value="">All Chains</option>
-                <option value="starbucks">Starbucks</option>
-                <option value="dutch_bros">Dutch Bros</option>
             </select>
             <select id="tier-filter">
                 <option value="">All Tiers</option>
@@ -23,7 +24,11 @@
                 <option value="elevated">Elevated</option>
                 <option value="adequate">Adequate</option>
             </select>
+            <label id="local-toggle" title="Show local (non-chain) employers">
+                <input type="checkbox" id="show-local" /> Local
+            </label>
             <button id="refresh-btn">Refresh</button>
+            <span id="store-count" title="Visible stores">—</span>
         </div>
     </div>
     <div id="map"></div>

@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from backend.database import Score, Store, WageIndex, get_session, init_db
+from backend.database import LocalEmployer, Score, Store, WageIndex, get_session, init_db
 from config.loader import (
     get_local_radius_mi,
     get_targeting_tiers,
@@ -201,7 +201,7 @@ def compute_targeting(
 
             # Component 4: Local alternatives (density of non-chain hiring)
             local_alt = _compute_local_alternatives(
-                store, store_coords, local_radius
+                store, store_coords, local_radius, session=session
             )
 
             # Weighted composite
@@ -302,15 +302,39 @@ def _compute_local_alternatives(
     store: Store,
     store_coords: dict,
     radius_mi: float,
+    session=None,
 ) -> float:
     """Compute local employer density score.
 
-    Counts non-same-chain stores within radius.
+    First tries real LocalEmployer data from the local_employers table.
+    Falls back to counting non-same-chain stores within radius if no
+    local employers exist yet.
     More local alternatives = higher score (better for job fair).
     """
     if not store.lat or not store.lng:
         return 50.0
 
+    # Try real LocalEmployer data first
+    if session is not None:
+        try:
+            employers = (
+                session.query(LocalEmployer)
+                .filter_by(industry=store.industry, is_active=True)
+                .all()
+            )
+            if employers:
+                nearby = sum(
+                    1
+                    for e in employers
+                    if e.lat and e.lng
+                    and _haversine(store.lat, store.lng, e.lat, e.lng) <= radius_mi
+                )
+                # Normalize: 5+ nearby = 100, 0 = 0
+                return min(nearby / 5.0, 1.0) * 100
+        except Exception:
+            pass  # fall through to store_coords fallback
+
+    # Fallback: count non-same-chain stores within radius
     count = 0
     for sn, (lat, lng, s) in store_coords.items():
         if sn == store.store_num:

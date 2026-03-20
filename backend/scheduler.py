@@ -102,6 +102,54 @@ def init_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # ── AllThePlaces store discovery — weekly Sunday 2am ────────────
+    scheduler.add_job(
+        _run_alltheplaces,
+        "cron",
+        day_of_week="sun",
+        hour=2,
+        minute=0,
+        id="atp_starbucks_austin",
+        name="AllThePlaces Starbucks Austin",
+        replace_existing=True,
+    )
+
+    # ── Overture chain cross-validation — weekly Sunday 2:15am ────
+    scheduler.add_job(
+        _run_overture_chain,
+        "cron",
+        day_of_week="sun",
+        hour=2,
+        minute=15,
+        id="overture_starbucks_austin",
+        name="Overture Chain Starbucks Austin",
+        replace_existing=True,
+    )
+
+    # ── OSM fallback — weekly Sunday 2:30am ──────────────────────
+    scheduler.add_job(
+        _run_osm,
+        "cron",
+        day_of_week="sun",
+        hour=2,
+        minute=30,
+        id="osm_starbucks_austin",
+        name="OSM Starbucks Austin",
+        replace_existing=True,
+    )
+
+    # ── Overture local employers — weekly Sunday 3am ─────────────
+    scheduler.add_job(
+        _run_overture_local,
+        "cron",
+        day_of_week="sun",
+        hour=3,
+        minute=0,
+        id="overture_local_austin",
+        name="Overture Local Employers Austin",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
@@ -208,3 +256,77 @@ def _run_bls() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] BLS job failed: %s", e)
+
+
+def _run_alltheplaces() -> None:
+    """Scheduled job: AllThePlaces store discovery."""
+    try:
+        from scrapers.alltheplaces_adapter import AllThePlacesAdapter
+        from backend.ingest import ingest_signals
+
+        logger.info("[Scheduler] Running AllThePlaces discovery")
+        for chain_key in ["starbucks", "dutch_bros", "mcdonalds"]:
+            adapter = AllThePlacesAdapter()
+            adapter.chain = chain_key
+            signals = adapter.scrape("austin_tx")
+            if signals:
+                ingest_signals(signals, region="austin_tx")
+            logger.info("[Scheduler] AllThePlaces %s: %d signals", chain_key, len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] AllThePlaces job failed: %s", e)
+
+
+def _run_overture_chain() -> None:
+    """Scheduled job: Overture chain cross-validation."""
+    try:
+        from scrapers.overture_adapter import OvertureChainAdapter
+        from backend.ingest import ingest_signals
+
+        logger.info("[Scheduler] Running Overture chain discovery")
+        for chain_key in ["starbucks", "dutch_bros"]:
+            adapter = OvertureChainAdapter()
+            adapter.chain = chain_key
+            signals = adapter.scrape("austin_tx")
+            if signals:
+                ingest_signals(signals, region="austin_tx")
+            logger.info("[Scheduler] Overture chain %s: %d signals", chain_key, len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] Overture chain job failed: %s", e)
+
+
+def _run_overture_local() -> None:
+    """Scheduled job: Overture local employers discovery."""
+    try:
+        from scrapers.overture_adapter import OvertureLocalAdapter
+        from backend.ingest import ingest_signals
+
+        logger.info("[Scheduler] Running Overture local employer discovery")
+        adapter = OvertureLocalAdapter()
+        signals = adapter.scrape("austin_tx")
+        if signals:
+            ingest_signals(signals, region="austin_tx")
+        logger.info("[Scheduler] Overture local: %d signals", len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] Overture local job failed: %s", e)
+
+
+def _run_osm() -> None:
+    """Scheduled job: OSM Overpass store fallback."""
+    try:
+        from scrapers.osm_adapter import OSMAdapter
+        from backend.ingest import ingest_signals
+
+        logger.info("[Scheduler] Running OSM Overpass discovery")
+        for chain_key in ["starbucks", "dutch_bros", "mcdonalds"]:
+            adapter = OSMAdapter()
+            adapter.chain = chain_key
+            signals = adapter.scrape("austin_tx")
+            if signals:
+                ingest_signals(signals, region="austin_tx")
+            logger.info("[Scheduler] OSM %s: %d signals", chain_key, len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] OSM job failed: %s", e)
