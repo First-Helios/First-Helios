@@ -1,0 +1,22 @@
+{
+  "date": "2026-03-20",
+  "generated_by_model": "qwen2.5:7b-instruct",
+  "session_summary": "Session ended after 12 iterations. Proposed: 11, Executed: 8, Rejected: 3, Wishes: 1",
+  "count": 1,
+  "items": [
+    {
+      "wish_id": "wish-2026-03-20-001",
+      "category": "new_term",
+      "title": "Add matcha bar search term",
+      "description": "Matcha-focused cafes are growing in Austin, missing from poi_search_terms",
+      "suggested_value": "matcha bar",
+      "context": {
+        "industry": "coffee_cafe"
+      },
+      "status": "pending",
+      "created_at": "2026-03-20T22:45:41.262958",
+      "reviewed_at": null,
+      "reviewer_note": null
+    }
+  ]
+}

@@ -121,6 +121,14 @@ class Brand(str, Enum):
     ROTO_ROOTER = "roto_rooter"
 
 
+class AgentMode(str, Enum):
+    """Operational mode controlling freshness, fallbacks, and success criteria."""
+    COLLECT = "collect"     # External API collection — bypass freshness, no DB fallback
+    ANALYZE = "analyze"     # Compute on existing data — no external API calls
+    MONITOR = "monitor"     # Lightweight health/status checks — read-only
+    MIXED   = "mixed"       # Smart default — freshness-aware, DB fallback allowed
+
+
 class DataSource(str, Enum):
     """Which collector(s) to use."""
     AUTO = "auto"                   # system picks best available
@@ -182,6 +190,135 @@ FRESHNESS_THRESHOLDS: dict[str, float] = {
 }
 
 # ══════════════════════════════════════════════════════════════════════
+# Mode configuration — per-mode behavioral rules
+# ══════════════════════════════════════════════════════════════════════
+
+# Intents that hit external APIs (collectors)
+COLLECTION_INTENTS: set[str] = {
+    Intent.POI_CHAIN_LOCATIONS.value,
+    Intent.POI_LOCAL_DENSITY.value,
+    Intent.WAGE_BASELINE.value,
+    Intent.JOB_POSTING_VOLUME.value,
+    Intent.SENTIMENT_CHECK.value,
+}
+
+# Intents that compute on existing data (no external calls)
+ANALYSIS_INTENTS: set[str] = {
+    Intent.SCORE_REFRESH.value,
+    Intent.DATA_QUALITY_AUDIT.value,
+    Intent.DISCOVERY_SCAN.value,
+    Intent.ECONOMIC_CONTEXT.value,
+}
+
+# Lightweight read-only status intents
+MONITOR_INTENTS: set[str] = {
+    Intent.DATA_QUALITY_AUDIT.value,
+    Intent.CAMPAIGN_STATUS.value,
+}
+
+
+@dataclass
+class ModeConfig:
+    """Behavioral rules for an agent operational mode."""
+    name: str
+    description: str
+    bypass_freshness: bool          # skip freshness gates entirely
+    allow_db_fallback: bool         # if no collector runs, report DB data
+    require_new_data: bool          # success requires records_new > 0
+    allow_collection: bool          # allow external API calls
+    allowed_intents: set[str]       # which intents can be executed
+    max_api_calls_per_query: int    # per-query API budget cap
+    success_on_partial: bool        # treat PARTIAL status as success in logging
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "bypass_freshness": self.bypass_freshness,
+            "allow_db_fallback": self.allow_db_fallback,
+            "require_new_data": self.require_new_data,
+            "allow_collection": self.allow_collection,
+            "allowed_intents": sorted(self.allowed_intents),
+            "max_api_calls_per_query": self.max_api_calls_per_query,
+            "success_on_partial": self.success_on_partial,
+        }
+
+
+MODE_CONFIG: dict[str, ModeConfig] = {
+    AgentMode.COLLECT.value: ModeConfig(
+        name="collect",
+        description=(
+            "Targeted data acquisition from external APIs for STALE or missing data. "
+            "Freshness gates ACTIVE — queries for already-fresh data are rejected "
+            "before the agent considers them. No DB fallback — if a collector fails, "
+            "the query fails. Success requires at least one new record from an external source."
+        ),
+        bypass_freshness=False,
+        allow_db_fallback=False,
+        require_new_data=True,
+        allow_collection=True,
+        allowed_intents=COLLECTION_INTENTS | {
+            Intent.DATA_QUALITY_AUDIT.value,   # allowed for planning
+            Intent.CAMPAIGN_STATUS.value,       # allowed for budget checks
+            Intent.DISCOVERY_SCAN.value,        # allowed for targeting
+        },
+        max_api_calls_per_query=10,
+        success_on_partial=False,
+    ),
+    AgentMode.ANALYZE.value: ModeConfig(
+        name="analyze",
+        description=(
+            "Compute insights from existing data. "
+            "No external API calls attempted. "
+            "Success = computation completed on DB data."
+        ),
+        bypass_freshness=True,
+        allow_db_fallback=True,
+        require_new_data=False,
+        allow_collection=False,
+        allowed_intents=ANALYSIS_INTENTS | {Intent.CAMPAIGN_STATUS.value},
+        max_api_calls_per_query=0,
+        success_on_partial=True,
+    ),
+    AgentMode.MONITOR.value: ModeConfig(
+        name="monitor",
+        description=(
+            "Lightweight health and status checks. "
+            "Read-only, no collection or scoring mutations. "
+            "Success = report generated."
+        ),
+        bypass_freshness=True,
+        allow_db_fallback=True,
+        require_new_data=False,
+        allow_collection=False,
+        allowed_intents=MONITOR_INTENTS,
+        max_api_calls_per_query=0,
+        success_on_partial=True,
+    ),
+    AgentMode.MIXED.value: ModeConfig(
+        name="mixed",
+        description=(
+            "Smart default — freshness-aware with DB fallback. "
+            "Uses freshness thresholds to avoid redundant collection. "
+            "Cached data counts as success."
+        ),
+        bypass_freshness=False,
+        allow_db_fallback=True,
+        require_new_data=False,
+        allow_collection=True,
+        allowed_intents={i.value for i in Intent},  # all intents
+        max_api_calls_per_query=5,
+        success_on_partial=True,
+    ),
+}
+
+
+def get_mode_config(mode: AgentMode | str) -> ModeConfig:
+    """Get the ModeConfig for a given mode."""
+    key = mode.value if isinstance(mode, AgentMode) else mode
+    return MODE_CONFIG[key]
+
+# ══════════════════════════════════════════════════════════════════════
 # Intent → required fields validation
 # ══════════════════════════════════════════════════════════════════════
 
@@ -213,6 +350,7 @@ class AgentQuery:
 
     intent: Intent
     region: Region
+    mode: AgentMode = AgentMode.MIXED
     priority: QueuePriority = QueuePriority.NORMAL
     brand: Optional[Brand] = None
     industry: Optional[Industry] = None
@@ -230,6 +368,14 @@ class AgentQuery:
         """Return list of validation errors, or empty list if valid."""
         errors: list[str] = []
 
+        # Check mode allows this intent
+        mode_cfg = get_mode_config(self.mode)
+        if self.intent.value not in mode_cfg.allowed_intents:
+            errors.append(
+                f"Intent '{self.intent.value}' not allowed in mode '{self.mode.value}'. "
+                f"Allowed intents: {sorted(mode_cfg.allowed_intents)}"
+            )
+
         # Check intent-specific required fields
         required = INTENT_REQUIRED_FIELDS.get(self.intent.value, [])
         for f in required:
@@ -246,8 +392,13 @@ class AgentQuery:
         if self.max_results < 1:
             errors.append("max_results must be >= 1")
 
-        # Cap max_budget_spend
-        if self.max_budget_spend > 50:
+        # Cap max_budget_spend (respect mode cap)
+        effective_budget_cap = min(50, mode_cfg.max_api_calls_per_query) if mode_cfg.max_api_calls_per_query > 0 else 50
+        if self.max_budget_spend > effective_budget_cap:
+            errors.append(
+                f"max_budget_spend ({self.max_budget_spend}) exceeds mode '{self.mode.value}' "
+                f"cap of {effective_budget_cap}"
+            )
             errors.append("max_budget_spend cannot exceed 50")
         if self.max_budget_spend < 1:
             errors.append("max_budget_spend must be >= 1")
@@ -260,6 +411,7 @@ class AgentQuery:
             "query_id": self.query_id,
             "intent": self.intent.value,
             "region": self.region.value,
+            "mode": self.mode.value,
             "priority": self.priority.value,
             "brand": self.brand.value if self.brand else None,
             "industry": self.industry.value if self.industry else None,
@@ -378,6 +530,10 @@ def get_all_options() -> dict:
             {"value": e.value, "weight": e.weight}
             for e in QueuePriority
         ],
+        "modes": [
+            {"value": e.value, "config": MODE_CONFIG[e.value].to_dict()}
+            for e in AgentMode
+        ],
         "intent_required_fields": INTENT_REQUIRED_FIELDS,
         "freshness_thresholds_days": FRESHNESS_THRESHOLDS,
     }
@@ -470,12 +626,23 @@ def parse_agent_query(data: dict) -> tuple[Optional[AgentQuery], list[str]]:
                 f"Valid options: {[e.value for e in DataSource]}"
             )
 
+    mode = AgentMode.MIXED
+    if data.get("mode"):
+        try:
+            mode = AgentMode(data["mode"])
+        except ValueError:
+            errors.append(
+                f"Invalid mode '{data['mode']}'. "
+                f"Valid options: {[e.value for e in AgentMode]}"
+            )
+
     if errors:
         return None, errors
 
     query = AgentQuery(
         intent=intent,
         region=region,
+        mode=mode,
         priority=priority,
         brand=brand,
         industry=industry,

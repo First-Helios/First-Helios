@@ -71,6 +71,91 @@ actions:
       - Required to end the agent loop; omitting this wastes iterations
 
 # ──────────────────────────────────────────────────────────────────────
+# 2b. OPERATIONAL MODES  —  controls freshness, fallbacks, success criteria
+# ──────────────────────────────────────────────────────────────────────
+#
+# Every session runs in exactly ONE mode. The mode is set at session start
+# via POST /api/openclaw/run {"mode": "collect"} and applies to all queries
+# in that session.
+#
+modes:
+  collect:
+    description: >
+      Targeted data acquisition from external APIs for STALE or missing data.
+      Freshness gates ACTIVE — queries for already-fresh data are rejected
+      before the agent considers them. DB fallback DISABLED — if a collector
+      fails, the query fails. Success requires at least one NEW record.
+    bypass_freshness: false
+    allow_db_fallback: false
+    require_new_data: true
+    allow_collection: true
+    max_api_calls_per_query: 10
+    allowed_intents:
+      - poi_chain_locations
+      - poi_local_density
+      - wage_baseline
+      - job_posting_volume
+      - sentiment_check
+      - data_quality_audit     # for planning
+      - campaign_status        # for budget checks
+      - discovery_scan         # for targeting
+    when_to_use: >
+      Use when data is stale or missing and you need real external collection.
+      Fresh data is automatically skipped so the agent only works on gaps.
+
+  analyze:
+    description: >
+      Compute insights from existing data.
+      No external API calls attempted.
+      Success = computation completed on DB data.
+    bypass_freshness: true
+    allow_db_fallback: true
+    require_new_data: false
+    allow_collection: false
+    max_api_calls_per_query: 0
+    allowed_intents:
+      - score_refresh
+      - data_quality_audit
+      - discovery_scan
+      - economic_context
+      - campaign_status
+    when_to_use: >
+      Use after a collect session to recompute scores, run audits,
+      and discover coverage gaps. No API budget consumed.
+
+  monitor:
+    description: >
+      Lightweight health and status checks. Read-only.
+      No collection, no scoring mutations.
+    bypass_freshness: true
+    allow_db_fallback: true
+    require_new_data: false
+    allow_collection: false
+    max_api_calls_per_query: 0
+    allowed_intents:
+      - data_quality_audit
+      - campaign_status
+    when_to_use: >
+      Use for automated daily health checks, status dashboards,
+      or verifying system state before a collect session.
+
+  mixed:
+    description: >
+      Smart default — freshness-aware with DB fallback.
+      Uses freshness thresholds to skip redundant collection.
+      Cached data counts as success (PARTIAL promoted to COMPLETED).
+    bypass_freshness: false
+    allow_db_fallback: true
+    require_new_data: false
+    allow_collection: true
+    max_api_calls_per_query: 5
+    allowed_intents: all
+    when_to_use: >
+      Use for general-purpose agent sessions where you want the
+      system to decide what needs collection vs what's already fresh.
+      Good for exploratory research planning.
+
+# ──────────────────────────────────────────────────────────────────────
 # 3. INTENTS  —  what question the agent is asking
 # ──────────────────────────────────────────────────────────────────────
 intents:

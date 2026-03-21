@@ -278,6 +278,11 @@ def check_freshness_for_intent(
 ) -> dict | None:
     """Check if data for this query combo is still fresh.
 
+    Two-tier check:
+      1. SourceFreshness tracking table (populated by executor after runs)
+      2. Fallback: actual data tables (Store, LocalEmployer, etc.) when
+         the tracking table has no record (data predates tracking)
+
     Returns a dict with is_stale, age_days, threshold_days, etc.
     Returns None if freshness tracking is unavailable (import error, etc).
     """
@@ -303,6 +308,30 @@ def check_freshness_for_intent(
         # Re-evaluate staleness against the configured threshold
         if result.get("age_days") is not None:
             result["is_stale"] = result["age_days"] > threshold
+            return result
+
+        # ── Fallback: check actual data tables ──────────────────────
+        # If the tracking table has no record (never_collected), data may
+        # still exist from before tracking was implemented.  Query the
+        # real tables so we don't re-collect data that's already fresh.
+        if result.get("never_collected"):
+            fallback = _check_data_table_freshness(intent, region, brand, industry)
+            if fallback is not None:
+                fallback["threshold_days"] = threshold
+                fallback["is_stale"] = (
+                    fallback["age_days"] > threshold
+                    if fallback.get("age_days") is not None
+                    else True
+                )
+                logger.info(
+                    "[PreValidate] Freshness fallback from data tables: "
+                    "intent=%s age=%.1f days, records=%d, stale=%s",
+                    intent,
+                    fallback.get("age_days", -1),
+                    fallback.get("records_collected", 0),
+                    fallback.get("is_stale"),
+                )
+                return fallback
 
         return result
 
@@ -311,11 +340,145 @@ def check_freshness_for_intent(
         return None
 
 
+def _check_data_table_freshness(
+    intent: str,
+    region: str,
+    brand: str | None = None,
+    industry: str | None = None,
+) -> dict | None:
+    """Fallback freshness check against actual data tables.
+
+    Used when the SourceFreshness tracking table has no record for a query
+    (e.g. data was ingested before tracking was implemented).
+    """
+    from datetime import datetime
+    from backend.database import (
+        LocalEmployer, Score, Signal, Store, WageIndex,
+        get_session, init_db,
+    )
+
+    engine = init_db()
+    session = get_session(engine)
+
+    try:
+        staleness_days = None
+        count = 0
+
+        if intent == "poi_chain_locations":
+            q = session.query(Store).filter(
+                Store.region == region, Store.is_active.is_(True),
+            )
+            if brand:
+                q = q.filter(Store.chain == brand)
+            stores = q.all()
+            if stores:
+                count = len(stores)
+                latest = max((s.last_seen for s in stores if s.last_seen), default=None)
+                if latest:
+                    staleness_days = (datetime.utcnow() - latest).total_seconds() / 86400.0
+
+        elif intent == "poi_local_density":
+            q = session.query(LocalEmployer).filter(
+                LocalEmployer.region == region, LocalEmployer.is_active.is_(True),
+            )
+            if industry:
+                q = q.filter(LocalEmployer.industry == industry)
+            employers = q.all()
+            if employers:
+                count = len(employers)
+                latest = max((e.last_seen for e in employers if e.last_seen), default=None)
+                if latest:
+                    staleness_days = (datetime.utcnow() - latest).total_seconds() / 86400.0
+
+        elif intent in ("wage_baseline", "economic_context"):
+            q = session.query(WageIndex)
+            if industry:
+                q = q.filter(WageIndex.industry == industry)
+            wages = q.order_by(WageIndex.observed_at.desc()).all()
+            if wages:
+                count = len(wages)
+                if wages[0].observed_at:
+                    staleness_days = (datetime.utcnow() - wages[0].observed_at).total_seconds() / 86400.0
+
+        elif intent == "job_posting_volume":
+            q = session.query(Signal).filter(Signal.signal_type == "listing")
+            if brand:
+                store_nums = [
+                    s.store_num for s in session.query(Store.store_num).filter(
+                        Store.chain == brand, Store.region == region,
+                    ).all()
+                ]
+                if store_nums:
+                    q = q.filter(Signal.store_num.in_(store_nums))
+                else:
+                    return None
+            signals = q.order_by(Signal.observed_at.desc()).limit(100).all()
+            if signals:
+                count = len(signals)
+                if signals[0].observed_at:
+                    staleness_days = (datetime.utcnow() - signals[0].observed_at).total_seconds() / 86400.0
+
+        elif intent == "sentiment_check":
+            q = session.query(Signal).filter(Signal.signal_type == "sentiment")
+            if brand:
+                store_nums = [
+                    s.store_num for s in session.query(Store.store_num).filter(
+                        Store.chain == brand, Store.region == region,
+                    ).all()
+                ]
+                if store_nums:
+                    q = q.filter(Signal.store_num.in_(store_nums))
+                else:
+                    return None
+            signals = q.order_by(Signal.observed_at.desc()).limit(100).all()
+            if signals:
+                count = len(signals)
+                if signals[0].observed_at:
+                    staleness_days = (datetime.utcnow() - signals[0].observed_at).total_seconds() / 86400.0
+
+        elif intent == "score_refresh":
+            q = session.query(Score).filter(Score.score_type == "composite")
+            if brand:
+                store_nums = [
+                    s.store_num for s in session.query(Store.store_num).filter(
+                        Store.chain == brand, Store.region == region,
+                    ).all()
+                ]
+                if store_nums:
+                    q = q.filter(Score.store_num.in_(store_nums))
+                else:
+                    return None
+            scores = q.order_by(Score.computed_at.desc()).all()
+            if scores:
+                count = len(scores)
+                if scores[0].computed_at:
+                    staleness_days = (datetime.utcnow() - scores[0].computed_at).total_seconds() / 86400.0
+
+        if count == 0:
+            return None  # No data at all — let it through
+
+        return {
+            "is_stale": True,  # re-evaluated by caller
+            "age_days": round(staleness_days, 1) if staleness_days is not None else None,
+            "last_collected_at": None,
+            "records_collected": count,
+            "next_due_at": None,
+            "never_collected": False,
+            "source": "data_table_fallback",
+        }
+
+    except Exception as e:
+        logger.warning("[PreValidate] Data table freshness fallback error: %s", e)
+        return None
+    finally:
+        session.close()
+
+
 # ══════════════════════════════════════════════════════════════════════
 # Batch pre-validation (what the orchestrator calls before sending)
 # ══════════════════════════════════════════════════════════════════════
 
-def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
+def prevalidate_agent_plan(plan: list[dict], mode: str = "mixed", session_terms: Optional[dict] = None) -> BatchPreValidationResult:
     """Pre-validate a batch of proposed queries from the LLM.
 
     Each item in plan should have:
@@ -327,11 +490,19 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
     Returns a BatchPreValidationResult with per-item details.
 
     Validation order:
-      1. Industry/brand enum check
-      2. Freshness gate — skip if data is still fresh
-      3. Term validation against approved pools
-      4. Budget dry-run
+      1. Mode intent check — is this intent allowed in the current mode?
+      2. Industry/brand enum check
+      3. Freshness gate — skip if data is still fresh (BYPASSED in collect mode)
+      4. Term validation against approved pools
+      5. Budget dry-run
     """
+    from agent_interface.schemas import AgentMode, get_mode_config
+
+    try:
+        mode_cfg = get_mode_config(AgentMode(mode))
+    except (ValueError, KeyError):
+        mode_cfg = get_mode_config(AgentMode.MIXED)
+
     batch = BatchPreValidationResult(total=len(plan))
     total_api_calls = 0
 
@@ -342,6 +513,20 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
         terms = item.get("search_terms", [])
         max_calls = item.get("max_budget_spend", 5)
         region = item.get("region", "austin_tx")
+
+        # ── Mode intent check ──────────────────────────────────────
+        if intent not in mode_cfg.allowed_intents:
+            batch.results.append(PreValidationResult(
+                is_valid=False,
+                proposed_term=intent,
+                rejection_reason=(
+                    f"Intent '{intent}' not allowed in mode '{mode}'. "
+                    f"Allowed intents: {sorted(mode_cfg.allowed_intents)}"
+                ),
+                industry_key=industry or None,
+            ))
+            batch.rejected += 1
+            continue
 
         # Validate industry if provided
         if industry:
@@ -359,32 +544,44 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
                 batch.rejected += 1
                 continue
 
-        # ── Freshness gate ──────────────────────────────────────────
-        # Check if data for this intent/region/brand/industry is still fresh.
-        # If so, skip the query to reduce redundancy.
-        freshness = check_freshness_for_intent(
-            intent=intent,
-            region=region,
-            brand=brand or None,
-            industry=industry or None,
-        )
-        if freshness and not freshness["is_stale"]:
-            batch.results.append(PreValidationResult(
-                is_valid=False,
-                proposed_term=intent,
-                rejection_reason=(
-                    f"Data is still fresh — collected {freshness['age_days']:.1f} days ago "
-                    f"(threshold: {freshness['threshold_days']} days). "
-                    f"Next collection due: {freshness['next_due_at'] or 'unknown'}. "
-                    f"Records on file: {freshness['records_collected']}. "
-                    f"Pick a different intent, brand, or industry."
-                ),
-                industry_key=industry or None,
-                budget_ok=True,
-                budget_detail={"skipped": "data_still_fresh", **freshness},
-            ))
-            batch.rejected += 1
-            continue
+        # ── Freshness gate (BYPASSED in collect mode) ───────────────
+        freshness = None
+        if not mode_cfg.bypass_freshness:
+            freshness = check_freshness_for_intent(
+                intent=intent,
+                region=region,
+                brand=brand or None,
+                industry=industry or None,
+            )
+            if freshness and not freshness["is_stale"]:
+                batch.results.append(PreValidationResult(
+                    is_valid=False,
+                    proposed_term=intent,
+                    rejection_reason=(
+                        f"Data is still fresh — collected {freshness['age_days']:.1f} days ago "
+                        f"(threshold: {freshness['threshold_days']} days). "
+                        f"Next collection due: {freshness['next_due_at'] or 'unknown'}. "
+                        f"Records on file: {freshness['records_collected']}. "
+                        f"Pick a different intent, brand, or industry."
+                    ),
+                    industry_key=industry or None,
+                    budget_ok=True,
+                    budget_detail={"skipped": "data_still_fresh", **freshness},
+                ))
+                batch.rejected += 1
+                continue
+        else:
+            # In bypass mode, still fetch freshness for informational purposes
+            freshness = check_freshness_for_intent(
+                intent=intent,
+                region=region,
+                brand=brand or None,
+                industry=industry or None,
+            )
+            logger.info(
+                "[PreValidate] Freshness gate BYPASSED for %s (mode=%s)",
+                intent, mode,
+            )
 
         # Infer term_type from intent so POI queries check poi_search_terms
         term_type = "job"  # default
@@ -393,13 +590,24 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
         elif intent.startswith("sentiment"):
             term_type = "sentiment"
 
-        # Validate each search term against the correct pool
+        # Validate each search term against the correct pool (plus session-local terms)
         term_issues = []
         for t in terms:
             if industry:
                 tv = validate_search_term(t, industry, term_type)
                 if not tv.is_valid:
-                    term_issues.append(tv)
+                    # Fall back to session-local terms added via wish this session
+                    session_pool = (session_terms or {}).get(industry, [])
+                    if any(t.strip().lower() == s.strip().lower() for s in session_pool):
+                        tv = PreValidationResult(
+                            is_valid=True,
+                            proposed_term=t,
+                            matched_term=t,
+                            industry_key=industry,
+                            term_type=term_type,
+                        )
+                    else:
+                        term_issues.append(tv)
 
         if term_issues:
             # Report first bad term
@@ -415,8 +623,16 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
         freshness_note = None
         if freshness and freshness.get("never_collected"):
             freshness_note = "Never collected — first run"
+        elif freshness and mode_cfg.bypass_freshness:
+            freshness_note = (
+                f"Last collected {freshness['age_days']:.1f} days ago — "
+                f"freshness BYPASSED (mode={mode})"
+            )
         elif freshness:
-            freshness_note = f"Last collected {freshness['age_days']:.1f} days ago (stale, threshold: {freshness['threshold_days']} days)"
+            freshness_note = (
+                f"Last collected {freshness['age_days']:.1f} days ago "
+                f"(stale, threshold: {freshness['threshold_days']} days)"
+            )
 
         batch.results.append(PreValidationResult(
             is_valid=True,
@@ -427,6 +643,7 @@ def prevalidate_agent_plan(plan: list[dict]) -> BatchPreValidationResult:
             budget_detail={
                 **(budget or {}),
                 "freshness": freshness_note,
+                "mode": mode,
             },
         ))
         batch.valid += 1

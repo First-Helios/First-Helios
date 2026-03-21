@@ -33,7 +33,7 @@ from typing import Optional
 import requests
 
 from agent_interface.queue_manager import agent_queue
-from agent_interface.schemas import parse_agent_query, get_all_options
+from agent_interface.schemas import parse_agent_query, get_all_options, AgentMode, get_mode_config
 
 from openclaw.industries import (
     INDUSTRY_REGISTRY,
@@ -137,18 +137,18 @@ Use these leads to decide what to explore next in the session.
 - Each industry block above lists its EXACT valid terms. Copy them exactly.
 
 ## Rules
-1. ALWAYS start with data_quality_audit
-2. After audit, run discovery_scan to find coverage gaps and prioritised expansion targets
-3. Use discovery leads to decide which industries and brands to explore next — highest priority leads first
+1. Your Collection Agenda is already prepared in the Context above — start from Priority 1 and work down in order
+2. Items marked ✓ in "Already collected" are fresh — do NOT re-collect them, they will be rejected
+3. Run discovery_scan again mid-session after completing a batch of queries to find newly exposed gaps
 4. For each industry, check: chain locations → local density → wages → job postings → sentiment
 5. ONLY use search terms from the approved pools listed above — match term type to intent
-6. If a query is REJECTED, you MUST use "wish" to request the missing term/brand — do NOT retry with the same invalid term
+6. If a query is REJECTED for a missing term, use "wish" to request it — it will be added to this session's term pool immediately so you can use it in the next query
 7. Track your budget — check "status" if api_calls_remaining_today drops below 20
-8. When your goal is met OR you have explored all requested industries, use "done" to end the session
-9. At session end in the "done" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have
-10. Output ONLY valid JSON per response — no surrounding text
-11. Do NOT repeat the exact same query you already executed — check previous results first
-12. Run discovery_scan again mid-session after completing a batch of queries to check for newly exposed gaps
+8. score_refresh, data_quality_audit, discovery_scan, and campaign_status are always DB-internal — they run in analyze mode automatically regardless of session mode
+9. When your goal is met OR you have explored all agenda items, use "done" to end the session
+10. At session end in the "done" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have
+11. Output ONLY valid JSON per response — no surrounding text
+12. Do NOT repeat the exact same query you already executed — check previous results first
 
 ## Current Context
 {context}
@@ -242,6 +242,7 @@ class ClawSession:
     """Tracks state across an OpenClaw research session."""
     region: str
     model: str
+    mode: str = "mixed"
     goal: str = ""
     started_at: datetime = field(default_factory=datetime.utcnow)
     iterations: int = 0
@@ -259,6 +260,7 @@ class ClawSession:
         return {
             "region": self.region,
             "model": self.model,
+            "mode": self.mode,
             "goal": self.goal,
             "iterations": self.iterations,
             "queries_proposed": self.queries_proposed,
@@ -297,6 +299,7 @@ class OpenClawOrchestrator:
         self.max_iterations = max_iterations
         self.temperature = temperature
         self._session: Optional[ClawSession] = None
+        self._session_terms: dict[str, list[str]] = {}  # terms added this session via wish
 
     # ── Public API ───────────────────────────────────────────────
 
@@ -328,6 +331,7 @@ class OpenClawOrchestrator:
         region: str = "austin_tx",
         goal: str = "",
         industries: Optional[list[str]] = None,
+        mode: str = "mixed",
     ) -> ClawSession:
         """Run an OpenClaw research session.
 
@@ -335,8 +339,19 @@ class OpenClawOrchestrator:
             region: Target region.
             goal: Research goal description.
             industries: Subset of industries to focus on (None = all).
+            mode: Operational mode — collect, analyze, monitor, or mixed.
         """
-        self._session = ClawSession(region=region, model=self.model, goal=goal)
+        # Validate and resolve mode
+        try:
+            agent_mode = AgentMode(mode)
+        except ValueError:
+            logger.warning("[OpenClaw] Invalid mode '%s' — falling back to mixed", mode)
+            agent_mode = AgentMode.MIXED
+        mode_cfg = get_mode_config(agent_mode)
+
+        self._session = ClawSession(
+            region=region, model=self.model, mode=agent_mode.value, goal=goal,
+        )
 
         # Build system prompt with industry data
         industry_data = get_all_industries()
@@ -370,49 +385,26 @@ class OpenClawOrchestrator:
         if industries:
             context += f"\nFocus industries: {industries}"
 
-        # ── Freshness context ───────────────────────────────────────
-        # Tell the agent what data is stale/fresh so it prioritises wisely
-        try:
-            from backend.database import get_all_freshness
-            from agent_interface.schemas import FRESHNESS_THRESHOLDS
+        # ── Pilot briefing ──────────────────────────────────────────
+        # Run discovery + freshness before the loop so the agent reads a
+        # ranked collection agenda instead of guessing from raw timestamps.
+        self._session_terms = {}  # reset session term pool for new session
+        context += self._build_pilot_briefing(region, agent_mode)
 
-            freshness_records = get_all_freshness()
-            if freshness_records:
-                stale = [r for r in freshness_records if r.get("is_stale", True)]
-                fresh = [r for r in freshness_records if not r.get("is_stale", True)]
-
-                context += f"\n\n## Source Freshness ({len(freshness_records)} tracked)"
-                context += f"\nStale (need re-collection): {len(stale)}"
-                context += f"\nFresh (skip these): {len(fresh)}"
-
-                if stale:
-                    context += "\n\nSTALE data — prioritize these:"
-                    for r in stale[:15]:
-                        brand_str = f" brand={r['brand']}" if r.get("brand") else ""
-                        ind_str = f" industry={r['industry']}" if r.get("industry") else ""
-                        context += (
-                            f"\n  - {r['intent']}{brand_str}{ind_str}: "
-                            f"{r['age_days']}d old (threshold: {r['threshold_days']}d), "
-                            f"{r['records_collected']} records"
-                        )
-
-                if fresh:
-                    context += "\n\nFRESH data — DO NOT re-collect:"
-                    for r in fresh[:15]:
-                        brand_str = f" brand={r['brand']}" if r.get("brand") else ""
-                        ind_str = f" industry={r['industry']}" if r.get("industry") else ""
-                        context += (
-                            f"\n  - {r['intent']}{brand_str}{ind_str}: "
-                            f"{r['age_days']}d old (threshold: {r['threshold_days']}d) ✓"
-                        )
-            else:
-                context += "\n\n## Source Freshness: No data collected yet — everything is stale."
-
-            context += f"\n\nFreshness thresholds (days): {json.dumps(FRESHNESS_THRESHOLDS)}"
-
-        except Exception as e:
-            logger.warning("[OpenClaw] Could not load freshness context: %s", e)
-            context += "\n\n## Source Freshness: unavailable"
+        # ── Mode context ────────────────────────────────────────────
+        context += f"\n\n## Operational Mode: {agent_mode.value.upper()}"
+        context += f"\n{mode_cfg.description}"
+        context += f"\nAllowed intents: {sorted(mode_cfg.allowed_intents)}"
+        if mode_cfg.bypass_freshness:
+            context += "\nFreshness gates: BYPASSED — all queries proceed regardless of data age"
+        else:
+            context += "\nFreshness gates: ACTIVE — stale data will be re-collected, fresh data skipped"
+        if mode_cfg.require_new_data:
+            context += "\nSuccess criteria: STRICT — must collect new records from external APIs"
+        if not mode_cfg.allow_db_fallback:
+            context += "\nDB fallback: DISABLED — cached data is NOT returned as results"
+        if not mode_cfg.allow_collection:
+            context += "\nExternal APIs: DISABLED — no external collection in this mode"
 
         system = SYSTEM_PROMPT.format(
             industries=industries_compact,
@@ -425,24 +417,32 @@ class OpenClawOrchestrator:
         # Start the live thought log
         sid = f"session-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
         session_log.start(sid)
-        session_log.append("system", f"Session started — model={self.model}  region={region}", {
+        session_log.append("system", f"Session started — model={self.model}  region={region}  mode={agent_mode.value}", {
             "model": self.model, "region": region, "goal": goal,
+            "mode": agent_mode.value,
             "industries": industries or list(INDUSTRY_REGISTRY.keys()),
         })
 
         # Initial instruction
         initial = (
-            f"Begin research for {region}. "
-            f"Start with a data_quality_audit to understand current data state."
+            f"Begin research for {region} in {agent_mode.value.upper()} mode. "
         )
+        if agent_mode == AgentMode.COLLECT:
+            initial += "Focus on collecting data where existing records are STALE or missing. Queries for already-fresh data will be automatically rejected. "
+        elif agent_mode == AgentMode.ANALYZE:
+            initial += "Focus on computing insights from existing data. No external API calls. "
+        elif agent_mode == AgentMode.MONITOR:
+            initial += "Run a lightweight health check. Read-only. "
+        else:
+            initial += "Start with a data_quality_audit to understand current data state. "
         if goal:
-            initial += f" Goal: {goal}"
+            initial += f"Goal: {goal}"
 
         self._session.messages.append({"role": "user", "content": initial})
         session_log.append("system", initial)
 
-        logger.info("[OpenClaw] Starting session: model=%s region=%s goal=%s",
-                     self.model, region, goal)
+        logger.info("[OpenClaw] Starting session: model=%s region=%s mode=%s goal=%s",
+                     self.model, region, agent_mode.value, goal)
 
         # Agent loop
         while (
@@ -571,6 +571,67 @@ class OpenClawOrchestrator:
                 "Valid: propose, query, wish, status, done"
             }
 
+    def _build_pilot_briefing(self, region: str, mode: AgentMode) -> str:
+        """Run discovery + freshness checks before the agent loop begins.
+
+        Returns a formatted string to append to {context} in the system prompt.
+        The agent reads a ranked collection agenda instead of raw timestamps so
+        it doesn't have to guess what to collect first.
+        """
+        from agent_interface.schemas import FRESHNESS_THRESHOLDS
+        from backend.database import get_all_freshness
+
+        lines: list[str] = []
+        lines.append("\n\n## Collection Agenda (auto-generated from discovery scan)")
+
+        # ── Discovery leads (ranked) ──────────────────────────────
+        try:
+            from backend.discovery import run_discovery
+            scan = run_discovery(region=region)
+            leads = getattr(scan, "leads", [])
+            if leads:
+                lines.append("Follow this priority order:")
+                for i, lead in enumerate(leads[:10], 1):
+                    proposal = lead.to_agent_proposal() if hasattr(lead, "to_agent_proposal") else {}
+                    brand_str = f" brand={proposal.get('brand')}" if proposal.get("brand") else ""
+                    ind_str = f" industry={proposal.get('industry')}" if proposal.get("industry") else ""
+                    lines.append(
+                        f"  {i}. [{getattr(lead, 'lead_type', '?')}] "
+                        f"{proposal.get('intent', '?')}{brand_str}{ind_str}"
+                        f" — {getattr(lead, 'description', '')} "
+                        f"(priority={getattr(lead, 'priority', 0)})"
+                    )
+                # Surface key anomalies
+                anomalies = getattr(scan, "anomalies", [])
+                if anomalies:
+                    lines.append("\nKey data gaps detected:")
+                    for a in anomalies[:5]:
+                        lines.append(f"  ! {a}")
+            else:
+                lines.append("  (no discovery leads — DB may be empty or fully fresh)")
+        except Exception as e:
+            logger.warning("[OpenClaw] Pilot briefing: discovery scan failed: %s", e)
+            lines.append(f"  (discovery unavailable: {e})")
+
+        # ── Already-collected (do NOT re-collect) ────────────────
+        try:
+            freshness_records = get_all_freshness()
+            fresh = [r for r in freshness_records if not r.get("is_stale", True)]
+            if fresh:
+                lines.append("\nAlready collected — do NOT re-collect (marked ✓):")
+                for r in fresh[:20]:
+                    brand_str = f" brand={r['brand']}" if r.get("brand") else ""
+                    ind_str = f" industry={r['industry']}" if r.get("industry") else ""
+                    lines.append(
+                        f"  ✓ {r['intent']}{brand_str}{ind_str}: "
+                        f"{r['records_collected']} records, {r['age_days']:.0f}d old"
+                    )
+        except Exception as e:
+            logger.warning("[OpenClaw] Pilot briefing: freshness load failed: %s", e)
+
+        lines.append(f"\nFreshness thresholds (days): {json.dumps(FRESHNESS_THRESHOLDS)}")
+        return "\n".join(lines)
+
     def _handle_propose(self, data: dict) -> dict:
         """Pre-validate a batch of proposed queries, then execute valid ones."""
         raw_queries = data.get("queries", [])
@@ -578,9 +639,10 @@ class OpenClawOrchestrator:
             return {"error": "No queries in proposal. Provide 'queries' list."}
 
         self._session.queries_proposed += len(raw_queries)
+        session_mode = self._session.mode
 
-        # Pre-validate
-        validation = prevalidate_agent_plan(raw_queries)
+        # Pre-validate (mode-aware, with session-local terms)
+        validation = prevalidate_agent_plan(raw_queries, mode=session_mode, session_terms=self._session_terms)
 
         # Execute valid ones, skip invalid
         executed_results = []
@@ -608,6 +670,7 @@ class OpenClawOrchestrator:
             query_data = {
                 "intent": raw.get("intent", ""),
                 "region": raw.get("region", self._session.region),
+                "mode": session_mode,
             }
             if raw.get("brand"):
                 query_data["brand"] = raw["brand"]
@@ -638,17 +701,20 @@ class OpenClawOrchestrator:
             self._session.results.append(result_dict)
             executed_results.append(result_dict)
 
-            # Log to tracker — treat partial as success but annotate
+            # Mode-aware success logging
+            mode_cfg = get_mode_config(session_mode)
             status_val = result.status.value
             is_success = status_val == "completed"
             is_partial = status_val == "partial"
+            # In modes that accept partial, treat it as success
+            effective_success = is_success or (is_partial and mode_cfg.success_on_partial)
             error_msg = "; ".join(result.errors) if result.errors else None
-            if is_partial:
-                error_msg = (error_msg + "; " if error_msg else "") + "PARTIAL: no live API call, used cached DB data"
+            if is_partial and not mode_cfg.success_on_partial:
+                error_msg = (error_msg + "; " if error_msg else "") + f"MODE={session_mode}: PARTIAL not accepted as success"
             request_tracker.log_request(
                 intent=raw.get("intent", ""),
                 source="agent_queue",
-                success=is_success or is_partial,
+                success=effective_success,
                 industry=raw.get("industry", ""),
                 brand=raw.get("brand", ""),
                 search_term=str(raw.get("search_terms", "")),
@@ -669,6 +735,16 @@ class OpenClawOrchestrator:
         query_data = {k: v for k, v in data.items() if k != "action"}
         if "region" not in query_data:
             query_data["region"] = self._session.region
+        # Inject session mode — but force analyze for DB-internal intents so they
+        # never fail due to COLLECT mode's require_new_data constraint.
+        _ANALYSIS_ONLY_INTENTS = {
+            "score_refresh", "data_quality_audit",
+            "discovery_scan", "campaign_status",
+        }
+        if query_data.get("intent") in _ANALYSIS_ONLY_INTENTS:
+            query_data["mode"] = "analyze"
+        else:
+            query_data["mode"] = self._session.mode
 
         self._session.queries_proposed += 1
 
@@ -686,16 +762,19 @@ class OpenClawOrchestrator:
         result_dict = result.to_dict()
         self._session.results.append(result_dict)
 
+        # Mode-aware success logging
+        mode_cfg = get_mode_config(self._session.mode)
         status_val = result.status.value
         is_success = status_val == "completed"
         is_partial = status_val == "partial"
+        effective_success = is_success or (is_partial and mode_cfg.success_on_partial)
         error_msg = "; ".join(result.errors) if result.errors else None
-        if is_partial:
-            error_msg = (error_msg + "; " if error_msg else "") + "PARTIAL: no live API call, used cached DB data"
+        if is_partial and not mode_cfg.success_on_partial:
+            error_msg = (error_msg + "; " if error_msg else "") + f"MODE={self._session.mode}: PARTIAL not accepted"
         request_tracker.log_request(
             intent=data.get("intent", ""),
             source="agent_queue",
-            success=is_success or is_partial,
+            success=effective_success,
             industry=data.get("industry", ""),
             brand=data.get("brand", ""),
             records_returned=result.records_found,
@@ -730,7 +809,22 @@ class OpenClawOrchestrator:
             model=self.model,
         )
         self._session.wishes_added += 1
-        return {"status": "wish_added", "wish": wish.to_dict()}
+
+        result = {"status": "wish_added", "wish": wish.to_dict()}
+
+        # For new_term wishes, immediately add to session-local term pool so the
+        # agent can use the term in the same session without waiting for manual approval.
+        if category == "new_term" and suggested_value and context.get("industry"):
+            term = suggested_value.strip()
+            industry = context["industry"]
+            self._session_terms.setdefault(industry, []).append(term)
+            result["session_term_added"] = True
+            result["message"] = (
+                f"'{term}' added to this session's '{industry}' term pool. "
+                f"You may use it in your next query immediately."
+            )
+
+        return result
 
     def _handle_status(self) -> dict:
         """Return budget, tracker, and wishlist summary."""

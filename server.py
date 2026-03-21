@@ -852,13 +852,35 @@ def agent_options():
     """Return all valid enum values the agent can use.
 
     This is the first thing an LLM agent should call to learn
-    the valid intents, regions, brands, industries, and priorities.
+    the valid intents, regions, brands, industries, priorities, and modes.
     """
     try:
         from agent_interface.schemas import get_all_options
         return jsonify({"status": "ok", **get_all_options()})
     except Exception as e:
         logger.error("[Server] Agent options failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/agent/modes")
+def agent_modes():
+    """Return all operational modes with their configurations.
+
+    Each mode controls freshness bypass, DB fallback, success criteria,
+    and allowed intents. Use this to choose the right mode for a session.
+    """
+    try:
+        from agent_interface.schemas import MODE_CONFIG, AgentMode
+        modes = {}
+        for key, cfg in MODE_CONFIG.items():
+            modes[key] = cfg.to_dict()
+        return jsonify({
+            "status": "ok",
+            "modes": modes,
+            "default": AgentMode.MIXED.value,
+        })
+    except Exception as e:
+        logger.error("[Server] Agent modes failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -1466,17 +1488,33 @@ def openclaw_run():
     Body: {
         "model": "qwen2.5:7b-instruct",
         "region": "austin_tx",
+        "mode": "collect",
         "goal": "Survey coffee and healthcare labor markets",
         "industries": ["coffee_cafe", "healthcare_clinic"]
     }
+
+    Mode options:
+      - collect  — Fresh data from external APIs. Bypasses freshness. No DB fallback.
+      - analyze  — Compute insights from existing data. No external API calls.
+      - monitor  — Lightweight health checks. Read-only.
+      - mixed    — Smart default — freshness-aware with DB fallback.
 
     Returns immediately.  Poll /api/openclaw/session/live to watch progress.
     """
     data = request.get_json(silent=True) or {}
     model = data.get("model", "qwen2.5:7b-instruct")
     region = data.get("region", "austin_tx")
+    mode = data.get("mode", "mixed")
     goal = data.get("goal", "")
     industries = data.get("industries")
+
+    # Validate mode
+    valid_modes = ["collect", "analyze", "monitor", "mixed"]
+    if mode not in valid_modes:
+        return jsonify({
+            "status": "error",
+            "message": f"Invalid mode '{mode}'. Valid: {valid_modes}",
+        }), 400
 
     try:
         from openclaw.orchestrator import OpenClawOrchestrator, session_log
@@ -1499,7 +1537,7 @@ def openclaw_run():
         # Run in background thread
         def _run():
             try:
-                orch.run(region=region, goal=goal, industries=industries)
+                orch.run(region=region, goal=goal, industries=industries, mode=mode)
             except Exception as exc:
                 logger.error("[Server] Background OpenClaw run failed: %s", exc)
                 session_log.append("error", f"Session crashed: {exc}")
@@ -1510,7 +1548,8 @@ def openclaw_run():
 
         return jsonify({
             "status": "ok",
-            "message": "Session started.  Poll /api/openclaw/session/live to follow progress.",
+            "mode": mode,
+            "message": f"Session started in {mode.upper()} mode.  Poll /api/openclaw/session/live to follow progress.",
             "session": session_log.snapshot(),
         })
     except Exception as e:

@@ -28,13 +28,16 @@ from backend.rate_manager import rate_manager
 from backend.scoring.engine import compute_all_scores
 
 from agent_interface.schemas import (
+    AgentMode,
     AgentQuery,
     Brand,
     ConciseResult,
     DataSource,
     FRESHNESS_THRESHOLDS,
     Intent,
+    ModeConfig,
     ResultStatus,
+    get_mode_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,8 +89,11 @@ def execute(query: AgentQuery) -> ConciseResult:
     """Execute a validated AgentQuery and return a ConciseResult.
 
     Dispatches to the appropriate intent handler based on query.intent.
+    Mode-aware: the query.mode controls freshness bypass, DB fallback,
+    and success criteria (see ModeConfig in schemas.py).
     """
     t0 = time.time()
+    mode_cfg = get_mode_config(query.mode)
 
     try:
         handler = _INTENT_HANDLERS.get(query.intent)
@@ -101,6 +107,23 @@ def execute(query: AgentQuery) -> ConciseResult:
 
         result = handler(query)
         result.estimated_seconds = round(time.time() - t0, 2)
+
+        # ── Mode-aware success re-evaluation ────────────────────────
+        # In COLLECT mode: must have actually fetched new data
+        if mode_cfg.require_new_data and result.records_new == 0:
+            if result.status in (ResultStatus.COMPLETED, ResultStatus.PARTIAL):
+                result.status = ResultStatus.FAILED
+                result.anomalies.append(
+                    f"MODE={query.mode.value}: no new records collected from "
+                    f"external sources — treating as failure"
+                )
+
+        # In ANALYZE/MONITOR mode: PARTIAL is fine
+        if mode_cfg.success_on_partial and result.status == ResultStatus.PARTIAL:
+            result.status = ResultStatus.COMPLETED
+            result.anomalies.append(
+                f"MODE={query.mode.value}: promoted PARTIAL → COMPLETED (cached data is acceptable)"
+            )
 
         # Add remaining budget info
         result.api_calls_remaining_today = _get_total_remaining_budget(query)
@@ -121,14 +144,15 @@ def execute(query: AgentQuery) -> ConciseResult:
                     status=result.status.value,
                     source_key=None,  # populated if specific source known
                     threshold_days=threshold,
-                    notes=f"query_id={query.query_id}, api_calls={result.api_calls_used}",
+                    notes=f"query_id={query.query_id}, mode={query.mode.value}, api_calls={result.api_calls_used}",
                 )
                 logger.info(
-                    "[Executor] Freshness stamped: %s/%s brand=%s industry=%s (%d records)",
+                    "[Executor] Freshness stamped: %s/%s brand=%s industry=%s (%d records) mode=%s",
                     query.intent.value, query.region.value,
                     query.brand.value if query.brand else "-",
                     query.industry.value if query.industry else "-",
                     result.records_found,
+                    query.mode.value,
                 )
             except Exception as e:
                 logger.warning("[Executor] Freshness upsert failed (non-fatal): %s", e)
@@ -155,10 +179,15 @@ def _execute_poi_chain(query: AgentQuery) -> ConciseResult:
     """POI_CHAIN_LOCATIONS — Find all chain store locations.
 
     Tries collectors in priority order: AllThePlaces → Overture → OSM.
-    Falls back to existing DB data if no collectors are available yet.
+    Mode-aware:
+      COLLECT  — must hit external APIs, no DB fallback
+      ANALYZE  — report DB counts only, no API calls
+      MONITOR  — read-only DB summary
+      MIXED    — try APIs, fall back to DB
     """
     brand_key = query.brand.value if query.brand else "starbucks"
     bbox = REGION_BBOX.get(query.region.value, REGION_BBOX["austin_tx"])
+    mode_cfg = get_mode_config(query.mode)
     api_calls = 0
     records_found = 0
     records_new = 0
@@ -166,34 +195,37 @@ def _execute_poi_chain(query: AgentQuery) -> ConciseResult:
     anomalies: list[str] = []
     sources_used: list[str] = []
 
-    # Try each source in priority order
-    # Phase 1: Use existing scrapers as bridge until collectors are built
-    try:
-        from scrapers.alltheplaces_adapter import AllThePlacesAdapter
+    # ── External collection (skip in ANALYZE/MONITOR modes) ─────────
+    if mode_cfg.allow_collection:
+        try:
+            from scrapers.alltheplaces_adapter import AllThePlacesAdapter
 
-        if rate_manager.can_request("atp_geojson", count=1):
-            adapter = AllThePlacesAdapter()
-            spider = ATP_SPIDER_MAP.get(brand_key)
-            if spider:
-                try:
-                    stores = adapter.fetch_chain_stores(
-                        brand_key=brand_key,
-                        spider_name=spider,
-                        bbox=bbox,
-                        region=query.region.value,
-                    )
-                    api_calls += 1
-                    records_found += len(stores)
-                    sources_used.append("alltheplaces")
-                    logger.info("[Executor] ATP returned %d stores for %s", len(stores), brand_key)
-                except Exception as e:
-                    anomalies.append(f"AllThePlaces failed: {e}")
-                    logger.warning("[Executor] ATP error: %s", e)
-    except ImportError:
-        anomalies.append("AllThePlaces adapter not available")
+            if rate_manager.can_request("atp_geojson", count=1):
+                adapter = AllThePlacesAdapter()
+                spider = ATP_SPIDER_MAP.get(brand_key)
+                if spider:
+                    try:
+                        stores = adapter.fetch_chain_stores(
+                            brand_key=brand_key,
+                            spider_name=spider,
+                            bbox=bbox,
+                            region=query.region.value,
+                        )
+                        api_calls += 1
+                        records_found += len(stores)
+                        records_new = len(stores)  # ATP returns fresh data
+                        sources_used.append("alltheplaces")
+                        logger.info("[Executor] ATP returned %d stores for %s", len(stores), brand_key)
+                    except Exception as e:
+                        anomalies.append(f"AllThePlaces failed: {e}")
+                        logger.warning("[Executor] ATP error: %s", e)
+            else:
+                anomalies.append("AllThePlaces budget exhausted")
+        except ImportError:
+            anomalies.append("AllThePlaces adapter not available")
 
-    # Fall back to DB count if no collection happened
-    if not sources_used:
+    # ── DB fallback (disabled in COLLECT mode) ──────────────────────
+    if not sources_used and mode_cfg.allow_db_fallback:
         engine = init_db()
         session = get_session(engine)
         try:
@@ -208,6 +240,10 @@ def _execute_poi_chain(query: AgentQuery) -> ConciseResult:
             )
         finally:
             session.close()
+    elif not sources_used and not mode_cfg.allow_db_fallback:
+        anomalies.append(
+            f"MODE={query.mode.value}: no collector executed and DB fallback disabled"
+        )
 
     # Build suggested next steps
     suggested_next: list[dict] = []
@@ -241,50 +277,65 @@ def _execute_poi_chain(query: AgentQuery) -> ConciseResult:
 
 
 def _execute_poi_local(query: AgentQuery) -> ConciseResult:
-    """POI_LOCAL_DENSITY — Count local employers in an industry."""
+    """POI_LOCAL_DENSITY — Count local employers in an industry.
+
+    Mode-aware: COLLECT requires external API hit, ANALYZE/MONITOR DB-only.
+    """
     industry_key = query.industry.value if query.industry else "coffee_cafe"
+    mode_cfg = get_mode_config(query.mode)
     api_calls = 0
     anomalies: list[str] = []
     sources_used: list[str] = []
+    records_new = 0
 
-    # Try Overture adapter first
-    try:
-        from scrapers.overture_adapter import OvertureLocalAdapter
+    # ── External collection (skip in ANALYZE/MONITOR modes) ─────────
+    if mode_cfg.allow_collection:
+        try:
+            from scrapers.overture_adapter import OvertureLocalAdapter
 
-        if rate_manager.can_request("overture_s3", count=1):
-            bbox = REGION_BBOX.get(query.region.value, REGION_BBOX["austin_tx"])
-            adapter = OvertureLocalAdapter()
-            try:
-                count = adapter.fetch_local_employers(
-                    bbox=bbox,
-                    region=query.region.value,
-                )
-                api_calls += 1
-                sources_used.append("overture")
-                logger.info("[Executor] Overture returned %d local employers", count)
-            except Exception as e:
-                anomalies.append(f"Overture query failed: {e}")
-    except ImportError:
-        anomalies.append("Overture adapter not available")
+            if rate_manager.can_request("overture_s3", count=1):
+                bbox = REGION_BBOX.get(query.region.value, REGION_BBOX["austin_tx"])
+                adapter = OvertureLocalAdapter()
+                try:
+                    count = adapter.fetch_local_employers(
+                        bbox=bbox,
+                        region=query.region.value,
+                    )
+                    api_calls += 1
+                    records_new = count
+                    sources_used.append("overture")
+                    logger.info("[Executor] Overture returned %d local employers", count)
+                except Exception as e:
+                    anomalies.append(f"Overture query failed: {e}")
+            else:
+                anomalies.append("Overture budget exhausted")
+        except ImportError:
+            anomalies.append("Overture adapter not available")
 
-    # Report from DB
-    engine = init_db()
-    session = get_session(engine)
-    try:
-        q = session.query(LocalEmployer).filter(
-            LocalEmployer.region == query.region.value,
-            LocalEmployer.is_active.is_(True),
-        )
-        if industry_key != "coffee_cafe":  # broad search for now
-            q = q.filter(LocalEmployer.industry == industry_key)
-        total = q.count()
-
-        if total == 0:
-            anomalies.append(
-                "0 local employers indexed — run poi_local_density to populate"
+    # ── DB report (disabled as primary in COLLECT mode) ─────────────
+    total = 0
+    if mode_cfg.allow_db_fallback or sources_used:
+        engine = init_db()
+        session = get_session(engine)
+        try:
+            q = session.query(LocalEmployer).filter(
+                LocalEmployer.region == query.region.value,
+                LocalEmployer.is_active.is_(True),
             )
-    finally:
-        session.close()
+            if industry_key != "coffee_cafe":
+                q = q.filter(LocalEmployer.industry == industry_key)
+            total = q.count()
+
+            if total == 0:
+                anomalies.append(
+                    "0 local employers indexed — run poi_local_density in collect mode to populate"
+                )
+        finally:
+            session.close()
+    elif not sources_used:
+        anomalies.append(
+            f"MODE={query.mode.value}: no collector executed and DB fallback disabled"
+        )
 
     suggested_next: list[dict] = []
     if total > 0:
@@ -303,6 +354,7 @@ def _execute_poi_local(query: AgentQuery) -> ConciseResult:
         status=ResultStatus.COMPLETED if sources_used else ResultStatus.PARTIAL,
         intent=query.intent,
         records_found=total,
+        records_new=records_new,
         api_calls_used=api_calls,
         anomalies=anomalies,
         suggested_next=suggested_next,
@@ -310,63 +362,75 @@ def _execute_poi_local(query: AgentQuery) -> ConciseResult:
 
 
 def _execute_wage_baseline(query: AgentQuery) -> ConciseResult:
-    """WAGE_BASELINE — Fetch BLS wage data for industry/region."""
+    """WAGE_BASELINE — Fetch BLS wage data for industry/region.
+
+    Mode-aware: COLLECT requires BLS API hit, ANALYZE/MONITOR DB-only.
+    """
     industry_key = query.industry.value if query.industry else "coffee_cafe"
+    mode_cfg = get_mode_config(query.mode)
     api_calls = 0
     anomalies: list[str] = []
     sources_used: list[str] = []
+    records_new = 0
 
-    # Try BLS adapter
-    try:
-        from scrapers.bls_adapter import BLSAdapter
+    # ── External collection ─────────────────────────────────────────
+    if mode_cfg.allow_collection:
+        try:
+            from scrapers.bls_adapter import BLSAdapter
 
-        if rate_manager.can_request("bls_v1", count=1):
-            adapter = BLSAdapter()
-            series_ids = list(AUSTIN_BLS_SERIES.values())
-            try:
-                data = adapter.fetch_series(series_ids[:3])  # Limit to budget
-                api_calls += 1
-                sources_used.append("bls")
-                logger.info("[Executor] BLS returned data for %d series", len(data))
-            except Exception as e:
-                anomalies.append(f"BLS fetch failed: {e}")
-        else:
-            anomalies.append("BLS budget exhausted for today")
-    except ImportError:
-        anomalies.append("BLS adapter not available")
+            if rate_manager.can_request("bls_v1", count=1):
+                adapter = BLSAdapter()
+                series_ids = list(AUSTIN_BLS_SERIES.values())
+                try:
+                    data = adapter.fetch_series(series_ids[:3])
+                    api_calls += 1
+                    records_new = len(data) if data else 0
+                    sources_used.append("bls")
+                    logger.info("[Executor] BLS returned data for %d series", len(data))
+                except Exception as e:
+                    anomalies.append(f"BLS fetch failed: {e}")
+            else:
+                anomalies.append("BLS budget exhausted for today")
+        except ImportError:
+            anomalies.append("BLS adapter not available")
 
-    # Report from existing DB
-    engine = init_db()
-    session = get_session(engine)
-    try:
-        q = session.query(WageIndex)
-        if industry_key:
-            q = q.filter(WageIndex.industry == industry_key)
-        wages = q.all()
+    # ── DB report ───────────────────────────────────────────────────
+    wages = []
+    if mode_cfg.allow_db_fallback or sources_used:
+        engine = init_db()
+        session = get_session(engine)
+        try:
+            q = session.query(WageIndex)
+            if industry_key:
+                q = q.filter(WageIndex.industry == industry_key)
+            wages = q.all()
 
-        chain_wages = [w for w in wages if w.is_chain]
-        local_wages = [w for w in wages if not w.is_chain]
+            chain_wages = [w for w in wages if w.is_chain]
+            local_wages = [w for w in wages if not w.is_chain]
 
-        if not wages:
-            anomalies.append("No wage data in DB — need BLS collection first")
-        else:
-            # Calculate averages for anomaly reporting
-            def _avg(items):
-                vals = []
-                for w in items:
-                    if w.wage_min and w.wage_max:
-                        vals.append((w.wage_min + w.wage_max) / 2)
-                return round(sum(vals) / len(vals), 2) if vals else None
+            if not wages:
+                anomalies.append("No wage data in DB — need BLS collection first")
+            else:
+                def _avg(items):
+                    vals = []
+                    for w in items:
+                        if w.wage_min and w.wage_max:
+                            vals.append((w.wage_min + w.wage_max) / 2)
+                    return round(sum(vals) / len(vals), 2) if vals else None
 
-            chain_avg = _avg(chain_wages)
-            local_avg = _avg(local_wages)
-            if chain_avg and local_avg:
-                gap = round(((local_avg - chain_avg) / chain_avg) * 100, 1)
-                anomalies.append(
-                    f"Wage gap: local avg ${local_avg}/hr vs chain avg ${chain_avg}/hr ({gap:+.1f}%)"
-                )
-    finally:
-        session.close()
+                chain_avg = _avg(chain_wages)
+                local_avg = _avg(local_wages)
+                if chain_avg and local_avg:
+                    gap = round(((local_avg - chain_avg) / chain_avg) * 100, 1)
+                    anomalies.append(
+                        f"Wage gap: local avg ${local_avg}/hr vs chain avg ${chain_avg}/hr ({gap:+.1f}%)"
+                    )
+        finally:
+            session.close()
+    elif not sources_used:
+        anomalies.append(
+            f"MODE={query.mode.value}: no collector executed and DB fallback disabled"
+        )
 
     suggested_next: list[dict] = []
     suggested_next.append({
@@ -379,7 +443,8 @@ def _execute_wage_baseline(query: AgentQuery) -> ConciseResult:
         query_id=query.query_id,
         status=ResultStatus.COMPLETED if sources_used else ResultStatus.PARTIAL,
         intent=query.intent,
-        records_found=len(wages) if 'wages' in dir() else 0,
+        records_found=len(wages),
+        records_new=records_new,
         api_calls_used=api_calls,
         anomalies=anomalies,
         suggested_next=suggested_next,
@@ -387,54 +452,67 @@ def _execute_wage_baseline(query: AgentQuery) -> ConciseResult:
 
 
 def _execute_job_posting_volume(query: AgentQuery) -> ConciseResult:
-    """JOB_POSTING_VOLUME — Count open job postings for a brand."""
+    """JOB_POSTING_VOLUME — Count open job postings for a brand.
+
+    Mode-aware: COLLECT requires Workday API hit, ANALYZE/MONITOR DB-only.
+    """
     brand_key = query.brand.value if query.brand else "starbucks"
+    mode_cfg = get_mode_config(query.mode)
     api_calls = 0
     anomalies: list[str] = []
     sources_used: list[str] = []
     records_found = 0
+    records_new = 0
 
-    # Try Workday careers API first
-    try:
-        from scrapers.careers_api import scrape_careers_api
+    # ── External collection ─────────────────────────────────────────
+    if mode_cfg.allow_collection:
+        try:
+            from scrapers.careers_api import scrape_careers_api
 
-        if rate_manager.can_request("careers_workday", count=1):
-            try:
-                signals = scrape_careers_api(
-                    region=query.region.value,
-                    chain=brand_key,
-                    ingest=True,
-                )
-                api_calls += 1
-                records_found = len(signals)
-                sources_used.append("workday")
-                logger.info("[Executor] Careers API returned %d signals", len(signals))
-            except Exception as e:
-                anomalies.append(f"Careers API failed: {e}")
-    except ImportError:
-        anomalies.append("Careers API adapter not available")
+            if rate_manager.can_request("careers_workday", count=1):
+                try:
+                    signals = scrape_careers_api(
+                        region=query.region.value,
+                        chain=brand_key,
+                        ingest=True,
+                    )
+                    api_calls += 1
+                    records_found = len(signals)
+                    records_new = len(signals)
+                    sources_used.append("workday")
+                    logger.info("[Executor] Careers API returned %d signals", len(signals))
+                except Exception as e:
+                    anomalies.append(f"Careers API failed: {e}")
+            else:
+                anomalies.append("Careers API budget exhausted")
+        except ImportError:
+            anomalies.append("Careers API adapter not available")
 
-    # Count existing signals from DB
-    engine = init_db()
-    session = get_session(engine)
-    try:
-        store_nums = [
-            s.store_num
-            for s in session.query(Store.store_num).filter(
-                Store.chain == brand_key,
-                Store.region == query.region.value,
-            ).all()
-        ]
-        if store_nums:
-            listing_count = session.query(Signal).filter(
-                Signal.store_num.in_(store_nums),
-                Signal.signal_type == "listing",
-            ).count()
-            if not sources_used:
+    # ── DB fallback ─────────────────────────────────────────────────
+    if not sources_used and mode_cfg.allow_db_fallback:
+        engine = init_db()
+        session = get_session(engine)
+        try:
+            store_nums = [
+                s.store_num
+                for s in session.query(Store.store_num).filter(
+                    Store.chain == brand_key,
+                    Store.region == query.region.value,
+                ).all()
+            ]
+            if store_nums:
+                listing_count = session.query(Signal).filter(
+                    Signal.store_num.in_(store_nums),
+                    Signal.signal_type == "listing",
+                ).count()
                 records_found = listing_count
-            anomalies.append(f"Total listing signals in DB: {listing_count}")
-    finally:
-        session.close()
+                anomalies.append(f"Total listing signals in DB: {listing_count}")
+        finally:
+            session.close()
+    elif not sources_used:
+        anomalies.append(
+            f"MODE={query.mode.value}: no collector executed and DB fallback disabled"
+        )
 
     suggested_next: list[dict] = [
         {
@@ -456,44 +534,55 @@ def _execute_job_posting_volume(query: AgentQuery) -> ConciseResult:
 
 
 def _execute_sentiment_check(query: AgentQuery) -> ConciseResult:
-    """SENTIMENT_CHECK — Gather worker sentiment for a brand."""
+    """SENTIMENT_CHECK — Gather worker sentiment for a brand.
+
+    Mode-aware: COLLECT requires Reddit API hit, ANALYZE/MONITOR DB-only.
+    """
     brand_key = query.brand.value if query.brand else "starbucks"
+    mode_cfg = get_mode_config(query.mode)
     api_calls = 0
     anomalies: list[str] = []
     sources_used: list[str] = []
     records_found = 0
+    records_new = 0
 
-    # Try Reddit adapter
-    try:
-        from scrapers.reddit_adapter import RedditAdapter
+    # ── External collection ─────────────────────────────────────────
+    if mode_cfg.allow_collection:
+        try:
+            from scrapers.reddit_adapter import RedditAdapter
 
-        source_key = "reddit_oauth" if rate_manager.can_request("reddit_oauth") else "reddit_json"
-        if rate_manager.can_request(source_key, count=1):
-            try:
-                adapter = RedditAdapter()
-                posts = adapter.fetch_sentiment(brand=brand_key)
-                api_calls += 1
-                records_found = len(posts) if posts else 0
-                sources_used.append("reddit")
-            except Exception as e:
-                anomalies.append(f"Reddit fetch failed: {e}")
-        else:
-            anomalies.append("Reddit budget exhausted")
-    except ImportError:
-        anomalies.append("Reddit adapter not available")
+            source_key = "reddit_oauth" if rate_manager.can_request("reddit_oauth") else "reddit_json"
+            if rate_manager.can_request(source_key, count=1):
+                try:
+                    adapter = RedditAdapter()
+                    posts = adapter.fetch_sentiment(brand=brand_key)
+                    api_calls += 1
+                    records_found = len(posts) if posts else 0
+                    records_new = records_found
+                    sources_used.append("reddit")
+                except Exception as e:
+                    anomalies.append(f"Reddit fetch failed: {e}")
+            else:
+                anomalies.append("Reddit budget exhausted")
+        except ImportError:
+            anomalies.append("Reddit adapter not available")
 
-    # Count existing sentiment signals
-    engine = init_db()
-    session = get_session(engine)
-    try:
-        sentiment_count = session.query(Signal).filter(
-            Signal.signal_type.in_(["sentiment", "review_score"]),
-        ).count()
-        if not sources_used:
+    # ── DB fallback ─────────────────────────────────────────────────
+    if not sources_used and mode_cfg.allow_db_fallback:
+        engine = init_db()
+        session = get_session(engine)
+        try:
+            sentiment_count = session.query(Signal).filter(
+                Signal.signal_type.in_(["sentiment", "review_score"]),
+            ).count()
             records_found = sentiment_count
-        anomalies.append(f"Total sentiment signals in DB: {sentiment_count}")
-    finally:
-        session.close()
+            anomalies.append(f"Total sentiment signals in DB: {sentiment_count}")
+        finally:
+            session.close()
+    elif not sources_used:
+        anomalies.append(
+            f"MODE={query.mode.value}: no collector executed and DB fallback disabled"
+        )
 
     return ConciseResult(
         query_id=query.query_id,

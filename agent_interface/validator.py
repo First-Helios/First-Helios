@@ -29,12 +29,14 @@ from backend.database import (
 from backend.rate_manager import rate_manager
 
 from agent_interface.schemas import (
+    AgentMode,
     AgentQuery,
     ConciseResult,
     DataSource,
     FRESHNESS_THRESHOLDS,
     Intent,
     ResultStatus,
+    get_mode_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,10 +58,18 @@ INTENT_SOURCE_MAP: dict[str, list[str]] = {
 def validate_and_check(query: AgentQuery) -> Optional[ConciseResult]:
     """Run pre-flight checks on an AgentQuery.
 
+    Mode-aware:
+      COLLECT  — freshness check SKIPPED (always collect fresh data)
+      ANALYZE  — freshness check skipped (no external calls anyway)
+      MONITOR  — freshness check skipped (read-only)
+      MIXED    — freshness check ACTIVE (original behavior)
+
     Returns:
         ConciseResult with status REJECTED/DUPLICATE/NO_BUDGET if blocked.
         None if the query should proceed to execution.
     """
+    mode_cfg = get_mode_config(query.mode)
+
     # 1. Schema validation (already done at parse time, but double-check)
     errors = query.validate()
     if errors:
@@ -71,15 +81,23 @@ def validate_and_check(query: AgentQuery) -> Optional[ConciseResult]:
             valid_options=_get_valid_options_for_intent(query.intent),
         )
 
-    # 2. Freshness check — do we already have recent enough data?
-    freshness = _check_freshness(query)
-    if freshness is not None:
-        return freshness
+    # 2. Freshness check — SKIP if mode bypasses freshness
+    if not mode_cfg.bypass_freshness:
+        freshness = _check_freshness(query)
+        if freshness is not None:
+            return freshness
+    else:
+        logger.info(
+            "[Validator] Freshness check BYPASSED for %s (mode=%s)",
+            query.intent.value, query.mode.value,
+        )
 
     # 3. Budget check — can we afford the API calls?
-    budget_check = _check_budget(query)
-    if budget_check is not None:
-        return budget_check
+    #    Skip for modes that don't make external calls
+    if mode_cfg.allow_collection:
+        budget_check = _check_budget(query)
+        if budget_check is not None:
+            return budget_check
 
     # All checks passed — proceed to execution
     return None
