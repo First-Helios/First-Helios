@@ -142,6 +142,30 @@ First-Helios/
 │   ├── populate_reference_data.py ← Seed ref_industry, ref_brands, ref_regions
 │   └── backfill_geocoding.py      ← Geocode stores missing coordinates
 │
+├── pipeline/                      ← Route registry, tracing, validation, health
+│   ├── route_index.py             ← RouteContract dataclass + ROUTES registry (intent→adapter→DB)
+│   ├── tracing.py                 ← PipelineTrace + TraceSpan structured span recording
+│   ├── validation.py              ← Per-intent scraper output contracts + validate_scraper_output()
+│   └── health.py                  ← Startup self-check (routes, adapters, thresholds, contracts)
+│
+├── tests/                         ← Full pytest suite (258 tests, 0 failures)
+│   ├── conftest.py                ← In-memory SQLite fixtures (mem_engine, mem_session)
+│   ├── pytest.ini
+│   ├── unit/                      ← Pure logic, no DB, no external calls
+│   │   ├── test_schemas.py        ← AgentQuery.validate(), parse_agent_query(), ModeConfig
+│   │   ├── test_database_models.py← SourceFreshness/RateBudget properties, upsert/check
+│   │   ├── test_scoring_careers.py← age_weight(), weighted_listing_count(), tiers
+│   │   ├── test_scoring_sentiment.py← sentiment inversion, scaling, percentile ranking
+│   │   ├── test_scoring_wage.py   ← wage gap, yearly→hourly, tier assignment
+│   │   └── test_dedup_helpers.py  ← haversine, normalize, radius checks
+│   ├── integration/               ← In-memory SQLite, mocked external deps
+│   │   ├── test_ingest.py         ← ingest_signals(): upsert, dedup, geocode, snapshot
+│   │   ├── test_validator.py      ← validate_and_check(): freshness, budget, mode
+│   │   ├── test_scoring_engine.py ← compute_all_scores(): weights, tiers, DB writes
+│   │   └── test_dedup_pipeline.py ← find_existing_match(), resolve_alias()
+│   └── pipeline/
+│       └── test_pipeline_contracts.py ← Route contracts, tracing, validation, health
+│
 ├── collectors/                    ← WIP — future collector-pattern refactor
 ├── storage/                       ← WIP — future ingestion pipeline refactor
 ├── scraper/scrape.py              ← LEGACY CLI (delegates to scrapers/)
@@ -152,7 +176,7 @@ First-Helios/
 │   └── openclaw_wishlists/        ← Daily JSON wishlist files
 │
 ├── RUNBOOK.md                     ← Operational procedures
-├── ARCHITECTURE_PLAN.md           ← Long-term architecture plan
+├── SYSTEM_DESIGN.md               ← Big-picture design rationale, pros/cons, industry standards
 └── .venv/                         ← Python 3.12 virtual environment
 ```
 
@@ -199,23 +223,32 @@ User starts session via POST /api/openclaw/run
 │
 ├─1─ Build system prompt with:
 │      • 13 industries + 49 mega-corps (term pools)
-│      • Source freshness context (stale vs fresh data)
+│      • Pilot briefing (auto-generated BEFORE the agent loop):
+│          - Runs discovery_scan internally
+│          - Injects ranked collection agenda (top 10 leads by priority)
+│          - Lists already-fresh data the agent must NOT re-collect
 │      • Region + goal context
 │
-├─2─ LLM generates JSON action (propose / query / wish / status / done)
+├─2─ LLM reads the ranked agenda and generates JSON action
+│      (propose / query / wish / status / done)
 │      │
 │      ├── propose → prevalidation gate:
 │      │     1. Industry/brand enum check
 │      │     2. Freshness gate (skip if data <threshold days old)
 │      │     3. Search term pool validation (job/poi/sentiment)
+│      │        └── also checks session-local terms added via wish
 │      │     4. Budget dry-run
 │      │
 │      ├── query → executor.execute():
 │      │     Routes to intent handler → calls scraper → DB write
 │      │     Auto-stamps source_freshness table on success
-│      │     discovery_scan → runs 5 strategies, returns ranked leads
+│      │     NOTE: score_refresh, data_quality_audit, discovery_scan,
+│      │     and campaign_status always execute in analyze mode
+│      │     regardless of session mode (they are DB-internal)
 │      │
-│      ├── wish → wishlist manager (gap tracking)
+│      ├── wish (new_term) → wishlist manager + session-local term pool
+│      │     Term is immediately available in the same session
+│      │     without waiting for operator approval
 │      ├── status → rate budget summary
 │      └── done → session complete
 │
@@ -397,6 +430,45 @@ Every successful execution stamps the `source_freshness` table. Future queries f
 
 ---
 
+## Pipeline Package
+
+The `pipeline/` package is the single source of truth for how data moves through the system. Every intent has a registered `RouteContract` that maps it all the way to a DB write.
+
+```python
+from pipeline.route_index import ROUTES
+
+routes = ROUTES["poi_chain_locations"]
+# [RouteContract(source_key="atp_geojson", scraper_adapter="AllThePlacesAdapter",
+#                signal_type="listing", db_table="Store", status="live"),
+#  RouteContract(source_key="overture_s3",  ..., status="live"),
+#  RouteContract(source_key="overpass_api", ..., status="unwired")]
+```
+
+| Module | Purpose |
+|--------|---------|
+| `route_index.py` | `RouteContract` dataclass + `ROUTES` dict — every intent mapped to source → adapter → DB |
+| `tracing.py` | `PipelineTrace` + `TraceSpan` for structured per-stage span recording |
+| `validation.py` | `SCRAPER_OUTPUT_CONTRACTS` + `validate_scraper_output()` — catches bad scraper output before it hits the DB |
+| `health.py` | `run_startup_check()` — verifies routes, adapter imports, threshold consistency; exposed at `/api/pipeline/health` |
+
+---
+
+## Test Suite
+
+258 tests across three categories, all passing. Run with:
+
+```bash
+python -m pytest tests/ -v
+python -m pytest tests/unit/ -v        # fast — no DB or external calls
+python -m pytest tests/integration/ -v # in-memory SQLite, all deps mocked
+python -m pytest tests/pipeline/ -v   # route contracts, tracing, health
+python -m pytest tests/ --cov=agent_interface --cov=backend --cov-report=term-missing
+```
+
+**Isolation strategy:** Integration tests use in-memory SQLite. External dependencies (`init_db`, `get_session`, `geocode`, `rate_manager`) are patched at the call site so the system under test owns its session lifecycle.
+
+---
+
 ## Scoring Model
 
 Every store gets a composite score from 0–100 built from three independent sub-scores:
@@ -506,7 +578,7 @@ curl -X POST http://localhost:8765/api/openclaw/run \
 ### Layer 3 (Agent/Orchestration)
 | Issue | File | Impact | Notes |
 |-------|------|--------|-------|
-| LLM may still mix terms across industries | `openclaw/orchestrator.py` | Pre-validation catches it, but wastes an LLM iteration | Improved prompt mitigates; 7b model has limits |
+| LLM may still mix terms across industries | `openclaw/orchestrator.py` | Pre-validation catches it, but wastes an LLM iteration | Improved prompt + wishlist session pool mitigates; 7b model has limits |
 | `economic_context` handler is DB-only | `agent_interface/executor.py` | No live economic data collection | Could wire BLS unemployment + CPI series |
 | Executor `_execute_poi_chain` only tries AllThePlaces | `agent_interface/executor.py` | No multi-source agreement for POI data | OSM + Overture chain adapters ready to wire |
 | `data_quality_audit` hardcodes Starbucks thresholds | `agent_interface/executor.py` | "Expected ~300+" only meaningful for Starbucks Austin | Make brand/region thresholds dynamic |
