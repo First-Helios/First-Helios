@@ -52,7 +52,10 @@ Public Sources (free, legal, no login required)
 ChainStaffingTracker/
 │
 ├── README.md                   ← you are here
-├── AGENT.md                    ← instructions for AI coding agents
+├── CLAUDE_AGENT_HANDOFF.md     ← full system overview for general agents
+├── CLAUDE_DATA_ENGINEER.md     ← ⭐ START HERE for data engineering tasks
+├── CLAUDE_DATA_ENGINEERING_HANDOFF.md  ← detailed data digest, validation, ingestion
+├── DATABASE_DESIGN_BEST_PRACTICES.md   ← 6-layer architecture & metadata system
 ├── config/
 │   ├── chains.yaml             ← chain targets, industries, regions, scoring weights
 │   └── loader.py               ← typed config access for all modules
@@ -64,39 +67,88 @@ ChainStaffingTracker/
 │   ├── reddit_adapter.py       ← PRAW + keyword scoring → ScraperSignal output
 │   ├── reviews_adapter.py      ← Google Maps (Playwright) + Yelp → ScraperSignal output
 │   ├── bls_adapter.py          ← BLS API v1 (no key) → wage baseline context
+│   ├── qcew_adapter.py         ← BLS QCEW CSV API → employment baseline
+│   ├── cbp_adapter.py          ← Census CBP API → establishment counts
+│   ├── overture_adapter.py     ← Overture Maps → store discovery
 │   └── geocoding.py            ← Nominatim + overrides
 │
 ├── backend/
-│   ├── database.py             ← SQLAlchemy models + init (tracker.db)
-│   ├── ingest.py               ← ingest_signals() — writes ScraperSignals to DB
-│   ├── scheduler.py            ← APScheduler job definitions
+│   ├── database.py             ← SQLAlchemy models (22 tables) + init
+│   ├── metadata.py             ← Metadata tables for audit trail + system intelligence
+│   ├── ingest.py               ← Signal ingestion pipeline + validation
+│   ├── baseline.py             ← Labor market baseline (QCEW+JOLTS+OEWS+LAUS)
+│   ├── scheduler.py            ← APScheduler job definitions (12 jobs)
+│   ├── rate_manager.py         ← API rate limit tracking
 │   ├── scoring/
-│   │   ├── engine.py           ← Composite score (multi-source weighted)
-│   │   ├── careers.py          ← Careers API sub-score (age decay + baseline)
-│   │   ├── sentiment.py        ← Reddit + review sentiment sub-score
-│   │   └── wage.py             ← Wage gap sub-score (local vs chain)
-│   └── targeting.py            ← TargetingScore — ranked job fair candidates
+│   │   ├── engine.py           ← 4-component composite score
+│   │   ├── careers.py          ← Careers API sub-score
+│   │   ├── sentiment.py        ← Reddit + review sentiment
+│   │   └── wage.py             ← Wage gap sub-score
+│   ├── models/
+│   │   └── reference.py        ← Reference data (brands, industries, regions)
+│   └── targeting.py            ← Targeting score — ranked job fair candidates
 │
-├── server.py                   ← Flask app (port 8765)
-├── frontend/                   ← Existing Leaflet map SPA (dark theme, vanilla JS)
-│   ├── index.html
+├── server.py                   ← Flask API + serving (port 8765)
+├── scripts/
+│   ├── populate_metadata.py    ← Initialize metadata tables
+│   ├── system_health_dashboard.py ← Weekly audit tool
+│   ├── backfill_geocoding.py
+│   └── populate_reference_data.py
+│
+├── frontend/
+│   ├── index.html              ← Leaflet map SPA (dark theme)
+│   ├── metrics.html            ← API metrics dashboard
 │   ├── css/style.css
 │   └── js/
 │
-├── scraper/                    ← LEGACY — do not delete, original scrape.py lives here
-│   └── scrape.py               ← Still callable as CLI; internally delegates to scrapers/
-│
-├── spiritpool/                 ← Browser extension — ON HIATUS, do not modify
 ├── data/
-│   ├── tracker.db              ← Primary SQLite DB (auto-created)
-│   └── spiritpool.db           ← Extension DB — leave untouched
+│   ├── tracker.db              ← Primary SQLite DB (auto-created on init)
+│   └── spiritpool.db           ← Extension DB (legacy, do not modify)
 │
-├── Data Analysis/
-│   └── spiritpool_analysis.ipynb
+├── spiritpool/                 ← Browser extension — ON HIATUS
+├── Data_analysis/              ← Jupyter analysis notebooks
+│   └── full_table_scan.ipynb
 │
-├── RUNBOOK.md                  ← Start server, run scrapers, troubleshoot
+├── docs/
+│   ├── INDEX.md                ← documentation index & quick navigation
+│   ├── DATABASE_DESIGN_BEST_PRACTICES.md
+│   ├── DATA_DICTIONARY_*.md    ← comprehensive data documentation
+│   ├── BLS_GROUND_TRUTH_GUIDE.md
+│   ├── DATA_INGESTION_SUMMARY.md
+│   └── contracts/              ← data contracts (SLA per table)
+│
+├── RUNBOOK.md                  ← Server startup, debugging, troubleshooting
+├── .env.example                ← API key template
 └── .venv/                      ← Python virtual environment
 ```
+
+---
+
+## ⭐ Data Engineering Path
+
+**If you're working on data structures, validation, or ingestion:** Start here.
+
+1. **[CLAUDE_DATA_ENGINEER.md](./CLAUDE_DATA_ENGINEER.md)** (5 min read)
+   - Quick-start health checks
+   - 6-step checklist for adding data sources
+   - Monthly audit procedures
+
+2. **[CLAUDE_DATA_ENGINEERING_HANDOFF.md](./CLAUDE_DATA_ENGINEERING_HANDOFF.md)** (15 min read)
+   - Data digest structure (layers, tables, flows)
+   - Validation logic per layer
+   - Ingestion pipeline architecture
+   - Common scenarios and debugging
+
+3. **[DATABASE_DESIGN_BEST_PRACTICES.md](./DATABASE_DESIGN_BEST_PRACTICES.md)** (20 min read)
+   - Why we have 6 layers (raw → metadata)
+   - Metadata system for agent blindness
+   - Data contracts and SLAs
+   - Lineage tracking
+
+4. **[docs/INDEX.md](./docs/INDEX.md)**
+   - Full documentation index with navigation
+   - Table structure and column reference
+   - BLS data sources and refresh schedules
 
 ---
 
@@ -349,6 +401,100 @@ Key sections:
 **Public data only** — no logins, no paywalls, no bypassing access controls. The legal defensibility of this project depends on this constraint being absolute.
 
 **Austin TX only for now** — build it right for one city before adding regions. The config system supports multi-region; the pipeline focuses on one.
+
+---
+
+## Data Engineering: System Overview
+
+The heart of this system is a **multi-layer data architecture** that ingests from 15+ sources, validates at each layer, and feeds a composite scoring engine.
+
+### Data Digest Structure (6 Layers)
+
+```
+Source APIs (15+ sources: BLS, Census, Indeed, Reddit, etc.)
+    ↓
+Layer 1: RAW — Normalized observations from each source
+    • stores, signals, wage_index, qcew_data, cbp_data, jolts_data, etc.
+    • Append-only, immutable after creation
+    • Validation: schema, nullability, valid ranges
+    ↓
+Layer 2: SIGNALS — De-duplicated, time-series observations ready for analysis
+    • Same tables as Layer 1 but with reconciliation
+    • Validation: time-monotonicity, outlier detection, staleness
+    ↓
+Layer 3: DERIVED — Computed aggregates and transformations
+    • labor_market_baseline (combines QCEW+JOLTS+OEWS+LAUS)
+    • industry aggregates, regional summaries
+    • Validation: referential integrity, formula audit
+    ↓
+Layer 4: BUSINESS LOGIC — Decision inputs (scores, targeting)
+    • scores (composite staffing-stress index)
+    • wage_index (local vs. chain comparison)
+    • Validation: score bounds (0-100), no nulls in key fields
+    ↓
+Layer 5: REFERENCE — Master data (lookup tables)
+    • ref_brands, ref_industry, ref_regions, ref_category_map
+    • Validation: uniqueness, no orphaned foreign keys
+    ↓
+Layer 6: METADATA — System intelligence
+    • meta_table_catalog, meta_column_catalog, meta_data_lineage
+    • meta_job_runs, meta_api_calls
+    • Validation: all production tables documented
+```
+
+### How Data Flows
+
+1. **Ingest** (15+ scrapers pull from public APIs concurrently)
+   - BLS QCEW, JOLTS, OEWS, LAUS (government labor statistics)
+   - Indeed, Glassdoor, LinkedIn (job postings via JobSpy)
+   - Reddit (sentiment via PRAW)
+   - Google Maps + Yelp (reviews and ratings)
+   - Workday careers APIs (Starbucks, Dutch Bros)
+
+2. **Normalize** (`ScraperSignal` dataclass standardizes all inputs)
+   - All sources converted to common format (source, signal_type, value, timestamp, store)
+   - Stored in `signals` table
+
+3. **Validate** (per-layer validation rules)
+   - Raw layer: schema, nullability, type conversion
+   - Signals layer: duplicate detection, time-series integrity
+   - Derived layer: formula accuracy, referential integrity
+   - Business layer: score bounds, no surprising nulls
+
+4. **Transform** (scheduled jobs compute derived tables)
+   - `labor_market_baseline` recomputed weekly (combines 4 BLS sources)
+   - `wage_index` recomputed daily (local vs. chain comparison)
+   - `scores` recomputed on every signal arrival
+
+5. **Serve** (Flask API → frontend map)
+   - `/api/scores` — All store scores
+   - `/api/targeting` — Ranked job fair candidates
+   - `/api/wage-index` — Pay gap analysis
+
+### Data Quality Checks (Run Weekly)
+
+```bash
+python scripts/system_health_dashboard.py
+```
+
+Checks:
+- 🟢 FRESH (updated in last 3 days)
+- 🟡 AGING (3–7 days old)
+- 🔴 STALE (violates SLA)
+- Recent job failures
+- API errors and rate limits
+- Data lineage accuracy
+
+### Adding a New Data Source (6 Steps)
+
+See [CLAUDE_DATA_ENGINEER.md](./CLAUDE_DATA_ENGINEER.md#adding-a-new-data-source-step-by-step-checklist) for the complete checklist. TL;DR:
+
+1. **Assess:** frequency, coverage, freshness requirement
+2. **Define tables:** follow `[layer]_[source]_[entity]` naming
+3. **Register in metadata:** document in `meta_table_catalog` + `meta_column_catalog`
+4. **Write ingestion script:** log to `meta_job_runs` and `meta_api_calls`
+5. **Define lineage:** show which tables feed which downstream tables
+6. **Write data contract:** document SLA, valid ranges, fallback strategy
 
 ---
 

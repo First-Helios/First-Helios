@@ -43,6 +43,17 @@ def _import_reference_models() -> None:
         logger.debug("[Database] backend.models.reference not found — skipping")
 
 
+def _import_metadata_models() -> None:
+    """Import metadata models so their tables register with Base.metadata.
+
+    Called lazily in init_db() to avoid circular-import issues.
+    """
+    try:
+        import backend.metadata  # noqa: F401
+    except ImportError:
+        logger.debug("[Database] backend.metadata not found — skipping")
+
+
 class Base(DeclarativeBase):
     """Declarative base for all tracker models."""
     pass
@@ -699,6 +710,7 @@ def get_engine(db_path: Path | None = None):
 def init_db(db_path: Path | None = None):
     """Create all tables if they don't exist."""
     _import_reference_models()
+    _import_metadata_models()
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
     logger.info("[Database] Initialized tracker.db at %s", db_path or DB_PATH)
