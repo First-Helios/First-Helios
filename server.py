@@ -19,6 +19,10 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Ensure project root is on sys.path
 _PROJECT_ROOT = Path(__file__).parent
 if str(_PROJECT_ROOT) not in sys.path:

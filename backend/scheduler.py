@@ -189,6 +189,32 @@ def init_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # ── NLRB labor unrest — weekly Wednesday 7am ─────────────────
+    nlrb_cron = sched_cfg.get("nlrb", {}).get("cron", {})
+    scheduler.add_job(
+        _run_nlrb,
+        "cron",
+        day_of_week=nlrb_cron.get("day_of_week", "wed"),
+        hour=nlrb_cron.get("hour", 7),
+        minute=nlrb_cron.get("minute", 0),
+        id="nlrb",
+        name="NLRB Labor Unrest Cases",
+        replace_existing=True,
+    )
+
+    # ── Texas WARN Act — weekly Tuesday 7am ──────────────────────
+    warn_cron = sched_cfg.get("warn_tx", {}).get("cron", {})
+    scheduler.add_job(
+        _run_warn,
+        "cron",
+        day_of_week=warn_cron.get("day_of_week", "tue"),
+        hour=warn_cron.get("hour", 7),
+        minute=warn_cron.get("minute", 0),
+        id="warn_tx",
+        name="Texas WARN Act Filings",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
@@ -285,13 +311,36 @@ def _run_reviews() -> None:
 
 
 def _run_bls() -> None:
-    """Scheduled job: Run BLS wage data fetcher."""
-    try:
-        from scrapers.bls_adapter import scrape_bls
+    """Scheduled job: Run BLS data fetcher.
 
-        logger.info("[Scheduler] Running BLS fetcher")
-        signals = scrape_bls(region="austin_tx")
-        logger.info("[Scheduler] BLS: %d signals", len(signals))
+    Uses the bulk download script when BLS_API_KEY is set (v2, 50 series/call),
+    falls back to the legacy per-series adapter otherwise.
+    """
+    import os
+    try:
+        if os.environ.get("BLS_API_KEY"):
+            # v2 path: batch POST, cache per-series, write to DB
+            import sys
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+            from download_bls_bulk import fetch_series, process_and_write
+            from config.loader import get_bls_series
+
+            current_year = str(__import__("datetime").datetime.utcnow().year)
+            series_config = get_bls_series()
+            logger.info("[Scheduler] Running BLS bulk fetch (v2) for %s", current_year)
+            series_data = fetch_series(series_config, current_year, current_year, force=True)
+            counts = process_and_write(series_data, series_config, "austin_tx")
+            logger.info(
+                "[Scheduler] BLS bulk: JOLTS=%d LAUS=%d CES=%d CPI/ECI=%d new rows",
+                counts["jolts"], counts["laus"], counts["ces"], counts.get("cpi_eci", 0),
+            )
+        else:
+            # Legacy v1 path: per-series GET via bls_adapter
+            from scrapers.bls_adapter import scrape_bls
+            logger.info("[Scheduler] Running BLS fetcher (v1 fallback — set BLS_API_KEY for v2)")
+            signals = scrape_bls(region="austin_tx")
+            logger.info("[Scheduler] BLS: %d signals", len(signals))
 
     except Exception as e:
         logger.error("[Scheduler] BLS job failed: %s", e)
@@ -437,3 +486,33 @@ def _run_baseline_recompute() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] Baseline recompute failed: %s", e)
+
+
+def _run_nlrb() -> None:
+    """Scheduled job: Fetch NLRB labor unrest cases for tracked chains."""
+    try:
+        from scrapers.nlrb_adapter import scrape_nlrb
+        from backend.scoring.engine import compute_all_scores
+
+        logger.info("[Scheduler] Running NLRB labor unrest fetch")
+        signals = scrape_nlrb(region="austin_tx")
+        logger.info("[Scheduler] NLRB: %d signals", len(signals))
+
+        if signals:
+            compute_all_scores(region="austin_tx")
+
+    except Exception as e:
+        logger.error("[Scheduler] NLRB job failed: %s", e)
+
+
+def _run_warn() -> None:
+    """Scheduled job: Fetch Texas WARN Act filings."""
+    try:
+        from scrapers.warn_adapter import scrape_warn
+
+        logger.info("[Scheduler] Running Texas WARN Act fetch")
+        signals = scrape_warn(region="austin_tx")
+        logger.info("[Scheduler] WARN: %d signals", len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] WARN job failed: %s", e)

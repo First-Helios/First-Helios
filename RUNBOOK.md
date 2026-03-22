@@ -84,6 +84,15 @@ python scraper/scrape.py --location "Austin, TX, US" --radius 25
 
 ## Check Database
 
+Download data 
+overturemaps download \
+  --bbox=-98.0,30.1,-97.4,30.55 \
+  -f geojson \
+  --type=place \
+  -o data/overture_austin_places.geojson
+
+  
+
 ```bash
 python3 -c "
 import sqlite3; conn = sqlite3.connect('data/tracker.db')

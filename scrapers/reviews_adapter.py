@@ -30,6 +30,47 @@ from scrapers.geocoding import extract_store_num
 
 logger = logging.getLogger(__name__)
 
+# Staffing-stress keywords extracted from review text.
+# Split into tiers: high-signal phrases vs. moderate single words.
+_STAFFING_KEYWORDS_HIGH: list[str] = [
+    "understaffed", "short staffed", "short-staffed",
+    "skeleton crew", "no one working", "only one person",
+    "one barista", "one employee", "one worker",
+    "drive thru only", "drive-thru only", "lobby closed",
+    "closed early", "closed the lobby", "hiring desperately",
+    "can't keep staff", "always hiring", "always short",
+    "waited 30 minutes", "waited 45 minutes", "waited an hour",
+    "forever to get", "took forever",
+]
+_STAFFING_KEYWORDS_MED: list[str] = [
+    "understaffing", "short handed", "short-handed",
+    "understated", "wait forever", "waited long",
+    "slow service", "overworked", "burned out", "turnover",
+    "quitting", "nobody working", "no staff", "no employees",
+    "only two", "just one",
+]
+
+
+def _staffing_keyword_score(text: str) -> tuple[float, list[str]]:
+    """Return (score 0-1, matched keywords) for staffing-stress content.
+
+    High-signal matches count 2×; moderate count 1×.
+    Score is capped at 1.0 after normalizing against a ceiling of 5 hits.
+    """
+    t = text.lower()
+    hits: list[str] = []
+    weight = 0.0
+    for phrase in _STAFFING_KEYWORDS_HIGH:
+        if phrase in t:
+            hits.append(phrase)
+            weight += 2.0
+    for phrase in _STAFFING_KEYWORDS_MED:
+        if phrase in t and phrase not in hits:
+            hits.append(phrase)
+            weight += 1.0
+    score = min(1.0, weight / 5.0)
+    return score, hits
+
 
 class ReviewsAdapter(BaseScraper):
     """Scrapes Google Maps for store ratings and review counts.
@@ -139,6 +180,43 @@ class ReviewsAdapter(BaseScraper):
                             source_url=getattr(place, "url", None),
                         )
                         signals.append(signal)
+
+                        # ── Staffing keyword NLP ──────────────────────
+                        # If the library returns individual review snippets,
+                        # score them for staffing-stress language.
+                        review_texts: list[str] = []
+                        if hasattr(place, "reviews") and place.reviews:
+                            review_texts = [
+                                r.text if hasattr(r, "text") else str(r)
+                                for r in place.reviews
+                                if r
+                            ]
+                        elif hasattr(place, "review_text") and place.review_text:
+                            review_texts = [place.review_text]
+
+                        if review_texts:
+                            combined_text = " ".join(review_texts)
+                            kw_score, matched_kws = _staffing_keyword_score(combined_text)
+                            if kw_score > 0:
+                                kw_signal = ScraperSignal(
+                                    store_num=store_num,
+                                    chain=self.chain_key,
+                                    source="google_maps",
+                                    signal_type="staffing_keywords",
+                                    value=kw_score,
+                                    metadata={
+                                        "store_name": place.name or "",
+                                        "address": place.address or "",
+                                        "lat": place.latitude,
+                                        "lng": place.longitude,
+                                        "matched_keywords": matched_kws,
+                                        "keyword_count": len(matched_kws),
+                                        "review_sample_count": len(review_texts),
+                                    },
+                                    observed_at=datetime.utcnow(),
+                                    source_url=getattr(place, "url", None),
+                                )
+                                signals.append(kw_signal)
 
                         # Rate limiting
                         delay_min = self.rate_limit.get("delay_min_seconds", 3.0)

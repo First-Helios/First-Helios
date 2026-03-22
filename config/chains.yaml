@@ -138,6 +138,10 @@ rate_limits:
     delay_seconds: 2.0
   bls:
     delay_seconds: 1.0
+  nlrb:
+    delay_seconds: 2.0   # NLRB public search — be polite, no documented limit
+  warn:
+    delay_seconds: 1.0   # Socrata API — generous limits, 1s is sufficient
 
 http:
   timeout_seconds: 30
@@ -194,6 +198,80 @@ bls_series:
     metric: "separations_rate"
     industry_code: "72"
 
+  # ── CES — Austin MSA broader economy (new) ─────────────────────
+  austin_total_nonfarm_employment:
+    series_id: "SMU48124200000000001"
+    description: "Austin-Round Rock MSA, Total Nonfarm Employment (thousands)"
+    category: "ces"
+  austin_total_private_employment:
+    series_id: "SMU48124200500000001"
+    description: "Austin-Round Rock MSA, Total Private Employment (thousands)"
+    category: "ces"
+  austin_total_private_weekly_earnings:
+    series_id: "SMU48124200500000011"
+    description: "Austin-Round Rock MSA, Total Private, Average Weekly Earnings ($)"
+    category: "ces"
+  austin_total_private_weekly_hours:
+    series_id: "SMU48124200500000003"
+    description: "Austin-Round Rock MSA, Total Private, Average Weekly Hours"
+    category: "ces"
+  austin_trade_transport_employment:
+    series_id: "SMU48124204100000001"
+    description: "Austin-Round Rock MSA, Trade/Transport/Utilities Employment (thousands)"
+    category: "ces"
+  austin_professional_business_employment:
+    series_id: "SMU48124206500000001"
+    description: "Austin-Round Rock MSA, Professional & Business Services Employment (thousands)"
+    category: "ces"
+
+  # ── CES — National benchmarks (new) ────────────────────────────
+  national_all_private_hourly_earnings:
+    series_id: "CEU0500000003"
+    description: "National All Private, Average Hourly Earnings ($)"
+    category: "ces"
+  national_all_private_employment:
+    series_id: "CEU0500000001"
+    description: "National All Private, Total Employment (thousands)"
+    category: "ces"
+
+  # ── JOLTS — Total private cross-industry baseline (new) ─────────
+  jolts_total_private_quits:
+    series_id: "JTS000000000000000QUR"
+    description: "Total Private, Quits Rate — cross-industry baseline"
+    category: "jolts"
+    metric: "quits_rate"
+    industry_code: "total_private"
+  jolts_total_private_openings:
+    series_id: "JTS000000000000000JOR"
+    description: "Total Private, Job Openings Rate — cross-industry baseline"
+    category: "jolts"
+    metric: "openings_rate"
+    industry_code: "total_private"
+  jolts_total_private_hires:
+    series_id: "JTS000000000000000HIR"
+    description: "Total Private, Hires Rate — cross-industry baseline"
+    category: "jolts"
+    metric: "hires_rate"
+    industry_code: "total_private"
+  jolts_total_private_separations:
+    series_id: "JTS000000000000000TSR"
+    description: "Total Private, Total Separations Rate — cross-industry baseline"
+    category: "jolts"
+    metric: "separations_rate"
+    industry_code: "total_private"
+  jolts_retail_quits:
+    series_id: "JTS440000000000000QUR"
+    description: "Retail Trade, Quits Rate — adjacent sector comparison"
+    category: "jolts"
+    metric: "quits_rate"
+    industry_code: "44"
+  jolts_retail_openings:
+    series_id: "JTS440000000000000JOR"
+    description: "Retail Trade, Job Openings Rate — adjacent sector comparison"
+    category: "jolts"
+    metric: "openings_rate"
+    industry_code: "44"
+
   # ── LAUS (Local Area Unemployment Statistics) ──────────────────
   laus_travis_county_unemployment:
     series_id: "LAUCN484530000000003"
@@ -210,6 +288,62 @@ bls_series:
     description: "Hays County TX, Unemployment Rate"
     category: "laus"
     fips_code: "48209"
+
+  # ── LAUS — remaining QCEW counties + MSA aggregate (new) ────────
+  laus_bastrop_county_unemployment:
+    series_id: "LAUCN480210000000003"
+    description: "Bastrop County TX, Unemployment Rate"
+    category: "laus"
+    fips_code: "48021"
+  laus_caldwell_county_unemployment:
+    series_id: "LAUCN480550000000003"
+    description: "Caldwell County TX, Unemployment Rate"
+    category: "laus"
+    fips_code: "48055"
+  laus_austin_msa_unemployment_rate:
+    series_id: "LAUMT481242000000003"
+    description: "Austin-Round Rock-Georgetown MSA, Unemployment Rate"
+    category: "laus"
+    fips_code: "MSA-12420"
+  laus_austin_msa_unemployed_persons:
+    series_id: "LAUMT481242000000004"
+    description: "Austin-Round Rock-Georgetown MSA, Unemployed Persons (level)"
+    category: "laus"
+    fips_code: "MSA-12420"
+  laus_austin_msa_employed_persons:
+    series_id: "LAUMT481242000000005"
+    description: "Austin-Round Rock-Georgetown MSA, Employed Persons (level)"
+    category: "laus"
+    fips_code: "MSA-12420"
+  laus_austin_msa_labor_force:
+    series_id: "LAUMT481242000000006"
+    description: "Austin-Round Rock-Georgetown MSA, Civilian Labor Force"
+    category: "laus"
+    fips_code: "MSA-12420"
+
+  # ── CPI (Consumer Price Index) — inflation context (new) ────────
+  cpi_us_all_items:
+    series_id: "CUUR0000SA0"
+    description: "US City Average CPI-U, All Items"
+    category: "cpi"
+  cpi_south_all_items:
+    series_id: "CUURS37ASA0"
+    description: "South Urban CPI-U, All Items (semi-annual)"
+    category: "cpi"
+  cpi_us_food_away_from_home:
+    series_id: "CUUR0000SEFA"
+    description: "US CPI-U, Food Away From Home — deflates restaurant wage comparisons"
+    category: "cpi"
+  cpi_us_all_food:
+    series_id: "CUUR0000SAF1"
+    description: "US CPI-U, All Food"
+    category: "cpi"
+
+  # ── ECI (Employment Cost Index) — labor cost trend (new) ────────
+  eci_private_wages_salaries:
+    series_id: "CIU2020000000000A"
+    description: "Employment Cost Index, Private Sector Wages & Salaries (quarterly)"
+    category: "eci"
 
 # ── QCEW Configuration ──────────────────────────────────────────────────────
 qcew:
@@ -371,4 +505,14 @@ scheduler:
     cron:
       day_of_week: "sun"
       hour: 4
+      minute: 0
+  nlrb:
+    cron:
+      day_of_week: "wed"  # Mid-week; NLRB updates case data continuously
+      hour: 7
+      minute: 0
+  warn_tx:
+    cron:
+      day_of_week: "tue"  # Texas ODP updates ~monthly; weekly check is fine
+      hour: 7
       minute: 0
