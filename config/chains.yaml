@@ -10,6 +10,8 @@ regions:
     radius_mi: 25
     location_string: "Austin, TX"
     state: "TX"
+    county_fips: "48453"      # Travis County, TX
+    msa_code: "C1242"         # Austin-Round Rock-Georgetown MSA (CBSA 12420)
 
 industries:
   coffee_cafe:

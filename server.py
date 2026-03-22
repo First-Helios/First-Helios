@@ -482,7 +482,7 @@ def api_meta():
       - store_counts: {chain_key: count}
     """
     try:
-        from openclaw.industries import INDUSTRY_REGISTRY
+        from backend.industries import INDUSTRY_REGISTRY
         from agent_interface.schemas import Region
 
         engine = init_db()
@@ -744,6 +744,92 @@ def scheduler_status():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route("/api/scheduler/run-now", methods=["POST"])
+def scheduler_run_now():
+    """Trigger the collection planner immediately in a background thread.
+
+    Body (JSON, all optional):
+      region      — defaults to "austin_tx"
+      max_tasks   — cap on tasks to execute (default: 20)
+      dry_run     — if true, plan but do not execute (default: false)
+      force       — if true, treat all data as stale (default: false)
+
+    Returns the plan summary immediately; execution continues in background.
+    """
+    try:
+        from backend.collection_planner import build_plan, run_plan
+
+        body      = request.get_json(silent=True) or {}
+        region    = body.get("region", "austin_tx")
+        max_tasks = int(body.get("max_tasks", 20))
+        dry_run   = bool(body.get("dry_run", False))
+        force     = bool(body.get("force", False))
+
+        plan = build_plan(region=region, force_stale=force)
+        summary = plan.summary()
+
+        if not dry_run and plan.tasks:
+            def _run():
+                try:
+                    run_plan(plan, max_tasks=max_tasks)
+                except Exception as exc:
+                    logger.error("[Server] run-now background execution failed: %s", exc)
+
+            t = threading.Thread(target=_run, daemon=True, name="planner-run-now")
+            t.start()
+
+        return jsonify({
+            "status":     "ok",
+            "dry_run":    dry_run,
+            "region":     region,
+            "tasks_total": len(plan.tasks),
+            "tasks_will_run": min(len(plan.tasks), max_tasks) if not dry_run else 0,
+            "skipped_fresh": plan.skipped_fresh,
+            "plan_summary": summary,
+        })
+
+    except Exception as e:
+        logger.error("[Server] run-now failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/scheduler/run-job", methods=["POST"])
+def scheduler_run_job():
+    """Trigger a specific scheduler job immediately (runs in background).
+
+    Body (JSON):
+      job_id  — one of: qcew_wage_baseline, atp_chain_locations,
+                overture_local_density, job_posting_volume,
+                sentiment_check, discovery_and_score, endpoint_health_check
+    """
+    try:
+        from backend.scheduler import get_scheduler
+
+        body   = request.get_json(silent=True) or {}
+        job_id = body.get("job_id", "").strip()
+
+        if not job_id:
+            return jsonify({"status": "error", "message": "job_id is required"}), 400
+
+        scheduler = get_scheduler()
+        job = scheduler.get_job(job_id)
+        if job is None:
+            known = [j.id for j in scheduler.get_jobs()]
+            return jsonify({
+                "status": "error",
+                "message": f"Unknown job_id '{job_id}'",
+                "known_jobs": known,
+            }), 404
+
+        job.modify(next_run_time=datetime.now(job.next_run_time.tzinfo if job.next_run_time else None))
+        logger.info("[Server] Job '%s' triggered manually", job_id)
+        return jsonify({"status": "ok", "job_id": job_id, "message": "Job queued to run now"})
+
+    except Exception as e:
+        logger.error("[Server] run-job failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ── Rate Budget / Metrics endpoints ──────────────────────────────────────────
 
 @app.route("/api/rate-budget")
@@ -881,169 +967,6 @@ def agent_modes():
         })
     except Exception as e:
         logger.error("[Server] Agent modes failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/api/agent/query", methods=["POST"])
-def agent_query():
-    """Submit one structured query from the agent.
-
-    Body: {
-        "intent": "data_quality_audit",
-        "region": "austin_tx",
-        "brand": "starbucks",          // optional, depends on intent
-        "industry": "coffee_cafe",     // optional, depends on intent
-        "priority": "normal",          // optional
-        "source_preference": "auto",   // optional
-        "max_results": 500,            // optional, cap 5000
-        "max_budget_spend": 5,         // optional, cap 50
-        "known_count": null,           // optional
-        "reason": "Initial audit"      // optional logging note
-    }
-
-    Returns ConciseResult JSON with status, records found/new, anomalies,
-    and suggested_next actions.
-
-    On invalid enum values, returns HTTP 422 with valid_options dict
-    so the agent can self-correct.
-    """
-    data = request.get_json(silent=True) or {}
-
-    try:
-        from agent_interface.schemas import parse_agent_query, get_all_options
-        from agent_interface.queue_manager import agent_queue
-
-        query, errors = parse_agent_query(data)
-        if errors:
-            return jsonify({
-                "status": "rejected",
-                "errors": errors,
-                "valid_options": get_all_options(),
-            }), 422
-
-        result = agent_queue.submit(query)
-        return jsonify({"status": "ok", **result.to_dict()})
-
-    except Exception as e:
-        logger.error("[Server] Agent query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/api/agent/batch", methods=["POST"])
-def agent_batch():
-    """Submit multiple structured queries in one request.
-
-    Body: {
-        "queries": [
-            {"intent": "poi_chain_locations", "brand": "starbucks", "region": "austin_tx"},
-            {"intent": "wage_baseline", "industry": "coffee_cafe", "region": "austin_tx"}
-        ]
-    }
-
-    Later queries benefit from earlier ones (freshness dedup).
-    Returns a list of ConciseResult objects.
-    """
-    data = request.get_json(silent=True) or {}
-    raw_queries = data.get("queries", [])
-
-    if not raw_queries:
-        return jsonify({"status": "error", "message": "No queries provided"}), 400
-    if len(raw_queries) > 20:
-        return jsonify({"status": "error", "message": "Max 20 queries per batch"}), 400
-
-    try:
-        from agent_interface.schemas import parse_agent_query, get_all_options
-        from agent_interface.queue_manager import agent_queue
-
-        parsed_queries = []
-        all_errors = []
-
-        for i, raw in enumerate(raw_queries):
-            query, errors = parse_agent_query(raw)
-            if errors:
-                all_errors.append({"index": i, "errors": errors})
-            else:
-                parsed_queries.append(query)
-
-        if all_errors and not parsed_queries:
-            return jsonify({
-                "status": "rejected",
-                "errors": all_errors,
-                "valid_options": get_all_options(),
-            }), 422
-
-        results = agent_queue.submit_batch(parsed_queries)
-
-        return jsonify({
-            "status": "ok",
-            "count": len(results),
-            "results": [r.to_dict() for r in results],
-            "parse_errors": all_errors if all_errors else None,
-        })
-
-    except Exception as e:
-        logger.error("[Server] Agent batch failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/api/agent/queue/status")
-def agent_queue_status():
-    """Return current queue state + budget summary."""
-    try:
-        from agent_interface.queue_manager import agent_queue
-        status = agent_queue.status()
-        return jsonify({"status": "ok", **status.to_dict()})
-    except Exception as e:
-        logger.error("[Server] Agent queue status failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/api/agent/queue/pause", methods=["POST"])
-def agent_queue_pause():
-    """Pause the agent execution queue.
-
-    Body: {"reason": "BLS budget exhausted"}
-    """
-    data = request.get_json(silent=True) or {}
-    reason = data.get("reason", "")
-
-    try:
-        from agent_interface.queue_manager import agent_queue
-        result = agent_queue.pause(reason)
-        return jsonify({"status": "ok", **result})
-    except Exception as e:
-        logger.error("[Server] Agent queue pause failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/api/agent/queue/resume", methods=["POST"])
-def agent_queue_resume():
-    """Resume the agent execution queue."""
-    try:
-        from agent_interface.queue_manager import agent_queue
-        result = agent_queue.resume()
-        return jsonify({"status": "ok", **result})
-    except Exception as e:
-        logger.error("[Server] Agent queue resume failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/api/agent/history")
-def agent_history():
-    """Return recent agent query results.
-
-    Query params:
-      - limit (optional, default 20, max 100)
-    """
-    limit = request.args.get("limit", 20, type=int)
-    limit = min(limit, 100)
-
-    try:
-        from agent_interface.queue_manager import agent_queue
-        history = agent_queue.get_recent_history(limit=limit)
-        return jsonify({"status": "ok", "count": len(history), "results": history})
-    except Exception as e:
-        logger.error("[Server] Agent history failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

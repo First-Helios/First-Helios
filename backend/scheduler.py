@@ -1,18 +1,28 @@
 """
-APScheduler job definitions for ChainStaffingTracker.
+backend/scheduler.py
 
-Runs scraping jobs on configurable schedules inside the Flask process.
-Schedule configuration comes from config/chains.yaml under 'scheduler'.
+APScheduler job definitions for First-Helios.
 
-Depends on: apscheduler, config.loader, scrapers.*, backend.scoring.engine
-Called by: server.py (on startup)
+Architecture: deterministic planner → adapters → ingest → score.
+The collection planner (backend/collection_planner.py) decides what to collect
+based on freshness state.  No AI agent is involved in collection scheduling.
+
+Schedule (all times local server time / UTC):
+  01:00  daily    — QCEW wage baseline (all industries, one HTTP call)
+  02:00  Sunday   — AllThePlaces chain locations (all registered brands)
+  03:00  Sunday   — Overture local density (all industries)
+  04:00  daily    — Job posting volume (stale industries only)
+  05:00  daily    — Sentiment / Reddit (stale industries only)
+  06:00  daily    — Discovery scan + score refresh
+  every 4h        — API endpoint health check
+
+Depends on: apscheduler, backend.collection_planner, backend.scoring.engine
+Called by: server.py on startup
 """
 
 import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
-
-from config.loader import get_scheduler_config
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +30,6 @@ _scheduler: BackgroundScheduler | None = None
 
 
 def get_scheduler() -> BackgroundScheduler:
-    """Return the singleton scheduler instance."""
     global _scheduler
     if _scheduler is None:
         _scheduler = BackgroundScheduler(daemon=True)
@@ -28,144 +37,80 @@ def get_scheduler() -> BackgroundScheduler:
 
 
 def init_scheduler() -> BackgroundScheduler:
-    """Configure and start the background scheduler.
-
-    Adds jobs based on config/chains.yaml scheduler section.
-    Safe to call multiple times — skips if already running.
-    """
+    """Configure and start the background scheduler.  Safe to call multiple times."""
     scheduler = get_scheduler()
 
     if scheduler.running:
         logger.info("[Scheduler] Already running, skipping init")
         return scheduler
 
-    sched_cfg = get_scheduler_config()
-
-    # ── Careers API — daily at 3am ───────────────────────────────────
-    careers_cron = sched_cfg.get("careers_api", {}).get("cron", {})
+    # ── QCEW wage baseline — daily 01:00 ─────────────────────────────
+    # One HTTP call covers all 13 industries for the county.
+    # Runs daily so any newly published quarter is picked up promptly.
     scheduler.add_job(
-        _run_careers_api,
-        "cron",
-        hour=careers_cron.get("hour", 3),
-        minute=careers_cron.get("minute", 0),
-        id="careers_api",
-        name="Careers API Scraper",
+        _job_wage_baseline,
+        "cron", hour=1, minute=0,
+        id="qcew_wage_baseline",
+        name="QCEW Wage Baseline (all industries)",
         replace_existing=True,
     )
 
-    # ── JobSpy — daily at 4am ────────────────────────────────────────
-    jobspy_cron = sched_cfg.get("jobspy", {}).get("cron", {})
+    # ── AllThePlaces chain locations — weekly Sunday 02:00 ────────────
+    # Covers every brand registered in INDUSTRY_REGISTRY.mega_corps.
+    # Downloads prebuilt GeoJSON — no per-brand API calls.
     scheduler.add_job(
-        _run_jobspy,
-        "cron",
-        hour=jobspy_cron.get("hour", 4),
-        minute=jobspy_cron.get("minute", 0),
-        id="jobspy",
-        name="JobSpy Scraper",
+        _job_chain_locations,
+        "cron", day_of_week="sun", hour=2, minute=0,
+        id="atp_chain_locations",
+        name="AllThePlaces Chain Locations (all brands)",
         replace_existing=True,
     )
 
-    # ── Reddit — every 6 hours ───────────────────────────────────────
-    reddit_interval = sched_cfg.get("reddit", {}).get("interval_hours", 6)
+    # ── Overture local density — weekly Sunday 03:00 ──────────────────
+    # One DuckDB Parquet query covers all local employers in the region bbox.
+    # Runs after chain locations so dedup has chain data to compare against.
     scheduler.add_job(
-        _run_reddit,
-        "interval",
-        hours=reddit_interval,
-        id="reddit",
-        name="Reddit Sentiment Scraper",
+        _job_local_density,
+        "cron", day_of_week="sun", hour=3, minute=0,
+        id="overture_local_density",
+        name="Overture Local Employer Density (all industries)",
         replace_existing=True,
     )
 
-    # ── Google Maps — weekly Monday 5am ──────────────────────────────
-    gmaps_cron = sched_cfg.get("google_maps", {}).get("cron", {})
+    # ── Job postings — daily 04:00 ────────────────────────────────────
+    # Planner filters to only stale industries (threshold: 14 days).
     scheduler.add_job(
-        _run_reviews,
-        "cron",
-        day_of_week=gmaps_cron.get("day_of_week", "mon"),
-        hour=gmaps_cron.get("hour", 5),
-        minute=gmaps_cron.get("minute", 0),
-        id="google_maps",
-        name="Google Maps Reviews Scraper",
+        _job_postings,
+        "cron", hour=4, minute=0,
+        id="job_posting_volume",
+        name="Job Posting Volume (stale industries)",
         replace_existing=True,
     )
 
-    # ── BLS — weekly ─────────────────────────────────────────────────
-    bls_cron = sched_cfg.get("bls", {}).get("cron", {})
+    # ── Sentiment / Reddit — daily 05:00 ─────────────────────────────
+    # Planner filters to only stale industries (threshold: 14 days).
     scheduler.add_job(
-        _run_bls,
-        "cron",
-        day_of_week=bls_cron.get("day_of_week", "mon"),
-        hour=bls_cron.get("hour", 6),
-        minute=bls_cron.get("minute", 0),
-        id="bls",
-        name="BLS Wage Data Fetcher",
+        _job_sentiment,
+        "cron", hour=5, minute=0,
+        id="sentiment_check",
+        name="Reddit Sentiment (stale industries)",
         replace_existing=True,
     )
 
-    # ── AllThePlaces store discovery — weekly Sunday 2am ────────────
+    # ── Discovery scan + score refresh — daily 06:00 ──────────────────
+    # Runs after all collectors so it sees the freshest data.
     scheduler.add_job(
-        _run_alltheplaces,
-        "cron",
-        day_of_week="sun",
-        hour=2,
-        minute=0,
-        id="atp_starbucks_austin",
-        name="AllThePlaces Starbucks Austin",
+        _job_discovery_and_score,
+        "cron", hour=6, minute=0,
+        id="discovery_and_score",
+        name="Discovery Scan + Score Refresh",
         replace_existing=True,
     )
 
-    # ── Overture chain cross-validation — weekly Sunday 2:15am ────
+    # ── API endpoint health check — every 4 hours ─────────────────────
     scheduler.add_job(
-        _run_overture_chain,
-        "cron",
-        day_of_week="sun",
-        hour=2,
-        minute=15,
-        id="overture_starbucks_austin",
-        name="Overture Chain Starbucks Austin",
-        replace_existing=True,
-    )
-
-    # ── OSM fallback — weekly Sunday 2:30am ──────────────────────
-    scheduler.add_job(
-        _run_osm,
-        "cron",
-        day_of_week="sun",
-        hour=2,
-        minute=30,
-        id="osm_starbucks_austin",
-        name="OSM Starbucks Austin",
-        replace_existing=True,
-    )
-
-    # ── Overture local employers — weekly Sunday 3am ─────────────
-    scheduler.add_job(
-        _run_overture_local,
-        "cron",
-        day_of_week="sun",
-        hour=3,
-        minute=0,
-        id="overture_local_austin",
-        name="Overture Local Employers Austin",
-        replace_existing=True,
-    )
-
-    # ── Discovery scan — daily at 1am ────────────────────────────
-    scheduler.add_job(
-        _run_discovery_scan,
-        "cron",
-        hour=1,
-        minute=0,
-        id="discovery_scan",
-        name="Discovery Expansion Scan",
-        replace_existing=True,
-    )
-
-    # ── Endpoint health monitor — every 4 hours ───────────────────
-    scheduler.add_job(
-        _run_endpoint_health_check,
-        "interval",
-        hours=4,
+        _job_endpoint_health,
+        "interval", hours=4,
         id="endpoint_health_check",
         name="API Endpoint Health Monitor",
         replace_existing=True,
@@ -182,220 +127,175 @@ def get_scheduler_status() -> dict:
     jobs = []
     for job in scheduler.get_jobs():
         jobs.append({
-            "id": job.id,
-            "name": job.name,
+            "id":       job.id,
+            "name":     job.name,
             "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
-            "trigger": str(job.trigger),
+            "trigger":  str(job.trigger),
         })
-    return {
-        "running": scheduler.running,
-        "jobs": jobs,
-    }
+    return {"running": scheduler.running, "jobs": jobs}
 
 
-# ── Job functions ────────────────────────────────────────────────────────────
+# ── Job implementations ───────────────────────────────────────────────────────
 
-def _run_careers_api() -> None:
-    """Scheduled job: Run careers API scraper."""
+def _job_wage_baseline() -> None:
+    """Daily: fetch QCEW county wage + establishment data for all industries.
+
+    One HTTP GET per region — no per-industry calls needed.
+    QCEW returns all NAICS codes in a single ~400 KB CSV.
+    """
     try:
-        from scrapers.careers_api import scrape_careers_api
-        from backend.scoring.engine import compute_all_scores
-
-        logger.info("[Scheduler] Running careers API scraper")
-        signals = scrape_careers_api(region="austin_tx", chain="starbucks")
-        logger.info("[Scheduler] Careers API: %d signals", len(signals))
-
-        # Recompute scores after new data
-        compute_all_scores(region="austin_tx")
-
-    except Exception as e:
-        logger.error("[Scheduler] Careers API job failed: %s", e)
-
-
-def _run_jobspy() -> None:
-    """Scheduled job: Run JobSpy scraper (chain + wage modes)."""
-    try:
-        from scrapers.jobspy_adapter import scrape_jobspy
-        from backend.scoring.engine import compute_all_scores
-
-        logger.info("[Scheduler] Running JobSpy scraper")
-
-        # Chain mode
-        signals = scrape_jobspy(chain="starbucks", region="austin_tx", mode="chain")
-        logger.info("[Scheduler] JobSpy chain: %d signals", len(signals))
-
-        # Wage mode
-        signals = scrape_jobspy(industry="coffee_cafe", region="austin_tx", mode="wage")
-        logger.info("[Scheduler] JobSpy wage: %d signals", len(signals))
-
-        compute_all_scores(region="austin_tx")
-
-    except Exception as e:
-        logger.error("[Scheduler] JobSpy job failed: %s", e)
-
-
-def _run_reddit() -> None:
-    """Scheduled job: Run Reddit sentiment scraper."""
-    try:
-        from scrapers.reddit_adapter import scrape_reddit
-        from backend.scoring.engine import compute_all_scores
-
-        logger.info("[Scheduler] Running Reddit scraper")
-        signals = scrape_reddit(region="austin_tx")
-        logger.info("[Scheduler] Reddit: %d signals", len(signals))
-
-        compute_all_scores(region="austin_tx")
-
-    except Exception as e:
-        logger.error("[Scheduler] Reddit job failed: %s", e)
-
-
-def _run_reviews() -> None:
-    """Scheduled job: Run Google Maps reviews scraper."""
-    try:
-        from scrapers.reviews_adapter import scrape_reviews
-        from backend.scoring.engine import compute_all_scores
-
-        logger.info("[Scheduler] Running reviews scraper")
-        signals = scrape_reviews(chain="starbucks", region="austin_tx")
-        logger.info("[Scheduler] Reviews: %d signals", len(signals))
-
-        compute_all_scores(region="austin_tx")
-
-    except Exception as e:
-        logger.error("[Scheduler] Reviews job failed: %s", e)
-
-
-def _run_bls() -> None:
-    """Scheduled job: Run BLS wage data fetcher."""
-    try:
-        from scrapers.bls_adapter import scrape_bls
-
-        logger.info("[Scheduler] Running BLS fetcher")
-        signals = scrape_bls(region="austin_tx")
-        logger.info("[Scheduler] BLS: %d signals", len(signals))
-
-    except Exception as e:
-        logger.error("[Scheduler] BLS job failed: %s", e)
-
-
-def _run_alltheplaces() -> None:
-    """Scheduled job: AllThePlaces store discovery."""
-    try:
-        from scrapers.alltheplaces_adapter import AllThePlacesAdapter
+        from scrapers.qcew_adapter import QCEWAdapter
         from backend.ingest import ingest_signals
 
-        logger.info("[Scheduler] Running AllThePlaces discovery")
-        for chain_key in ["starbucks", "dutch_bros", "mcdonalds"]:
-            adapter = AllThePlacesAdapter()
-            adapter.chain = chain_key
-            signals = adapter.scrape("austin_tx")
-            if signals:
-                ingest_signals(signals, region="austin_tx")
-            logger.info("[Scheduler] AllThePlaces %s: %d signals", chain_key, len(signals))
+        logger.info("[Scheduler] Running QCEW wage baseline")
+        adapter = QCEWAdapter()
+        signals = adapter.scrape(region="austin_tx")
+
+        if signals:
+            n = ingest_signals(signals, region="austin_tx", chain="qcew", source="qcew")
+            wage_count  = sum(1 for s in signals if s.signal_type == "wage")
+            estab_count = sum(1 for s in signals if s.signal_type == "establishment_count")
+            logger.info(
+                "[Scheduler] QCEW: ingested %d signals "
+                "(%d wage, %d establishment_count)",
+                n, wage_count, estab_count,
+            )
+        else:
+            logger.warning("[Scheduler] QCEW returned no signals")
 
     except Exception as e:
-        logger.error("[Scheduler] AllThePlaces job failed: %s", e)
+        logger.error("[Scheduler] QCEW wage baseline failed: %s", e)
 
 
-def _run_overture_chain() -> None:
-    """Scheduled job: Overture chain cross-validation."""
+def _job_chain_locations() -> None:
+    """Weekly Sunday: collect chain store locations for every registered brand.
+
+    Uses AllThePlaces (primary) → Overture fallback per brand.
+    The planner handles which brands are stale.
+    """
     try:
-        from scrapers.overture_adapter import OvertureChainAdapter
-        from backend.ingest import ingest_signals
+        from backend.collection_planner import build_plan, run_plan
 
-        logger.info("[Scheduler] Running Overture chain discovery")
-        for chain_key in ["starbucks", "dutch_bros"]:
-            adapter = OvertureChainAdapter()
-            adapter.chain = chain_key
-            signals = adapter.scrape("austin_tx")
-            if signals:
-                ingest_signals(signals, region="austin_tx")
-            logger.info("[Scheduler] Overture chain %s: %d signals", chain_key, len(signals))
+        logger.info("[Scheduler] Running chain location collection")
+        plan = build_plan(
+            region="austin_tx",
+            # wage_baseline and local_density have their own jobs; exclude here
+        )
+        chain_tasks = [t for t in plan.tasks if t.intent == "poi_chain_locations"]
+
+        if not chain_tasks:
+            logger.info("[Scheduler] All chain locations are fresh — nothing to collect")
+            return
+
+        logger.info("[Scheduler] %d stale brand(s) to collect", len(chain_tasks))
+        results = run_plan(plan.__class__(
+            region=plan.region,
+            tasks=chain_tasks,
+        ))
+
+        ok  = sum(1 for r in results if r.success)
+        new = sum(r.records_new for r in results)
+        logger.info("[Scheduler] Chain locations: %d/%d OK, %d new records",
+                    ok, len(results), new)
 
     except Exception as e:
-        logger.error("[Scheduler] Overture chain job failed: %s", e)
+        logger.error("[Scheduler] Chain location job failed: %s", e)
 
 
-def _run_overture_local() -> None:
-    """Scheduled job: Overture local employers discovery."""
+def _job_local_density() -> None:
+    """Weekly Sunday: collect local employer density via Overture."""
     try:
         from scrapers.overture_adapter import OvertureLocalAdapter
         from backend.ingest import ingest_signals
+        from backend.category_catalog import discover_from_db
 
-        logger.info("[Scheduler] Running Overture local employer discovery")
+        logger.info("[Scheduler] Running Overture local density collection")
         adapter = OvertureLocalAdapter()
-        signals = adapter.scrape("austin_tx")
+        signals = adapter.scrape(region="austin_tx")
+
         if signals:
-            ingest_signals(signals, region="austin_tx")
-        logger.info("[Scheduler] Overture local: %d signals", len(signals))
+            n = ingest_signals(signals, region="austin_tx", chain="local", source="overture")
+            logger.info("[Scheduler] Overture local: ingested %d signals", n)
+        else:
+            logger.warning("[Scheduler] Overture local returned no signals")
+
+        # Classify all newly collected records immediately
+        logger.info("[Scheduler] Running category discovery after local density")
+        discover_from_db(source_system="overture")
 
     except Exception as e:
-        logger.error("[Scheduler] Overture local job failed: %s", e)
+        logger.error("[Scheduler] Local density job failed: %s", e)
 
 
-def _run_osm() -> None:
-    """Scheduled job: OSM Overpass store fallback."""
+def _job_postings() -> None:
+    """Daily: collect job posting volume for stale industries."""
     try:
-        from scrapers.osm_adapter import OSMAdapter
-        from backend.ingest import ingest_signals
+        from backend.collection_planner import build_plan, run_plan
 
-        logger.info("[Scheduler] Running OSM Overpass discovery")
-        for chain_key in ["starbucks", "dutch_bros", "mcdonalds"]:
-            adapter = OSMAdapter()
-            adapter.chain = chain_key
-            signals = adapter.scrape("austin_tx")
-            if signals:
-                ingest_signals(signals, region="austin_tx")
-            logger.info("[Scheduler] OSM %s: %d signals", chain_key, len(signals))
+        plan = build_plan(region="austin_tx")
+        posting_tasks = [t for t in plan.tasks if t.intent == "job_posting_volume"]
+
+        if not posting_tasks:
+            logger.info("[Scheduler] All job posting data is fresh")
+            return
+
+        logger.info("[Scheduler] %d industry/industries need job posting refresh",
+                    len(posting_tasks))
+        from backend.collection_planner import CollectionPlan
+        results = run_plan(CollectionPlan(region="austin_tx", tasks=posting_tasks))
+        ok  = sum(1 for r in results if r.success)
+        new = sum(r.records_new for r in results)
+        logger.info("[Scheduler] Job postings: %d/%d OK, %d new records",
+                    ok, len(results), new)
 
     except Exception as e:
-        logger.error("[Scheduler] OSM job failed: %s", e)
+        logger.error("[Scheduler] Job posting job failed: %s", e)
 
 
-def _run_discovery_scan() -> None:
-    """Scheduled job: Discovery expansion scan.
-
-    Analyses collected data to find coverage gaps, stale leads, and
-    geographic clusters that need attention.  Logs a summary so operators
-    can review overnight.
-    """
+def _job_sentiment() -> None:
+    """Daily: collect Reddit sentiment for stale industries."""
     try:
-        from backend.discovery import run_discovery, get_discovery_summary
+        from backend.collection_planner import build_plan, run_plan, CollectionPlan
 
-        logger.info("[Scheduler] Running discovery expansion scan")
+        plan = build_plan(region="austin_tx")
+        sentiment_tasks = [t for t in plan.tasks if t.intent == "sentiment_check"]
+
+        if not sentiment_tasks:
+            logger.info("[Scheduler] All sentiment data is fresh")
+            return
+
+        logger.info("[Scheduler] %d industry/industries need sentiment refresh",
+                    len(sentiment_tasks))
+        results = run_plan(CollectionPlan(region="austin_tx", tasks=sentiment_tasks))
+        ok  = sum(1 for r in results if r.success)
+        new = sum(r.records_new for r in results)
+        logger.info("[Scheduler] Sentiment: %d/%d OK, %d new records",
+                    ok, len(results), new)
+
+    except Exception as e:
+        logger.error("[Scheduler] Sentiment job failed: %s", e)
+
+
+def _job_discovery_and_score() -> None:
+    """Daily: run discovery scan then refresh all scores."""
+    try:
+        from backend.discovery import run_discovery
+        from backend.scoring.engine import compute_all_scores
+
+        logger.info("[Scheduler] Running discovery scan")
         scan = run_discovery(region="austin_tx", max_leads=50)
-        summary = get_discovery_summary(region="austin_tx")
+        logger.info("[Scheduler] Discovery: %d leads", len(scan.leads))
 
-        logger.info(
-            "[Scheduler] Discovery scan complete: %d leads found "
-            "(coverage_gaps=%d, data_gaps=%d, stale=%d, geo=%d, local=%d)",
-            len(scan.leads),
-            sum(1 for l in scan.leads if l.lead_type == "coverage_gap"),
-            sum(1 for l in scan.leads if l.lead_type == "data_dimension_gap"),
-            sum(1 for l in scan.leads if l.lead_type == "stale_lead"),
-            sum(1 for l in scan.leads if l.lead_type == "geographic_cluster"),
-            sum(1 for l in scan.leads if l.lead_type == "local_opportunity"),
-        )
-
-        # Log top 5 highest-priority leads for operator review
-        for lead in scan.leads[:5]:
-            logger.info(
-                "[Scheduler] Discovery top lead: [%d] %s — %s",
-                lead.priority, lead.lead_type, lead.description,
-            )
+        logger.info("[Scheduler] Running score refresh")
+        compute_all_scores(region="austin_tx")
+        logger.info("[Scheduler] Score refresh complete")
 
     except Exception as e:
-        logger.error("[Scheduler] Discovery scan failed: %s", e)
+        logger.error("[Scheduler] Discovery + score job failed: %s", e)
 
 
-def _run_endpoint_health_check() -> None:
-    """Scheduled job: Probe all live API endpoints and update health state.
-
-    Runs every 4 hours.  Endpoints that fail ENDPOINT_FAILURE_THRESHOLD
-    consecutive probes are marked inactive and excluded from the next
-    OpenClaw session prompt.  Recovered endpoints are automatically re-activated.
-    """
+def _job_endpoint_health() -> None:
+    """Every 4h: probe API endpoints and update health state."""
     try:
         from backend.endpoint_catalog import verify_all_endpoints
 
@@ -403,20 +303,16 @@ def _run_endpoint_health_check() -> None:
         results = verify_all_endpoints(skip_recently_verified_hours=4.0)
 
         for ep in results.get("deactivated", []):
-            logger.warning(
-                "[Scheduler] Endpoint DEACTIVATED: %s/%s — %s",
-                ep["adapter_name"], ep["intent"], ep.get("reason", "?"),
-            )
+            logger.warning("[Scheduler] Endpoint DEACTIVATED: %s/%s — %s",
+                           ep["adapter_name"], ep["intent"], ep.get("reason", "?"))
         for ep in results.get("recovered", []):
-            logger.info(
-                "[Scheduler] Endpoint RECOVERED: %s/%s",
-                ep["adapter_name"], ep["intent"],
-            )
+            logger.info("[Scheduler] Endpoint RECOVERED: %s/%s",
+                        ep["adapter_name"], ep["intent"])
 
         logger.info(
-            "[Scheduler] Endpoint health check complete: total=%d checked=%d skipped=%d "
+            "[Scheduler] Health check: total=%d checked=%d "
             "deactivated=%d recovered=%d",
-            results["total"], results["checked"], results["skipped"],
+            results["total"], results["checked"],
             len(results.get("deactivated", [])), len(results.get("recovered", [])),
         )
     except Exception as e:
