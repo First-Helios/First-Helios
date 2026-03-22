@@ -32,12 +32,39 @@ config = get_config()
 # Verified 2026-03-19 against https://data.alltheplaces.xyz/runs/latest/output/{name}.geojson
 # Browse full list at: https://alltheplaces.xyz/spiders.html
 ATP_BRAND_MAP: dict[str, str] = {
+    # Coffee
     "starbucks": "starbucks_us",
     "dutch_bros": "dutch_bros",
+    # Fast Food
     "mcdonalds": "mcdonalds",
-    "target_retail": "target_us",
-    "chipotle": "chipotle",
     "whataburger": "whataburger",
+    "chipotle": "chipotle",
+    "wendys": "wendys",
+    "burger_king": "burger_king",
+    "taco_bell": "taco_bell",
+    "chick_fil_a": "chick_fil_a",
+    # Retail
+    "target": "target_us",
+    "walmart": "walmart",
+    "heb": "heb",
+    "whole_foods": "whole_foods_market",
+    "walgreens": "walgreens",
+    "cvs": "cvs_pharmacy",
+    # Hair & Beauty
+    "great_clips": "great_clips",
+    "supercuts": "supercuts",
+    "sport_clips": "sport_clips",
+    "fantastic_sams": "fantastic_sams",
+    # Fitness
+    "planet_fitness": "planet_fitness",
+    "anytime_fitness": "anytime_fitness",
+    # Healthcare
+    "cvs_minuteclinic": "cvs_minuteclinic",
+    # Childcare
+    "kindercare": "kindercare",
+    # Hospitality
+    "marriott": "marriott",
+    "hilton": "hilton",
 }
 
 # API root per https://github.com/alltheplaces/alltheplaces/blob/master/API.md

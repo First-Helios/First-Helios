@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenClaw — Live Session</title>
+    <title>OpenClaw — Session Lab</title>
     <link rel="stylesheet" href="css/nav.css" />
     <style>
-        /* ── Reset ─────────────────────────────────────────────── */
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
@@ -35,7 +34,7 @@
             flex-direction: column;
         }
 
-        /* ── Header ────────────────────────────────────────────── */
+        /* ── Header ─────────────────────────────────────────── */
         #header {
             background: var(--bg-surface);
             border-bottom: 1px solid var(--border);
@@ -45,55 +44,28 @@
             justify-content: space-between;
             flex-wrap: wrap;
             gap: 10px;
+            flex-shrink: 0;
         }
-
-        .hdr-left {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .hdr-left h1 {
-            font-size: 1.1rem;
-            color: var(--accent);
-        }
-
+        .hdr-left { display: flex; align-items: center; gap: 14px; }
+        .hdr-left h1 { font-size: 1.1rem; color: var(--accent); }
         #session-state {
-            font-size: 0.78rem;
-            padding: 2px 10px;
-            border-radius: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
+            font-size: 0.75rem; padding: 2px 10px; border-radius: 10px;
+            text-transform: uppercase; letter-spacing: 0.04em;
         }
         .state-idle     { background: #30363d; color: var(--text-muted); }
         .state-running  { background: #1b4332; color: var(--green); }
         .state-complete { background: #0f3460; color: var(--blue); }
         .state-error    { background: #3d1c1c; color: var(--accent); }
-
-        .hdr-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
+        .hdr-right { display: flex; align-items: center; gap: 10px; }
         .hdr-right a, .hdr-right button {
-            font-size: 0.8rem;
-            padding: 5px 12px;
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            color: var(--text-muted);
-            text-decoration: none;
-            background: none;
-            cursor: pointer;
-            font-family: inherit;
-            transition: all 0.15s;
+            font-size: 0.8rem; padding: 5px 12px; border-radius: var(--radius);
+            border: 1px solid var(--border); color: var(--text-muted);
+            text-decoration: none; background: none; cursor: pointer;
+            font-family: inherit; transition: all 0.15s;
         }
-        .hdr-right a:hover, .hdr-right button:hover {
-            color: var(--text);
-            border-color: var(--text-muted);
-        }
+        .hdr-right a:hover, .hdr-right button:hover { color: var(--text); border-color: var(--text-muted); }
 
-        /* ── Stats bar ─────────────────────────────────────────── */
+        /* ── Stats bar ──────────────────────────────────────── */
         #stats-bar {
             background: var(--bg-surface);
             border-bottom: 1px solid var(--border);
@@ -103,604 +75,994 @@
             font-size: 0.75rem;
             color: var(--text-muted);
             flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .stat { display: flex; gap: 4px; align-items: center; }
+        .sv             { color: var(--text); font-weight: 600; }
+        .sv.green       { color: var(--green); }
+        .sv.yellow      { color: var(--yellow); }
+        .sv.blue        { color: var(--blue); }
+        .sv.orange      { color: var(--orange); }
+
+        /* ── Main layout ────────────────────────────────────── */
+        #main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            min-height: 0;
         }
 
-        .stat { display: flex; gap: 4px; align-items: center; }
-        .stat-value { color: var(--text); font-weight: 600; }
-        .stat-value.green  { color: var(--green); }
-        .stat-value.red    { color: var(--accent); }
-        .stat-value.yellow { color: var(--yellow); }
-        .stat-value.blue   { color: var(--blue); }
-
-        /* ── Main stream ───────────────────────────────────────── */
+        /* ── Turn stream (left) ─────────────────────────────── */
         #stream {
             flex: 1;
             overflow-y: auto;
-            padding: 12px 20px;
+            padding: 12px 16px;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 6px;
+            min-width: 0;
         }
+        #stream::-webkit-scrollbar { width: 5px; }
+        #stream::-webkit-scrollbar-track { background: var(--bg); }
+        #stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-        .entry {
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-size: 0.82rem;
-            line-height: 1.5;
-            border-left: 3px solid transparent;
-            animation: entrySlide 0.2s ease;
-        }
-
-        @keyframes entrySlide {
-            from { opacity: 0; transform: translateY(6px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Kind-based styling */
-        .entry-system {
-            border-left-color: var(--blue);
-            color: var(--blue);
-            font-size: 0.78rem;
-        }
-
-        .entry-thinking {
-            border-left-color: var(--purple);
-            background: #1c1c3a;
-        }
-
-        .entry-thinking .entry-label {
-            color: var(--purple);
-        }
-
-        .entry-action {
-            border-left-color: var(--green);
-            background: #1a2e26;
-        }
-
-        .entry-action .entry-label {
-            color: var(--green);
-        }
-
-        .entry-action.action-rejected {
-            border-left-color: var(--yellow);
-            background: #2e2a1a;
-        }
-
-        .entry-action.action-rejected .entry-label {
-            color: var(--yellow);
-        }
-
-        .entry-result {
-            border-left-color: var(--text-dim);
+        /* ── Sidebar (right) ────────────────────────────────── */
+        #sidebar {
+            width: 310px;
+            flex-shrink: 0;
             background: var(--bg-surface);
-            font-size: 0.78rem;
-        }
-
-        .entry-error {
-            border-left-color: var(--accent);
-            background: #2d1a1a;
-            color: var(--accent);
-        }
-
-        .entry-done {
-            border-left-color: var(--green);
-            background: #1a2e26;
-            font-weight: 600;
-        }
-
-        .entry-label {
-            font-size: 0.68rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            margin-bottom: 2px;
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
             display: flex;
-            align-items: center;
-            gap: 8px;
+            flex-direction: column;
         }
+        #sidebar::-webkit-scrollbar { width: 4px; }
+        #sidebar::-webkit-scrollbar-track { background: var(--bg-surface); }
+        #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        @media (max-width: 900px) { #sidebar { display: none; } }
 
-        .entry-label .ts {
-            color: var(--text-dim);
-            font-size: 0.65rem;
-            font-weight: normal;
-        }
-
-        .entry-label .meta-tag {
-            font-size: 0.65rem;
-            padding: 0 5px;
-            border-radius: 3px;
-            background: #30363d;
-            color: var(--text-muted);
-            text-transform: none;
-            letter-spacing: 0;
-        }
-
-        .entry-body {
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-
-        .entry-body.collapsed {
-            max-height: 120px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .entry-body.collapsed::after {
-            content: '▼ click to expand';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            text-align: center;
-            padding: 2px;
-            background: linear-gradient(transparent, var(--bg) 60%);
-            color: var(--text-dim);
-            font-size: 0.7rem;
+        .panel { border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .panel-title {
+            font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            padding: 8px 14px; background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
             cursor: pointer;
         }
+        .panel-title:hover { color: var(--text); }
+        .panel-body { padding: 10px 14px; font-size: 0.78rem; line-height: 1.55; }
+        .panel-body.collapsed { display: none; }
 
-        /* JSON syntax highlighting (simple) */
-        .json-key   { color: var(--blue); }
-        .json-str   { color: var(--green); }
-        .json-num   { color: var(--orange); }
-        .json-bool  { color: var(--purple); }
-        .json-null  { color: var(--text-dim); }
+        /* Briefing agenda items */
+        .agenda-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #1c2333;
+        }
+        .agenda-item:last-child { border-bottom: none; }
+        .agenda-row1 { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+        .agenda-num { color: var(--text-dim); min-width: 18px; font-size: 0.7rem; }
+        .type-badge {
+            font-size: 0.62rem; padding: 1px 5px; border-radius: 3px;
+            text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em; flex-shrink: 0;
+        }
+        .type-coverage_gap { background: #0f3460; color: var(--blue); }
+        .type-stale        { background: #2e2a1a; color: var(--yellow); }
+        .type-data_gap     { background: #1b2e1b; color: var(--green); }
+        .type-anomaly      { background: #2d1a1a; color: var(--accent); }
+        .type-unknown      { background: #30363d; color: var(--text-muted); }
+        .agenda-intent { color: var(--text); font-size: 0.78rem; }
+        .agenda-params { color: var(--text-muted); font-size: 0.7rem; padding-left: 24px; }
+        .agenda-desc   { color: var(--text-dim);   font-size: 0.68rem; padding-left: 24px; }
+        .agenda-item.executed { opacity: 0.45; }
+        .agenda-item.executed .agenda-num::before { content: "✓ "; color: var(--green); }
+        .already-block {
+            margin-top: 8px; padding-top: 8px;
+            border-top: 1px solid var(--border);
+        }
+        .already-title { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .already-item  { font-size: 0.68rem; color: var(--text-dim); padding: 1px 0; }
 
-        /* ── Launch bar (shown when idle) ──────────────────────── */
+        /* Rejection items */
+        .rej-item { padding: 5px 0; border-bottom: 1px solid #1c2333; font-size: 0.75rem; }
+        .rej-item:last-child { border-bottom: none; }
+        .rej-header { display: flex; gap: 6px; align-items: center; }
+        .rej-turn   { color: var(--text-dim); font-size: 0.68rem; }
+        .rej-intent { color: var(--yellow); }
+        .rej-reason { color: var(--text-muted); font-size: 0.7rem; margin-top: 2px; }
+        .rej-sugg   { color: var(--text-dim);   font-size: 0.67rem; margin-top: 1px; }
+
+        /* ── Turn cards ─────────────────────────────────────── */
+        .turn-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            animation: fadeSlide 0.18s ease;
+        }
+        @keyframes fadeSlide {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .turn-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 12px;
+            background: var(--bg-surface);
+            cursor: pointer; user-select: none;
+        }
+        .turn-header:hover { background: #1c2333; }
+        .turn-num { font-size: 0.72rem; color: var(--text-dim); min-width: 46px; flex-shrink: 0; }
+        .turn-badge {
+            font-size: 0.63rem; padding: 2px 7px; border-radius: 3px;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
+        }
+        .badge-propose   { background: #0f3460; color: var(--blue); }
+        .badge-query     { background: #1b2e1b; color: var(--green); }
+        .badge-wish      { background: #2d1a3d; color: var(--purple); }
+        .badge-status    { background: #30363d; color: var(--text-muted); }
+        .badge-done      { background: #1b4332; color: var(--green); }
+        .badge-pending   { background: #30363d; color: var(--text-dim); animation: pendingPulse 1.5s ease infinite; }
+        .badge-parse-err { background: #3d2800; color: var(--orange); }
+        @keyframes pendingPulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+        .turn-summary {
+            flex: 1; font-size: 0.78rem; color: var(--text-muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .turn-chevron { color: var(--text-dim); font-size: 0.7rem; background: none; border: none; cursor: pointer; padding: 0 2px; font-family: inherit; }
+        .turn-card.tc-collapsed .turn-body { display: none; }
+
+        .turn-body {
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* thinking section */
+        .think-label {
+            font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--purple); display: flex; align-items: center; gap: 6px; margin-bottom: 3px;
+        }
+        .parse-err-pill {
+            font-size: 0.62rem; background: #3d2800; color: var(--orange);
+            padding: 1px 6px; border-radius: 3px;
+        }
+        .think-reasoning {
+            font-size: 0.8rem; color: var(--text); line-height: 1.55;
+            background: #1c1c3a; padding: 8px 10px; border-radius: 4px;
+            white-space: pre-wrap; word-break: break-word;
+            border-left: 3px solid var(--purple);
+        }
+        .think-reasoning.is-raw {
+            background: #1c1400; border-left-color: var(--orange);
+            color: var(--text-muted); font-size: 0.75rem;
+        }
+        .think-reasoning.no-reason {
+            color: var(--text-dim); font-style: italic;
+        }
+        details.raw-collapse > summary {
+            font-size: 0.67rem; color: var(--text-dim); cursor: pointer; padding: 2px 0; margin-top: 3px;
+        }
+        details.raw-collapse > summary:hover { color: var(--text-muted); }
+        .raw-body {
+            background: var(--bg); padding: 6px 8px; border-radius: 4px;
+            font-size: 0.7rem; white-space: pre-wrap; word-break: break-word;
+            margin-top: 3px; max-height: 260px; overflow-y: auto;
+            color: var(--text-muted);
+        }
+
+        /* result section */
+        .result-label {
+            font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-dim); margin-bottom: 3px;
+        }
+        .r-item {
+            padding: 5px 8px; border-radius: 4px; font-size: 0.78rem; line-height: 1.5;
+            margin-bottom: 3px;
+        }
+        .r-item:last-child { margin-bottom: 0; }
+        .r-ok  { background: #1a2e26; border-left: 3px solid var(--green); }
+        .r-rej { background: #2e2a1a; border-left: 3px solid var(--yellow); }
+        .r-err { background: #2d1a1a; border-left: 3px solid var(--accent); }
+        .r-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .r-icon.ok   { color: var(--green); }
+        .r-icon.rej  { color: var(--yellow); }
+        .r-icon.err  { color: var(--accent); }
+        .r-intent  { color: var(--text); font-size: 0.78rem; }
+        .r-params  { color: var(--text-muted); font-size: 0.73rem; }
+        .r-records { color: var(--green); font-size: 0.73rem; margin-left: auto; }
+        .r-reason  { color: var(--yellow); font-size: 0.73rem; margin-top: 2px; }
+        .r-sugg    { color: var(--text-dim); font-size: 0.7rem; margin-top: 1px; }
+        .r-anomaly { color: var(--orange); font-size: 0.7rem; margin-top: 2px; }
+
+        /* inline entries */
+        .sys-entry {
+            font-size: 0.7rem; color: var(--blue);
+            padding: 2px 8px; border-left: 2px solid #1a3050;
+            background: #0d1a2e; border-radius: 3px;
+        }
+        .error-entry {
+            padding: 7px 10px; background: #2d1a1a;
+            border-left: 3px solid var(--accent); border-radius: var(--radius);
+            color: var(--accent); font-size: 0.78rem;
+        }
+        .done-entry {
+            padding: 10px 14px; background: #1a2e26;
+            border-left: 3px solid var(--green); border-radius: var(--radius);
+        }
+        .done-title { font-weight: 700; color: var(--green); margin-bottom: 5px; font-size: 0.85rem; }
+        .done-body  { white-space: pre-wrap; color: var(--text-muted); font-size: 0.74rem; }
+
+        /* empty */
+        .empty-splash {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            color: var(--text-dim); gap: 8px;
+        }
+        .empty-splash .big  { font-size: 2.5rem; }
+        .empty-splash .hint { font-size: 0.85rem; }
+
+        /* pulse */
+        .pulse {
+            display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+            background: var(--green); animation: pulseAnim 1.2s ease infinite;
+        }
+        @keyframes pulseAnim {
+            0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(78,204,163,0.5); }
+            50%      { opacity:0.6; box-shadow: 0 0 0 5px rgba(78,204,163,0); }
+        }
+
+        /* JSON syntax highlight classes */
+        .jk { color: var(--blue); }
+        .js { color: var(--green); }
+        .jn { color: var(--orange); }
+        .jb { color: var(--purple); }
+        .jz { color: var(--text-dim); }
+
+        /* ── Launch bar ─────────────────────────────────────── */
         #launch-bar {
             background: var(--bg-surface);
             border-top: 1px solid var(--border);
-            padding: 12px 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
+            padding: 10px 16px;
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            flex-shrink: 0;
         }
-
-        #launch-bar.hidden { display: none; }
-
         #launch-bar input, #launch-bar select {
-            background: var(--bg);
-            color: var(--text);
+            background: var(--bg); color: var(--text);
             border: 1px solid var(--border);
-            padding: 6px 10px;
-            border-radius: var(--radius);
-            font-family: inherit;
-            font-size: 0.82rem;
+            padding: 5px 9px; border-radius: var(--radius);
+            font-family: inherit; font-size: 0.8rem;
         }
-
         #launch-bar input:focus, #launch-bar select:focus {
-            outline: none;
-            border-color: var(--accent);
+            outline: none; border-color: var(--accent);
         }
-
-        #launch-goal {
-            flex: 1;
-            min-width: 300px;
-        }
-
+        #launch-goal { flex: 1; min-width: 240px; }
+        #launch-industries { min-width: 180px; max-height: 80px; }
         #launch-btn {
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            padding: 7px 18px;
-            border-radius: var(--radius);
-            font-family: inherit;
-            font-size: 0.85rem;
-            cursor: pointer;
+            background: var(--accent); color: #fff; border: none;
+            padding: 6px 16px; border-radius: var(--radius);
+            font-family: inherit; font-size: 0.82rem; cursor: pointer;
             transition: background 0.15s;
         }
-        #launch-btn:hover { background: #c73a52; }
-        #launch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        #launch-msg {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-        }
-
-        /* ── Empty state ───────────────────────────────────────── */
-        .empty-splash {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-dim);
-            gap: 8px;
-        }
-        .empty-splash .big { font-size: 2.5rem; }
-        .empty-splash .hint { font-size: 0.85rem; }
-
-        /* ── Pulse indicator ───────────────────────────────────── */
-        .pulse {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--green);
-            animation: pulse 1.2s ease infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(78, 204, 163, 0.5); }
-            50%      { opacity: 0.6; box-shadow: 0 0 0 6px rgba(78, 204, 163, 0); }
-        }
-
-        /* ── Responsive ────────────────────────────────────────── */
-        @media (max-width: 700px) {
-            #stream { padding: 8px 10px; }
-            .entry { font-size: 0.78rem; }
-            #stats-bar { gap: 10px; }
-        }
-
-        /* ── Scrollbar ─────────────────────────────────────────── */
-        #stream::-webkit-scrollbar { width: 6px; }
-        #stream::-webkit-scrollbar-track { background: var(--bg); }
-        #stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        #launch-btn:hover     { background: #c73a52; }
+        #launch-btn:disabled  { opacity: 0.5; cursor: not-allowed; }
+        .lbl { font-size: 0.7rem; color: var(--text-dim); white-space: nowrap; }
+        #launch-msg { font-size: 0.75rem; color: var(--text-muted); }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <div id="header">
-        <div class="hdr-left">
-            <h1>🦀 OpenClaw Session</h1>
-            <span id="session-state" class="state-idle">idle</span>
-            <span id="session-id" style="font-size:0.72rem;color:var(--text-dim)"></span>
-        </div>
-        <div class="hdr-right">
-            <button id="scroll-toggle" title="Toggle auto-scroll">⬇ Auto-scroll</button>
-            <a href="/openclaw">← Dashboard</a>
-            <a href="/">← Map</a>
-        </div>
-    </div>
 
-    <!-- Stats bar -->
-    <div id="stats-bar">
-        <div class="stat">Iteration <span class="stat-value blue" id="st-iter">0</span></div>
-        <div class="stat">Proposed <span class="stat-value" id="st-proposed">0</span></div>
-        <div class="stat">Executed <span class="stat-value green" id="st-executed">0</span></div>
-        <div class="stat">Rejected <span class="stat-value yellow" id="st-rejected">0</span></div>
-        <div class="stat">Wishes <span class="stat-value" id="st-wishes">0</span></div>
-        <div class="stat">Entries <span class="stat-value" id="st-entries">0</span></div>
-        <div class="stat" id="st-duration-wrap" style="display:none">Duration <span class="stat-value blue" id="st-duration">0s</span></div>
+<!-- Header -->
+<div id="header">
+    <div class="hdr-left">
+        <h1>🦀 Session Lab</h1>
+        <span id="session-state" class="state-idle">idle</span>
+        <span id="session-id" style="font-size:0.7rem;color:var(--text-dim)"></span>
     </div>
+    <div class="hdr-right">
+        <button id="scroll-toggle">⬇ Auto</button>
+        <a href="/openclaw">← Dashboard</a>
+        <a href="/">← Map</a>
+    </div>
+</div>
 
-    <!-- Stream -->
+<!-- Stats bar -->
+<div id="stats-bar">
+    <div class="stat">Turn <span class="sv blue" id="st-iter">—</span></div>
+    <div class="stat">Proposed <span class="sv" id="st-proposed">0</span></div>
+    <div class="stat">Executed <span class="sv green" id="st-executed">0</span></div>
+    <div class="stat">Rejected <span class="sv yellow" id="st-rejected">0</span></div>
+    <div class="stat">JSON errors <span class="sv orange" id="st-parse-err">0</span> <span title="How often the model failed to output valid JSON — high = prompt is confusing it" style="cursor:help;color:var(--text-dim)">ⓘ</span></div>
+    <div class="stat">Wishes <span class="sv" id="st-wishes">0</span></div>
+    <div class="stat" id="st-dur-wrap" style="display:none">Duration <span class="sv blue" id="st-dur">0s</span></div>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+    <!-- Turn stream -->
     <div id="stream">
         <div class="empty-splash" id="empty-splash">
             <div class="big">🦀</div>
-            <div class="hint">No active session — launch one below or from the dashboard</div>
+            <div class="hint">No active session — launch one below</div>
         </div>
     </div>
 
-    <!-- Launch bar -->
-    <div id="launch-bar">
-        <input type="text" id="launch-goal" placeholder="Research goal — e.g. Survey coffee labor market in Austin" />
-        <input type="text" id="launch-region" value="austin_tx" style="width:100px" />
-        <button id="launch-btn">🚀 Launch</button>
-        <span id="launch-msg"></span>
+    <!-- Sidebar -->
+    <div id="sidebar">
+        <div class="panel">
+            <div class="panel-title" id="briefing-toggle">
+                📋 Collection Agenda
+                <span style="font-size:0.7rem">▼</span>
+            </div>
+            <div class="panel-body" id="briefing-body">
+                <span style="color:var(--text-dim);font-style:italic">Waiting for session…</span>
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-title" id="rej-toggle">
+                ❌ Rejection Log
+                <span style="font-size:0.7rem">▼</span>
+            </div>
+            <div class="panel-body" id="rej-body">
+                <span id="rej-empty" style="color:var(--text-dim);font-style:italic">None yet</span>
+            </div>
+        </div>
     </div>
 
-    <script>
-    (function () {
-        'use strict';
+</div>
 
-        const API = '';
-        const POLL_MS = 1200;   // poll every 1.2 s while running
-        const IDLE_POLL_MS = 5000;  // poll every 5 s when idle/complete
-        let lastSeq = 0;
-        let autoScroll = true;
-        let pollTimer = null;
-        let sessionStartTime = null;
-        let durationTimer = null;
+<!-- Launch bar -->
+<div id="launch-bar">
+    <input type="text" id="launch-goal" placeholder="Research goal — e.g. Map coffee labor gaps in Austin" />
+    <span class="lbl">mode</span>
+    <select id="launch-mode">
+        <option value="mixed" selected>mixed</option>
+        <option value="collect">collect</option>
+        <option value="analyze">analyze</option>
+    </select>
+    <span class="lbl">industries</span>
+    <select id="launch-industries" multiple size="3" title="Ctrl/Cmd+click to select multiple"></select>
+    <span class="lbl">region</span>
+    <input type="text" id="launch-region" value="austin_tx" style="width:88px" />
+    <span class="lbl">model</span>
+    <input type="text" id="launch-model" value="qwen2.5:7b-instruct" style="width:175px" />
+    <button id="launch-btn">🚀 Launch</button>
+    <span id="launch-msg"></span>
+</div>
 
-        // ── DOM shortcuts ────────────────────────────────────
-        const $ = (s) => document.querySelector(s);
-        const stream = $('#stream');
-        const emptySplash = $('#empty-splash');
+<script>
+(function () {
+    'use strict';
 
-        // ── State badge ──────────────────────────────────────
-        function setStateBadge(state) {
-            const el = $('#session-state');
-            el.textContent = state;
-            el.className = 'state-' + state;
+    // ── Config ────────────────────────────────────────────────
+    const POLL_MS      = 1200;
+    const IDLE_POLL_MS = 5000;
+
+    // ── State ─────────────────────────────────────────────────
+    let lastSeq          = 0;
+    let autoScroll       = true;
+    let pollTimer        = null;
+    let sessionStartTime = null;
+    let durationTimer    = null;
+    let currentIteration = 0;
+    let parseErrCount    = 0;
+
+    // Map: iteration → { cardEl, thinking, action, actionName }
+    const turnMap = new Map();
+
+    // ── DOM ───────────────────────────────────────────────────
+    const $ = (s) => document.querySelector(s);
+    const stream      = $('#stream');
+    const emptySplash = $('#empty-splash');
+    const briefingBody = $('#briefing-body');
+    const rejBody      = $('#rej-body');
+
+    // ── Helpers ───────────────────────────────────────────────
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s == null ? '' : s);
+        return d.innerHTML;
+    }
+
+    function hjson(str) {
+        return esc(str)
+            .replace(/"([^"\\]*(\\.[^"\\]*)*)"\s*:/g,   '<span class="jk">"$1"</span>:')
+            .replace(/:\s*"([^"\\]*(\\.[^"\\]*)*)"/g,   ': <span class="js">"$1"</span>')
+            .replace(/:\s*(-?\d+\.?\d*)/g,               ': <span class="jn">$1</span>')
+            .replace(/:\s*(true|false)/g,                ': <span class="jb">$1</span>')
+            .replace(/:\s*(null)/g,                      ': <span class="jz">null</span>');
+    }
+
+    function fmtTime(iso) {
+        if (!iso) return '';
+        try { return new Date(iso + (iso.endsWith('Z') ? '' : 'Z'))
+            .toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
+        catch (_) { return ''; }
+    }
+
+    function incStat(id, by) {
+        const el = $(id);
+        el.textContent = (parseInt(el.textContent) || 0) + (by || 1);
+    }
+
+    // ── Briefing panel ────────────────────────────────────────
+    function renderBriefing(text) {
+        briefingBody.innerHTML = '';
+
+        // Extract agenda block
+        const agendaM = text.match(/##\s*Collection Agenda[^\n]*\n([\s\S]*?)(?=\nAlready collected|$)/);
+        const alreadyM = text.match(/Already collected[^\n]*\n([\s\S]+)/);
+
+        if (agendaM) {
+            agendaM[1].trim().split('\n').forEach(function (line) {
+                line = line.trim();
+                if (!line) return;
+
+                // Numbered agenda item: "  1. [type] intent brand=X — desc (priority=N)"
+                const m = line.match(/^(\d+)\.\s+\[([^\]]+)\]\s+(\S+)(.*?)(?:\((?:priority|score)=(\d+)\))?$/);
+                if (m) {
+                    const [, num, type, intent, rest, score] = m;
+                    const paramsM = rest.match(/^([^—]*)(?:—(.*))?$/);
+                    const paramStr = paramsM ? paramsM[1].trim() : '';
+                    const desc     = paramsM ? (paramsM[2] || '').trim() : '';
+                    const safeType = type.replace(/[^a-z_]/g, '_');
+
+                    const el = document.createElement('div');
+                    el.className = 'agenda-item';
+                    el.dataset.intent = intent;
+                    el.innerHTML =
+                        '<div class="agenda-row1">' +
+                            '<span class="agenda-num">' + esc(num) + '.</span>' +
+                            '<span class="type-badge type-' + safeType + '">' + esc(type) + '</span>' +
+                            '<span class="agenda-intent">' + esc(intent) + '</span>' +
+                            (score ? '<span style="color:var(--text-dim);font-size:0.67rem">·' + esc(score) + '</span>' : '') +
+                        '</div>' +
+                        (paramStr ? '<div class="agenda-params">' + esc(paramStr) + '</div>' : '') +
+                        (desc     ? '<div class="agenda-desc">'   + esc(desc)     + '</div>' : '');
+                    briefingBody.appendChild(el);
+                } else if (line.startsWith('!')) {
+                    const el = document.createElement('div');
+                    el.style.cssText = 'color:var(--orange);font-size:0.7rem;padding:3px 0';
+                    el.textContent = line;
+                    briefingBody.appendChild(el);
+                } else if (line.startsWith('(')) {
+                    const el = document.createElement('div');
+                    el.style.cssText = 'color:var(--text-dim);font-size:0.7rem;font-style:italic;padding:3px 0';
+                    el.textContent = line;
+                    briefingBody.appendChild(el);
+                }
+            });
+        } else {
+            // Fallback: raw text
+            const pre = document.createElement('pre');
+            pre.style.cssText = 'font-size:0.7rem;white-space:pre-wrap;color:var(--text-muted)';
+            pre.textContent = text.length > 1200 ? text.slice(0, 1200) + '\n…' : text;
+            briefingBody.appendChild(pre);
         }
 
-        // ── Time formatting ──────────────────────────────────
-        function fmtTime(iso) {
-            if (!iso) return '';
-            const d = new Date(iso + 'Z');
-            return d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        if (alreadyM) {
+            const block = document.createElement('div');
+            block.className = 'already-block';
+            block.innerHTML = '<div class="already-title">Already collected — skip</div>';
+            alreadyM[1].trim().split('\n').forEach(function (l) {
+                l = l.trim();
+                if (l.startsWith('✓') || l.startsWith('*') || l.startsWith('-')) {
+                    const el = document.createElement('div');
+                    el.className = 'already-item';
+                    el.textContent = l;
+                    block.appendChild(el);
+                }
+            });
+            briefingBody.appendChild(block);
         }
+    }
 
-        // ── Simple JSON syntax highlight ─────────────────────
-        function highlightJSON(str) {
-            return str
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/"([^"\\]*(\\.[^"\\]*)*)"\s*:/g, '<span class="json-key">"$1"</span>:')
-                .replace(/:\s*"([^"\\]*(\\.[^"\\]*)*)"/g, ': <span class="json-str">"$1"</span>')
-                .replace(/:\s*(-?\d+\.?\d*)/g, ': <span class="json-num">$1</span>')
-                .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
-                .replace(/:\s*(null)/g, ': <span class="json-null">null</span>');
-        }
-
-        // ── Render a single entry ────────────────────────────
-        function renderEntry(e) {
-            const div = document.createElement('div');
-
-            let cls = 'entry entry-' + e.kind;
-            let label = e.kind;
-            let body = e.content;
-            let bodyClass = 'entry-body';
-            let metaTags = '';
-
-            // Meta tags
-            if (e.meta) {
-                if (e.meta.action) {
-                    metaTags += '<span class="meta-tag">' + esc(e.meta.action) + '</span>';
-                    if (e.meta.action === 'rejected' || (body && body.includes('"rejected"'))) {
-                        cls += ' action-rejected';
-                    }
-                }
-                if (e.meta.iteration) {
-                    metaTags += '<span class="meta-tag">iter ' + e.meta.iteration + '</span>';
-                }
-                if (e.meta.model) {
-                    metaTags += '<span class="meta-tag">' + esc(e.meta.model) + '</span>';
-                }
+    function markAgendaDone(intent) {
+        briefingBody.querySelectorAll('.agenda-item').forEach(function (el) {
+            if (el.dataset.intent === intent && !el.classList.contains('executed')) {
+                el.classList.add('executed');
             }
+        });
+    }
 
-            // Kind-specific rendering
-            switch (e.kind) {
-                case 'thinking':
-                    label = '🧠 Thinking';
-                    // Try to pretty-format JSON inside the thinking
-                    try {
-                        const parsed = JSON.parse(body);
-                        body = JSON.stringify(parsed, null, 2);
-                        body = highlightJSON(body);
-                    } catch (_) {
-                        body = esc(body);
-                    }
-                    // Collapse long entries
-                    if (body.split('\n').length > 8) {
-                        bodyClass += ' collapsed';
-                    }
-                    break;
-                case 'action':
-                    label = '⚡ Result';
-                    try {
-                        // already JSON string
-                        body = highlightJSON(esc(body));
-                    } catch(_) {
-                        body = esc(body);
-                    }
-                    if (body.split('\n').length > 8) {
-                        bodyClass += ' collapsed';
-                    }
-                    break;
-                case 'system':
-                    label = '📡 System';
-                    body = esc(body);
-                    break;
-                case 'error':
-                    label = '❌ Error';
-                    body = esc(body);
-                    break;
-                case 'done':
-                    label = '✅ Session Complete';
-                    body = esc(body);
-                    break;
-                default:
-                    body = esc(body);
-            }
+    // ── Rejection panel ───────────────────────────────────────
+    function addRejection(turn, intent, reason, suggestion) {
+        const empty = $('#rej-empty');
+        if (empty) empty.style.display = 'none';
+        const el = document.createElement('div');
+        el.className = 'rej-item';
+        el.innerHTML =
+            '<div class="rej-header">' +
+                '<span class="rej-turn">T' + turn + '</span>' +
+                '<span class="rej-intent">' + esc(intent || '?') + '</span>' +
+            '</div>' +
+            (reason     ? '<div class="rej-reason">' + esc(reason)     + '</div>' : '') +
+            (suggestion ? '<div class="rej-sugg">→ ' + esc(suggestion) + '</div>' : '');
+        rejBody.appendChild(el);
+    }
 
-            div.className = cls;
-            div.innerHTML =
-                '<div class="entry-label">' +
-                    label +
-                    ' <span class="ts">' + fmtTime(e.ts) + '</span>' +
-                    metaTags +
+    // ── Turn card management ──────────────────────────────────
+    function getOrCreate(iter) {
+        if (!turnMap.has(iter)) {
+            const card = document.createElement('div');
+            card.className = 'turn-card';
+            card.id = 'turn-' + iter;
+            card.innerHTML =
+                '<div class="turn-header">' +
+                    '<span class="turn-num">Turn ' + iter + '</span>' +
+                    '<span class="turn-badge badge-pending">pending</span>' +
+                    '<span class="turn-summary"><span class="pulse"></span> generating…</span>' +
+                    '<button class="turn-chevron">▼</button>' +
                 '</div>' +
-                '<div class="' + bodyClass + '">' + body + '</div>';
+                '<div class="turn-body"></div>';
 
-            // Click to expand/collapse
-            const bodyEl = div.querySelector('.entry-body');
-            if (bodyEl && bodyEl.classList.contains('collapsed')) {
-                bodyEl.addEventListener('click', function () {
-                    this.classList.toggle('collapsed');
-                });
-            }
+            card.querySelector('.turn-header').addEventListener('click', function () {
+                card.classList.toggle('tc-collapsed');
+                card.querySelector('.turn-chevron').textContent =
+                    card.classList.contains('tc-collapsed') ? '▶' : '▼';
+            });
 
-            return div;
+            stream.appendChild(card);
+            turnMap.set(iter, { cardEl: card, thinking: null, action: null, actionName: null });
+            if (autoScroll) stream.scrollTop = stream.scrollHeight;
         }
+        return turnMap.get(iter);
+    }
 
-        function esc(s) {
-            const d = document.createElement('div');
-            d.textContent = s;
-            return d.innerHTML;
-        }
+    function rebuildTurnCard(iter) {
+        const turn = turnMap.get(iter);
+        if (!turn) return;
+        const card    = turn.cardEl;
+        const header  = card.querySelector('.turn-header');
+        const body    = card.querySelector('.turn-body');
+        body.innerHTML = '';
 
-        // ── Poll the live endpoint ───────────────────────────
-        async function poll() {
-            try {
-                const r = await fetch(API + '/api/openclaw/session/live?after=' + lastSeq);
-                const d = await r.json();
-                if (d.status !== 'ok') return;
+        // ── Thinking section
+        if (turn.thinking) {
+            const rawContent = turn.thinking.content || '';
+            let parsed  = null;
+            let parseOk = false;
+            try { parsed = JSON.parse(rawContent); parseOk = true; } catch (_) {}
 
-                // Update state
-                setStateBadge(d.state);
-                $('#session-id').textContent = d.session_id || '';
-                $('#st-entries').textContent = d.entry_count;
-
-                // Hide splash once entries arrive
-                if (d.entry_count > 0 && emptySplash) {
-                    emptySplash.style.display = 'none';
-                }
-
-                // Append new entries
-                if (d.entries && d.entries.length > 0) {
-                    d.entries.forEach(function (e) {
-                        stream.appendChild(renderEntry(e));
-                        lastSeq = Math.max(lastSeq, e.seq);
-
-                        // Update stat counters from meta
-                        updateStatsFromEntry(e);
-                    });
-
-                    if (autoScroll) {
-                        stream.scrollTop = stream.scrollHeight;
-                    }
-                }
-
-                // If complete/error + launch bar visible
-                if (d.state === 'complete' || d.state === 'error') {
-                    $('#launch-btn').disabled = false;
-                    $('#launch-msg').textContent = '';
-                    stopDurationClock();
-                }
-
-                // Adjust poll rate
-                schedulePoll(d.state === 'running' ? POLL_MS : IDLE_POLL_MS);
-
-            } catch (e) {
-                console.warn('Poll error', e);
-                schedulePoll(IDLE_POLL_MS);
+            // Label
+            const labelEl = document.createElement('div');
+            labelEl.className = 'think-label';
+            if (!parseOk) {
+                labelEl.innerHTML = '🧠 Model output <span class="parse-err-pill">⚠ not valid JSON</span>';
+            } else {
+                const act = parsed.action || '?';
+                labelEl.innerHTML = '🧠 Model chose <strong style="color:var(--blue)">' + esc(act) + '</strong>';
             }
-        }
+            body.appendChild(labelEl);
 
-        function schedulePoll(ms) {
-            if (pollTimer) clearTimeout(pollTimer);
-            pollTimer = setTimeout(poll, ms);
-        }
-
-        // ── Update stats from entry metadata ─────────────────
-        function updateStatsFromEntry(e) {
-            if (e.kind === 'system' && e.content && e.content.startsWith('Iteration')) {
-                const m = e.content.match(/Iteration (\d+)/);
-                if (m) $('#st-iter').textContent = m[1];
-            }
-            if (e.kind === 'done' && e.meta) {
-                if (e.meta.queries_proposed != null) $('#st-proposed').textContent = e.meta.queries_proposed;
-                if (e.meta.queries_executed != null) $('#st-executed').textContent = e.meta.queries_executed;
-                if (e.meta.queries_rejected != null) $('#st-rejected').textContent = e.meta.queries_rejected;
-                if (e.meta.wishes_added != null) $('#st-wishes').textContent = e.meta.wishes_added;
-                if (e.meta.duration_seconds != null) {
-                    $('#st-duration').textContent = e.meta.duration_seconds + 's';
-                    $('#st-duration-wrap').style.display = '';
-                }
-            }
-            if (e.kind === 'action' && e.meta) {
-                // Incremental counting from action results
-                try {
-                    const parsed = JSON.parse(e.content);
-                    if (parsed.proposed != null) {
-                        const cur = parseInt($('#st-proposed').textContent) || 0;
-                        $('#st-proposed').textContent = cur + parsed.proposed;
-                    }
-                    if (parsed.validated != null) {
-                        const cur = parseInt($('#st-executed').textContent) || 0;
-                        $('#st-executed').textContent = cur + parsed.validated;
-                    }
-                    if (parsed.rejected != null) {
-                        const cur = parseInt($('#st-rejected').textContent) || 0;
-                        $('#st-rejected').textContent = cur + parsed.rejected;
-                    }
-                } catch (_) {}
-            }
-        }
-
-        // ── Duration clock ───────────────────────────────────
-        function startDurationClock() {
-            sessionStartTime = Date.now();
-            $('#st-duration-wrap').style.display = '';
-            durationTimer = setInterval(function () {
-                const s = Math.round((Date.now() - sessionStartTime) / 1000);
-                $('#st-duration').textContent = s + 's';
-            }, 1000);
-        }
-
-        function stopDurationClock() {
-            if (durationTimer) {
-                clearInterval(durationTimer);
-                durationTimer = null;
-            }
-        }
-
-        // ── Launch session ───────────────────────────────────
-        async function launch() {
-            const goal = $('#launch-goal').value.trim();
-            if (!goal) {
-                $('#launch-msg').textContent = 'Enter a goal';
-                return;
-            }
-            const region = $('#launch-region').value.trim() || 'austin_tx';
-
-            $('#launch-btn').disabled = true;
-            $('#launch-msg').textContent = 'Starting…';
-
-            // Reset stream
-            stream.innerHTML = '';
-            lastSeq = 0;
-            $('#st-iter').textContent = '0';
-            $('#st-proposed').textContent = '0';
-            $('#st-executed').textContent = '0';
-            $('#st-rejected').textContent = '0';
-            $('#st-wishes').textContent = '0';
-
-            try {
-                const r = await fetch(API + '/api/openclaw/run', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: 'qwen2.5:7b-instruct',
-                        region: region,
-                        goal: goal,
-                    }),
-                });
-                const d = await r.json();
-                if (d.status === 'ok') {
-                    $('#launch-msg').textContent = 'Session running — watching…';
-                    startDurationClock();
-                    schedulePoll(500); // fast first poll
+            // Reasoning / raw text
+            const reasonEl = document.createElement('div');
+            if (parseOk) {
+                const reasoning = parsed.reasoning || parsed.reason || parsed.message || '';
+                if (reasoning) {
+                    reasonEl.className   = 'think-reasoning';
+                    reasonEl.textContent = reasoning;
                 } else {
-                    $('#launch-msg').textContent = d.message || 'Failed';
-                    $('#launch-btn').disabled = false;
+                    reasonEl.className = 'think-reasoning no-reason';
+                    reasonEl.textContent = '(no reasoning field in model output — model skipped explaining its choice)';
                 }
-            } catch (e) {
-                $('#launch-msg').textContent = 'Request failed: ' + e.message;
+            } else {
+                reasonEl.className   = 'think-reasoning is-raw';
+                reasonEl.textContent = rawContent;
+            }
+            body.appendChild(reasonEl);
+
+            // Collapsible raw JSON
+            const det = document.createElement('details');
+            det.className = 'raw-collapse';
+            det.innerHTML =
+                '<summary>raw output (' + rawContent.length + ' chars, ' +
+                (parseOk ? 'valid JSON' : '<span style="color:var(--orange)">invalid JSON</span>') +
+                ')</summary>' +
+                '<div class="raw-body">' + hjson(rawContent) + '</div>';
+            body.appendChild(det);
+        }
+
+        // ── Result section
+        if (turn.action) {
+            const rlabel = document.createElement('div');
+            rlabel.className = 'result-label';
+            rlabel.textContent = '⚡ Result';
+            body.appendChild(rlabel);
+
+            let parsed = null;
+            try { parsed = JSON.parse(turn.action.content); } catch (_) {}
+
+            if (parsed) {
+                switch (turn.actionName) {
+                    case 'propose': renderPropose(body, parsed, iter); break;
+                    case 'query':   renderQuery(body, parsed);          break;
+                    case 'wish':    renderWish(body, parsed);            break;
+                    default:        renderGeneric(body, turn.action.content); break;
+                }
+            } else {
+                renderGeneric(body, turn.action.content);
+            }
+        }
+
+        // ── Update header badge + summary
+        const badgeEl   = header.querySelector('.turn-badge');
+        const summaryEl = header.querySelector('.turn-summary');
+
+        let actionName = turn.actionName;
+        if (!actionName && turn.thinking) {
+            try { actionName = JSON.parse(turn.thinking.content).action; } catch (_) {}
+        }
+
+        if (actionName) {
+            badgeEl.className   = 'turn-badge badge-' + actionName;
+            badgeEl.textContent = actionName.toUpperCase();
+        } else if (turn.thinking && !turn.action) {
+            badgeEl.className   = 'turn-badge badge-pending';
+            badgeEl.textContent = 'thinking';
+        }
+
+        if (!turn.thinking) {
+            // Still waiting for thinking
+            summaryEl.innerHTML = '<span class="pulse"></span> generating…';
+        } else if (turn.thinking && !turn.action) {
+            summaryEl.innerHTML = '<span class="pulse"></span> executing…';
+        } else if (turn.actionName === 'propose' && turn.action) {
+            try {
+                const p  = JSON.parse(turn.action.content);
+                const ok = p.validated || 0;
+                const rj = p.rejected  || 0;
+                summaryEl.innerHTML =
+                    (ok > 0 ? '<span style="color:var(--green)">' + ok + ' executed</span>' : '') +
+                    (ok > 0 && rj > 0 ? ' · ' : '') +
+                    (rj > 0 ? '<span style="color:var(--yellow)">' + rj + ' rejected</span>' : '') +
+                    (ok === 0 && rj === 0 ? '<span style="color:var(--text-dim)">0 executed</span>' : '');
+            } catch (_) { summaryEl.textContent = 'propose'; }
+        } else if (turn.actionName === 'query' && turn.action) {
+            try {
+                const p = JSON.parse(turn.action.content);
+                const st = p.status || '';
+                const rc = p.records_found != null ? ' · ' + p.records_found + ' records' : '';
+                summaryEl.innerHTML =
+                    '<span style="color:' + (st === 'completed' ? 'var(--green)' : 'var(--yellow)') + '">' +
+                    esc(st) + '</span>' + esc(rc);
+            } catch (_) { summaryEl.textContent = 'query'; }
+        } else if (turn.actionName === 'wish') {
+            summaryEl.innerHTML = '<span style="color:var(--purple)">wish added</span>';
+        } else if (turn.actionName === 'done') {
+            summaryEl.innerHTML = '<span style="color:var(--green)">session ended</span>';
+        }
+
+        if (autoScroll) stream.scrollTop = stream.scrollHeight;
+    }
+
+    function renderPropose(container, parsed, iter) {
+        (parsed.results || []).forEach(function (r) {
+            const isRej = r.status === 'rejected';
+            const isErr = !!(r.errors && r.errors.length);
+            const cls   = isRej ? 'r-rej' : (isErr ? 'r-err' : 'r-ok');
+            const icon  = isRej ? '✗' : (isErr ? '!' : '✓');
+            const icls  = isRej ? 'rej' : (isErr ? 'err' : 'ok');
+
+            const intent   = r.intent   || '';
+            const brand    = r.brand    || '';
+            const industry = r.industry || '';
+            const params   = [brand && 'brand=' + brand, industry && 'industry=' + industry]
+                              .filter(Boolean).join(' · ');
+
+            const el = document.createElement('div');
+            el.className = 'r-item ' + cls;
+            el.innerHTML =
+                '<div class="r-row">' +
+                    '<span class="r-icon ' + icls + '">' + icon + '</span>' +
+                    '<span class="r-intent">' + esc(intent || '?') + '</span>' +
+                    (params ? '<span class="r-params">' + esc(params) + '</span>' : '') +
+                    (r.records_found != null ? '<span class="r-records">→ ' + r.records_found + ' records</span>' : '') +
+                '</div>' +
+                (isRej && r.reason ?
+                    '<div class="r-reason">' + esc(r.reason) + '</div>' : '') +
+                (isRej && r.suggestions && r.suggestions.length ?
+                    '<div class="r-sugg">Try: ' + esc(r.suggestions.slice(0, 3).join(', ')) + '</div>' : '') +
+                (isErr && r.errors ?
+                    '<div class="r-reason">' + esc(r.errors.join('; ')) + '</div>' : '') +
+                (r.anomalies && r.anomalies.length ?
+                    '<div class="r-anomaly">⚠ ' + esc(r.anomalies.slice(0, 2).join('; ')) + '</div>' : '');
+
+            container.appendChild(el);
+
+            if (isRej) {
+                addRejection(iter, intent, r.reason,
+                    r.suggestions && r.suggestions.length ? r.suggestions[0] : '');
+            } else if (!isErr && intent) {
+                markAgendaDone(intent);
+            }
+        });
+    }
+
+    function renderQuery(container, parsed) {
+        const isOk = parsed.status === 'completed';
+        const intent   = parsed.intent   || '';
+        const brand    = parsed.brand    || '';
+        const industry = parsed.industry || '';
+        const params   = [brand && 'brand=' + brand, industry && 'industry=' + industry]
+                          .filter(Boolean).join(' · ');
+        const el = document.createElement('div');
+        el.className = 'r-item ' + (isOk ? 'r-ok' : 'r-rej');
+        el.innerHTML =
+            '<div class="r-row">' +
+                '<span class="r-icon ' + (isOk ? 'ok' : 'rej') + '">' + (isOk ? '✓' : '~') + '</span>' +
+                '<span class="r-intent">' + esc(intent) + '</span>' +
+                (params ? '<span class="r-params">' + esc(params) + '</span>' : '') +
+                (parsed.records_found != null ? '<span class="r-records">→ ' + parsed.records_found + ' records</span>' : '') +
+            '</div>' +
+            (parsed.errors && parsed.errors.length ? '<div class="r-reason">' + esc(parsed.errors.join('; ')) + '</div>' : '') +
+            (parsed.anomalies && parsed.anomalies.length ? '<div class="r-anomaly">⚠ ' + esc(parsed.anomalies.slice(0,2).join('; ')) + '</div>' : '');
+        container.appendChild(el);
+        if (isOk && intent) markAgendaDone(intent);
+    }
+
+    function renderWish(container, parsed) {
+        const wish = parsed.wish || {};
+        const el = document.createElement('div');
+        el.className = 'r-item r-ok';
+        el.innerHTML =
+            '<div class="r-row">' +
+                '<span class="r-icon ok">💡</span>' +
+                '<span class="r-intent">' + esc(wish.category || 'wish') + '</span>' +
+                '<span class="r-params">' + esc(wish.title || '') + '</span>' +
+            '</div>' +
+            (parsed.session_term_added ? '<div class="r-reason" style="color:var(--green)">✓ term added to session pool — usable immediately</div>' : '');
+        container.appendChild(el);
+    }
+
+    function renderGeneric(container, content) {
+        const el = document.createElement('div');
+        el.className = 'raw-body';
+        el.style.marginTop = '0';
+        el.innerHTML = hjson(content);
+        container.appendChild(el);
+    }
+
+    // ── Inline entries ────────────────────────────────────────
+    function appendSys(e) {
+        const el = document.createElement('div');
+        el.className = 'sys-entry';
+        el.textContent = e.content;
+        stream.appendChild(el);
+        if (autoScroll) stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendError(e) {
+        const el = document.createElement('div');
+        el.className = 'error-entry';
+        el.innerHTML = '❌ ' + esc(e.content);
+        stream.appendChild(el);
+        if (autoScroll) stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendDone(e) {
+        if (e.meta) {
+            if (e.meta.queries_proposed != null) $('#st-proposed').textContent = e.meta.queries_proposed;
+            if (e.meta.queries_executed != null) $('#st-executed').textContent = e.meta.queries_executed;
+            if (e.meta.queries_rejected != null) $('#st-rejected').textContent = e.meta.queries_rejected;
+            if (e.meta.wishes_added     != null) $('#st-wishes').textContent   = e.meta.wishes_added;
+        }
+        const el = document.createElement('div');
+        el.className = 'done-entry';
+        el.innerHTML =
+            '<div class="done-title">✅ Session Complete</div>' +
+            '<div class="done-body">' + esc(e.content) + '</div>';
+        stream.appendChild(el);
+        if (autoScroll) stream.scrollTop = stream.scrollHeight;
+    }
+
+    // ── Main entry handler ────────────────────────────────────
+    function handleEntry(e) {
+        if (emptySplash) emptySplash.style.display = 'none';
+
+        switch (e.kind) {
+
+            case 'system': {
+                const iterM = e.content.match(/Iteration\s+(\d+)/);
+                if (iterM) {
+                    currentIteration = parseInt(iterM[1]);
+                    $('#st-iter').textContent = currentIteration;
+                    getOrCreate(currentIteration); // pre-create card
+                } else if (e.content.includes('Collection Agenda')) {
+                    renderBriefing(e.content);
+                } else {
+                    appendSys(e);
+                }
+                break;
+            }
+
+            case 'thinking': {
+                const turn = getOrCreate(currentIteration);
+                turn.thinking = e;
+                // Track JSON parse failures
+                try { JSON.parse(e.content); }
+                catch (_) {
+                    parseErrCount++;
+                    $('#st-parse-err').textContent = parseErrCount;
+                }
+                rebuildTurnCard(currentIteration);
+                break;
+            }
+
+            case 'action': {
+                const iter = (e.meta && e.meta.iteration) ? e.meta.iteration : currentIteration;
+                const turn  = getOrCreate(iter);
+                turn.action     = e;
+                turn.actionName = (e.meta && e.meta.action) || null;
+                rebuildTurnCard(iter);
+                // Incremental stat updates
+                if (turn.actionName === 'propose') {
+                    try {
+                        const p = JSON.parse(e.content);
+                        if (p.proposed  != null) incStat('#st-proposed',  p.proposed);
+                        if (p.validated != null) incStat('#st-executed',  p.validated);
+                        if (p.rejected  != null) incStat('#st-rejected',  p.rejected);
+                    } catch (_) {}
+                }
+                if (turn.actionName === 'wish') incStat('#st-wishes');
+                break;
+            }
+
+            case 'error': appendError(e); break;
+            case 'done':  appendDone(e);  break;
+            default:      appendSys(e);   break;
+        }
+    }
+
+    // ── Poll ─────────────────────────────────────────────────
+    async function poll() {
+        try {
+            const r = await fetch('/api/openclaw/session/live?after=' + lastSeq);
+            const d = await r.json();
+            if (d.status !== 'ok') { schedulePoll(IDLE_POLL_MS); return; }
+
+            const stateEl = $('#session-state');
+            stateEl.textContent = d.state;
+            stateEl.className   = 'state-' + d.state;
+            $('#session-id').textContent = d.session_id || '';
+
+            if (d.entries && d.entries.length > 0) {
+                d.entries.forEach(function (e) {
+                    handleEntry(e);
+                    lastSeq = Math.max(lastSeq, e.seq);
+                });
+            }
+
+            if (d.state === 'complete' || d.state === 'error') {
+                $('#launch-btn').disabled = false;
+                $('#launch-msg').textContent = '';
+                stopDurationClock();
+            }
+
+            schedulePoll(d.state === 'running' ? POLL_MS : IDLE_POLL_MS);
+        } catch (err) {
+            console.warn('Poll error', err);
+            schedulePoll(IDLE_POLL_MS);
+        }
+    }
+
+    function schedulePoll(ms) {
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = setTimeout(poll, ms);
+    }
+
+    // ── Duration clock ────────────────────────────────────────
+    function startDurationClock() {
+        sessionStartTime = Date.now();
+        $('#st-dur-wrap').style.display = '';
+        durationTimer = setInterval(function () {
+            const s = Math.round((Date.now() - sessionStartTime) / 1000);
+            $('#st-dur').textContent = s + 's';
+        }, 1000);
+    }
+
+    function stopDurationClock() {
+        if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
+    }
+
+    // ── Launch ────────────────────────────────────────────────
+    async function launch() {
+        const goal = $('#launch-goal').value.trim();
+        if (!goal) { $('#launch-msg').textContent = 'Enter a goal'; return; }
+
+        const region     = $('#launch-region').value.trim() || 'austin_tx';
+        const mode       = $('#launch-mode').value;
+        const industries = Array.from($('#launch-industries').selectedOptions)
+            .map(function (o) { return o.value; });
+        const model      = $('#launch-model').value.trim() || 'qwen2.5:7b-instruct';
+
+        $('#launch-btn').disabled = true;
+        $('#launch-msg').textContent = 'Starting…';
+
+        // Reset everything
+        stream.innerHTML = '';
+        briefingBody.innerHTML = '<span style="color:var(--text-dim);font-style:italic">Waiting…</span>';
+        rejBody.innerHTML = '<span id="rej-empty" style="color:var(--text-dim);font-style:italic">None yet</span>';
+        lastSeq = currentIteration = parseErrCount = 0;
+        turnMap.clear();
+        ['#st-iter','#st-proposed','#st-executed','#st-rejected','#st-parse-err','#st-wishes'].forEach(function (id) {
+            const el = $(id);
+            if (el) el.textContent = id === '#st-iter' ? '—' : '0';
+        });
+
+        try {
+            const r = await fetch('/api/openclaw/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model, region, mode, goal, industries }),
+            });
+            const d = await r.json();
+            if (d.status === 'ok') {
+                $('#launch-msg').textContent = 'Running…';
+                startDurationClock();
+                schedulePoll(500);
+            } else {
+                $('#launch-msg').textContent = d.message || 'Failed to start';
                 $('#launch-btn').disabled = false;
             }
+        } catch (err) {
+            $('#launch-msg').textContent = 'Request failed: ' + err.message;
+            $('#launch-btn').disabled = false;
         }
+    }
 
-        // ── Auto-scroll toggle ───────────────────────────────
-        function initScrollToggle() {
-            const btn = $('#scroll-toggle');
-            btn.addEventListener('click', function () {
-                autoScroll = !autoScroll;
-                btn.textContent = autoScroll ? '⬇ Auto-scroll' : '⏸ Scroll paused';
-                btn.style.borderColor = autoScroll ? 'var(--green)' : 'var(--yellow)';
+    // ── Panel toggles ─────────────────────────────────────────
+    [['#briefing-toggle', '#briefing-body'], ['#rej-toggle', '#rej-body']].forEach(function (pair) {
+        const toggle = $(pair[0]);
+        const body   = $(pair[1]);
+        if (!toggle || !body) return;
+        toggle.addEventListener('click', function () {
+            body.classList.toggle('collapsed');
+            const arrow = toggle.querySelector('span');
+            if (arrow) arrow.textContent = body.classList.contains('collapsed') ? '▶' : '▼';
+        });
+    });
+
+    // ── Auto-scroll toggle ────────────────────────────────────
+    $('#scroll-toggle').addEventListener('click', function () {
+        autoScroll = !autoScroll;
+        this.textContent     = autoScroll ? '⬇ Auto' : '⏸ Paused';
+        this.style.borderColor = autoScroll ? 'var(--green)' : 'var(--yellow)';
+    });
+
+    // ── Init ──────────────────────────────────────────────────
+    $('#launch-btn').addEventListener('click', launch);
+    $('#launch-goal').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') launch();
+    });
+
+    // Populate industry dropdown from API
+    (async function loadIndustries() {
+        const sel = $('#launch-industries');
+        try {
+            const r = await fetch('/api/openclaw/industries');
+            const d = await r.json();
+            if (d.status !== 'ok') throw new Error(d.message);
+            sel.innerHTML = '';
+            d.industries.forEach(function (ind) {
+                const opt = document.createElement('option');
+                opt.value = ind.key;
+                opt.textContent = ind.display_name || ind.key;
+                opt.selected = (ind.key === 'coffee_cafe' || ind.key === 'fast_food');
+                sel.appendChild(opt);
             });
-        }
-
-        // ── Init ─────────────────────────────────────────────
-        function init() {
-            initScrollToggle();
-            $('#launch-btn').addEventListener('click', launch);
-            $('#launch-goal').addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') launch();
-            });
-            poll(); // first poll
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
+        } catch (err) {
+            sel.innerHTML = '<option disabled>Failed to load industries</option>';
+            console.error('Industry load failed:', err);
         }
     })();
-    </script>
-    <script src="js/nav.js"></script>
+
+    poll();
+
+})();
+</script>
+<script src="js/nav.js"></script>
 </body>
 </html>

@@ -28,6 +28,21 @@ from openclaw.industries import INDUSTRY_REGISTRY, IndustryDimension
 logger = logging.getLogger(__name__)
 
 
+def _resolve_industry_key(raw: str) -> Optional[str]:
+    """Return canonical INDUSTRY_REGISTRY key for *raw*, or None if unrecognised.
+
+    Checks exact key match first, then exact alias match, then returns None.
+    Callers that need a fuzzy suggestion should use validate_industry_key().
+    """
+    if raw in INDUSTRY_REGISTRY:
+        return raw
+    normalized = raw.strip().lower()
+    for key, dim in INDUSTRY_REGISTRY.items():
+        if normalized == key or normalized in (a.lower() for a in dim.aliases):
+            return key
+    return None
+
+
 # ══════════════════════════════════════════════════════════════════════
 # Validation result
 # ══════════════════════════════════════════════════════════════════════
@@ -100,13 +115,17 @@ def validate_search_term(
         PreValidationResult with is_valid=True if term is approved,
         or suggestions for correction if not.
     """
+    canonical = _resolve_industry_key(industry_key)
+    if canonical:
+        industry_key = canonical
     dim = INDUSTRY_REGISTRY.get(industry_key)
     if dim is None:
+        result = validate_industry(industry_key)
         return PreValidationResult(
             is_valid=False,
             proposed_term=term,
-            rejection_reason=f"Unknown industry '{industry_key}'",
-            suggestions=list(INDUSTRY_REGISTRY.keys()),
+            rejection_reason=result.rejection_reason or f"Unknown industry '{industry_key}'",
+            suggestions=result.suggestions,
             term_type=term_type,
         )
 
@@ -199,12 +218,33 @@ def validate_industry(industry_key: str) -> PreValidationResult:
             industry_key=industry_key,
         )
 
-    close = get_close_matches(industry_key, list(INDUSTRY_REGISTRY.keys()), n=5, cutoff=0.4)
+    # Build alias → canonical key map for fuzzy lookup
+    normalized = industry_key.strip().lower()
+    alias_map: dict[str, str] = {}
+    for key, dim in INDUSTRY_REGISTRY.items():
+        alias_map[key] = key
+        for alias in dim.aliases:
+            alias_map[alias.lower()] = key
+
+    # Exact alias match
+    if normalized in alias_map:
+        canonical = alias_map[normalized]
+        return PreValidationResult(
+            is_valid=True,
+            proposed_term=industry_key,
+            matched_term=canonical,
+            industry_key=canonical,
+        )
+
+    # Fuzzy match across keys + aliases
+    close_raw = get_close_matches(normalized, list(alias_map.keys()), n=3, cutoff=0.4)
+    close_keys = list(dict.fromkeys(alias_map[m] for m in close_raw))  # deduplicate, preserve order
+
     return PreValidationResult(
         is_valid=False,
         proposed_term=industry_key,
-        rejection_reason=f"Unknown industry '{industry_key}'",
-        suggestions=close or list(INDUSTRY_REGISTRY.keys()),
+        rejection_reason=f"Unknown industry '{industry_key}'. Did you mean: {close_keys[0]!r}?" if close_keys else f"Unknown industry '{industry_key}'",
+        suggestions=close_keys or list(INDUSTRY_REGISTRY.keys()),
     )
 
 
@@ -514,6 +554,13 @@ def prevalidate_agent_plan(plan: list[dict], mode: str = "mixed", session_terms:
         max_calls = item.get("max_budget_spend", 5)
         region = item.get("region", "austin_tx")
 
+        # Auto-resolve industry aliases before validation so "mechanics" → "auto_repair"
+        if industry:
+            resolved = _resolve_industry_key(industry)
+            if resolved and resolved != industry:
+                logger.debug("[prevalidate] Industry alias resolved: '%s' → '%s'", industry, resolved)
+                industry = resolved
+
         # ── Mode intent check ──────────────────────────────────────
         if intent not in mode_cfg.allowed_intents:
             batch.results.append(PreValidationResult(
@@ -553,7 +600,7 @@ def prevalidate_agent_plan(plan: list[dict], mode: str = "mixed", session_terms:
                 brand=brand or None,
                 industry=industry or None,
             )
-            if freshness and not freshness["is_stale"]:
+            if freshness and not freshness["is_stale"] and freshness.get("records_collected", 0) > 0:
                 batch.results.append(PreValidationResult(
                     is_valid=False,
                     proposed_term=intent,

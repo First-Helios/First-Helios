@@ -1,0 +1,461 @@
+{
+  "session_id": "session-20260322-024006",
+  "saved_at": "2026-03-22T02:42:17.226274",
+  "state": "complete",
+  "session": {
+    "region": "austin_tx",
+    "model": "qwen2.5:7b-instruct",
+    "mode": "collect",
+    "goal": "Find nail salons",
+    "iterations": 12,
+    "queries_proposed": 10,
+    "queries_validated": 2,
+    "queries_rejected": 8,
+    "queries_executed": 2,
+    "wishes_added": 2,
+    "is_complete": false,
+    "final_summary": "Session ended after 12 iterations. Proposed: 10, Executed: 2, Rejected: 8, Wishes: 2",
+    "started_at": "2026-03-22T02:40:06.372157",
+    "duration_seconds": 130.9
+  },
+  "entries": [
+    {
+      "seq": 1,
+      "ts": "2026-03-22T02:40:06.465411",
+      "kind": "system",
+      "content": "Session started \u2014 model=qwen2.5:7b-instruct  region=austin_tx  mode=collect",
+      "meta": {
+        "model": "qwen2.5:7b-instruct",
+        "region": "austin_tx",
+        "goal": "Find nail salons",
+        "mode": "collect",
+        "industries": [
+          "hair_beauty"
+        ]
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-03-22T02:40:06.465420",
+      "kind": "system",
+      "content": "Begin research for austin_tx in COLLECT mode. Focus on collecting data where existing records are STALE or missing. Queries for already-fresh data will be automatically rejected. Goal: Find nail salons",
+      "meta": {}
+    },
+    {
+      "seq": 3,
+      "ts": "2026-03-22T02:40:06.465502",
+      "kind": "system",
+      "content": "Iteration 1/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 4,
+      "ts": "2026-03-22T02:40:11.237313",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"nailpro\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"NailPro is a known chain in Austin, collecting their locations will help identify potential gaps for local competitors.\", \"reason\": \"Map NailPro locations\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 5,
+      "ts": "2026-03-22T02:40:11.237831",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'nailpro' not in any industry registry\",\n      \"suggestions\": [\n        \"hilton (Hilton)\",\n        \"walmart (Walmart)\",\n        \"marriott (Marriott)\",\n        \"chipotle (Chipotle)\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 1
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-03-22T02:40:11.237920",
+      "kind": "system",
+      "content": "Iteration 2/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 7,
+      "ts": "2026-03-22T02:40:26.032657",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"chopstickz\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Chopstickz is a known chain in Austin, collecting their locations will help identify potential gaps for local competitors.\", \"reason\": \"Map Chopstickz locations\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 8,
+      "ts": "2026-03-22T02:40:26.033330",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'chopstickz' not in any industry registry\",\n      \"suggestions\": [\n        \"costco (Costco)\",\n        \"chickfila (Chick-fil-A)\",\n        \"ihop (IHOP)\",\n        \"starbucks (Starbucks)\",\n        \"dutch_bros (Dutch Bros)\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 2
+      }
+    },
+    {
+      "seq": 9,
+      "ts": "2026-03-22T02:40:26.033423",
+      "kind": "system",
+      "content": "Iteration 3/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 10,
+      "ts": "2026-03-22T02:40:27.764467",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"nail salon\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Using the term 'nail salon' directly to find chain locations will help identify potential gaps for local competitors.\", \"reason\": \"Map nail salon locations\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 11,
+      "ts": "2026-03-22T02:40:27.765064",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'nail salon' not in any industry registry\",\n      \"suggestions\": [\n        \"hilton (Hilton)\",\n        \"valvoline (Valvoline Instant Oil Change)\",\n        \"firestone (Firestone Complete Auto Care)\",\n        \"ascension (Ascension Health)\",\n        \"aire_serv (Aire Serv)\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 3
+      }
+    },
+    {
+      "seq": 12,
+      "ts": "2026-03-22T02:40:27.765156",
+      "kind": "system",
+      "content": "Iteration 4/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 13,
+      "ts": "2026-03-22T02:40:29.098508",
+      "kind": "thinking",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add nail salon chain term\", \"description\": \"Nail salon chains are needed to identify gaps for local competitors\", \"suggested_value\": \"nail salon chain\", \"industry\": \"hair_beauty\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 14,
+      "ts": "2026-03-22T02:40:29.098702",
+      "kind": "action",
+      "content": "{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-007\",\n        \"category\": \"new_term\",\n        \"title\": \"Add nail salon chain term\",\n        \"description\": \"Nail salon chains are needed to identify gaps for local competitors\",\n        \"suggested_value\": \"nail salon chain\",\n        \"context\": {\n          \"industry\": \"hair_beauty\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T02:40:29.098576\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'nail salon chain' \\u2192 hair_beauty\"\n}",
+      "meta": {
+        "action": "wish",
+        "iteration": 4
+      }
+    },
+    {
+      "seq": 15,
+      "ts": "2026-03-22T02:40:29.098756",
+      "kind": "system",
+      "content": "Iteration 5/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 16,
+      "ts": "2026-03-22T02:40:30.922856",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"nail salon chain\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Using the term 'nail salon chain' to find locations will help identify potential gaps for local competitors.\", \"reason\": \"Map nail salon chain locations\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 17,
+      "ts": "2026-03-22T02:40:30.923388",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'nail salon chain' not in any industry registry\",\n      \"suggestions\": [\n        \"walgreens_clinic (Walgreens Health)\",\n        \"one_hour_heating (One Hour Heating & Air Conditioning)\",\n        \"valvoline (Valvoline Instant Oil Change)\",\n        \"planet_fitness (Planet Fitness)\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 5
+      }
+    },
+    {
+      "seq": 18,
+      "ts": "2026-03-22T02:40:30.923472",
+      "kind": "system",
+      "content": "Iteration 6/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 19,
+      "ts": "2026-03-22T02:40:46.394714",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_local_density\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Checking the local density of nail salons will help identify areas with high demand for local competitors.\", \"reason\": \"Analyze nail salon local density\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 20,
+      "ts": "2026-03-22T02:41:18.094444",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"f276d4cb-e8d\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_local_density\",\n      \"records_found\": 4805,\n      \"records_new\": 6380,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112106,\n      \"estimated_seconds\": 31.61,\n      \"anomalies\": [\n        \"0 hair_beauty employers classified (of 4805 total) \\u2014 category mappings may be pending; run POST /api/categories/discover\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"wage_baseline\",\n          \"query\": {\n            \"intent\": \"wage_baseline\",\n            \"region\": \"austin_tx\",\n            \"industry\": \"hair_beauty\"\n          },\n          \"description\": \"Collect wage baseline for hair_beauty after indexing local employers\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 6
+      }
+    },
+    {
+      "seq": 21,
+      "ts": "2026-03-22T02:41:18.094552",
+      "kind": "system",
+      "content": "Iteration 7/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 22,
+      "ts": "2026-03-22T02:41:23.677360",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Collecting wage baseline data for hair beauty services will provide insights into competitive salaries and help identify potential local competitors.\", \"reason\": \"Collect wage baseline for nail salons\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 23,
+      "ts": "2026-03-22T02:41:23.680289",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'nail salon' not in approved job terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"receptionist salon\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 7
+      }
+    },
+    {
+      "seq": 24,
+      "ts": "2026-03-22T02:41:23.680385",
+      "kind": "system",
+      "content": "Iteration 8/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 25,
+      "ts": "2026-03-22T02:41:39.331120",
+      "kind": "thinking",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add nail salon job term\", \"description\": \"Nail salon is a critical role in hair beauty services and should be included for wage baseline analysis.\", \"suggested_value\": \"nail technician\", \"industry\": \"hair_beauty\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 26,
+      "ts": "2026-03-22T02:41:39.331353",
+      "kind": "action",
+      "content": "{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-008\",\n        \"category\": \"new_term\",\n        \"title\": \"Add nail salon job term\",\n        \"description\": \"Nail salon is a critical role in hair beauty services and should be included for wage baseline analysis.\",\n        \"suggested_value\": \"nail technician\",\n        \"context\": {\n          \"industry\": \"hair_beauty\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T02:41:39.331184\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'nail technician' \\u2192 hair_beauty\"\n}",
+      "meta": {
+        "action": "wish",
+        "iteration": 8
+      }
+    },
+    {
+      "seq": 27,
+      "ts": "2026-03-22T02:41:39.331417",
+      "kind": "system",
+      "content": "Iteration 9/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 28,
+      "ts": "2026-03-22T02:41:42.050733",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail technician\"], \"reasoning\": \"Collecting wage baseline data for nail technicians will provide insights into competitive salaries and help identify potential local competitors.\", \"reason\": \"Collect wage baseline for nail technicians\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 29,
+      "ts": "2026-03-22T02:41:45.889169",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"bda190e0-771\",\n      \"status\": \"failed\",\n      \"intent\": \"wage_baseline\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112094,\n      \"estimated_seconds\": 3.79,\n      \"anomalies\": [\n        \"No wage data in DB \\u2014 need BLS collection first\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"score_refresh\",\n          \"query\": {\n            \"intent\": \"score_refresh\",\n            \"region\": \"austin_tx\"\n          },\n          \"description\": \"Recompute scores with updated wage data\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 9
+      }
+    },
+    {
+      "seq": 30,
+      "ts": "2026-03-22T02:41:45.889307",
+      "kind": "system",
+      "content": "Iteration 10/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 31,
+      "ts": "2026-03-22T02:41:57.662351",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"score_refresh\", \"region\": \"austin_tx\", \"reasoning\": \"Refreshing the score will ensure that any new or updated data, including potential wage baseline data, is reflected in the analysis.\", \"reason\": \"Refresh scores for Austin TX\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 32,
+      "ts": "2026-03-22T02:41:57.662487",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Intent 'score_refresh' not allowed in mode 'collect'. Allowed intents: ['campaign_status', 'data_quality_audit', 'discovery_scan', 'job_posting_volume', 'poi_chain_locations', 'poi_local_density', 'sentiment_check', 'wage_baseline']\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 10
+      }
+    },
+    {
+      "seq": 33,
+      "ts": "2026-03-22T02:41:57.662569",
+      "kind": "system",
+      "content": "Iteration 11/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 34,
+      "ts": "2026-03-22T02:42:01.478895",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"job_posting_volume\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail technician\"], \"reasoning\": \"Checking job posting volume for nail technicians will help identify areas with high demand and potential opportunities for local competitors.\", \"reason\": \"Analyze job posting volume for nail technicians\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 35,
+      "ts": "2026-03-22T02:42:01.485697",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 2.0 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 100. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 11
+      }
+    },
+    {
+      "seq": 36,
+      "ts": "2026-03-22T02:42:01.485749",
+      "kind": "system",
+      "content": "Iteration 12/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 37,
+      "ts": "2026-03-22T02:42:17.220260",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"sentiment_check\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Checking sentiment for nail salons will provide insights into customer satisfaction and potential areas for local competitors to improve.\", \"reason\": \"Check sentiment for nail salons\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 38,
+      "ts": "2026-03-22T02:42:17.225684",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 9.3 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 6. Pick a different intent, brand, or industry.\",\n      \"suggestions\": [],\n      \"session_hint\": \"All remaining agenda items appear to have fresh data. Use the 'done' action to end the session with a summary and wishlist_reflection.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 12
+      }
+    },
+    {
+      "seq": 39,
+      "ts": "2026-03-22T02:42:17.226219",
+      "kind": "done",
+      "content": "Session ended after 12 iterations. Proposed: 10, Executed: 2, Rejected: 8, Wishes: 2",
+      "meta": {
+        "region": "austin_tx",
+        "model": "qwen2.5:7b-instruct",
+        "mode": "collect",
+        "goal": "Find nail salons",
+        "iterations": 12,
+        "queries_proposed": 10,
+        "queries_validated": 2,
+        "queries_rejected": 8,
+        "queries_executed": 2,
+        "wishes_added": 2,
+        "is_complete": false,
+        "final_summary": "Session ended after 12 iterations. Proposed: 10, Executed: 2, Rejected: 8, Wishes: 2",
+        "started_at": "2026-03-22T02:40:06.372157",
+        "duration_seconds": 130.9
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are OpenClaw, a research planning agent for First-Helios.\n\nYour mission: discover where LOCAL businesses can compete with mega-corporations\nin industries like healthcare, retail, food service, fitness, childcare, etc.\nYou do this by planning data collection queries, validating them, and interpreting results.\n\n## CRITICAL RULE: Pre-validation\nBefore any API call costs budget, your proposed queries go through pre-validation.\nYou MUST only propose search terms from the approved pools below.\nIf you want a term that doesn't exist, add it to your wishlist instead of using it.\n\n## Available Industries\n[\n  {\n    \"key\": \"hair_beauty\",\n    \"name\": \"Hair & Beauty Services\",\n    \"mega_corps\": [\n      \"great_clips\",\n      \"supercuts\",\n      \"sport_clips\",\n      \"fantastic_sams\"\n    ],\n    \"job_terms\": [\n      \"hair stylist\",\n      \"hairdresser\",\n      \"barber\",\n      \"cosmetologist\",\n      \"salon manager\",\n      \"colorist\"\n    ],\n    \"poi_terms\": [\n      \"hair salon\",\n      \"barbershop\",\n      \"beauty salon\",\n      \"barber shop\",\n      \"nail salon\",\n      \"day spa\"\n    ]\n  }\n]\n\n## Available Mega-Corps\n[\n  {\n    \"key\": \"great_clips\",\n    \"name\": \"Great Clips\",\n    \"industry\": \"hair_beauty\"\n  },\n  {\n    \"key\": \"supercuts\",\n    \"name\": \"Supercuts\",\n    \"industry\": \"hair_beauty\"\n  },\n  {\n    \"key\": \"sport_clips\",\n    \"name\": \"Sport Clips\",\n    \"industry\": \"hair_beauty\"\n  },\n  {\n    \"key\": \"fantastic_sams\",\n    \"name\": \"Fantastic Sams\",\n    \"industry\": \"hair_beauty\"\n  }\n]\n\n## Actions \u2014 output raw JSON ONLY, never use markdown fences or prose\n\n### propose \u2014 Propose queries to be pre-validated before execution\n{\"action\": \"propose\", \"queries\": [\n    {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"starbucks\",\n      \"industry\": \"coffee_cafe\", \"search_terms\": [\"barista\", \"coffee\"],\n      \"reasoning\": \"Starbucks is Priority 1 on the agenda \u2014 mapping locations reveals saturation zones for local competitors\",\n      \"reason\": \"Map Starbucks locations\"}\n]}\n\n### query \u2014 Submit a single DB-internal query (data_quality_audit, discovery_scan, score_refresh, campaign_status ONLY)\n{\"action\": \"query\", \"intent\": \"data_quality_audit\", \"region\": \"austin_tx\",\n  \"reasoning\": \"Starting with audit to understand current data state before collecting anything\",\n  \"reason\": \"Initial audit\"}\n\n### wish \u2014 Add one or more items to today's wishlist (use \"wishes\" array for multiple)\n{\"action\": \"wish\", \"wishes\": [\n  {\"category\": \"new_term\", \"title\": \"Add matcha bar search term\",\n    \"description\": \"Matcha cafes are growing in Austin, missing from poi_search_terms\",\n    \"suggested_value\": \"matcha bar\", \"industry\": \"coffee_cafe\"},\n  {\"category\": \"new_term\", \"title\": \"Add boba tea search term\",\n    \"description\": \"Boba shops are underrepresented in coffee_cafe terms\",\n    \"suggested_value\": \"boba tea\", \"industry\": \"coffee_cafe\"}\n]}\nCategories: new_source, new_term, new_industry, new_brand, tool_request\n\n### Running a discovery scan \u2014 use the query action with intent discovery_scan\n{\"action\": \"query\", \"intent\": \"discovery_scan\", \"region\": \"austin_tx\",\n  \"reason\": \"Find coverage gaps and new stores to investigate\"}\nReturns: coverage statistics and suggested_next leads. Each suggested_next item has a\n\"suggested_intent\" field showing what to collect \u2014 use it as the \"intent\" inside a propose action.\nDo NOT use suggested_intent as a top-level action. Always wrap it: {\"action\":\"propose\",\"queries\":[...]}\n\n### status \u2014 Check budget and queue state\n{\"action\": \"status\"}\n\n### done \u2014 End the session with summary and wishlist reflection\n{\"action\": \"done\", \"summary\": \"Completed coffee_cafe and fast_food scans for Austin\",\n  \"wishlist_reflection\": \"Would benefit from Indeed API access and 'matcha bar' as a POI term\"}\n\n## CRITICAL term-matching rules\n- poi_chain_locations, poi_local_density \u2192 use ONLY poi_search_terms (place names like \"hair salon\", \"HVAC\")\n- job_posting_volume, wage_baseline \u2192 use ONLY job_search_terms (job titles like \"hair stylist\", \"HVAC technician\")\n- sentiment_check \u2192 use ONLY sentiment_keywords for that industry\n- These pools are DIFFERENT. \"hair salon\" is a place type (POI). \"hair stylist\" is a job title (job).\n- Each industry block above lists its EXACT valid terms under separate poi_terms and job_terms keys.\n\n## Rules\n1. Output ONLY valid JSON \u2014 your ENTIRE response must be a single JSON object starting with { and ending with }. No prose before or after. No markdown fences (no ```). No \"Let's...\", \"Here is...\", or any other text.\n2. Do NOT repeat the exact same query you already executed \u2014 check previous results first\n3. Your Collection Agenda is already prepared in the Context above \u2014 start from Priority 1 and work down in order\n4. Items marked \u2713 in \"Already collected\" are fresh \u2014 do NOT re-collect them, they will be rejected\n5. Run discovery_scan again mid-session after completing a batch of queries to find newly exposed gaps\n6. For each industry, check: chain locations \u2192 local density \u2192 wages \u2192 job postings \u2192 sentiment\n7. ONLY use search terms from the approved pools listed above \u2014 match term type to intent\n8. If a query is REJECTED for a missing term, use \"wish\" to request it \u2014 it will be added to this session's term pool immediately so you can use it in the next query\n9. Track your budget \u2014 check \"status\" if api_calls_remaining_today drops below 20\n10. score_refresh, data_quality_audit, discovery_scan, and campaign_status are always DB-internal \u2014 they run in analyze mode automatically regardless of session mode\n11. When your goal is met OR you have explored all agenda items, use \"done\" to end the session\n12. At session end in the \"done\" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have\n13. If a result contains \"session_hint\", follow it immediately \u2014 it is a system-level directive\n\n## Current Context\nRegion: austin_tx\nGoal: Find nail salons\nFocus industries: ['hair_beauty']\n\n## Collection Agenda (auto-generated from discovery scan)\n  (no discovery leads \u2014 DB may be empty or fully fresh)\n\nAlready collected \u2014 do NOT re-collect (marked \u2713):\n  \u2713 poi_chain_locations brand=aire_serv industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=one_hour_heating industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=mr_electric industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=roto_rooter industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 score_refresh: 5289 records, 0d old\n  \u2713 poi_chain_locations brand=service_experts industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_local_density industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 wage_baseline industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=great_clips industry=hair_beauty: 41 records, 0d old\n  \u2713 poi_chain_locations brand=supercuts industry=hair_beauty: 19 records, 0d old\n  \u2713 poi_chain_locations brand=sport_clips industry=hair_beauty: 21 records, 0d old\n  \u2713 poi_chain_locations brand=fantastic_sams industry=hair_beauty: 1 records, 0d old\n  \u2713 poi_local_density industry=hair_beauty: 0 records, 0d old\n  \u2713 wage_baseline industry=hair_beauty: 0 records, 0d old\n\nFreshness thresholds (days): {\"poi_chain_locations\": 60.0, \"poi_local_density\": 60.0, \"wage_baseline\": 90.0, \"job_posting_volume\": 14.0, \"sentiment_check\": 14.0, \"economic_context\": 90.0, \"score_refresh\": 1.0, \"data_quality_audit\": 0.0, \"campaign_status\": 0.0, \"discovery_scan\": 0.0}\n\n## Operational Mode: COLLECT\nTargeted data acquisition from external APIs for STALE or missing data. Freshness gates ACTIVE \u2014 queries for already-fresh data are rejected before the agent considers them. No DB fallback \u2014 if a collector fails, the query fails. Success requires at least one new record from an external source.\nAllowed intents: ['campaign_status', 'data_quality_audit', 'discovery_scan', 'job_posting_volume', 'poi_chain_locations', 'poi_local_density', 'sentiment_check', 'wage_baseline']\nFreshness gates: ACTIVE \u2014 stale data will be re-collected, fresh data skipped\nSuccess criteria: STRICT \u2014 must collect new records from external APIs\nDB fallback: DISABLED \u2014 cached data is NOT returned as results\n"
+    },
+    {
+      "role": "user",
+      "content": "Begin research for austin_tx in COLLECT mode. Focus on collecting data where existing records are STALE or missing. Queries for already-fresh data will be automatically rejected. Goal: Find nail salons"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"nailpro\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"NailPro is a known chain in Austin, collecting their locations will help identify potential gaps for local competitors.\", \"reason\": \"Map NailPro locations\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'nailpro' not in any industry registry\",\n      \"suggestions\": [\n        \"hilton (Hilton)\",\n        \"walmart (Walmart)\",\n        \"marriott (Marriott)\",\n        \"chipotle (Chipotle)\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"chopstickz\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Chopstickz is a known chain in Austin, collecting their locations will help identify potential gaps for local competitors.\", \"reason\": \"Map Chopstickz locations\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'chopstickz' not in any industry registry\",\n      \"suggestions\": [\n        \"costco (Costco)\",\n        \"chickfila (Chick-fil-A)\",\n        \"ihop (IHOP)\",\n        \"starbucks (Starbucks)\",\n        \"dutch_bros (Dutch Bros)\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"nail salon\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Using the term 'nail salon' directly to find chain locations will help identify potential gaps for local competitors.\", \"reason\": \"Map nail salon locations\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'nail salon' not in any industry registry\",\n      \"suggestions\": [\n        \"hilton (Hilton)\",\n        \"valvoline (Valvoline Instant Oil Change)\",\n        \"firestone (Firestone Complete Auto Care)\",\n        \"ascension (Ascension Health)\",\n        \"aire_serv (Aire Serv)\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add nail salon chain term\", \"description\": \"Nail salon chains are needed to identify gaps for local competitors\", \"suggested_value\": \"nail salon chain\", \"industry\": \"hair_beauty\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-007\",\n        \"category\": \"new_term\",\n        \"title\": \"Add nail salon chain term\",\n        \"description\": \"Nail salon chains are needed to identify gaps for local competitors\",\n        \"suggested_value\": \"nail salon chain\",\n        \"context\": {\n          \"industry\": \"hair_beauty\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T02:40:29.098576\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'nail salon chain' \\u2192 hair_beauty\"\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"nail salon chain\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Using the term 'nail salon chain' to find locations will help identify potential gaps for local competitors.\", \"reason\": \"Map nail salon chain locations\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Brand 'nail salon chain' not in any industry registry\",\n      \"suggestions\": [\n        \"walgreens_clinic (Walgreens Health)\",\n        \"one_hour_heating (One Hour Heating & Air Conditioning)\",\n        \"valvoline (Valvoline Instant Oil Change)\",\n        \"planet_fitness (Planet Fitness)\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_local_density\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Checking the local density of nail salons will help identify areas with high demand for local competitors.\", \"reason\": \"Analyze nail salon local density\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"f276d4cb-e8d\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_local_density\",\n      \"records_found\": 4805,\n      \"records_new\": 6380,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112106,\n      \"estimated_seconds\": 31.61,\n      \"anomalies\": [\n        \"0 hair_beauty employers classified (of 4805 total) \\u2014 category mappings may be pending; run POST /api/categories/discover\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"wage_baseline\",\n          \"query\": {\n            \"intent\": \"wage_baseline\",\n            \"region\": \"austin_tx\",\n            \"industry\": \"hair_beauty\"\n          },\n          \"description\": \"Collect wage baseline for hair_beauty after indexing local employers\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Collecting wage baseline data for hair beauty services will provide insights into competitive salaries and help identify potential local competitors.\", \"reason\": \"Collect wage baseline for nail salons\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'nail salon' not in approved job terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"receptionist salon\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add nail salon job term\", \"description\": \"Nail salon is a critical role in hair beauty services and should be included for wage baseline analysis.\", \"suggested_value\": \"nail technician\", \"industry\": \"hair_beauty\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-008\",\n        \"category\": \"new_term\",\n        \"title\": \"Add nail salon job term\",\n        \"description\": \"Nail salon is a critical role in hair beauty services and should be included for wage baseline analysis.\",\n        \"suggested_value\": \"nail technician\",\n        \"context\": {\n          \"industry\": \"hair_beauty\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T02:41:39.331184\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'nail technician' \\u2192 hair_beauty\"\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail technician\"], \"reasoning\": \"Collecting wage baseline data for nail technicians will provide insights into competitive salaries and help identify potential local competitors.\", \"reason\": \"Collect wage baseline for nail technicians\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"bda190e0-771\",\n      \"status\": \"failed\",\n      \"intent\": \"wage_baseline\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112094,\n      \"estimated_seconds\": 3.79,\n      \"anomalies\": [\n        \"No wage data in DB \\u2014 need BLS collection first\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"score_refresh\",\n          \"query\": {\n            \"intent\": \"score_refresh\",\n            \"region\": \"austin_tx\"\n          },\n          \"description\": \"Recompute scores with updated wage data\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"score_refresh\", \"region\": \"austin_tx\", \"reasoning\": \"Refreshing the score will ensure that any new or updated data, including potential wage baseline data, is reflected in the analysis.\", \"reason\": \"Refresh scores for Austin TX\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Intent 'score_refresh' not allowed in mode 'collect'. Allowed intents: ['campaign_status', 'data_quality_audit', 'discovery_scan', 'job_posting_volume', 'poi_chain_locations', 'poi_local_density', 'sentiment_check', 'wage_baseline']\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"job_posting_volume\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail technician\"], \"reasoning\": \"Checking job posting volume for nail technicians will help identify areas with high demand and potential opportunities for local competitors.\", \"reason\": \"Analyze job posting volume for nail technicians\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 2.0 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 100. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"sentiment_check\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"nail salon\"], \"reasoning\": \"Checking sentiment for nail salons will provide insights into customer satisfaction and potential areas for local competitors to improve.\", \"reason\": \"Check sentiment for nail salons\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 9.3 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 6. Pick a different intent, brand, or industry.\",\n      \"suggestions\": [],\n      \"session_hint\": \"All remaining agenda items appear to have fresh data. Use the 'done' action to end the session with a summary and wishlist_reflection.\"\n    }\n  ]\n}"
+    }
+  ]
+}

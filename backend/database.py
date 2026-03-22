@@ -285,6 +285,132 @@ class ApiSource(Base):
         }
 
 
+ENDPOINT_FAILURE_THRESHOLD = 3   # consecutive failures before auto-deactivation
+
+
+class ApiEndpoint(Base):
+    """One row per (adapter_name, intent) binding — the unit of endpoint health tracking.
+
+    An adapter like AllThePlacesAdapter can serve multiple intents, so each
+    combination gets its own row with independent health state.  The orchestrator
+    builds its system prompt from healthy rows only, so a broken source is
+    automatically excluded without any code change.
+    """
+
+    __tablename__ = "api_endpoints"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+
+    # ── Identity ──────────────────────────────────────────────────
+    adapter_name    = Column(String, nullable=False, index=True)   # "AllThePlacesAdapter"
+    scraper_module  = Column(String, nullable=True)                # "scrapers.alltheplaces_adapter"
+    source_key      = Column(String, nullable=False, default="", index=True)  # FK-like to api_sources.source_key; "" for DB-internal
+    intent          = Column(String, nullable=False, index=True)   # Intent enum value
+    data_type       = Column(String, nullable=False, default="")   # "Store" | "Signal" | "WageIndex"
+    route_status    = Column(String, nullable=False, default="live")  # "live" | "unwired" | "suggested"
+    notes           = Column(Text, nullable=True)
+
+    # ── Coverage scope (NULL = covers all) ───────────────────────
+    industries_json = Column(Text, nullable=True)   # JSON list of industry keys
+    brands_json     = Column(Text, nullable=True)   # JSON list of brand keys
+    regions_json    = Column(Text, nullable=True)   # JSON list of region keys
+
+    # ── URL / access pattern ──────────────────────────────────────
+    base_url        = Column(String, nullable=True)
+    url_pattern     = Column(String, nullable=True)
+
+    # ── Health tracking ───────────────────────────────────────────
+    is_active            = Column(Boolean, default=True, nullable=False, index=True)
+    consecutive_failures = Column(Integer, default=0, nullable=False)
+    success_count        = Column(Integer, default=0, nullable=False)
+    failure_count        = Column(Integer, default=0, nullable=False)
+    last_verified_at     = Column(DateTime, nullable=True)
+    last_success_at      = Column(DateTime, nullable=True)
+    last_failure_reason  = Column(String, nullable=True)
+
+    # How many hours before health-check result is considered stale
+    health_check_freshness_hours = Column(Float, default=6.0, nullable=False)
+
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("adapter_name", "source_key", "intent", name="uq_endpoint_adapter_source_intent"),
+    )
+
+    # ── JSON property helpers ──────────────────────────────────────
+    @property
+    def industries(self) -> list[str] | None:
+        return json.loads(self.industries_json) if self.industries_json else None
+
+    @industries.setter
+    def industries(self, value: list[str] | None) -> None:
+        self.industries_json = json.dumps(value) if value is not None else None
+
+    @property
+    def brands(self) -> list[str] | None:
+        return json.loads(self.brands_json) if self.brands_json else None
+
+    @brands.setter
+    def brands(self, value: list[str] | None) -> None:
+        self.brands_json = json.dumps(value) if value is not None else None
+
+    @property
+    def regions(self) -> list[str] | None:
+        return json.loads(self.regions_json) if self.regions_json else None
+
+    @regions.setter
+    def regions(self, value: list[str] | None) -> None:
+        self.regions_json = json.dumps(value) if value is not None else None
+
+    # ── Computed health properties ─────────────────────────────────
+    @property
+    def success_rate(self) -> float:
+        total = self.success_count + self.failure_count
+        return round(self.success_count / total * 100, 1) if total > 0 else 0.0
+
+    @property
+    def health_check_is_stale(self) -> bool:
+        if not self.last_verified_at:
+            return True
+        age_hours = (datetime.utcnow() - self.last_verified_at).total_seconds() / 3600
+        return age_hours > self.health_check_freshness_hours
+
+    @property
+    def is_healthy(self) -> bool:
+        return self.is_active and self.consecutive_failures < ENDPOINT_FAILURE_THRESHOLD
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "adapter_name": self.adapter_name,
+            "scraper_module": self.scraper_module,
+            "source_key": self.source_key,
+            "intent": self.intent,
+            "data_type": self.data_type,
+            "route_status": self.route_status,
+            "notes": self.notes,
+            "industries": self.industries,
+            "brands": self.brands,
+            "regions": self.regions,
+            "base_url": self.base_url,
+            "url_pattern": self.url_pattern,
+            "is_active": self.is_active,
+            "is_healthy": self.is_healthy,
+            "consecutive_failures": self.consecutive_failures,
+            "success_count": self.success_count,
+            "failure_count": self.failure_count,
+            "success_rate": self.success_rate,
+            "last_verified_at": self.last_verified_at.isoformat() if self.last_verified_at else None,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "last_failure_reason": self.last_failure_reason,
+            "health_check_is_stale": self.health_check_is_stale,
+            "health_check_freshness_hours": self.health_check_freshness_hours,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class ApiRequestLog(Base):
     """Every individual external HTTP request the system makes.
 

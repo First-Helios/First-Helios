@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENT_CONFIG_PATH = _PROJECT_ROOT / "config" / "agent_config.yaml"
+SESSION_LOG_DIR = _PROJECT_ROOT / "data" / "openclaw_logs" / "sessions"
 
 # ══════════════════════════════════════════════════════════════════════
 # Configuration
@@ -85,70 +86,67 @@ If you want a term that doesn't exist, add it to your wishlist instead of using 
 ## Available Mega-Corps
 {mega_corps}
 
-## Actions (JSON only — no other text)
+## Actions — output raw JSON ONLY, never use markdown fences or prose
 
 ### propose — Propose queries to be pre-validated before execution
-```json
 {{"action": "propose", "queries": [
     {{"intent": "poi_chain_locations", "region": "austin_tx", "brand": "starbucks",
       "industry": "coffee_cafe", "search_terms": ["barista", "coffee"],
+      "reasoning": "Starbucks is Priority 1 on the agenda — mapping locations reveals saturation zones for local competitors",
       "reason": "Map Starbucks locations"}}
 ]}}
-```
 
-### query — Submit a single already-validated query for execution
-```json
-{{"action": "query", "intent": "data_quality_audit", "region": "austin_tx", "reason": "Initial audit"}}
-```
+### query — Submit a single DB-internal query (data_quality_audit, discovery_scan, score_refresh, campaign_status ONLY)
+{{"action": "query", "intent": "data_quality_audit", "region": "austin_tx",
+  "reasoning": "Starting with audit to understand current data state before collecting anything",
+  "reason": "Initial audit"}}
 
-### wish — Add an item to today's wishlist
-```json
-{{"action": "wish", "category": "new_term", "title": "Add matcha bar search term",
-  "description": "Matcha-focused cafes are growing in Austin, missing from poi_search_terms",
-  "suggested_value": "matcha bar", "industry": "coffee_cafe"}}
-```
+### wish — Add one or more items to today's wishlist (use "wishes" array for multiple)
+{{"action": "wish", "wishes": [
+  {{"category": "new_term", "title": "Add matcha bar search term",
+    "description": "Matcha cafes are growing in Austin, missing from poi_search_terms",
+    "suggested_value": "matcha bar", "industry": "coffee_cafe"}},
+  {{"category": "new_term", "title": "Add boba tea search term",
+    "description": "Boba shops are underrepresented in coffee_cafe terms",
+    "suggested_value": "boba tea", "industry": "coffee_cafe"}}
+]}}
 Categories: new_source, new_term, new_industry, new_brand, tool_request
 
-### discovery — Run discovery scan to find expansion targets
-```json
+### Running a discovery scan — use the query action with intent discovery_scan
 {{"action": "query", "intent": "discovery_scan", "region": "austin_tx",
   "reason": "Find coverage gaps and new stores to investigate"}}
-```
-Returns: coverage statistics, prioritised leads (brands/industries with data gaps,
-stale records, geographic clusters needing attention), and suggested next queries.
-Use these leads to decide what to explore next in the session.
+Returns: coverage statistics and suggested_next leads. Each suggested_next item has a
+"suggested_intent" field showing what to collect — use it as the "intent" inside a propose action.
+Do NOT use suggested_intent as a top-level action. Always wrap it: {{"action":"propose","queries":[...]}}
 
 ### status — Check budget and queue state
-```json
 {{"action": "status"}}
-```
 
 ### done — End the session with summary and wishlist reflection
-```json
 {{"action": "done", "summary": "Completed coffee_cafe and fast_food scans for Austin",
   "wishlist_reflection": "Would benefit from Indeed API access and 'matcha bar' as a POI term"}}
-```
 
 ## CRITICAL term-matching rules
-- For poi_chain_locations and poi_local_density → use ONLY poi_search_terms for that industry
-- For job_posting_volume and wage_baseline → use ONLY job_search_terms for that industry
-- For sentiment_check → use ONLY sentiment_keywords for that industry
-- NEVER mix terms across industries. "barista" is a coffee_cafe term, NOT retail_general.
-- Each industry block above lists its EXACT valid terms. Copy them exactly.
+- poi_chain_locations, poi_local_density → use ONLY poi_search_terms (place names like "hair salon", "HVAC")
+- job_posting_volume, wage_baseline → use ONLY job_search_terms (job titles like "hair stylist", "HVAC technician")
+- sentiment_check → use ONLY sentiment_keywords for that industry
+- These pools are DIFFERENT. "hair salon" is a place type (POI). "hair stylist" is a job title (job).
+- Each industry block above lists its EXACT valid terms under separate poi_terms and job_terms keys.
 
 ## Rules
-1. Your Collection Agenda is already prepared in the Context above — start from Priority 1 and work down in order
-2. Items marked ✓ in "Already collected" are fresh — do NOT re-collect them, they will be rejected
-3. Run discovery_scan again mid-session after completing a batch of queries to find newly exposed gaps
-4. For each industry, check: chain locations → local density → wages → job postings → sentiment
-5. ONLY use search terms from the approved pools listed above — match term type to intent
-6. If a query is REJECTED for a missing term, use "wish" to request it — it will be added to this session's term pool immediately so you can use it in the next query
-7. Track your budget — check "status" if api_calls_remaining_today drops below 20
-8. score_refresh, data_quality_audit, discovery_scan, and campaign_status are always DB-internal — they run in analyze mode automatically regardless of session mode
-9. When your goal is met OR you have explored all agenda items, use "done" to end the session
-10. At session end in the "done" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have
-11. Output ONLY valid JSON per response — no surrounding text
-12. Do NOT repeat the exact same query you already executed — check previous results first
+1. Output ONLY valid JSON — your ENTIRE response must be a single JSON object starting with {{ and ending with }}. No prose before or after. No markdown fences (no ```). No "Let's...", "Here is...", or any other text.
+2. Do NOT repeat the exact same query you already executed — check previous results first
+3. Your Collection Agenda is already prepared in the Context above — start from Priority 1 and work down in order
+4. Items marked ✓ in "Already collected" are fresh — do NOT re-collect them, they will be rejected
+5. Run discovery_scan again mid-session after completing a batch of queries to find newly exposed gaps
+6. For each industry, check: chain locations → local density → wages → job postings → sentiment
+7. ONLY use search terms from the approved pools listed above — match term type to intent
+8. If a query is REJECTED for a missing term, use "wish" to request it — it will be added to this session's term pool immediately so you can use it in the next query
+9. Track your budget — check "status" if api_calls_remaining_today drops below 20
+10. score_refresh, data_quality_audit, discovery_scan, and campaign_status are always DB-internal — they run in analyze mode automatically regardless of session mode
+11. When your goal is met OR you have explored all agenda items, use "done" to end the session
+12. At session end in the "done" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have
+13. If a result contains "session_hint", follow it immediately — it is a system-level directive
 
 ## Current Context
 {context}
@@ -228,6 +226,34 @@ class SessionLog:
                 "last_seq": self._seq,
             }
 
+    def save_to_file(self, messages: list[dict] | None = None, session_meta: dict | None = None) -> Path:
+        """Write the full session log (entries + message history) to a timestamped JSON file.
+
+        Args:
+            messages: Full message list (system prompt + all user/assistant turns).
+            session_meta: ClawSession.to_dict() snapshot.
+
+        Returns:
+            Path of the written file.
+        """
+        SESSION_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.utcnow().strftime("%Y-%m-%d_%H%M%S")
+        fname = SESSION_LOG_DIR / f"session_{ts}_{self.session_id}.json"
+
+        with self._lock:
+            payload = {
+                "session_id": self.session_id,
+                "saved_at": datetime.utcnow().isoformat(),
+                "state": self.state,
+                "session": session_meta or {},
+                "entries": [e.to_dict() for e in self._entries],
+                "messages": messages or [],
+            }
+
+        fname.write_text(json.dumps(payload, indent=2, default=str))
+        logger.info("[OpenClaw] Session log saved → %s", fname)
+        return fname
+
 
 # Module-level singleton — accessible from server endpoints
 session_log = SessionLog()
@@ -253,6 +279,8 @@ class ClawSession:
     wishes_added: int = 0
     results: list[dict] = field(default_factory=list)
     messages: list[dict] = field(default_factory=list)
+    executed_queries: set = field(default_factory=set)   # (intent, brand, industry) tuples
+    consecutive_freshness_rejections: int = 0  # resets on any successful execute
     is_complete: bool = False
     final_summary: str = ""
 
@@ -347,37 +375,31 @@ class OpenClawOrchestrator:
         except ValueError:
             logger.warning("[OpenClaw] Invalid mode '%s' — falling back to mixed", mode)
             agent_mode = AgentMode.MIXED
+
+        # Resolve industry aliases (e.g. "mechanics" → "auto_repair")
+        if industries:
+            from openclaw.prevalidate import _resolve_industry_key
+            resolved_industries = []
+            for ind in industries:
+                canonical = _resolve_industry_key(ind)
+                if canonical:
+                    if canonical != ind:
+                        logger.info("[OpenClaw] Industry alias resolved: '%s' → '%s'", ind, canonical)
+                    resolved_industries.append(canonical)
+                else:
+                    logger.warning("[OpenClaw] Unknown industry '%s' — skipping", ind)
+            industries = resolved_industries or None
         mode_cfg = get_mode_config(agent_mode)
 
         self._session = ClawSession(
             region=region, model=self.model, mode=agent_mode.value, goal=goal,
         )
 
-        # Build system prompt with industry data
-        industry_data = get_all_industries()
-        if industries:
-            industry_data = [i for i in industry_data if i["key"] in industries]
-
-        mega_corps = get_all_mega_corps()
-        if industries:
-            mega_corps = [m for m in mega_corps if m["industry"] in industries]
-
-        # Truncate for context window — just keys and terms, not full descriptions
-        industries_compact = json.dumps([
-            {
-                "key": i["key"],
-                "name": i["display_name"],
-                "mega_corps": [m["key"] for m in i["mega_corps"]],
-                "job_terms": i["job_search_terms"][:6],
-                "poi_terms": i["poi_search_terms"][:6],
-            }
-            for i in industry_data
-        ], indent=2)
-
-        corps_compact = json.dumps([
-            {"key": m["key"], "name": m["name"], "industry": m["industry"]}
-            for m in mega_corps
-        ], indent=2)
+        # Build system prompt context — filtered by healthy endpoints
+        industries_compact, corps_compact = self._build_dynamic_context(
+            region=region,
+            industries_filter=industries,
+        )
 
         context = f"Region: {region}"
         if goal:
@@ -389,7 +411,7 @@ class OpenClawOrchestrator:
         # Run discovery + freshness before the loop so the agent reads a
         # ranked collection agenda instead of guessing from raw timestamps.
         self._session_terms = {}  # reset session term pool for new session
-        context += self._build_pilot_briefing(region, agent_mode)
+        context += self._build_pilot_briefing(region, agent_mode, industries_filter=industries)
 
         # ── Mode context ────────────────────────────────────────────
         context += f"\n\n## Operational Mode: {agent_mode.value.upper()}"
@@ -507,6 +529,16 @@ class OpenClawOrchestrator:
         session_log.append("done", self._session.final_summary, self._session.to_dict())
         session_log.finish("complete")
 
+        # Persist full conversation log (entries + message history) to disk
+        try:
+            log_path = session_log.save_to_file(
+                messages=self._session.messages,
+                session_meta=self._session.to_dict(),
+            )
+            logger.info("[OpenClaw] Full session transcript → %s", log_path)
+        except Exception as e:
+            logger.warning("[OpenClaw] Could not save session log: %s", e)
+
         logger.info("[OpenClaw] Session complete: %s", self._session.to_dict())
         return self._session
 
@@ -522,7 +554,7 @@ class OpenClawOrchestrator:
                     "stream": False,
                     "options": {
                         "temperature": self.temperature,
-                        "num_predict": 768,
+                        "num_predict": 1024,
                     },
                 },
                 timeout=180,
@@ -543,12 +575,28 @@ class OpenClawOrchestrator:
     def _execute_action(self, llm_response: str) -> dict:
         json_str = self._extract_json(llm_response)
         if not json_str:
-            return {"error": "No valid JSON found. Output ONLY JSON."}
+            return {
+                "error": "No valid JSON found in your response.",
+                "recovery": (
+                    "RETRY with JSON only — no prose, no markdown fences, no explanation. "
+                    'Minimal valid example: {"action": "status"} '
+                    'or {"action": "propose", "queries": [{"intent": "poi_chain_locations", '
+                    '"region": "austin_tx", "brand": "starbucks", "industry": "coffee_cafe", '
+                    '"search_terms": ["coffee"], "reasoning": "why", "reason": "label"}]}'
+                ),
+            }
 
         try:
             data = json.loads(json_str)
         except json.JSONDecodeError as e:
-            return {"error": f"Invalid JSON: {e}"}
+            return {
+                "error": f"Malformed JSON: {e}",
+                "recovery": (
+                    "RETRY — fix the JSON syntax error above. "
+                    "Ensure all strings are quoted, no trailing commas, no comments. "
+                    'Minimal valid example: {"action": "status"}'
+                ),
+            }
 
         action = data.get("action", "")
 
@@ -565,13 +613,91 @@ class OpenClawOrchestrator:
         elif action == "batch":
             # Redirect batch to propose for pre-validation
             return self._handle_propose({"queries": data.get("queries", [])})
+        elif action == "discovery":
+            # Alias: model wrote {"action":"discovery"} instead of {"action":"query","intent":"discovery_scan"}
+            data.setdefault("intent", "discovery_scan")
+            data["action"] = "query"
+            return self._handle_query(data)
         else:
             return {
                 "error": f"Unknown action '{action}'. "
-                "Valid: propose, query, wish, status, done"
+                "Valid actions: propose, query, wish, status, done. "
+                "NOTE: to run discovery_scan use {\"action\":\"query\",\"intent\":\"discovery_scan\"}"
             }
 
-    def _build_pilot_briefing(self, region: str, mode: AgentMode) -> str:
+    def _build_dynamic_context(
+        self,
+        region: str,
+        industries_filter: Optional[list[str]],
+    ) -> tuple[str, str]:
+        """Query the endpoint catalog and return (industries_compact, corps_compact).
+
+        Only industries and brands backed by at least one healthy endpoint are
+        included in the system prompt.  Falls back to the full hardcoded
+        INDUSTRY_REGISTRY if the catalog is empty or unavailable.
+
+        Returns:
+            (industries_compact_json, corps_compact_json)
+        """
+        try:
+            from backend.endpoint_catalog import get_healthy_endpoints, derive_available_capabilities
+
+            endpoints = get_healthy_endpoints(industries=industries_filter)
+            if not endpoints:
+                raise RuntimeError("endpoint catalog returned zero healthy rows")
+
+            caps = derive_available_capabilities(endpoints)
+            available_industries = caps["available_industries"]  # None = all
+            available_brands     = caps["available_brands"]      # None = all
+
+            industry_data = get_all_industries()
+            if industries_filter:
+                industry_data = [i for i in industry_data if i["key"] in industries_filter]
+            if available_industries:
+                industry_data = [i for i in industry_data if i["key"] in available_industries]
+
+            mega_corps = get_all_mega_corps()
+            if industries_filter:
+                mega_corps = [m for m in mega_corps if m["industry"] in industries_filter]
+            if available_brands:
+                mega_corps = [m for m in mega_corps if m["key"] in available_brands]
+
+            logger.info(
+                "[OpenClaw] Dynamic context from catalog: %d industries, %d brands (%d healthy endpoints)",
+                len(industry_data), len(mega_corps), len(endpoints),
+            )
+
+        except Exception as exc:
+            logger.warning(
+                "[OpenClaw] Endpoint catalog unavailable (%s) — using full hardcoded registry",
+                exc,
+            )
+            industry_data = get_all_industries()
+            if industries_filter:
+                industry_data = [i for i in industry_data if i["key"] in industries_filter]
+            mega_corps = get_all_mega_corps()
+            if industries_filter:
+                mega_corps = [m for m in mega_corps if m["industry"] in industries_filter]
+
+        industries_compact = json.dumps([
+            {
+                "key": i["key"],
+                "name": i["display_name"],
+                "mega_corps": [m["key"] for m in i["mega_corps"]],
+                "job_terms": i["job_search_terms"][:6],
+                "poi_terms": i["poi_search_terms"][:6],
+            }
+            for i in industry_data
+        ], indent=2)
+
+        corps_compact = json.dumps([
+            {"key": m["key"], "name": m["name"], "industry": m["industry"]}
+            for m in mega_corps
+        ], indent=2)
+
+        return industries_compact, corps_compact
+
+    def _build_pilot_briefing(self, region: str, mode: AgentMode, industries_filter: Optional[list[str]] = None) -> str:
         """Run discovery + freshness checks before the agent loop begins.
 
         Returns a formatted string to append to {context} in the system prompt.
@@ -589,6 +715,12 @@ class OpenClawOrchestrator:
             from backend.discovery import run_discovery
             scan = run_discovery(region=region)
             leads = getattr(scan, "leads", [])
+            # Filter to focus industries if specified
+            if industries_filter:
+                leads = [
+                    l for l in leads
+                    if not getattr(l, "industry", None) or l.industry in industries_filter
+                ]
             if leads:
                 lines.append("Follow this priority order:")
                 for i, lead in enumerate(leads[:10], 1):
@@ -652,6 +784,9 @@ class OpenClawOrchestrator:
             if pv and not pv.is_valid:
                 # Log the rejection
                 self._session.queries_rejected += 1
+                is_freshness = pv.rejection_reason and "still fresh" in pv.rejection_reason
+                if is_freshness:
+                    self._session.consecutive_freshness_rejections += 1
                 request_tracker.log_prevalidation_rejection(
                     intent=raw.get("intent", ""),
                     industry=raw.get("industry", ""),
@@ -659,11 +794,18 @@ class OpenClawOrchestrator:
                     search_term=str(raw.get("search_terms", "")),
                     rejection_reason=pv.rejection_reason or "pre-validation failed",
                 )
-                executed_results.append({
+                result_entry: dict = {
                     "status": "rejected",
                     "reason": pv.rejection_reason,
                     "suggestions": pv.suggestions,
-                })
+                }
+                # After 2+ consecutive freshness rejections, tell the agent to wrap up
+                if self._session.consecutive_freshness_rejections >= 2:
+                    result_entry["session_hint"] = (
+                        "All remaining agenda items appear to have fresh data. "
+                        "Use the 'done' action to end the session with a summary and wishlist_reflection."
+                    )
+                executed_results.append(result_entry)
                 continue
 
             # Build agent_interface query from raw
@@ -690,6 +832,34 @@ class OpenClawOrchestrator:
                 })
                 continue
 
+            # Dedup check — skip queries already run this session
+            _SKIP_DEDUP = {"discovery_scan", "data_quality_audit", "score_refresh", "campaign_status"}
+            dedup_key = (
+                raw.get("intent", ""),
+                raw.get("brand", ""),
+                raw.get("industry", ""),
+            )
+            if dedup_key[0] not in _SKIP_DEDUP and dedup_key in self._session.executed_queries:
+                prev_count = next(
+                    (r.get("records_found", 0) for r in self._session.results
+                     if r.get("intent") == dedup_key[0]
+                        and r.get("brand") == dedup_key[1]
+                        and r.get("industry") == dedup_key[2]),
+                    0,
+                )
+                executed_results.append({
+                    "status": "duplicate",
+                    "message": (
+                        f"DUPLICATE — already ran {dedup_key[0]} / {dedup_key[1]} / {dedup_key[2]} "
+                        f"this session and got {prev_count} records. "
+                        "Move to the next agenda item."
+                    ),
+                })
+                continue
+
+            if dedup_key[0] not in _SKIP_DEDUP:
+                self._session.executed_queries.add(dedup_key)
+
             # Execute via the agent queue
             self._session.queries_validated += 1
             t0 = time.time()
@@ -697,7 +867,13 @@ class OpenClawOrchestrator:
             latency_ms = int((time.time() - t0) * 1000)
 
             self._session.queries_executed += 1
+            self._session.consecutive_freshness_rejections = 0  # reset on any successful execute
             result_dict = result.to_dict()
+            if result_dict.get("status") == "completed" and result_dict.get("records_found", -1) == 0:
+                result_dict["zero_records_note"] = (
+                    "No data found for this target. "
+                    "Move to the next agenda item rather than retrying the same query."
+                )
             self._session.results.append(result_dict)
             executed_results.append(result_dict)
 
@@ -753,6 +929,33 @@ class OpenClawOrchestrator:
             self._session.queries_rejected += 1
             return {"status": "rejected", "errors": errors}
 
+        # Dedup check for single-query path
+        _SKIP_DEDUP = {"discovery_scan", "data_quality_audit", "score_refresh", "campaign_status"}
+        dedup_key = (
+            data.get("intent", ""),
+            data.get("brand", ""),
+            data.get("industry", ""),
+        )
+        if dedup_key[0] not in _SKIP_DEDUP and dedup_key in self._session.executed_queries:
+            prev_count = next(
+                (r.get("records_found", 0) for r in self._session.results
+                 if r.get("intent") == dedup_key[0]
+                    and r.get("brand") == dedup_key[1]
+                    and r.get("industry") == dedup_key[2]),
+                0,
+            )
+            return {
+                "status": "duplicate",
+                "message": (
+                    f"DUPLICATE — already ran {dedup_key[0]} / {dedup_key[1]} / {dedup_key[2]} "
+                    f"this session and got {prev_count} records. "
+                    "Move to the next agenda item."
+                ),
+            }
+
+        if dedup_key[0] not in _SKIP_DEDUP:
+            self._session.executed_queries.add(dedup_key)
+
         self._session.queries_validated += 1
         t0 = time.time()
         result = agent_queue.submit(query)
@@ -760,6 +963,11 @@ class OpenClawOrchestrator:
 
         self._session.queries_executed += 1
         result_dict = result.to_dict()
+        if result_dict.get("status") == "completed" and result_dict.get("records_found", -1) == 0:
+            result_dict["zero_records_note"] = (
+                "No data found for this target. "
+                "Move to the next agenda item rather than retrying the same query."
+            )
         self._session.results.append(result_dict)
 
         # Mode-aware success logging
@@ -785,45 +993,63 @@ class OpenClawOrchestrator:
         return result_dict
 
     def _handle_wish(self, data: dict) -> dict:
-        """Add a wish item to today's wishlist."""
-        category = data.get("category", "tool_request")
-        title = data.get("title", "")
-        description = data.get("description", "")
-        suggested_value = data.get("suggested_value", "")
+        """Add one or more wish items to today's wishlist.
 
-        if not title:
-            return {"error": "Wish must have a 'title'"}
+        Accepts either:
+          - Single wish: top-level fields (category, title, description, ...)
+          - Batch wish:  {"action":"wish", "wishes":[{...}, {...}]}
+        """
+        wish_items: list[dict] = data.get("wishes") or []
+        if not wish_items:
+            # Single-wish form: treat the data dict itself as the wish
+            wish_items = [data]
 
-        context = {}
-        if data.get("industry"):
-            context["industry"] = data["industry"]
-        if data.get("brand"):
-            context["brand"] = data["brand"]
+        added: list[dict] = []
+        session_terms_added: list[str] = []
 
-        wish = wishlist_manager.add_wish(
-            category=category,
-            title=title,
-            description=description,
-            suggested_value=suggested_value,
-            context=context,
-            model=self.model,
-        )
-        self._session.wishes_added += 1
+        for item in wish_items:
+            category      = item.get("category", "tool_request")
+            title         = item.get("title", "")
+            description   = item.get("description", "")
+            suggested_value = item.get("suggested_value", "")
 
-        result = {"status": "wish_added", "wish": wish.to_dict()}
+            if not title:
+                added.append({"status": "skipped", "reason": "missing title"})
+                continue
 
-        # For new_term wishes, immediately add to session-local term pool so the
-        # agent can use the term in the same session without waiting for manual approval.
-        if category == "new_term" and suggested_value and context.get("industry"):
-            term = suggested_value.strip()
-            industry = context["industry"]
-            self._session_terms.setdefault(industry, []).append(term)
-            result["session_term_added"] = True
-            result["message"] = (
-                f"'{term}' added to this session's '{industry}' term pool. "
-                f"You may use it in your next query immediately."
+            context = {}
+            if item.get("industry"):
+                context["industry"] = item["industry"]
+            if item.get("brand"):
+                context["brand"] = item["brand"]
+
+            wish = wishlist_manager.add_wish(
+                category=category,
+                title=title,
+                description=description,
+                suggested_value=suggested_value,
+                context=context,
+                model=self.model,
             )
+            self._session.wishes_added += 1
+            entry = {"status": "wish_added", "wish": wish.to_dict()}
 
+            # Immediately add new_term wishes to session-local term pool
+            if category == "new_term" and suggested_value and context.get("industry"):
+                term = suggested_value.strip()
+                industry = context["industry"]
+                self._session_terms.setdefault(industry, []).append(term)
+                entry["session_term_added"] = True
+                session_terms_added.append(f"'{term}' → {industry}")
+
+            added.append(entry)
+
+        result: dict = {"status": "wishes_added", "count": len(added), "wishes": added}
+        if session_terms_added:
+            result["message"] = (
+                f"Terms added to this session's pool and usable immediately: "
+                + ", ".join(session_terms_added)
+            )
         return result
 
     def _handle_status(self) -> dict:
@@ -868,17 +1094,28 @@ class OpenClawOrchestrator:
 
     @staticmethod
     def _extract_json(text: str) -> Optional[str]:
-        """Extract JSON from LLM response."""
+        """Extract the first valid JSON object from an LLM response.
+
+        Handles:
+        - Pure JSON responses (ideal)
+        - Markdown-fenced JSON (``` json ... ```)
+        - Multiple JSON objects separated by whitespace — takes the FIRST valid one
+          so that batch outputs like three separate wish objects don't hard-fail
+        """
         import re
         text = text.strip()
+
+        # Fast path: response is already a single JSON object/array
         if text.startswith("{") or text.startswith("["):
-            return text
-        patterns = [
-            r"```json\s*([\s\S]*?)```",
-            r"```\s*([\s\S]*?)```",
-            r"(\{[\s\S]*\})",
-        ]
-        for pattern in patterns:
+            try:
+                json.loads(text)
+                return text
+            except json.JSONDecodeError:
+                # May be multiple objects — fall through to first-object extraction
+                pass
+
+        # Try markdown fences first
+        for pattern in [r"```json\s*([\s\S]*?)```", r"```\s*([\s\S]*?)```"]:
             match = re.search(pattern, text)
             if match:
                 candidate = match.group(1).strip()
@@ -887,6 +1124,28 @@ class OpenClawOrchestrator:
                     return candidate
                 except json.JSONDecodeError:
                     continue
+
+        # Extract the FIRST complete {...} block using a brace-counting scan.
+        # This handles the case where the model outputs multiple JSON objects
+        # separated by whitespace (e.g. three wish objects on consecutive lines).
+        depth = 0
+        start = None
+        for i, ch in enumerate(text):
+            if ch == "{":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0 and start is not None:
+                    candidate = text[start:i + 1]
+                    try:
+                        json.loads(candidate)
+                        return candidate
+                    except json.JSONDecodeError:
+                        # This brace pair didn't produce valid JSON; keep scanning
+                        start = None
+
         return None
 
 

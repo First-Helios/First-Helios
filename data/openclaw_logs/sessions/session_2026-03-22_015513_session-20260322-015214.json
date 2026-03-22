@@ -1,0 +1,461 @@
+{
+  "session_id": "session-20260322-015214",
+  "saved_at": "2026-03-22T01:55:13.682860",
+  "state": "complete",
+  "session": {
+    "region": "austin_tx",
+    "model": "qwen2.5:7b-instruct",
+    "mode": "collect",
+    "goal": "Map austins hair_beauty scene",
+    "iterations": 12,
+    "queries_proposed": 20,
+    "queries_validated": 7,
+    "queries_rejected": 11,
+    "queries_executed": 7,
+    "wishes_added": 1,
+    "is_complete": false,
+    "final_summary": "Session ended after 12 iterations. Proposed: 20, Executed: 7, Rejected: 11, Wishes: 1",
+    "started_at": "2026-03-22T01:52:14.725732",
+    "duration_seconds": 179.0
+  },
+  "entries": [
+    {
+      "seq": 1,
+      "ts": "2026-03-22T01:52:14.805402",
+      "kind": "system",
+      "content": "Session started \u2014 model=qwen2.5:7b-instruct  region=austin_tx  mode=collect",
+      "meta": {
+        "model": "qwen2.5:7b-instruct",
+        "region": "austin_tx",
+        "goal": "Map austins hair_beauty scene",
+        "mode": "collect",
+        "industries": [
+          "hair_beauty"
+        ]
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-03-22T01:52:14.805412",
+      "kind": "system",
+      "content": "Begin research for austin_tx in COLLECT mode. Focus on collecting data where existing records are STALE or missing. Queries for already-fresh data will be automatically rejected. Goal: Map austins hair_beauty scene",
+      "meta": {}
+    },
+    {
+      "seq": 3,
+      "ts": "2026-03-22T01:52:14.805504",
+      "kind": "system",
+      "content": "Iteration 1/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 4,
+      "ts": "2026-03-22T01:52:24.355863",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": 90.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": 85.0}]}",
+      "meta": {}
+    },
+    {
+      "seq": 5,
+      "ts": "2026-03-22T01:52:24.367917",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 4,\n  \"validated\": 0,\n  \"rejected\": 4,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 1
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-03-22T01:52:24.368004",
+      "kind": "system",
+      "content": "Iteration 2/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 7,
+      "ts": "2026-03-22T01:52:44.916092",
+      "kind": "thinking",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add hair stylist as a POI search term\", \"description\": \"Hair stylists are key in the hair beauty industry and should be included for accurate local density analysis.\", \"suggested_value\": \"hair salon\", \"industry\": \"hair_beauty\"}]}\n\n{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": 90.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": 85.0}]}",
+      "meta": {}
+    },
+    {
+      "seq": 8,
+      "ts": "2026-03-22T01:52:44.916563",
+      "kind": "action",
+      "content": "{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-002\",\n        \"category\": \"new_term\",\n        \"title\": \"Add hair stylist as a POI search term\",\n        \"description\": \"Hair stylists are key in the hair beauty industry and should be included for accurate local density analysis.\",\n        \"suggested_value\": \"hair salon\",\n        \"context\": {\n          \"industry\": \"hair_beauty\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T01:52:44.916355\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'hair salon' \\u2192 hair_beauty\"\n}",
+      "meta": {
+        "action": "wish",
+        "iteration": 2
+      }
+    },
+    {
+      "seq": 9,
+      "ts": "2026-03-22T01:52:44.916663",
+      "kind": "system",
+      "content": "Iteration 3/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 10,
+      "ts": "2026-03-22T01:53:05.318279",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": 90.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": 85.0}]}",
+      "meta": {}
+    },
+    {
+      "seq": 11,
+      "ts": "2026-03-22T01:53:05.494101",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 4,\n  \"validated\": 4,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '90.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '85.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '85.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '85.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 3
+      }
+    },
+    {
+      "seq": 12,
+      "ts": "2026-03-22T01:53:05.494274",
+      "kind": "system",
+      "content": "Iteration 4/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 13,
+      "ts": "2026-03-22T01:53:26.479437",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": \"high\"}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": \"normal\"}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": \"normal\"}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": \"normal\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 14,
+      "ts": "2026-03-22T01:53:26.886980",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 4,\n  \"validated\": 4,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"29b9aee1-8bb\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    },\n    {\n      \"query_id\": \"7c2e0822-d66\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    },\n    {\n      \"query_id\": \"8b37c9dd-b20\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    },\n    {\n      \"query_id\": \"bf309b38-05e\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 4
+      }
+    },
+    {
+      "seq": 15,
+      "ts": "2026-03-22T01:53:26.887184",
+      "kind": "system",
+      "content": "Iteration 5/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 16,
+      "ts": "2026-03-22T01:53:43.887587",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_local_density\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Understanding the local density of hair beauty services will help identify areas with potential for new businesses.\", \"priority\": \"high\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 17,
+      "ts": "2026-03-22T01:53:52.000063",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"99187f36-20b\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_local_density\",\n      \"records_found\": 0,\n      \"records_new\": 4805,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112136,\n      \"estimated_seconds\": 7.98,\n      \"anomalies\": [\n        \"0 local employers indexed \\u2014 run poi_local_density in collect mode to populate\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 5
+      }
+    },
+    {
+      "seq": 18,
+      "ts": "2026-03-22T01:53:52.000183",
+      "kind": "system",
+      "content": "Iteration 6/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 19,
+      "ts": "2026-03-22T01:54:01.552726",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Understanding the wage baseline for hair beauty services will help identify competitive salary ranges and potential cost structures.\", \"priority\": \"high\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 20,
+      "ts": "2026-03-22T01:54:23.830827",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"a5518db3-b51\",\n      \"status\": \"completed\",\n      \"intent\": \"wage_baseline\",\n      \"records_found\": 0,\n      \"records_new\": 7,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112124,\n      \"estimated_seconds\": 22.2,\n      \"anomalies\": [\n        \"No wage data in DB \\u2014 need BLS collection first\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"score_refresh\",\n          \"query\": {\n            \"intent\": \"score_refresh\",\n            \"region\": \"austin_tx\"\n          },\n          \"description\": \"Recompute scores with updated wage data\"\n        }\n      ],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 6
+      }
+    },
+    {
+      "seq": 21,
+      "ts": "2026-03-22T01:54:23.830909",
+      "kind": "system",
+      "content": "Iteration 7/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 22,
+      "ts": "2026-03-22T01:54:30.041707",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"job_posting_volume\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Analyzing job posting volume will help identify current demand and potential growth areas in the hair beauty industry.\", \"priority\": \"high\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 23,
+      "ts": "2026-03-22T01:54:30.048863",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 1.9 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 100. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 7
+      }
+    },
+    {
+      "seq": 24,
+      "ts": "2026-03-22T01:54:30.048919",
+      "kind": "system",
+      "content": "Iteration 8/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 25,
+      "ts": "2026-03-22T01:54:46.579819",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"sentiment_check\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\", \"barber shop\"], \"reasoning\": \"Checking public sentiment can provide insights into customer satisfaction and potential areas for improvement in local hair beauty businesses.\", \"priority\": \"high\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 26,
+      "ts": "2026-03-22T01:54:46.586317",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 9.3 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 6. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 8
+      }
+    },
+    {
+      "seq": 27,
+      "ts": "2026-03-22T01:54:46.586376",
+      "kind": "system",
+      "content": "Iteration 9/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 28,
+      "ts": "2026-03-22T01:54:47.090386",
+      "kind": "thinking",
+      "content": "{\"action\": \"status\"}",
+      "meta": {}
+    },
+    {
+      "seq": 29,
+      "ts": "2026-03-22T01:54:47.126289",
+      "kind": "action",
+      "content": "{\n  \"queue\": {\n    \"is_paused\": false,\n    \"pause_reason\": null,\n    \"total_pending\": 0,\n    \"total_reserved\": 0,\n    \"completed_today\": 7,\n    \"failed_today\": 4,\n    \"budget_summary\": {\n      \"atp_geojson\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"atp_parquet\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"bls_v1\": {\n        \"used\": 24,\n        \"remaining\": 476,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 4.8\n      },\n      \"bls_v1_post\": {\n        \"used\": 0,\n        \"remaining\": 500,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 0.0\n      },\n      \"careers_workday\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"carto_tiles\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_scraper\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"jobspy\": {\n        \"used\": 0,\n        \"remaining\": 50,\n        \"daily_limit\": 50,\n        \"utilization_pct\": 0.0\n      },\n      \"nominatim\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overpass_api\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overture_s3\": {\n        \"used\": 2,\n        \"remaining\": 9998,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_json\": {\n        \"used\": 0,\n        \"remaining\": 100,\n        \"daily_limit\": 100,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_oauth\": {\n        \"used\": 0,\n        \"remaining\": 1000,\n        \"daily_limit\": 1000,\n        \"utilization_pct\": 0.0\n      },\n      \"wikidata_sparql\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"workday_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      }\n    }\n  },\n  \"today_tracker\": {\n    \"date\": \"2026-03-22\",\n    \"total_requests\": 22,\n    \"successful\": 7,\n    \"failed\": 4,\n    \"prevalidation_rejected\": 11,\n    \"success_rate\": 31.8,\n    \"total_records\": 5313,\n    \"avg_latency_ms\": 4644.9,\n    \"by_source\": {\n      \"agent_queue\": {\n        \"success\": 7,\n        \"fail\": 4,\n        \"records\": 5313\n      },\n      \"prevalidation\": {\n        \"success\": 0,\n        \"fail\": 11,\n        \"records\": 0\n      }\n    },\n    \"by_intent\": {\n      \"data_quality_audit\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 5288\n      },\n      \"poi_chain_locations\": {\n        \"success\": 1,\n        \"fail\": 10,\n        \"records\": 0\n      },\n      \"poi_local_density\": {\n        \"success\": 2,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"wage_baseline\": {\n        \"success\": 2,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"score_refresh\": {\n        \"success\": 0,\n        \"fail\": 1,\n        \"records\": 0\n      },\n      \"job_posting_volume\": {\n        \"success\": 0,\n        \"fail\": 2,\n        \"records\": 0\n      },\n      \"sentiment_check\": {\n        \"success\": 0,\n        \"fail\": 2,\n        \"records\": 0\n      },\n      \"discovery_scan\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 25\n      }\n    },\n    \"by_industry\": {\n      \"hvac_skilled_trades\": {\n        \"success\": 3,\n        \"fail\": 1\n      },\n      \"fast_food\": {\n        \"success\": 0,\n        \"fail\": 1\n      },\n      \"hair_beauty\": {\n        \"success\": 2,\n        \"fail\": 10\n      }\n    },\n    \"top_errors\": [\n      \"Pre-validation rejected: Term 'hair stylist' not in approved poi terms for 'hair\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 1.9 days ago (threshold\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 9.3 days ago (threshold\",\n      \"Pre-validation rejected: Term 'maintenance technician' not in approved poi terms\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 0.0 days ago (threshold\"\n    ]\n  },\n  \"pending_wishes\": 2,\n  \"session\": {\n    \"region\": \"austin_tx\",\n    \"model\": \"qwen2.5:7b-instruct\",\n    \"mode\": \"collect\",\n    \"goal\": \"Map austins hair_beauty scene\",\n    \"iterations\": 9,\n    \"queries_proposed\": 16,\n    \"queries_validated\": 6,\n    \"queries_rejected\": 10,\n    \"queries_executed\": 6,\n    \"wishes_added\": 1,\n    \"is_complete\": false,\n    \"final_summary\": \"\",\n    \"started_at\": \"2026-03-22T01:52:14.725732\",\n    \"duration_seconds\": 152.4\n  }\n}",
+      "meta": {
+        "action": "status",
+        "iteration": 9
+      }
+    },
+    {
+      "seq": 30,
+      "ts": "2026-03-22T01:54:47.126530",
+      "kind": "system",
+      "content": "Iteration 10/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 31,
+      "ts": "2026-03-22T01:54:50.420915",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\"], \"suggestions\": []}, {\"intent\": \"discovery_scan\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"suggestions\": []}]}",
+      "meta": {}
+    },
+    {
+      "seq": 32,
+      "ts": "2026-03-22T01:54:50.611676",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 2,\n  \"validated\": 1,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"query_id\": \"cc24a0fd-377\",\n      \"status\": \"failed\",\n      \"intent\": \"discovery_scan\",\n      \"records_found\": 25,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112124,\n      \"estimated_seconds\": 0.1,\n      \"anomalies\": [\n        \"Industries: 2/13 have data\",\n        \"Industries with ZERO data: ['accommodation', 'auto_repair', 'childcare', 'fast_food', 'fitness_wellness', 'full_service_restaurant', 'hair_beauty', 'healthcare_clinic', 'hvac_skilled_trades', 'pharmacy', 'retail_general', 'retail_grocery']\",\n        \"Discovery found 25 leads: {'coverage_gap': 25}\",\n        \"Brand coverage: 4/49 (8.2%)\",\n        \"Stale data: 2 intent/brand combos need re-collection\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n            \"brand\": \"mcdonalds\",\n            \"industry\": \"fast_food\"\n          },\n          \"description\": \"Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"applebees\",\n            \"industry\": \"full_service_restaurant\"\n          },\n          \"description\": \"Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"target\",\n            \"industry\": \"retail_general\"\n          },\n          \"description\": \"Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"heb\",\n            \"industry\": \"retail_grocery\"\n          },\n          \"description\": \"Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs_minuteclinic\",\n            \"industry\": \"healthcare_clinic\"\n          },\n          \"description\": \"Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs\",\n            \"industry\": \"pharmacy\"\n          },\n          \"description\": \"Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"marriott\",\n            \"industry\": \"accommodation\"\n          },\n          \"description\": \"Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"planet_fitness\",\n            \"industry\": \"fitness_wellness\"\n          },\n          \"description\": \"Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"kindercare\",\n            \"industry\": \"childcare\"\n          },\n          \"description\": \"Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"great_clips\",\n            \"industry\": \"hair_beauty\"\n          },\n          \"description\": \"Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 10
+      }
+    },
+    {
+      "seq": 33,
+      "ts": "2026-03-22T01:54:50.611856",
+      "kind": "system",
+      "content": "Iteration 11/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 34,
+      "ts": "2026-03-22T01:55:09.489082",
+      "kind": "thinking",
+      "content": "{\n  \"action\": \"propose\",\n  \"queries\": [\n    {\n      \"intent\": \"poi_chain_locations\",\n      \"region\": \"austin_tx\",\n      \"brand\": \"great_clips\",\n      \"industry\": \"hair_beauty\",\n      \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\"\n    }\n  ]\n}",
+      "meta": {}
+    },
+    {
+      "seq": 35,
+      "ts": "2026-03-22T01:55:09.533245",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"status\": \"duplicate\",\n      \"message\": \"DUPLICATE \\u2014 already ran poi_chain_locations / great_clips / hair_beauty this session and got 0 records. Move to the next agenda item.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 11
+      }
+    },
+    {
+      "seq": 36,
+      "ts": "2026-03-22T01:55:09.533431",
+      "kind": "system",
+      "content": "Iteration 12/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 37,
+      "ts": "2026-03-22T01:55:13.651988",
+      "kind": "thinking",
+      "content": "{\n  \"action\": \"propose\",\n  \"queries\": [\n    {\n      \"intent\": \"poi_chain_locations\",\n      \"region\": \"austin_tx\",\n      \"brand\": \"supercuts\",\n      \"industry\": \"hair_beauty\",\n      \"reason\": \"[discovery:coverage_gap] No Supercuts stores found in austin_tx. Industry 'Hair & Beauty Services' has 0 total stores.\"\n    }\n  ]\n}",
+      "meta": {}
+    },
+    {
+      "seq": 38,
+      "ts": "2026-03-22T01:55:13.682071",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"status\": \"duplicate\",\n      \"message\": \"DUPLICATE \\u2014 already ran poi_chain_locations / supercuts / hair_beauty this session and got 0 records. Move to the next agenda item.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 12
+      }
+    },
+    {
+      "seq": 39,
+      "ts": "2026-03-22T01:55:13.682803",
+      "kind": "done",
+      "content": "Session ended after 12 iterations. Proposed: 20, Executed: 7, Rejected: 11, Wishes: 1",
+      "meta": {
+        "region": "austin_tx",
+        "model": "qwen2.5:7b-instruct",
+        "mode": "collect",
+        "goal": "Map austins hair_beauty scene",
+        "iterations": 12,
+        "queries_proposed": 20,
+        "queries_validated": 7,
+        "queries_rejected": 11,
+        "queries_executed": 7,
+        "wishes_added": 1,
+        "is_complete": false,
+        "final_summary": "Session ended after 12 iterations. Proposed: 20, Executed: 7, Rejected: 11, Wishes: 1",
+        "started_at": "2026-03-22T01:52:14.725732",
+        "duration_seconds": 179.0
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are OpenClaw, a research planning agent for First-Helios.\n\nYour mission: discover where LOCAL businesses can compete with mega-corporations\nin industries like healthcare, retail, food service, fitness, childcare, etc.\nYou do this by planning data collection queries, validating them, and interpreting results.\n\n## CRITICAL RULE: Pre-validation\nBefore any API call costs budget, your proposed queries go through pre-validation.\nYou MUST only propose search terms from the approved pools below.\nIf you want a term that doesn't exist, add it to your wishlist instead of using it.\n\n## Available Industries\n[\n  {\n    \"key\": \"hair_beauty\",\n    \"name\": \"Hair & Beauty Services\",\n    \"mega_corps\": [\n      \"great_clips\",\n      \"supercuts\",\n      \"sport_clips\",\n      \"fantastic_sams\"\n    ],\n    \"job_terms\": [\n      \"hair stylist\",\n      \"hairdresser\",\n      \"barber\",\n      \"cosmetologist\",\n      \"salon manager\",\n      \"colorist\"\n    ],\n    \"poi_terms\": [\n      \"hair salon\",\n      \"barbershop\",\n      \"beauty salon\",\n      \"barber shop\",\n      \"nail salon\",\n      \"day spa\"\n    ]\n  }\n]\n\n## Available Mega-Corps\n[\n  {\n    \"key\": \"great_clips\",\n    \"name\": \"Great Clips\",\n    \"industry\": \"hair_beauty\"\n  },\n  {\n    \"key\": \"supercuts\",\n    \"name\": \"Supercuts\",\n    \"industry\": \"hair_beauty\"\n  },\n  {\n    \"key\": \"sport_clips\",\n    \"name\": \"Sport Clips\",\n    \"industry\": \"hair_beauty\"\n  },\n  {\n    \"key\": \"fantastic_sams\",\n    \"name\": \"Fantastic Sams\",\n    \"industry\": \"hair_beauty\"\n  }\n]\n\n## Actions \u2014 output raw JSON ONLY, never use markdown fences or prose\n\n### propose \u2014 Propose queries to be pre-validated before execution\n{\"action\": \"propose\", \"queries\": [\n    {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"starbucks\",\n      \"industry\": \"coffee_cafe\", \"search_terms\": [\"barista\", \"coffee\"],\n      \"reasoning\": \"Starbucks is Priority 1 on the agenda \u2014 mapping locations reveals saturation zones for local competitors\",\n      \"reason\": \"Map Starbucks locations\"}\n]}\n\n### query \u2014 Submit a single DB-internal query (data_quality_audit, discovery_scan, score_refresh, campaign_status ONLY)\n{\"action\": \"query\", \"intent\": \"data_quality_audit\", \"region\": \"austin_tx\",\n  \"reasoning\": \"Starting with audit to understand current data state before collecting anything\",\n  \"reason\": \"Initial audit\"}\n\n### wish \u2014 Add one or more items to today's wishlist (use \"wishes\" array for multiple)\n{\"action\": \"wish\", \"wishes\": [\n  {\"category\": \"new_term\", \"title\": \"Add matcha bar search term\",\n    \"description\": \"Matcha cafes are growing in Austin, missing from poi_search_terms\",\n    \"suggested_value\": \"matcha bar\", \"industry\": \"coffee_cafe\"},\n  {\"category\": \"new_term\", \"title\": \"Add boba tea search term\",\n    \"description\": \"Boba shops are underrepresented in coffee_cafe terms\",\n    \"suggested_value\": \"boba tea\", \"industry\": \"coffee_cafe\"}\n]}\nCategories: new_source, new_term, new_industry, new_brand, tool_request\n\n### Running a discovery scan \u2014 use the query action with intent discovery_scan\n{\"action\": \"query\", \"intent\": \"discovery_scan\", \"region\": \"austin_tx\",\n  \"reason\": \"Find coverage gaps and new stores to investigate\"}\nReturns: coverage statistics and suggested_next leads. Each suggested_next item has a\n\"suggested_intent\" field showing what to collect \u2014 use it as the \"intent\" inside a propose action.\nDo NOT use suggested_intent as a top-level action. Always wrap it: {\"action\":\"propose\",\"queries\":[...]}\n\n### status \u2014 Check budget and queue state\n{\"action\": \"status\"}\n\n### done \u2014 End the session with summary and wishlist reflection\n{\"action\": \"done\", \"summary\": \"Completed coffee_cafe and fast_food scans for Austin\",\n  \"wishlist_reflection\": \"Would benefit from Indeed API access and 'matcha bar' as a POI term\"}\n\n## CRITICAL term-matching rules\n- For poi_chain_locations and poi_local_density \u2192 use ONLY poi_search_terms for that industry\n- For job_posting_volume and wage_baseline \u2192 use ONLY job_search_terms for that industry\n- For sentiment_check \u2192 use ONLY sentiment_keywords for that industry\n- NEVER mix terms across industries. \"barista\" is a coffee_cafe term, NOT retail_general.\n- Each industry block above lists its EXACT valid terms. Copy them exactly.\n\n## Rules\n1. Output ONLY valid JSON \u2014 your ENTIRE response must be a single JSON object starting with { and ending with }. No prose before or after. No markdown fences (no ```). No \"Let's...\", \"Here is...\", or any other text.\n2. Do NOT repeat the exact same query you already executed \u2014 check previous results first\n3. Your Collection Agenda is already prepared in the Context above \u2014 start from Priority 1 and work down in order\n4. Items marked \u2713 in \"Already collected\" are fresh \u2014 do NOT re-collect them, they will be rejected\n5. Run discovery_scan again mid-session after completing a batch of queries to find newly exposed gaps\n6. For each industry, check: chain locations \u2192 local density \u2192 wages \u2192 job postings \u2192 sentiment\n7. ONLY use search terms from the approved pools listed above \u2014 match term type to intent\n8. If a query is REJECTED for a missing term, use \"wish\" to request it \u2014 it will be added to this session's term pool immediately so you can use it in the next query\n9. Track your budget \u2014 check \"status\" if api_calls_remaining_today drops below 20\n10. score_refresh, data_quality_audit, discovery_scan, and campaign_status are always DB-internal \u2014 they run in analyze mode automatically regardless of session mode\n11. When your goal is met OR you have explored all agenda items, use \"done\" to end the session\n12. At session end in the \"done\" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have\n\n## Current Context\nRegion: austin_tx\nGoal: Map austins hair_beauty scene\nFocus industries: ['hair_beauty']\n\n## Collection Agenda (auto-generated from discovery scan)\nFollow this priority order:\n  1. [coverage_gap] poi_chain_locations brand=great_clips industry=hair_beauty \u2014 Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked. (priority=90.0)\n  2. [coverage_gap] poi_chain_locations brand=great_clips industry=hair_beauty \u2014 No Great Clips stores found in austin_tx. Industry 'Hair & Beauty Services' has 0 total stores. (priority=85.0)\n  3. [coverage_gap] poi_chain_locations brand=supercuts industry=hair_beauty \u2014 No Supercuts stores found in austin_tx. Industry 'Hair & Beauty Services' has 0 total stores. (priority=85.0)\n  4. [coverage_gap] poi_chain_locations brand=sport_clips industry=hair_beauty \u2014 No Sport Clips stores found in austin_tx. Industry 'Hair & Beauty Services' has 0 total stores. (priority=85.0)\n  5. [coverage_gap] poi_chain_locations brand=fantastic_sams industry=hair_beauty \u2014 No Fantastic Sams stores found in austin_tx. Industry 'Hair & Beauty Services' has 0 total stores. (priority=85.0)\n\nAlready collected \u2014 do NOT re-collect (marked \u2713):\n  \u2713 poi_chain_locations brand=great_clips industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_chain_locations brand=supercuts industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_chain_locations brand=sport_clips industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_local_density industry=hair_beauty: 0 records, 1d old\n  \u2713 wage_baseline industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_chain_locations brand=aire_serv industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=one_hour_heating industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=mr_electric industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=roto_rooter industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 score_refresh: 5289 records, 0d old\n  \u2713 poi_chain_locations brand=service_experts industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_local_density industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 wage_baseline industry=hvac_skilled_trades: 0 records, 0d old\n\nFreshness thresholds (days): {\"poi_chain_locations\": 60.0, \"poi_local_density\": 60.0, \"wage_baseline\": 90.0, \"job_posting_volume\": 14.0, \"sentiment_check\": 14.0, \"economic_context\": 90.0, \"score_refresh\": 1.0, \"data_quality_audit\": 0.0, \"campaign_status\": 0.0, \"discovery_scan\": 0.0}\n\n## Operational Mode: COLLECT\nTargeted data acquisition from external APIs for STALE or missing data. Freshness gates ACTIVE \u2014 queries for already-fresh data are rejected before the agent considers them. No DB fallback \u2014 if a collector fails, the query fails. Success requires at least one new record from an external source.\nAllowed intents: ['campaign_status', 'data_quality_audit', 'discovery_scan', 'job_posting_volume', 'poi_chain_locations', 'poi_local_density', 'sentiment_check', 'wage_baseline']\nFreshness gates: ACTIVE \u2014 stale data will be re-collected, fresh data skipped\nSuccess criteria: STRICT \u2014 must collect new records from external APIs\nDB fallback: DISABLED \u2014 cached data is NOT returned as results\n"
+    },
+    {
+      "role": "user",
+      "content": "Begin research for austin_tx in COLLECT mode. Focus on collecting data where existing records are STALE or missing. Queries for already-fresh data will be automatically rejected. Goal: Map austins hair_beauty scene"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": 90.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": 85.0}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 4,\n  \"validated\": 0,\n  \"rejected\": 4,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add hair stylist as a POI search term\", \"description\": \"Hair stylists are key in the hair beauty industry and should be included for accurate local density analysis.\", \"suggested_value\": \"hair salon\", \"industry\": \"hair_beauty\"}]}\n\n{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": 90.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": 85.0}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-002\",\n        \"category\": \"new_term\",\n        \"title\": \"Add hair stylist as a POI search term\",\n        \"description\": \"Hair stylists are key in the hair beauty industry and should be included for accurate local density analysis.\",\n        \"suggested_value\": \"hair salon\",\n        \"context\": {\n          \"industry\": \"hair_beauty\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T01:52:44.916355\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'hair salon' \\u2192 hair_beauty\"\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": 90.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": 85.0}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": 85.0}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 4,\n  \"validated\": 4,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '90.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '85.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '85.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    },\n    {\n      \"status\": \"rejected\",\n      \"errors\": [\n        \"Invalid priority '85.0'. Valid options: ['critical', 'high', 'normal', 'low', 'backfill']\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Great Clips is a major player in the hair beauty industry, and its absence from Austin suggests potential opportunities for local businesses.\", \"priority\": \"high\"}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"supercuts\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Supercuts is another significant brand in the hair beauty industry, and its presence or absence will provide valuable insights.\", \"priority\": \"normal\"}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"sport_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Sport Clips is known for its sports-themed branding and could offer a unique market opportunity in Austin.\", \"priority\": \"normal\"}, {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"fantastic_sams\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Fantastic Sams is a well-known brand in the hair beauty industry, and its presence or absence will help identify potential gaps.\", \"priority\": \"normal\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 4,\n  \"validated\": 4,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"29b9aee1-8bb\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    },\n    {\n      \"query_id\": \"7c2e0822-d66\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    },\n    {\n      \"query_id\": \"8b37c9dd-b20\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    },\n    {\n      \"query_id\": \"bf309b38-05e\",\n      \"status\": \"failed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.0,\n      \"anomalies\": [\n        \"MODE=collect: no collector executed and DB fallback disabled\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_local_density\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\"], \"reasoning\": \"Understanding the local density of hair beauty services will help identify areas with potential for new businesses.\", \"priority\": \"high\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"99187f36-20b\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_local_density\",\n      \"records_found\": 0,\n      \"records_new\": 4805,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112136,\n      \"estimated_seconds\": 7.98,\n      \"anomalies\": [\n        \"0 local employers indexed \\u2014 run poi_local_density in collect mode to populate\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Understanding the wage baseline for hair beauty services will help identify competitive salary ranges and potential cost structures.\", \"priority\": \"high\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"a5518db3-b51\",\n      \"status\": \"completed\",\n      \"intent\": \"wage_baseline\",\n      \"records_found\": 0,\n      \"records_new\": 7,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112124,\n      \"estimated_seconds\": 22.2,\n      \"anomalies\": [\n        \"No wage data in DB \\u2014 need BLS collection first\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"score_refresh\",\n          \"query\": {\n            \"intent\": \"score_refresh\",\n            \"region\": \"austin_tx\"\n          },\n          \"description\": \"Recompute scores with updated wage data\"\n        }\n      ],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"job_posting_volume\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\", \"barber\"], \"reasoning\": \"Analyzing job posting volume will help identify current demand and potential growth areas in the hair beauty industry.\", \"priority\": \"high\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 1.9 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 100. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"sentiment_check\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair salon\", \"barber shop\"], \"reasoning\": \"Checking public sentiment can provide insights into customer satisfaction and potential areas for improvement in local hair beauty businesses.\", \"priority\": \"high\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 9.3 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 6. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"status\"}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"queue\": {\n    \"is_paused\": false,\n    \"pause_reason\": null,\n    \"total_pending\": 0,\n    \"total_reserved\": 0,\n    \"completed_today\": 7,\n    \"failed_today\": 4,\n    \"budget_summary\": {\n      \"atp_geojson\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"atp_parquet\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"bls_v1\": {\n        \"used\": 24,\n        \"remaining\": 476,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 4.8\n      },\n      \"bls_v1_post\": {\n        \"used\": 0,\n        \"remaining\": 500,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 0.0\n      },\n      \"careers_workday\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"carto_tiles\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_scraper\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"jobspy\": {\n        \"used\": 0,\n        \"remaining\": 50,\n        \"daily_limit\": 50,\n        \"utilization_pct\": 0.0\n      },\n      \"nominatim\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overpass_api\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overture_s3\": {\n        \"used\": 2,\n        \"remaining\": 9998,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_json\": {\n        \"used\": 0,\n        \"remaining\": 100,\n        \"daily_limit\": 100,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_oauth\": {\n        \"used\": 0,\n        \"remaining\": 1000,\n        \"daily_limit\": 1000,\n        \"utilization_pct\": 0.0\n      },\n      \"wikidata_sparql\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"workday_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      }\n    }\n  },\n  \"today_tracker\": {\n    \"date\": \"2026-03-22\",\n    \"total_requests\": 22,\n    \"successful\": 7,\n    \"failed\": 4,\n    \"prevalidation_rejected\": 11,\n    \"success_rate\": 31.8,\n    \"total_records\": 5313,\n    \"avg_latency_ms\": 4644.9,\n    \"by_source\": {\n      \"agent_queue\": {\n        \"success\": 7,\n        \"fail\": 4,\n        \"records\": 5313\n      },\n      \"prevalidation\": {\n        \"success\": 0,\n        \"fail\": 11,\n        \"records\": 0\n      }\n    },\n    \"by_intent\": {\n      \"data_quality_audit\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 5288\n      },\n      \"poi_chain_locations\": {\n        \"success\": 1,\n        \"fail\": 10,\n        \"records\": 0\n      },\n      \"poi_local_density\": {\n        \"success\": 2,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"wage_baseline\": {\n        \"success\": 2,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"score_refresh\": {\n        \"success\": 0,\n        \"fail\": 1,\n        \"records\": 0\n      },\n      \"job_posting_volume\": {\n        \"success\": 0,\n        \"fail\": 2,\n        \"records\": 0\n      },\n      \"sentiment_check\": {\n        \"success\": 0,\n        \"fail\": 2,\n        \"records\": 0\n      },\n      \"discovery_scan\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 25\n      }\n    },\n    \"by_industry\": {\n      \"hvac_skilled_trades\": {\n        \"success\": 3,\n        \"fail\": 1\n      },\n      \"fast_food\": {\n        \"success\": 0,\n        \"fail\": 1\n      },\n      \"hair_beauty\": {\n        \"success\": 2,\n        \"fail\": 10\n      }\n    },\n    \"top_errors\": [\n      \"Pre-validation rejected: Term 'hair stylist' not in approved poi terms for 'hair\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 1.9 days ago (threshold\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 9.3 days ago (threshold\",\n      \"Pre-validation rejected: Term 'maintenance technician' not in approved poi terms\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 0.0 days ago (threshold\"\n    ]\n  },\n  \"pending_wishes\": 2,\n  \"session\": {\n    \"region\": \"austin_tx\",\n    \"model\": \"qwen2.5:7b-instruct\",\n    \"mode\": \"collect\",\n    \"goal\": \"Map austins hair_beauty scene\",\n    \"iterations\": 9,\n    \"queries_proposed\": 16,\n    \"queries_validated\": 6,\n    \"queries_rejected\": 10,\n    \"queries_executed\": 6,\n    \"wishes_added\": 1,\n    \"is_complete\": false,\n    \"final_summary\": \"\",\n    \"started_at\": \"2026-03-22T01:52:14.725732\",\n    \"duration_seconds\": 152.4\n  }\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"great_clips\", \"industry\": \"hair_beauty\", \"search_terms\": [\"hair stylist\"], \"suggestions\": []}, {\"intent\": \"discovery_scan\", \"region\": \"austin_tx\", \"industry\": \"hair_beauty\", \"suggestions\": []}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 2,\n  \"validated\": 1,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'hair stylist' not in approved poi terms for 'hair_beauty'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"hair salon\"\n      ]\n    },\n    {\n      \"query_id\": \"cc24a0fd-377\",\n      \"status\": \"failed\",\n      \"intent\": \"discovery_scan\",\n      \"records_found\": 25,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112124,\n      \"estimated_seconds\": 0.1,\n      \"anomalies\": [\n        \"Industries: 2/13 have data\",\n        \"Industries with ZERO data: ['accommodation', 'auto_repair', 'childcare', 'fast_food', 'fitness_wellness', 'full_service_restaurant', 'hair_beauty', 'healthcare_clinic', 'hvac_skilled_trades', 'pharmacy', 'retail_general', 'retail_grocery']\",\n        \"Discovery found 25 leads: {'coverage_gap': 25}\",\n        \"Brand coverage: 4/49 (8.2%)\",\n        \"Stale data: 2 intent/brand combos need re-collection\",\n        \"MODE=collect: no new records collected from external sources \\u2014 treating as failure\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n            \"brand\": \"mcdonalds\",\n            \"industry\": \"fast_food\"\n          },\n          \"description\": \"Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"applebees\",\n            \"industry\": \"full_service_restaurant\"\n          },\n          \"description\": \"Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"target\",\n            \"industry\": \"retail_general\"\n          },\n          \"description\": \"Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"heb\",\n            \"industry\": \"retail_grocery\"\n          },\n          \"description\": \"Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs_minuteclinic\",\n            \"industry\": \"healthcare_clinic\"\n          },\n          \"description\": \"Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs\",\n            \"industry\": \"pharmacy\"\n          },\n          \"description\": \"Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"marriott\",\n            \"industry\": \"accommodation\"\n          },\n          \"description\": \"Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"planet_fitness\",\n            \"industry\": \"fitness_wellness\"\n          },\n          \"description\": \"Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"kindercare\",\n            \"industry\": \"childcare\"\n          },\n          \"description\": \"Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"great_clips\",\n            \"industry\": \"hair_beauty\"\n          },\n          \"description\": \"Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\n  \"action\": \"propose\",\n  \"queries\": [\n    {\n      \"intent\": \"poi_chain_locations\",\n      \"region\": \"austin_tx\",\n      \"brand\": \"great_clips\",\n      \"industry\": \"hair_beauty\",\n      \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"status\": \"duplicate\",\n      \"message\": \"DUPLICATE \\u2014 already ran poi_chain_locations / great_clips / hair_beauty this session and got 0 records. Move to the next agenda item.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\n  \"action\": \"propose\",\n  \"queries\": [\n    {\n      \"intent\": \"poi_chain_locations\",\n      \"region\": \"austin_tx\",\n      \"brand\": \"supercuts\",\n      \"industry\": \"hair_beauty\",\n      \"reason\": \"[discovery:coverage_gap] No Supercuts stores found in austin_tx. Industry 'Hair & Beauty Services' has 0 total stores.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"status\": \"duplicate\",\n      \"message\": \"DUPLICATE \\u2014 already ran poi_chain_locations / supercuts / hair_beauty this session and got 0 records. Move to the next agenda item.\"\n    }\n  ]\n}"
+    }
+  ]
+}

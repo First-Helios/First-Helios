@@ -1,0 +1,461 @@
+{
+  "session_id": "session-20260322-015001",
+  "saved_at": "2026-03-22T01:51:42.320538",
+  "state": "complete",
+  "session": {
+    "region": "austin_tx",
+    "model": "qwen2.5:7b-instruct",
+    "mode": "mixed",
+    "goal": "Skilled trade search",
+    "iterations": 12,
+    "queries_proposed": 10,
+    "queries_validated": 5,
+    "queries_rejected": 5,
+    "queries_executed": 5,
+    "wishes_added": 1,
+    "is_complete": false,
+    "final_summary": "Session ended after 12 iterations. Proposed: 10, Executed: 5, Rejected: 5, Wishes: 1",
+    "started_at": "2026-03-22T01:50:01.262676",
+    "duration_seconds": 101.1
+  },
+  "entries": [
+    {
+      "seq": 1,
+      "ts": "2026-03-22T01:50:01.355716",
+      "kind": "system",
+      "content": "Session started \u2014 model=qwen2.5:7b-instruct  region=austin_tx  mode=mixed",
+      "meta": {
+        "model": "qwen2.5:7b-instruct",
+        "region": "austin_tx",
+        "goal": "Skilled trade search",
+        "mode": "mixed",
+        "industries": [
+          "hvac_skilled_trades"
+        ]
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-03-22T01:50:01.355727",
+      "kind": "system",
+      "content": "Begin research for austin_tx in MIXED mode. Start with a data_quality_audit to understand current data state. Goal: Skilled trade search",
+      "meta": {}
+    },
+    {
+      "seq": 3,
+      "ts": "2026-03-22T01:50:01.355822",
+      "kind": "system",
+      "content": "Iteration 1/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 4,
+      "ts": "2026-03-22T01:50:05.178253",
+      "kind": "thinking",
+      "content": "{\"action\": \"query\", \"intent\": \"data_quality_audit\", \"region\": \"austin_tx\", \"reason\": \"Starting with audit to understand current data state before collecting anything\"}",
+      "meta": {}
+    },
+    {
+      "seq": 5,
+      "ts": "2026-03-22T01:50:05.266186",
+      "kind": "action",
+      "content": "{\n  \"query_id\": \"4349786b-138\",\n  \"status\": \"completed\",\n  \"intent\": \"data_quality_audit\",\n  \"records_found\": 5288,\n  \"records_new\": 0,\n  \"records_updated\": 0,\n  \"staleness_days\": null,\n  \"coverage_pct\": 1095.0,\n  \"source_agreement\": null,\n  \"api_calls_used\": 0,\n  \"api_calls_remaining_today\": 112150,\n  \"estimated_seconds\": 0.01,\n  \"anomalies\": [\n    \"Chain stores: 483 total \\u2014 {'dutch_bros': 35, 'mcdonalds': 119, 'starbucks': 329}\",\n    \"Local employers: 4805\",\n    \"Score coverage: 5289/483 (1095.0%)\",\n    \"Wage observations: 18\",\n    \"Freshest signal: 1.9 days old\",\n    \"Scan snapshots: 12\"\n  ],\n  \"suggested_next\": [],\n  \"errors\": []\n}",
+      "meta": {
+        "action": "query",
+        "iteration": 1
+      }
+    },
+    {
+      "seq": 6,
+      "ts": "2026-03-22T01:50:05.266242",
+      "kind": "system",
+      "content": "Iteration 2/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 7,
+      "ts": "2026-03-22T01:50:19.872307",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"service_experts\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC technician\", \"HVAC installer\", \"HVAC service tech\", \"plumber\", \"electrician\", \"maintenance technician\"], \"reasoning\": \"Mapping locations of Service Experts to identify gaps in local skilled trade coverage.\", \"reason\": \"Identify potential market opportunities\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 8,
+      "ts": "2026-03-22T01:50:19.876662",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'maintenance technician' not in approved poi terms for 'hvac_skilled_trades'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"HVAC\",\n        \"heating and cooling\",\n        \"air conditioning repair\",\n        \"plumber\",\n        \"electrician\",\n        \"handyman\",\n        \"appliance repair\",\n        \"water heater\"\n      ]\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 2
+      }
+    },
+    {
+      "seq": 9,
+      "ts": "2026-03-22T01:50:19.876746",
+      "kind": "system",
+      "content": "Iteration 3/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 10,
+      "ts": "2026-03-22T01:50:34.789245",
+      "kind": "thinking",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add maintenance technician term\", \"description\": \"Maintenance technician is relevant for HVAC & Skilled Trades, missing from approved terms.\", \"suggested_value\": \"maintenance technician\", \"industry\": \"hvac_skilled_trades\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 11,
+      "ts": "2026-03-22T01:50:34.789424",
+      "kind": "action",
+      "content": "{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-001\",\n        \"category\": \"new_term\",\n        \"title\": \"Add maintenance technician term\",\n        \"description\": \"Maintenance technician is relevant for HVAC & Skilled Trades, missing from approved terms.\",\n        \"suggested_value\": \"maintenance technician\",\n        \"context\": {\n          \"industry\": \"hvac_skilled_trades\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T01:50:34.789306\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'maintenance technician' \\u2192 hvac_skilled_trades\"\n}",
+      "meta": {
+        "action": "wish",
+        "iteration": 3
+      }
+    },
+    {
+      "seq": 12,
+      "ts": "2026-03-22T01:50:34.789509",
+      "kind": "system",
+      "content": "Iteration 4/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 13,
+      "ts": "2026-03-22T01:50:36.956608",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"service_experts\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC technician\", \"HVAC installer\", \"HVAC service tech\", \"plumber\", \"electrician\", \"maintenance technician\"], \"reasoning\": \"Mapping locations of Service Experts to identify gaps in local skilled trade coverage.\", \"reason\": \"Identify potential market opportunities\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 14,
+      "ts": "2026-03-22T01:50:37.056128",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"d2060a76-0c9\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112150,\n      \"estimated_seconds\": 0.01,\n      \"anomalies\": [\n        \"No collector executed \\u2014 reporting 0 existing stores from DB\",\n        \"MODE=mixed: promoted PARTIAL \\u2192 COMPLETED (cached data is acceptable)\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 4
+      }
+    },
+    {
+      "seq": 15,
+      "ts": "2026-03-22T01:50:37.056213",
+      "kind": "system",
+      "content": "Iteration 5/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 16,
+      "ts": "2026-03-22T01:50:39.290797",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_local_density\", \"region\": \"austin_tx\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC\", \"heating and cooling\", \"air conditioning repair\", \"plumber\", \"electrician\", \"handyman\"], \"reasoning\": \"Determine the local density of HVAC & skilled trade businesses to identify areas with high or low competition.\", \"reason\": \"Identify dense and sparse regions for targeted market entry\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 17,
+      "ts": "2026-03-22T01:50:47.035977",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"7b7b558b-169\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_local_density\",\n      \"records_found\": 0,\n      \"records_new\": 4805,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112149,\n      \"estimated_seconds\": 7.67,\n      \"anomalies\": [\n        \"0 local employers indexed \\u2014 run poi_local_density in collect mode to populate\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 5
+      }
+    },
+    {
+      "seq": 18,
+      "ts": "2026-03-22T01:50:47.036043",
+      "kind": "system",
+      "content": "Iteration 6/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 19,
+      "ts": "2026-03-22T01:50:55.603080",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC technician\", \"HVAC installer\", \"HVAC service tech\", \"plumber\", \"electrician\", \"maintenance technician\"], \"reasoning\": \"Determine the average wages for HVAC & skilled trade jobs to understand competitive salary levels.\", \"reason\": \"Identify wage trends and set competitive compensation strategies\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 20,
+      "ts": "2026-03-22T01:51:07.970130",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"3f4cf06f-9db\",\n      \"status\": \"completed\",\n      \"intent\": \"wage_baseline\",\n      \"records_found\": 0,\n      \"records_new\": 7,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 12.28,\n      \"anomalies\": [\n        \"No wage data in DB \\u2014 need BLS collection first\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"score_refresh\",\n          \"query\": {\n            \"intent\": \"score_refresh\",\n            \"region\": \"austin_tx\"\n          },\n          \"description\": \"Recompute scores with updated wage data\"\n        }\n      ],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 6
+      }
+    },
+    {
+      "seq": 21,
+      "ts": "2026-03-22T01:51:07.970205",
+      "kind": "system",
+      "content": "Iteration 7/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 22,
+      "ts": "2026-03-22T01:51:15.600070",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"score_refresh\", \"region\": \"austin_tx\", \"reasoning\": \"Recompute scores with updated wage data to ensure accurate market analysis.\", \"reason\": \"Update market score for HVAC & skilled trades in Austin\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 23,
+      "ts": "2026-03-22T01:51:15.602910",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 0.0 days ago (threshold: 1.0 days). Next collection due: 2026-03-23T01:21:49.800323. Records on file: 5289. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 7
+      }
+    },
+    {
+      "seq": 24,
+      "ts": "2026-03-22T01:51:15.603018",
+      "kind": "system",
+      "content": "Iteration 8/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 25,
+      "ts": "2026-03-22T01:51:17.902057",
+      "kind": "thinking",
+      "content": "{\"action\": \"status\"}",
+      "meta": {}
+    },
+    {
+      "seq": 26,
+      "ts": "2026-03-22T01:51:17.932105",
+      "kind": "action",
+      "content": "{\n  \"queue\": {\n    \"is_paused\": false,\n    \"pause_reason\": null,\n    \"total_pending\": 0,\n    \"total_reserved\": 0,\n    \"completed_today\": 4,\n    \"failed_today\": 0,\n    \"budget_summary\": {\n      \"atp_geojson\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"atp_parquet\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"bls_v1\": {\n        \"used\": 12,\n        \"remaining\": 488,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 2.4\n      },\n      \"bls_v1_post\": {\n        \"used\": 0,\n        \"remaining\": 500,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 0.0\n      },\n      \"careers_workday\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"carto_tiles\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_scraper\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"jobspy\": {\n        \"used\": 0,\n        \"remaining\": 50,\n        \"daily_limit\": 50,\n        \"utilization_pct\": 0.0\n      },\n      \"nominatim\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overpass_api\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overture_s3\": {\n        \"used\": 1,\n        \"remaining\": 9999,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_json\": {\n        \"used\": 0,\n        \"remaining\": 100,\n        \"daily_limit\": 100,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_oauth\": {\n        \"used\": 0,\n        \"remaining\": 1000,\n        \"daily_limit\": 1000,\n        \"utilization_pct\": 0.0\n      },\n      \"wikidata_sparql\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"workday_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      }\n    }\n  },\n  \"today_tracker\": {\n    \"date\": \"2026-03-22\",\n    \"total_requests\": 6,\n    \"successful\": 4,\n    \"failed\": 0,\n    \"prevalidation_rejected\": 2,\n    \"success_rate\": 66.7,\n    \"total_records\": 5288,\n    \"avg_latency_ms\": 5060.2,\n    \"by_source\": {\n      \"agent_queue\": {\n        \"success\": 4,\n        \"fail\": 0,\n        \"records\": 5288\n      },\n      \"prevalidation\": {\n        \"success\": 0,\n        \"fail\": 2,\n        \"records\": 0\n      }\n    },\n    \"by_intent\": {\n      \"data_quality_audit\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 5288\n      },\n      \"poi_chain_locations\": {\n        \"success\": 1,\n        \"fail\": 1,\n        \"records\": 0\n      },\n      \"poi_local_density\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"wage_baseline\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"score_refresh\": {\n        \"success\": 0,\n        \"fail\": 1,\n        \"records\": 0\n      }\n    },\n    \"by_industry\": {\n      \"hvac_skilled_trades\": {\n        \"success\": 3,\n        \"fail\": 1\n      }\n    },\n    \"top_errors\": [\n      \"Pre-validation rejected: Term 'maintenance technician' not in approved poi terms\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 0.0 days ago (threshold\"\n    ]\n  },\n  \"pending_wishes\": 1,\n  \"session\": {\n    \"region\": \"austin_tx\",\n    \"model\": \"qwen2.5:7b-instruct\",\n    \"mode\": \"mixed\",\n    \"goal\": \"Skilled trade search\",\n    \"iterations\": 8,\n    \"queries_proposed\": 6,\n    \"queries_validated\": 4,\n    \"queries_rejected\": 2,\n    \"queries_executed\": 4,\n    \"wishes_added\": 1,\n    \"is_complete\": false,\n    \"final_summary\": \"\",\n    \"started_at\": \"2026-03-22T01:50:01.262676\",\n    \"duration_seconds\": 76.7\n  }\n}",
+      "meta": {
+        "action": "status",
+        "iteration": 8
+      }
+    },
+    {
+      "seq": 27,
+      "ts": "2026-03-22T01:51:17.932285",
+      "kind": "system",
+      "content": "Iteration 9/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 28,
+      "ts": "2026-03-22T01:51:20.321172",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"job_posting_volume\", \"region\": \"austin_tx\", \"reasoning\": \"Collect job posting volume to understand current demand for HVAC & skilled trades positions.\", \"reason\": \"Gather job market insights\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 29,
+      "ts": "2026-03-22T01:51:20.328409",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 1.9 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 100. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 9
+      }
+    },
+    {
+      "seq": 30,
+      "ts": "2026-03-22T01:51:20.328474",
+      "kind": "system",
+      "content": "Iteration 10/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 31,
+      "ts": "2026-03-22T01:51:36.072650",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"sentiment_check\", \"region\": \"austin_tx\", \"reasoning\": \"Check public sentiment towards local HVAC & skilled trades businesses to gauge customer satisfaction and identify areas for improvement.\", \"reason\": \"Assess public perception\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 32,
+      "ts": "2026-03-22T01:51:36.080326",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 9.3 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 6. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 10
+      }
+    },
+    {
+      "seq": 33,
+      "ts": "2026-03-22T01:51:36.080406",
+      "kind": "system",
+      "content": "Iteration 11/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 34,
+      "ts": "2026-03-22T01:51:37.676724",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"discovery_scan\", \"region\": \"austin_tx\", \"reasoning\": \"Perform a discovery scan to identify any new trends or insights in the HVAC & skilled trades market.\", \"reason\": \"Identify new market trends\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 35,
+      "ts": "2026-03-22T01:51:37.895855",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"c6b0c8be-84c\",\n      \"status\": \"completed\",\n      \"intent\": \"discovery_scan\",\n      \"records_found\": 25,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.15,\n      \"anomalies\": [\n        \"Industries: 2/13 have data\",\n        \"Industries with ZERO data: ['accommodation', 'auto_repair', 'childcare', 'fast_food', 'fitness_wellness', 'full_service_restaurant', 'hair_beauty', 'healthcare_clinic', 'hvac_skilled_trades', 'pharmacy', 'retail_general', 'retail_grocery']\",\n        \"Discovery found 25 leads: {'coverage_gap': 25}\",\n        \"Brand coverage: 4/49 (8.2%)\",\n        \"Stale data: 2 intent/brand combos need re-collection\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n            \"brand\": \"mcdonalds\",\n            \"industry\": \"fast_food\"\n          },\n          \"description\": \"Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"applebees\",\n            \"industry\": \"full_service_restaurant\"\n          },\n          \"description\": \"Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"target\",\n            \"industry\": \"retail_general\"\n          },\n          \"description\": \"Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"heb\",\n            \"industry\": \"retail_grocery\"\n          },\n          \"description\": \"Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs_minuteclinic\",\n            \"industry\": \"healthcare_clinic\"\n          },\n          \"description\": \"Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs\",\n            \"industry\": \"pharmacy\"\n          },\n          \"description\": \"Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"marriott\",\n            \"industry\": \"accommodation\"\n          },\n          \"description\": \"Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"planet_fitness\",\n            \"industry\": \"fitness_wellness\"\n          },\n          \"description\": \"Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"kindercare\",\n            \"industry\": \"childcare\"\n          },\n          \"description\": \"Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"great_clips\",\n            \"industry\": \"hair_beauty\"\n          },\n          \"description\": \"Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 11
+      }
+    },
+    {
+      "seq": 36,
+      "ts": "2026-03-22T01:51:37.895997",
+      "kind": "system",
+      "content": "Iteration 12/12 \u2014 generating\u2026",
+      "meta": {}
+    },
+    {
+      "seq": 37,
+      "ts": "2026-03-22T01:51:42.312309",
+      "kind": "thinking",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"mcdonalds\", \"industry\": \"fast_food\", \"search_terms\": [\"fast food\", \"restaurant\"], \"reasoning\": \"[discovery:coverage_gap] Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\", \"reason\": \"Identify potential gaps in the market\"}]}",
+      "meta": {}
+    },
+    {
+      "seq": 38,
+      "ts": "2026-03-22T01:51:42.319873",
+      "kind": "action",
+      "content": "{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 1.9 days ago (threshold: 60.0 days). Next collection due: unknown. Records on file: 119. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}",
+      "meta": {
+        "action": "propose",
+        "iteration": 12
+      }
+    },
+    {
+      "seq": 39,
+      "ts": "2026-03-22T01:51:42.320474",
+      "kind": "done",
+      "content": "Session ended after 12 iterations. Proposed: 10, Executed: 5, Rejected: 5, Wishes: 1",
+      "meta": {
+        "region": "austin_tx",
+        "model": "qwen2.5:7b-instruct",
+        "mode": "mixed",
+        "goal": "Skilled trade search",
+        "iterations": 12,
+        "queries_proposed": 10,
+        "queries_validated": 5,
+        "queries_rejected": 5,
+        "queries_executed": 5,
+        "wishes_added": 1,
+        "is_complete": false,
+        "final_summary": "Session ended after 12 iterations. Proposed: 10, Executed: 5, Rejected: 5, Wishes: 1",
+        "started_at": "2026-03-22T01:50:01.262676",
+        "duration_seconds": 101.1
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are OpenClaw, a research planning agent for First-Helios.\n\nYour mission: discover where LOCAL businesses can compete with mega-corporations\nin industries like healthcare, retail, food service, fitness, childcare, etc.\nYou do this by planning data collection queries, validating them, and interpreting results.\n\n## CRITICAL RULE: Pre-validation\nBefore any API call costs budget, your proposed queries go through pre-validation.\nYou MUST only propose search terms from the approved pools below.\nIf you want a term that doesn't exist, add it to your wishlist instead of using it.\n\n## Available Industries\n[\n  {\n    \"key\": \"hvac_skilled_trades\",\n    \"name\": \"HVAC & Skilled Trades\",\n    \"mega_corps\": [\n      \"service_experts\",\n      \"aire_serv\",\n      \"one_hour_heating\",\n      \"mr_electric\",\n      \"roto_rooter\"\n    ],\n    \"job_terms\": [\n      \"HVAC technician\",\n      \"HVAC installer\",\n      \"HVAC service tech\",\n      \"plumber\",\n      \"electrician\",\n      \"maintenance technician\"\n    ],\n    \"poi_terms\": [\n      \"HVAC\",\n      \"heating and cooling\",\n      \"air conditioning repair\",\n      \"plumber\",\n      \"electrician\",\n      \"handyman\"\n    ]\n  }\n]\n\n## Available Mega-Corps\n[\n  {\n    \"key\": \"service_experts\",\n    \"name\": \"Service Experts Heating & Air\",\n    \"industry\": \"hvac_skilled_trades\"\n  },\n  {\n    \"key\": \"aire_serv\",\n    \"name\": \"Aire Serv\",\n    \"industry\": \"hvac_skilled_trades\"\n  },\n  {\n    \"key\": \"one_hour_heating\",\n    \"name\": \"One Hour Heating & Air Conditioning\",\n    \"industry\": \"hvac_skilled_trades\"\n  },\n  {\n    \"key\": \"mr_electric\",\n    \"name\": \"Mr. Electric\",\n    \"industry\": \"hvac_skilled_trades\"\n  },\n  {\n    \"key\": \"roto_rooter\",\n    \"name\": \"Roto-Rooter\",\n    \"industry\": \"hvac_skilled_trades\"\n  }\n]\n\n## Actions \u2014 output raw JSON ONLY, never use markdown fences or prose\n\n### propose \u2014 Propose queries to be pre-validated before execution\n{\"action\": \"propose\", \"queries\": [\n    {\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"starbucks\",\n      \"industry\": \"coffee_cafe\", \"search_terms\": [\"barista\", \"coffee\"],\n      \"reasoning\": \"Starbucks is Priority 1 on the agenda \u2014 mapping locations reveals saturation zones for local competitors\",\n      \"reason\": \"Map Starbucks locations\"}\n]}\n\n### query \u2014 Submit a single DB-internal query (data_quality_audit, discovery_scan, score_refresh, campaign_status ONLY)\n{\"action\": \"query\", \"intent\": \"data_quality_audit\", \"region\": \"austin_tx\",\n  \"reasoning\": \"Starting with audit to understand current data state before collecting anything\",\n  \"reason\": \"Initial audit\"}\n\n### wish \u2014 Add one or more items to today's wishlist (use \"wishes\" array for multiple)\n{\"action\": \"wish\", \"wishes\": [\n  {\"category\": \"new_term\", \"title\": \"Add matcha bar search term\",\n    \"description\": \"Matcha cafes are growing in Austin, missing from poi_search_terms\",\n    \"suggested_value\": \"matcha bar\", \"industry\": \"coffee_cafe\"},\n  {\"category\": \"new_term\", \"title\": \"Add boba tea search term\",\n    \"description\": \"Boba shops are underrepresented in coffee_cafe terms\",\n    \"suggested_value\": \"boba tea\", \"industry\": \"coffee_cafe\"}\n]}\nCategories: new_source, new_term, new_industry, new_brand, tool_request\n\n### Running a discovery scan \u2014 use the query action with intent discovery_scan\n{\"action\": \"query\", \"intent\": \"discovery_scan\", \"region\": \"austin_tx\",\n  \"reason\": \"Find coverage gaps and new stores to investigate\"}\nReturns: coverage statistics and suggested_next leads. Each suggested_next item has a\n\"suggested_intent\" field showing what to collect \u2014 use it as the \"intent\" inside a propose action.\nDo NOT use suggested_intent as a top-level action. Always wrap it: {\"action\":\"propose\",\"queries\":[...]}\n\n### status \u2014 Check budget and queue state\n{\"action\": \"status\"}\n\n### done \u2014 End the session with summary and wishlist reflection\n{\"action\": \"done\", \"summary\": \"Completed coffee_cafe and fast_food scans for Austin\",\n  \"wishlist_reflection\": \"Would benefit from Indeed API access and 'matcha bar' as a POI term\"}\n\n## CRITICAL term-matching rules\n- For poi_chain_locations and poi_local_density \u2192 use ONLY poi_search_terms for that industry\n- For job_posting_volume and wage_baseline \u2192 use ONLY job_search_terms for that industry\n- For sentiment_check \u2192 use ONLY sentiment_keywords for that industry\n- NEVER mix terms across industries. \"barista\" is a coffee_cafe term, NOT retail_general.\n- Each industry block above lists its EXACT valid terms. Copy them exactly.\n\n## Rules\n1. Output ONLY valid JSON \u2014 your ENTIRE response must be a single JSON object starting with { and ending with }. No prose before or after. No markdown fences (no ```). No \"Let's...\", \"Here is...\", or any other text.\n2. Do NOT repeat the exact same query you already executed \u2014 check previous results first\n3. Your Collection Agenda is already prepared in the Context above \u2014 start from Priority 1 and work down in order\n4. Items marked \u2713 in \"Already collected\" are fresh \u2014 do NOT re-collect them, they will be rejected\n5. Run discovery_scan again mid-session after completing a batch of queries to find newly exposed gaps\n6. For each industry, check: chain locations \u2192 local density \u2192 wages \u2192 job postings \u2192 sentiment\n7. ONLY use search terms from the approved pools listed above \u2014 match term type to intent\n8. If a query is REJECTED for a missing term, use \"wish\" to request it \u2014 it will be added to this session's term pool immediately so you can use it in the next query\n9. Track your budget \u2014 check \"status\" if api_calls_remaining_today drops below 20\n10. score_refresh, data_quality_audit, discovery_scan, and campaign_status are always DB-internal \u2014 they run in analyze mode automatically regardless of session mode\n11. When your goal is met OR you have explored all agenda items, use \"done\" to end the session\n12. At session end in the \"done\" action, include a wishlist_reflection listing any terms/brands/sources you wanted but didn't have\n\n## Current Context\nRegion: austin_tx\nGoal: Skilled trade search\nFocus industries: ['hvac_skilled_trades']\n\n## Collection Agenda (auto-generated from discovery scan)\nFollow this priority order:\n  1. [coverage_gap] poi_chain_locations brand=service_experts industry=hvac_skilled_trades \u2014 Zero stores for entire 'HVAC & Skilled Trades' industry. 5 mega-corps registered but none tracked. (priority=90.0)\n\nAlready collected \u2014 do NOT re-collect (marked \u2713):\n  \u2713 poi_chain_locations brand=great_clips industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_chain_locations brand=supercuts industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_chain_locations brand=sport_clips industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_local_density industry=hair_beauty: 0 records, 1d old\n  \u2713 wage_baseline industry=hair_beauty: 0 records, 1d old\n  \u2713 poi_chain_locations brand=service_experts industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=aire_serv industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=one_hour_heating industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=mr_electric industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_chain_locations brand=roto_rooter industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 poi_local_density industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 wage_baseline industry=hvac_skilled_trades: 0 records, 0d old\n  \u2713 score_refresh: 5289 records, 0d old\n\nFreshness thresholds (days): {\"poi_chain_locations\": 60.0, \"poi_local_density\": 60.0, \"wage_baseline\": 90.0, \"job_posting_volume\": 14.0, \"sentiment_check\": 14.0, \"economic_context\": 90.0, \"score_refresh\": 1.0, \"data_quality_audit\": 0.0, \"campaign_status\": 0.0, \"discovery_scan\": 0.0}\n\n## Operational Mode: MIXED\nSmart default \u2014 freshness-aware with DB fallback. Uses freshness thresholds to avoid redundant collection. Cached data counts as success.\nAllowed intents: ['campaign_status', 'data_quality_audit', 'discovery_scan', 'economic_context', 'job_posting_volume', 'poi_chain_locations', 'poi_local_density', 'score_refresh', 'sentiment_check', 'wage_baseline']\nFreshness gates: ACTIVE \u2014 stale data will be re-collected, fresh data skipped\n"
+    },
+    {
+      "role": "user",
+      "content": "Begin research for austin_tx in MIXED mode. Start with a data_quality_audit to understand current data state. Goal: Skilled trade search"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"query\", \"intent\": \"data_quality_audit\", \"region\": \"austin_tx\", \"reason\": \"Starting with audit to understand current data state before collecting anything\"}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"query_id\": \"4349786b-138\",\n  \"status\": \"completed\",\n  \"intent\": \"data_quality_audit\",\n  \"records_found\": 5288,\n  \"records_new\": 0,\n  \"records_updated\": 0,\n  \"staleness_days\": null,\n  \"coverage_pct\": 1095.0,\n  \"source_agreement\": null,\n  \"api_calls_used\": 0,\n  \"api_calls_remaining_today\": 112150,\n  \"estimated_seconds\": 0.01,\n  \"anomalies\": [\n    \"Chain stores: 483 total \\u2014 {'dutch_bros': 35, 'mcdonalds': 119, 'starbucks': 329}\",\n    \"Local employers: 4805\",\n    \"Score coverage: 5289/483 (1095.0%)\",\n    \"Wage observations: 18\",\n    \"Freshest signal: 1.9 days old\",\n    \"Scan snapshots: 12\"\n  ],\n  \"suggested_next\": [],\n  \"errors\": []\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"service_experts\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC technician\", \"HVAC installer\", \"HVAC service tech\", \"plumber\", \"electrician\", \"maintenance technician\"], \"reasoning\": \"Mapping locations of Service Experts to identify gaps in local skilled trade coverage.\", \"reason\": \"Identify potential market opportunities\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Term 'maintenance technician' not in approved poi terms for 'hvac_skilled_trades'. Choose from the suggestions or request a new term via the wishlist.\",\n      \"suggestions\": [\n        \"HVAC\",\n        \"heating and cooling\",\n        \"air conditioning repair\",\n        \"plumber\",\n        \"electrician\",\n        \"handyman\",\n        \"appliance repair\",\n        \"water heater\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"wish\", \"wishes\": [{\"category\": \"new_term\", \"title\": \"Add maintenance technician term\", \"description\": \"Maintenance technician is relevant for HVAC & Skilled Trades, missing from approved terms.\", \"suggested_value\": \"maintenance technician\", \"industry\": \"hvac_skilled_trades\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"status\": \"wishes_added\",\n  \"count\": 1,\n  \"wishes\": [\n    {\n      \"status\": \"wish_added\",\n      \"wish\": {\n        \"wish_id\": \"wish-2026-03-22-001\",\n        \"category\": \"new_term\",\n        \"title\": \"Add maintenance technician term\",\n        \"description\": \"Maintenance technician is relevant for HVAC & Skilled Trades, missing from approved terms.\",\n        \"suggested_value\": \"maintenance technician\",\n        \"context\": {\n          \"industry\": \"hvac_skilled_trades\"\n        },\n        \"status\": \"pending\",\n        \"created_at\": \"2026-03-22T01:50:34.789306\",\n        \"reviewed_at\": null,\n        \"reviewer_note\": null\n      },\n      \"session_term_added\": true\n    }\n  ],\n  \"message\": \"Terms added to this session's pool and usable immediately: 'maintenance technician' \\u2192 hvac_skilled_trades\"\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"service_experts\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC technician\", \"HVAC installer\", \"HVAC service tech\", \"plumber\", \"electrician\", \"maintenance technician\"], \"reasoning\": \"Mapping locations of Service Experts to identify gaps in local skilled trade coverage.\", \"reason\": \"Identify potential market opportunities\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"d2060a76-0c9\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_chain_locations\",\n      \"records_found\": 0,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112150,\n      \"estimated_seconds\": 0.01,\n      \"anomalies\": [\n        \"No collector executed \\u2014 reporting 0 existing stores from DB\",\n        \"MODE=mixed: promoted PARTIAL \\u2192 COMPLETED (cached data is acceptable)\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_local_density\", \"region\": \"austin_tx\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC\", \"heating and cooling\", \"air conditioning repair\", \"plumber\", \"electrician\", \"handyman\"], \"reasoning\": \"Determine the local density of HVAC & skilled trade businesses to identify areas with high or low competition.\", \"reason\": \"Identify dense and sparse regions for targeted market entry\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"7b7b558b-169\",\n      \"status\": \"completed\",\n      \"intent\": \"poi_local_density\",\n      \"records_found\": 0,\n      \"records_new\": 4805,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112149,\n      \"estimated_seconds\": 7.67,\n      \"anomalies\": [\n        \"0 local employers indexed \\u2014 run poi_local_density in collect mode to populate\"\n      ],\n      \"suggested_next\": [],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"wage_baseline\", \"region\": \"austin_tx\", \"industry\": \"hvac_skilled_trades\", \"search_terms\": [\"HVAC technician\", \"HVAC installer\", \"HVAC service tech\", \"plumber\", \"electrician\", \"maintenance technician\"], \"reasoning\": \"Determine the average wages for HVAC & skilled trade jobs to understand competitive salary levels.\", \"reason\": \"Identify wage trends and set competitive compensation strategies\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"3f4cf06f-9db\",\n      \"status\": \"completed\",\n      \"intent\": \"wage_baseline\",\n      \"records_found\": 0,\n      \"records_new\": 7,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 1,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 12.28,\n      \"anomalies\": [\n        \"No wage data in DB \\u2014 need BLS collection first\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"score_refresh\",\n          \"query\": {\n            \"intent\": \"score_refresh\",\n            \"region\": \"austin_tx\"\n          },\n          \"description\": \"Recompute scores with updated wage data\"\n        }\n      ],\n      \"errors\": [],\n      \"zero_records_note\": \"No data found for this target. Move to the next agenda item rather than retrying the same query.\"\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"score_refresh\", \"region\": \"austin_tx\", \"reasoning\": \"Recompute scores with updated wage data to ensure accurate market analysis.\", \"reason\": \"Update market score for HVAC & skilled trades in Austin\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 0.0 days ago (threshold: 1.0 days). Next collection due: 2026-03-23T01:21:49.800323. Records on file: 5289. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"status\"}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"queue\": {\n    \"is_paused\": false,\n    \"pause_reason\": null,\n    \"total_pending\": 0,\n    \"total_reserved\": 0,\n    \"completed_today\": 4,\n    \"failed_today\": 0,\n    \"budget_summary\": {\n      \"atp_geojson\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"atp_parquet\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"bls_v1\": {\n        \"used\": 12,\n        \"remaining\": 488,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 2.4\n      },\n      \"bls_v1_post\": {\n        \"used\": 0,\n        \"remaining\": 500,\n        \"daily_limit\": 500,\n        \"utilization_pct\": 0.0\n      },\n      \"careers_workday\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"carto_tiles\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"gmaps_scraper\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"jobspy\": {\n        \"used\": 0,\n        \"remaining\": 50,\n        \"daily_limit\": 50,\n        \"utilization_pct\": 0.0\n      },\n      \"nominatim\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overpass_api\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"overture_s3\": {\n        \"used\": 1,\n        \"remaining\": 9999,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_json\": {\n        \"used\": 0,\n        \"remaining\": 100,\n        \"daily_limit\": 100,\n        \"utilization_pct\": 0.0\n      },\n      \"reddit_oauth\": {\n        \"used\": 0,\n        \"remaining\": 1000,\n        \"daily_limit\": 1000,\n        \"utilization_pct\": 0.0\n      },\n      \"wikidata_sparql\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      },\n      \"workday_playwright\": {\n        \"used\": 0,\n        \"remaining\": 10000,\n        \"daily_limit\": 10000,\n        \"utilization_pct\": 0.0\n      }\n    }\n  },\n  \"today_tracker\": {\n    \"date\": \"2026-03-22\",\n    \"total_requests\": 6,\n    \"successful\": 4,\n    \"failed\": 0,\n    \"prevalidation_rejected\": 2,\n    \"success_rate\": 66.7,\n    \"total_records\": 5288,\n    \"avg_latency_ms\": 5060.2,\n    \"by_source\": {\n      \"agent_queue\": {\n        \"success\": 4,\n        \"fail\": 0,\n        \"records\": 5288\n      },\n      \"prevalidation\": {\n        \"success\": 0,\n        \"fail\": 2,\n        \"records\": 0\n      }\n    },\n    \"by_intent\": {\n      \"data_quality_audit\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 5288\n      },\n      \"poi_chain_locations\": {\n        \"success\": 1,\n        \"fail\": 1,\n        \"records\": 0\n      },\n      \"poi_local_density\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"wage_baseline\": {\n        \"success\": 1,\n        \"fail\": 0,\n        \"records\": 0\n      },\n      \"score_refresh\": {\n        \"success\": 0,\n        \"fail\": 1,\n        \"records\": 0\n      }\n    },\n    \"by_industry\": {\n      \"hvac_skilled_trades\": {\n        \"success\": 3,\n        \"fail\": 1\n      }\n    },\n    \"top_errors\": [\n      \"Pre-validation rejected: Term 'maintenance technician' not in approved poi terms\",\n      \"Pre-validation rejected: Data is still fresh \\u2014 collected 0.0 days ago (threshold\"\n    ]\n  },\n  \"pending_wishes\": 1,\n  \"session\": {\n    \"region\": \"austin_tx\",\n    \"model\": \"qwen2.5:7b-instruct\",\n    \"mode\": \"mixed\",\n    \"goal\": \"Skilled trade search\",\n    \"iterations\": 8,\n    \"queries_proposed\": 6,\n    \"queries_validated\": 4,\n    \"queries_rejected\": 2,\n    \"queries_executed\": 4,\n    \"wishes_added\": 1,\n    \"is_complete\": false,\n    \"final_summary\": \"\",\n    \"started_at\": \"2026-03-22T01:50:01.262676\",\n    \"duration_seconds\": 76.7\n  }\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"job_posting_volume\", \"region\": \"austin_tx\", \"reasoning\": \"Collect job posting volume to understand current demand for HVAC & skilled trades positions.\", \"reason\": \"Gather job market insights\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 1.9 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 100. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"sentiment_check\", \"region\": \"austin_tx\", \"reasoning\": \"Check public sentiment towards local HVAC & skilled trades businesses to gauge customer satisfaction and identify areas for improvement.\", \"reason\": \"Assess public perception\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 9.3 days ago (threshold: 14.0 days). Next collection due: unknown. Records on file: 6. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"discovery_scan\", \"region\": \"austin_tx\", \"reasoning\": \"Perform a discovery scan to identify any new trends or insights in the HVAC & skilled trades market.\", \"reason\": \"Identify new market trends\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 1,\n  \"rejected\": 0,\n  \"results\": [\n    {\n      \"query_id\": \"c6b0c8be-84c\",\n      \"status\": \"completed\",\n      \"intent\": \"discovery_scan\",\n      \"records_found\": 25,\n      \"records_new\": 0,\n      \"records_updated\": 0,\n      \"staleness_days\": null,\n      \"coverage_pct\": null,\n      \"source_agreement\": null,\n      \"api_calls_used\": 0,\n      \"api_calls_remaining_today\": 112137,\n      \"estimated_seconds\": 0.15,\n      \"anomalies\": [\n        \"Industries: 2/13 have data\",\n        \"Industries with ZERO data: ['accommodation', 'auto_repair', 'childcare', 'fast_food', 'fitness_wellness', 'full_service_restaurant', 'hair_beauty', 'healthcare_clinic', 'hvac_skilled_trades', 'pharmacy', 'retail_general', 'retail_grocery']\",\n        \"Discovery found 25 leads: {'coverage_gap': 25}\",\n        \"Brand coverage: 4/49 (8.2%)\",\n        \"Stale data: 2 intent/brand combos need re-collection\"\n      ],\n      \"suggested_next\": [\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n            \"brand\": \"mcdonalds\",\n            \"industry\": \"fast_food\"\n          },\n          \"description\": \"Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"applebees\",\n            \"industry\": \"full_service_restaurant\"\n          },\n          \"description\": \"Zero stores for entire 'Full Service Restaurants' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"target\",\n            \"industry\": \"retail_general\"\n          },\n          \"description\": \"Zero stores for entire 'Retail General Merchandise' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"heb\",\n            \"industry\": \"retail_grocery\"\n          },\n          \"description\": \"Zero stores for entire 'Grocery & Supermarket' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs_minuteclinic\",\n            \"industry\": \"healthcare_clinic\"\n          },\n          \"description\": \"Zero stores for entire 'Healthcare Clinics & Urgent Care' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n            \"brand\": \"cvs\",\n            \"industry\": \"pharmacy\"\n          },\n          \"description\": \"Zero stores for entire 'Pharmacy & Drugstore' industry. 2 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"marriott\",\n            \"industry\": \"accommodation\"\n          },\n          \"description\": \"Zero stores for entire 'Hotels & Accommodation' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"planet_fitness\",\n            \"industry\": \"fitness_wellness\"\n          },\n          \"description\": \"Zero stores for entire 'Fitness & Wellness' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n            \"brand\": \"kindercare\",\n            \"industry\": \"childcare\"\n          },\n          \"description\": \"Zero stores for entire 'Childcare & Early Education' industry. 3 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        },\n        {\n          \"suggested_intent\": \"poi_chain_locations\",\n          \"query\": {\n            \"intent\": \"poi_chain_locations\",\n            \"region\": \"austin_tx\",\n            \"reason\": \"[discovery:coverage_gap] Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n            \"brand\": \"great_clips\",\n            \"industry\": \"hair_beauty\"\n          },\n          \"description\": \"Zero stores for entire 'Hair & Beauty Services' industry. 4 mega-corps registered but none tracked.\",\n          \"priority\": 90.0,\n          \"lead_type\": \"coverage_gap\"\n        }\n      ],\n      \"errors\": []\n    }\n  ]\n}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"action\": \"propose\", \"queries\": [{\"intent\": \"poi_chain_locations\", \"region\": \"austin_tx\", \"brand\": \"mcdonalds\", \"industry\": \"fast_food\", \"search_terms\": [\"fast food\", \"restaurant\"], \"reasoning\": \"[discovery:coverage_gap] Zero stores for entire 'Fast Food & QSR' industry. 5 mega-corps registered but none tracked.\", \"reason\": \"Identify potential gaps in the market\"}]}"
+    },
+    {
+      "role": "user",
+      "content": "Result:\n{\n  \"proposed\": 1,\n  \"validated\": 0,\n  \"rejected\": 1,\n  \"results\": [\n    {\n      \"status\": \"rejected\",\n      \"reason\": \"Data is still fresh \\u2014 collected 1.9 days ago (threshold: 60.0 days). Next collection due: unknown. Records on file: 119. Pick a different intent, brand, or industry.\",\n      \"suggestions\": []\n    }\n  ]\n}"
+    }
+  ]
+}

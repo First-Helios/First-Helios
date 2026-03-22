@@ -45,23 +45,71 @@ def _get_overture_s3_path() -> str:
         "/theme=places/type=place/*"
     )
 
-# Overture category → industry mapping
+# Offline emergency fallback — only used if category_catalog DB is unavailable.
+# Do NOT add entries here; update INDUSTRY_KEYWORD_RULES in backend/category_catalog.py instead.
 CATEGORY_INDUSTRY_MAP: dict[str, str] = {
+    # Coffee & Cafe
     "coffee_shop": "coffee_cafe",
     "cafe": "coffee_cafe",
     "donut_shop": "coffee_cafe",
     "tea_house": "coffee_cafe",
+    "juice_bar": "coffee_cafe",
+    # Fast Food
     "fast_food_restaurant": "fast_food",
     "sandwich_shop": "fast_food",
     "burger_restaurant": "fast_food",
     "pizza_restaurant": "fast_food",
     "mexican_restaurant": "fast_food",
-    "grocery_store": "retail_general",
+    "taco_restaurant": "fast_food",
+    "chicken_restaurant": "fast_food",
+    # Full Service Restaurants
+    "restaurant": "full_service_restaurant",
+    "american_restaurant": "full_service_restaurant",
+    "italian_restaurant": "full_service_restaurant",
+    "seafood_restaurant": "full_service_restaurant",
+    "sushi_restaurant": "full_service_restaurant",
+    "steakhouse": "full_service_restaurant",
+    # Retail
+    "grocery_store": "retail_grocery",
+    "supermarket": "retail_grocery",
     "convenience_store": "retail_general",
     "clothing_store": "retail_general",
     "department_store": "retail_general",
-    "hotel": "hospitality",
-    "motel": "hospitality",
+    "electronics_store": "retail_general",
+    "drug_store": "pharmacy",
+    "pharmacy": "pharmacy",
+    # Hair & Beauty
+    "hair_salon": "hair_beauty",
+    "beauty_salon": "hair_beauty",
+    "nail_salon": "hair_beauty",
+    "barber_shop": "hair_beauty",
+    "spa": "hair_beauty",
+    "tanning_salon": "hair_beauty",
+    "waxing_salon": "hair_beauty",
+    # Fitness & Wellness
+    "gym": "fitness_wellness",
+    "fitness_center": "fitness_wellness",
+    "yoga_studio": "fitness_wellness",
+    "pilates_studio": "fitness_wellness",
+    "martial_arts_school": "fitness_wellness",
+    # Healthcare
+    "urgent_care": "healthcare_clinic",
+    "medical_clinic": "healthcare_clinic",
+    "health_clinic": "healthcare_clinic",
+    "dentist": "healthcare_clinic",
+    "optometrist": "healthcare_clinic",
+    # Childcare
+    "child_care": "childcare",
+    "preschool": "childcare",
+    "daycare": "childcare",
+    # Hospitality
+    "hotel": "accommodation",
+    "motel": "accommodation",
+    "extended_stay": "accommodation",
+    # HVAC & Trades
+    "hvac": "hvac_skilled_trades",
+    "plumber": "hvac_skilled_trades",
+    "electrician": "hvac_skilled_trades",
 }
 
 # Chain names to exclude from local employer queries (lowercase LIKE patterns)
@@ -139,12 +187,41 @@ class OvertureChainAdapter(BaseScraper):
     chain = "starbucks"
 
     CHAIN_NAME_FILTERS: dict[str, str] = {
+        # Coffee
         "starbucks": "%starbucks%",
         "dutch_bros": "%dutch bros%",
+        # Fast Food
         "mcdonalds": "%mcdonald%",
-        "target_retail": "%target%",
         "whataburger": "%whataburger%",
         "chipotle": "%chipotle%",
+        # Retail
+        "target": "%target%",
+        "heb": "%h-e-b%",
+        # Hair & Beauty
+        "great_clips": "%great clips%",
+        "supercuts": "%supercuts%",
+        "sport_clips": "%sport clips%",
+        "fantastic_sams": "%fantastic sam%",
+        "regis_salon": "%regis salon%",
+        # Fitness
+        "planet_fitness": "%planet fitness%",
+        "la_fitness": "%la fitness%",
+        "anytime_fitness": "%anytime fitness%",
+        # Pharmacy
+        "cvs": "%cvs pharmacy%",
+        "walgreens": "%walgreens%",
+        # Healthcare
+        "cvs_minuteclinic": "%minuteclinic%",
+        # Childcare
+        "kindercare": "%kindercare%",
+        # Hospitality
+        "marriott": "%marriott%",
+        # HVAC / Trades
+        "service_experts": "%service experts%",
+        "aire_serv": "%aire serv%",
+        "one_hour_heating": "%one hour heating%",
+        "mr_electric": "%mr. electric%",
+        "roto_rooter": "%roto-rooter%",
     }
 
     def scrape(self, region: str, radius_mi: int = 25) -> list[ScraperSignal]:
@@ -332,7 +409,8 @@ class OvertureLocalAdapter(BaseScraper):
             try:
                 for p in places:
                     oid = str(p["overture_id"])
-                    industry = CATEGORY_INDUSTRY_MAP.get(str(p["category"] or ""), "unknown")
+                    from backend.category_catalog import get_industry_for_category
+                    industry = get_industry_for_category(str(p["category"] or ""))
                     existing = (
                         session.query(LocalEmployer).filter_by(overture_id=oid).first()
                     )

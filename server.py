@@ -1579,12 +1579,231 @@ def openclaw_session_live():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ── Endpoint catalog ─────────────────────────────────────────────────────────
+
+@app.route("/api/endpoints/catalog")
+def endpoint_catalog_list():
+    """List all registered API endpoints with health state.
+
+    Query params:
+        intent       — filter by intent key
+        active_only  — "true" to show only active endpoints
+        healthy_only — "true" to show only is_healthy=True endpoints
+    """
+    try:
+        from backend.endpoint_catalog import get_all_endpoints
+        rows = get_all_endpoints()
+        data = [ep.to_dict() for ep in rows]
+
+        intent_filter = request.args.get("intent")
+        if intent_filter:
+            data = [d for d in data if d["intent"] == intent_filter]
+        if request.args.get("active_only", "").lower() == "true":
+            data = [d for d in data if d["is_active"]]
+        if request.args.get("healthy_only", "").lower() == "true":
+            data = [d for d in data if d["is_healthy"]]
+
+        return jsonify({"status": "ok", "count": len(data), "endpoints": data})
+    except Exception as e:
+        logger.error("[Server] endpoint_catalog_list failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/endpoints/catalog/<int:endpoint_id>")
+def endpoint_catalog_detail(endpoint_id: int):
+    """Single endpoint detail."""
+    try:
+        from backend.endpoint_catalog import get_endpoint_by_id
+        ep = get_endpoint_by_id(endpoint_id)
+        if not ep:
+            return jsonify({"status": "error", "message": "not found"}), 404
+        return jsonify({"status": "ok", "endpoint": ep.to_dict()})
+    except Exception as e:
+        logger.error("[Server] endpoint_catalog_detail failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/endpoints/catalog/<int:endpoint_id>/verify", methods=["POST"])
+def endpoint_verify(endpoint_id: int):
+    """Trigger an on-demand health probe for a single endpoint."""
+    try:
+        from backend.endpoint_catalog import verify_endpoint
+        result = verify_endpoint(endpoint_id)
+        return jsonify({"status": "ok", "result": result})
+    except Exception as e:
+        logger.error("[Server] endpoint_verify(%d) failed: %s", endpoint_id, e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/endpoints/catalog/<int:endpoint_id>/activate", methods=["POST"])
+def endpoint_activate(endpoint_id: int):
+    """Manually re-activate a deactivated endpoint."""
+    try:
+        from backend.endpoint_catalog import set_endpoint_active
+        updated = set_endpoint_active(endpoint_id, active=True)
+        if not updated:
+            return jsonify({"status": "error", "message": "not found"}), 404
+        return jsonify({"status": "ok", "endpoint": updated})
+    except Exception as e:
+        logger.error("[Server] endpoint_activate(%d) failed: %s", endpoint_id, e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/endpoints/catalog/<int:endpoint_id>/deactivate", methods=["POST"])
+def endpoint_deactivate(endpoint_id: int):
+    """Manually deactivate an endpoint."""
+    try:
+        from backend.endpoint_catalog import set_endpoint_active
+        updated = set_endpoint_active(endpoint_id, active=False)
+        if not updated:
+            return jsonify({"status": "error", "message": "not found"}), 404
+        return jsonify({"status": "ok", "endpoint": updated})
+    except Exception as e:
+        logger.error("[Server] endpoint_deactivate(%d) failed: %s", endpoint_id, e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/endpoints/seed", methods=["POST"])
+def endpoint_seed():
+    """Re-seed the endpoint catalog from ROUTES + INDUSTRY_REGISTRY.
+
+    POST JSON (optional): {"overwrite_health": true}
+    """
+    try:
+        from backend.endpoint_catalog import seed_from_route_index
+        body = request.get_json(silent=True) or {}
+        overwrite_health = bool(body.get("overwrite_health", False))
+        counts = seed_from_route_index(overwrite_health=overwrite_health)
+        return jsonify({"status": "ok", "counts": counts})
+    except Exception as e:
+        logger.error("[Server] endpoint_seed failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/endpoints/capabilities")
+def endpoint_capabilities():
+    """Current effective intents/industries/brands from healthy endpoints."""
+    try:
+        from backend.endpoint_catalog import get_healthy_endpoints, derive_available_capabilities
+        endpoints = get_healthy_endpoints()
+        if not endpoints:
+            return jsonify({"status": "ok", "source": "empty_catalog", "capabilities": {}})
+        caps = derive_available_capabilities(endpoints)
+        return jsonify({"status": "ok", "source": "catalog", "capabilities": caps})
+    except Exception as e:
+        logger.error("[Server] endpoint_capabilities failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── Category catalog routes ──────────────────────────────────────────────────
+
+@app.route("/api/categories/mappings")
+def category_mappings():
+    """All category→industry mappings in the DB."""
+    try:
+        from backend.category_catalog import get_all_mappings
+        source = request.args.get("source", "overture")
+        mappings = get_all_mappings(source_system=source)
+        return jsonify({"status": "ok", "count": len(mappings), "mappings": mappings})
+    except Exception as e:
+        logger.error("[Server] category_mappings failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/categories/unmapped")
+def category_unmapped():
+    """Categories with no confident mapping — need human review."""
+    try:
+        from backend.category_catalog import get_unmapped
+        source = request.args.get("source", "overture")
+        rows = get_unmapped(source_system=source)
+        return jsonify({"status": "ok", "count": len(rows), "unmapped": rows})
+    except Exception as e:
+        logger.error("[Server] category_unmapped failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/categories/mappings/<path:category_value>", methods=["POST"])
+def category_set_mapping(category_value):
+    """Manually assign a category to an industry (confidence=1.0).
+
+    POST JSON: {"internal_industry": "hair_beauty", "source": "overture"}
+    """
+    try:
+        from backend.category_catalog import set_mapping
+        body = request.get_json(silent=True) or {}
+        industry = body.get("internal_industry")
+        source = body.get("source", "overture")
+        if not industry:
+            return jsonify({"status": "error", "message": "internal_industry required"}), 400
+        result = set_mapping(category_value, industry, source_system=source)
+        return jsonify({"status": "ok", "mapping": result})
+    except Exception as e:
+        logger.error("[Server] category_set_mapping failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/categories/discover", methods=["POST"])
+def category_discover():
+    """Classify all categories already seen in DB + optionally query Overture S3.
+
+    POST JSON: {"region": "austin_tx", "from_overture": false}
+    Set from_overture=true to run the full Overture S3 discovery (slow, ~30s).
+    """
+    try:
+        from backend.category_catalog import discover_from_db, discover_from_overture
+        body = request.get_json(silent=True) or {}
+        region = body.get("region", "austin_tx")
+        from_overture = bool(body.get("from_overture", False))
+
+        db_result = discover_from_db()
+        overture_result = {}
+        if from_overture:
+            overture_result = discover_from_overture(region=region)
+
+        return jsonify({
+            "status": "ok",
+            "from_db": db_result,
+            "from_overture": overture_result,
+        })
+    except Exception as e:
+        logger.error("[Server] category_discover failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/categories/seed", methods=["POST"])
+def category_seed():
+    """Re-run keyword-rule seeding over the bootstrap category list."""
+    try:
+        from backend.category_catalog import seed_from_keyword_rules
+        counts = seed_from_keyword_rules()
+        return jsonify({"status": "ok", "counts": counts})
+    except Exception as e:
+        logger.error("[Server] category_seed failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ── Server startup ───────────────────────────────────────────────────────────
 
 def create_app() -> Flask:
     """Application factory for Flask."""
     # Initialize database
     init_db()
+
+    # Seed endpoint catalog (idempotent — safe to run on every startup)
+    try:
+        from backend.endpoint_catalog import seed_from_route_index
+        seed_from_route_index()
+    except Exception as e:
+        logger.warning("[Server] Endpoint catalog seed failed (non-fatal): %s", e)
+
+    # Seed category map — classify any categories already seen in DB,
+    # and bootstrap known Overture category strings via keyword rules
+    try:
+        from backend.category_catalog import seed_from_keyword_rules
+        seed_from_keyword_rules()
+    except Exception as e:
+        logger.warning("[Server] Category catalog seed failed (non-fatal): %s", e)
 
     # Start scheduler
     try:

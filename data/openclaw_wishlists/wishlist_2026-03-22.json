@@ -1,0 +1,108 @@
+{
+  "date": "2026-03-22",
+  "generated_by_model": "qwen2.5:7b-instruct",
+  "session_summary": "Session ended after 12 iterations. Proposed: 10, Executed: 2, Rejected: 8, Wishes: 2",
+  "count": 8,
+  "items": [
+    {
+      "wish_id": "wish-2026-03-22-001",
+      "category": "new_industry",
+      "title": "Add mechanics to valid industries",
+      "description": "Mobil 1 is a well-known brand in the automotive service industry, which should be included for comprehensive market analysis.",
+      "suggested_value": "mechanics",
+      "context": {},
+      "status": "pending",
+      "created_at": "2026-03-22T02:28:57.887255",
+      "reviewed_at": null,
+      "reviewer_note": null
+    },
+    {
+      "wish_id": "wish-2026-03-22-002",
+      "category": "new_industry",
+      "title": "Add mechanics to valid industries",
+      "description": "Mobil 1 is a well-known brand in the automotive service industry, which should be included for comprehensive market analysis.",
+      "suggested_value": "mechanics",
+      "context": {},
+      "status": "pending",
+      "created_at": "2026-03-22T02:29:14.211831",
+      "reviewed_at": null,
+      "reviewer_note": null
+    },
+    {
+      "wish_id": "wish-2026-03-22-003",
+      "category": "new_industry",
+      "title": "Add mechanics to valid industries",
+      "description": "Mechanics are an important part of the automotive service industry and should be included for comprehensive market analysis.",
+      "suggested_value": "mechanics",
+      "context": {},
+      "status": "pending",
+      "created_at": "2026-03-22T02:29:17.110345",
+      "reviewed_at": null,
+      "reviewer_note": null
+    },
+    {
+      "wish_id": "wish-2026-03-22-004",
+      "category": "new_industry",
+      "title": "Add mechanics to valid industries",
+      "description": "Mechanics are an important part of the automotive service industry and should be included for comprehensive market analysis.",
+      "suggested_value": "mechanics",
+      "context": {},
+      "status": "pending",
+      "created_at": "2026-03-22T02:29:20.008389",
+      "reviewed_at": null,
+      "reviewer_note": null
+    },
+    {
+      "wish_id": "wish-2026-03-22-005",
+      "category": "new_industry",
+      "title": "Add mechanics to valid industries",
+      "description": "Mechanics are an important part of the automotive service industry and should be included for comprehensive market analysis.",
+      "suggested_value": "mechanics",
+      "context": {},
+      "status": "pending",
+      "created_at": "2026-03-22T02:29:36.689221",
+      "reviewed_at": null,
+      "reviewer_note": null
+    },
+    {
+      "wish_id": "wish-2026-03-22-006",
+      "category": "new_industry",
+      "title": "Add mechanics to valid industries",
+      "description": "Mechanics are an important part of the automotive service industry and should be included for comprehensive market analysis.",
+      "suggested_value": "mechanics",
+      "context": {},
+      "status": "pending",
+      "created_at": "2026-03-22T02:29:40.871968",
+      "reviewed_at": null,
+      "reviewer_note": null
+    },
+    {
+      "wish_id": "wish-2026-03-22-007",
+      "category": "new_term",
+      "title": "Add nail salon chain term",
+      "description": "Nail salon chains are needed to identify gaps for local competitors",
+      "suggested_value": "nail salon chain",
+      "context": {
+        "industry": "hair_beauty"
+      },
+      "status": "pending",
+      "created_at": "2026-03-22T02:40:29.098576",
+      "reviewed_at": null,
+      "reviewer_note": null
+    },
+    {
+      "wish_id": "wish-2026-03-22-008",
+      "category": "new_term",
+      "title": "Add nail salon job term",
+      "description": "Nail salon is a critical role in hair beauty services and should be included for wage baseline analysis.",
+      "suggested_value": "nail technician",
+      "context": {
+        "industry": "hair_beauty"
+      },
+      "status": "pending",
+      "created_at": "2026-03-22T02:41:39.331184",
+      "reviewed_at": null,
+      "reviewer_note": null
+    }
+  ]
+}

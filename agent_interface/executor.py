@@ -56,14 +56,7 @@ REGION_BBOX = {
 }
 
 # Brand → AllThePlaces spider mapping
-ATP_SPIDER_MAP = {
-    "starbucks": "starbucks_us",
-    "dutch_bros": "dutch_bros",
-    "mcdonalds": "mcdonalds",
-    "whataburger": "whataburger",
-    "chipotle": "chipotle",
-    "target": "target",
-}
+# ATP_SPIDER_MAP removed — ATP_BRAND_MAP in scrapers/alltheplaces_adapter.py is the single source of truth
 
 # Brand → OSM Wikidata ID mapping
 BRAND_WIKIDATA = {
@@ -201,28 +194,53 @@ def _execute_poi_chain(query: AgentQuery) -> ConciseResult:
             from scrapers.alltheplaces_adapter import AllThePlacesAdapter
 
             if rate_manager.can_request("atp_geojson", count=1):
-                adapter = AllThePlacesAdapter()
-                spider = ATP_SPIDER_MAP.get(brand_key)
-                if spider:
+                from scrapers.alltheplaces_adapter import ATP_BRAND_MAP as _ATP_MAP
+                if brand_key in _ATP_MAP:
+                    adapter = AllThePlacesAdapter()
+                    adapter.chain = brand_key
                     try:
-                        stores = adapter.fetch_chain_stores(
-                            brand_key=brand_key,
-                            spider_name=spider,
-                            bbox=bbox,
-                            region=query.region.value,
-                        )
+                        signals = adapter.scrape(region=query.region.value)
                         api_calls += 1
-                        records_found += len(stores)
-                        records_new = len(stores)  # ATP returns fresh data
+                        records_new = len(signals)
+                        records_found += records_new
                         sources_used.append("alltheplaces")
-                        logger.info("[Executor] ATP returned %d stores for %s", len(stores), brand_key)
+                        logger.info("[Executor] ATP returned %d stores for %s", records_new, brand_key)
                     except Exception as e:
                         anomalies.append(f"AllThePlaces failed: {e}")
                         logger.warning("[Executor] ATP error: %s", e)
+                # else: brand not in ATP map — silently fall through to Overture
             else:
                 anomalies.append("AllThePlaces budget exhausted")
         except ImportError:
             anomalies.append("AllThePlaces adapter not available")
+
+        # ── Overture fallback (if ATP had no spider or failed) ──────
+        if not sources_used:
+            try:
+                from scrapers.overture_adapter import OvertureChainAdapter
+
+                if rate_manager.can_request("overture_s3", count=1):
+                    adapter = OvertureChainAdapter()
+                    adapter.chain = brand_key
+                    try:
+                        signals = adapter.scrape(region=query.region.value)
+                        if signals:
+                            api_calls += 1
+                            records_new += len(signals)
+                            records_found += len(signals)
+                            sources_used.append("overture")
+                            logger.info(
+                                "[Executor] Overture returned %d stores for %s",
+                                len(signals), brand_key,
+                            )
+                        else:
+                            anomalies.append(f"Overture: no name filter for brand '{brand_key}' — chain not in Overture map")
+                    except Exception as e:
+                        anomalies.append(f"Overture chain lookup failed: {e}")
+                else:
+                    anomalies.append("Overture budget exhausted")
+            except ImportError:
+                anomalies.append("Overture adapter not available")
 
     # ── DB fallback (disabled in COLLECT mode) ──────────────────────
     if not sources_used and mode_cfg.allow_db_fallback:
@@ -249,7 +267,7 @@ def _execute_poi_chain(query: AgentQuery) -> ConciseResult:
     suggested_next: list[dict] = []
     if records_found > 0:
         suggested_next.append({
-            "action": "poi_local_density",
+            "suggested_intent": "poi_local_density",
             "query": {
                 "intent": "poi_local_density",
                 "region": query.region.value,
@@ -258,7 +276,7 @@ def _execute_poi_chain(query: AgentQuery) -> ConciseResult:
             "description": f"Find local competitors near {records_found} {brand_key} stores",
         })
         suggested_next.append({
-            "action": "score_refresh",
+            "suggested_intent": "score_refresh",
             "query": {"intent": "score_refresh", "region": query.region.value},
             "description": "Recompute staffing scores with updated location data",
         })
@@ -294,17 +312,13 @@ def _execute_poi_local(query: AgentQuery) -> ConciseResult:
             from scrapers.overture_adapter import OvertureLocalAdapter
 
             if rate_manager.can_request("overture_s3", count=1):
-                bbox = REGION_BBOX.get(query.region.value, REGION_BBOX["austin_tx"])
                 adapter = OvertureLocalAdapter()
                 try:
-                    count = adapter.fetch_local_employers(
-                        bbox=bbox,
-                        region=query.region.value,
-                    )
+                    signals = adapter.scrape(region=query.region.value)
                     api_calls += 1
-                    records_new = count
+                    records_new = len(signals)
                     sources_used.append("overture")
-                    logger.info("[Executor] Overture returned %d local employers", count)
+                    logger.info("[Executor] Overture returned %d local employer signals", records_new)
                 except Exception as e:
                     anomalies.append(f"Overture query failed: {e}")
             else:
@@ -312,23 +326,40 @@ def _execute_poi_local(query: AgentQuery) -> ConciseResult:
         except ImportError:
             anomalies.append("Overture adapter not available")
 
-    # ── DB report (disabled as primary in COLLECT mode) ─────────────
+    # ── DB report — total local employers in region (all industries) ─
     total = 0
     if mode_cfg.allow_db_fallback or sources_used:
         engine = init_db()
         session = get_session(engine)
         try:
-            q = session.query(LocalEmployer).filter(
+            # Count ALL local employers in region (not filtered by industry)
+            # so records_found reflects actual DB coverage, not classification gaps
+            total_all = session.query(LocalEmployer).filter(
                 LocalEmployer.region == query.region.value,
                 LocalEmployer.is_active.is_(True),
-            )
-            if industry_key != "coffee_cafe":
-                q = q.filter(LocalEmployer.industry == industry_key)
-            total = q.count()
+            ).count()
+            # Count industry-specific for context
+            total_industry = 0
+            if industry_key:
+                total_industry = session.query(LocalEmployer).filter(
+                    LocalEmployer.region == query.region.value,
+                    LocalEmployer.is_active.is_(True),
+                    LocalEmployer.industry == industry_key,
+                ).count()
 
-            if total == 0:
+            total = total_all
+            if total_all == 0:
                 anomalies.append(
                     "0 local employers indexed — run poi_local_density in collect mode to populate"
+                )
+            elif total_industry == 0 and industry_key:
+                anomalies.append(
+                    f"0 {industry_key} employers classified (of {total_all} total) — "
+                    f"category mappings may be pending; run POST /api/categories/discover"
+                )
+            else:
+                anomalies.append(
+                    f"{total_industry} {industry_key} employers of {total_all} total in region"
                 )
         finally:
             session.close()
@@ -338,15 +369,15 @@ def _execute_poi_local(query: AgentQuery) -> ConciseResult:
         )
 
     suggested_next: list[dict] = []
-    if total > 0:
+    if total > 0 or records_new > 0:
         suggested_next.append({
-            "action": "wage_baseline",
+            "suggested_intent": "wage_baseline",
             "query": {
                 "intent": "wage_baseline",
                 "region": query.region.value,
                 "industry": industry_key,
             },
-            "description": f"Compare local vs chain wages for {total} employers",
+            "description": f"Collect wage baseline for {industry_key} after indexing local employers",
         })
 
     return ConciseResult(
@@ -380,13 +411,12 @@ def _execute_wage_baseline(query: AgentQuery) -> ConciseResult:
 
             if rate_manager.can_request("bls_v1", count=1):
                 adapter = BLSAdapter()
-                series_ids = list(AUSTIN_BLS_SERIES.values())
                 try:
-                    data = adapter.fetch_series(series_ids[:3])
+                    signals = adapter.scrape(region=query.region.value)
                     api_calls += 1
-                    records_new = len(data) if data else 0
+                    records_new = len(signals)
                     sources_used.append("bls")
-                    logger.info("[Executor] BLS returned data for %d series", len(data))
+                    logger.info("[Executor] BLS returned %d wage signals", records_new)
                 except Exception as e:
                     anomalies.append(f"BLS fetch failed: {e}")
             else:
@@ -434,7 +464,7 @@ def _execute_wage_baseline(query: AgentQuery) -> ConciseResult:
 
     suggested_next: list[dict] = []
     suggested_next.append({
-        "action": "score_refresh",
+        "suggested_intent": "score_refresh",
         "query": {"intent": "score_refresh", "region": query.region.value},
         "description": "Recompute scores with updated wage data",
     })
@@ -516,7 +546,7 @@ def _execute_job_posting_volume(query: AgentQuery) -> ConciseResult:
 
     suggested_next: list[dict] = [
         {
-            "action": "score_refresh",
+            "suggested_intent": "score_refresh",
             "query": {"intent": "score_refresh", "region": query.region.value},
             "description": "Update staffing stress scores with new posting data",
         }
@@ -592,7 +622,7 @@ def _execute_sentiment_check(query: AgentQuery) -> ConciseResult:
         api_calls_used=api_calls,
         anomalies=anomalies,
         suggested_next=[{
-            "action": "score_refresh",
+            "suggested_intent": "score_refresh",
             "query": {"intent": "score_refresh", "region": query.region.value},
             "description": "Update scores with new sentiment data",
         }],
@@ -625,7 +655,7 @@ def _execute_economic_context(query: AgentQuery) -> ConciseResult:
         records_found=wage_count if 'wage_count' in dir() else 0,
         anomalies=anomalies,
         suggested_next=[{
-            "action": "wage_baseline",
+            "suggested_intent": "wage_baseline",
             "query": {
                 "intent": "wage_baseline",
                 "region": query.region.value,
@@ -665,7 +695,7 @@ def _execute_score_refresh(query: AgentQuery) -> ConciseResult:
             records_updated=len(results),
             anomalies=anomalies,
             suggested_next=[{
-                "action": "data_quality_audit",
+                "suggested_intent": "data_quality_audit",
                 "query": {
                     "intent": "data_quality_audit",
                     "region": query.region.value,
@@ -694,10 +724,10 @@ def _execute_data_quality_audit(query: AgentQuery) -> ConciseResult:
     try:
         region = query.region.value
 
-        # 1. Chain store counts
+        # 1. Chain store counts (exclude 'local' — those are local employers, not chains)
         chain_counts = dict(
             session.query(Store.chain, func.count(Store.store_num))
-            .filter(Store.region == region, Store.is_active.is_(True))
+            .filter(Store.region == region, Store.is_active.is_(True), Store.chain != "local")
             .group_by(Store.chain)
             .all()
         )
@@ -713,7 +743,7 @@ def _execute_data_quality_audit(query: AgentQuery) -> ConciseResult:
                     f"expected ~300+ for Austin metro"
                 )
                 suggested_next.append({
-                    "action": "poi_chain_locations",
+                    "suggested_intent": "poi_chain_locations",
                     "query": {
                         "intent": "poi_chain_locations",
                         "brand": brand_key,
@@ -732,7 +762,7 @@ def _execute_data_quality_audit(query: AgentQuery) -> ConciseResult:
         if local_count == 0:
             anomalies.append("WARNING: 0 local employers indexed")
             suggested_next.append({
-                "action": "poi_local_density",
+                "suggested_intent": "poi_local_density",
                 "query": {
                     "intent": "poi_local_density",
                     "region": region,
@@ -750,7 +780,7 @@ def _execute_data_quality_audit(query: AgentQuery) -> ConciseResult:
             anomalies.append(f"Score coverage: {scored_stores}/{total_stores} ({coverage}%)")
             if coverage < 80:
                 suggested_next.append({
-                    "action": "score_refresh",
+                    "suggested_intent": "score_refresh",
                     "query": {"intent": "score_refresh", "region": region},
                     "description": f"Only {coverage}% of stores scored — refresh needed",
                 })
@@ -761,7 +791,7 @@ def _execute_data_quality_audit(query: AgentQuery) -> ConciseResult:
         if wage_count == 0:
             anomalies.append("WARNING: No wage data — scoring will be incomplete")
             suggested_next.append({
-                "action": "wage_baseline",
+                "suggested_intent": "wage_baseline",
                 "query": {
                     "intent": "wage_baseline",
                     "region": region,
@@ -780,7 +810,7 @@ def _execute_data_quality_audit(query: AgentQuery) -> ConciseResult:
             if age_days > 7:
                 anomalies.append("WARNING: All signals are >7 days old")
                 suggested_next.append({
-                    "action": "job_posting_volume",
+                    "suggested_intent": "job_posting_volume",
                     "query": {
                         "intent": "job_posting_volume",
                         "brand": "starbucks",
@@ -844,7 +874,7 @@ def _execute_campaign_status(query: AgentQuery) -> ConciseResult:
             api_calls_remaining_today=total_remaining,
             anomalies=anomalies,
             suggested_next=[{
-                "action": "data_quality_audit",
+                "suggested_intent": "data_quality_audit",
                 "query": {
                     "intent": "data_quality_audit",
                     "region": query.region.value,
@@ -897,11 +927,9 @@ def _execute_discovery_scan(query: AgentQuery) -> ConciseResult:
         for lead in scan.leads[:10]:  # top 10
             proposal = lead.to_agent_proposal()
             suggested_next.append({
-                "action": lead.suggested_intent,
+                "suggested_intent": lead.suggested_intent,
                 "query": proposal,
                 "description": lead.description,
-                "priority": lead.priority,
-                "lead_type": lead.lead_type,
             })
 
         # Add coverage summary to anomalies

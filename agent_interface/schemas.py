@@ -514,17 +514,42 @@ class QueueStatus:
 def get_all_options() -> dict:
     """Return all valid enum values the agent can use.
 
-    This is the first thing an agent should request so it knows
-    what inputs are acceptable.
+    Industries and brands are filtered to those backed by at least one
+    healthy endpoint in the catalog.  Falls back to full enum lists if
+    the catalog is unavailable or empty.
+
+    Note: parse_agent_query() still validates against the full Python enums —
+    this filtering only affects what the agent is *told* it can use.
     """
+    available_industries: Optional[list[str]] = None
+    available_brands: Optional[list[str]] = None
+
+    try:
+        from backend.endpoint_catalog import get_healthy_endpoints, derive_available_capabilities
+        endpoints = get_healthy_endpoints()
+        if endpoints:
+            caps = derive_available_capabilities(endpoints)
+            available_industries = caps.get("available_industries")  # None = all
+            available_brands     = caps.get("available_brands")      # None = all
+    except Exception:
+        pass  # silently fall back to full enum lists
+
+    industry_values = [e.value for e in Industry]
+    brand_values    = [e.value for e in Brand]
+
+    if available_industries is not None:
+        industry_values = [v for v in industry_values if v in available_industries]
+    if available_brands is not None:
+        brand_values = [v for v in brand_values if v in available_brands]
+
     return {
         "intents": [
             {"value": e.value, "description": _INTENT_DESCRIPTIONS.get(e.value, "")}
             for e in Intent
         ],
         "regions": [{"value": e.value} for e in Region],
-        "industries": [{"value": e.value} for e in Industry],
-        "brands": [{"value": e.value} for e in Brand],
+        "industries": [{"value": v} for v in industry_values],
+        "brands": [{"value": v} for v in brand_values],
         "data_sources": [{"value": e.value} for e in DataSource],
         "priorities": [
             {"value": e.value, "weight": e.weight}

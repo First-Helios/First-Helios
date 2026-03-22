@@ -161,6 +161,16 @@ def init_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # ── Endpoint health monitor — every 4 hours ───────────────────
+    scheduler.add_job(
+        _run_endpoint_health_check,
+        "interval",
+        hours=4,
+        id="endpoint_health_check",
+        name="API Endpoint Health Monitor",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
@@ -377,3 +387,37 @@ def _run_discovery_scan() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] Discovery scan failed: %s", e)
+
+
+def _run_endpoint_health_check() -> None:
+    """Scheduled job: Probe all live API endpoints and update health state.
+
+    Runs every 4 hours.  Endpoints that fail ENDPOINT_FAILURE_THRESHOLD
+    consecutive probes are marked inactive and excluded from the next
+    OpenClaw session prompt.  Recovered endpoints are automatically re-activated.
+    """
+    try:
+        from backend.endpoint_catalog import verify_all_endpoints
+
+        logger.info("[Scheduler] Running endpoint health check")
+        results = verify_all_endpoints(skip_recently_verified_hours=4.0)
+
+        for ep in results.get("deactivated", []):
+            logger.warning(
+                "[Scheduler] Endpoint DEACTIVATED: %s/%s — %s",
+                ep["adapter_name"], ep["intent"], ep.get("reason", "?"),
+            )
+        for ep in results.get("recovered", []):
+            logger.info(
+                "[Scheduler] Endpoint RECOVERED: %s/%s",
+                ep["adapter_name"], ep["intent"],
+            )
+
+        logger.info(
+            "[Scheduler] Endpoint health check complete: total=%d checked=%d skipped=%d "
+            "deactivated=%d recovered=%d",
+            results["total"], results["checked"], results["skipped"],
+            len(results.get("deactivated", [])), len(results.get("recovered", [])),
+        )
+    except Exception as e:
+        logger.error("[Scheduler] Endpoint health check failed: %s", e)

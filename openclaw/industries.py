@@ -39,6 +39,10 @@ class IndustryDimension:
     poi_search_terms: tuple[str, ...]       # for finding local competitors
     sentiment_keywords: tuple[str, ...]     # for Reddit / review sentiment
 
+    # Common synonyms / alternate names for this industry — used to map
+    # unrecognised user/model terms back to the canonical key
+    aliases: tuple[str, ...] = ()
+
     # BLS NAICS codes to pull wage/employment data
     naics_codes: tuple[str, ...] = ()
 
@@ -73,6 +77,7 @@ COFFEE_CAFE = _register(IndustryDimension(
     key="coffee_cafe",
     display_name="Coffee & Café",
     description="Coffee shops, tea houses, bakery cafés — where local roasters compete with Starbucks",
+    aliases=("coffee", "cafe", "cafes", "coffee shop", "tea", "espresso", "roastery"),
     job_search_terms=(
         "barista", "coffee", "cafe", "shift supervisor",
         "roaster", "tea", "espresso", "bakery cafe",
@@ -99,6 +104,7 @@ FAST_FOOD = _register(IndustryDimension(
     key="fast_food",
     display_name="Fast Food & QSR",
     description="Quick-service restaurants — where local taco trucks and burger joints compete with chains",
+    aliases=("qsr", "quick service", "fast food restaurant", "burger", "drive thru", "drive-thru", "drive through"),
     job_search_terms=(
         "crew member", "team member", "cashier", "drive thru",
         "shift lead", "cook", "food prep", "fast food",
@@ -125,6 +131,7 @@ FULL_SERVICE_RESTAURANT = _register(IndustryDimension(
     key="full_service_restaurant",
     display_name="Full Service Restaurants",
     description="Sit-down dining — where local restaurants compete with Applebee's, Chili's, etc.",
+    aliases=("restaurant", "dining", "sit down", "sit-down", "full service", "casual dining", "bar and grill"),
     job_search_terms=(
         "server", "waiter", "waitress", "host", "hostess",
         "line cook", "prep cook", "dishwasher", "bartender",
@@ -153,6 +160,7 @@ RETAIL_GENERAL = _register(IndustryDimension(
     key="retail_general",
     display_name="Retail General Merchandise",
     description="Big box and department stores — where local shops compete with Target, Walmart, etc.",
+    aliases=("retail", "big box", "department store", "general merchandise", "variety store"),
     job_search_terms=(
         "retail associate", "cashier", "stocker", "sales floor",
         "team lead", "department manager", "inventory",
@@ -178,6 +186,7 @@ RETAIL_GROCERY = _register(IndustryDimension(
     key="retail_grocery",
     display_name="Grocery & Supermarket",
     description="Grocery stores — where local co-ops and markets compete with HEB, Kroger, etc.",
+    aliases=("grocery", "supermarket", "food market", "grocery store", "market"),
     job_search_terms=(
         "grocery clerk", "produce", "deli", "bakery",
         "butcher", "cashier", "stock clerk", "grocery",
@@ -205,6 +214,7 @@ HEALTHCARE_CLINIC = _register(IndustryDimension(
     key="healthcare_clinic",
     display_name="Healthcare Clinics & Urgent Care",
     description="Walk-in clinics and urgent care — where local practices compete with CVS MinuteClinic, etc.",
+    aliases=("healthcare", "clinic", "urgent care", "medical", "walk-in", "walk in clinic", "doctor", "health"),
     job_search_terms=(
         "medical assistant", "nurse", "RN", "LVN", "CNA",
         "front desk medical", "phlebotomist", "x-ray tech",
@@ -231,6 +241,7 @@ PHARMACY = _register(IndustryDimension(
     key="pharmacy",
     display_name="Pharmacy & Drugstore",
     description="Pharmacies — where local pharmacies compete with CVS, Walgreens, etc.",
+    aliases=("drugstore", "drug store", "rx", "pharmacist", "compounding"),
     job_search_terms=(
         "pharmacist", "pharmacy tech", "pharmacy technician",
         "pharmacy clerk", "pharmacy manager",
@@ -256,6 +267,7 @@ ACCOMMODATION = _register(IndustryDimension(
     key="accommodation",
     display_name="Hotels & Accommodation",
     description="Hotels, motels, B&Bs — where local lodging competes with Marriott, Hilton, etc.",
+    aliases=("hotel", "hotels", "motel", "lodging", "hospitality", "inn", "bed and breakfast", "bnb", "resort"),
     job_search_terms=(
         "front desk", "housekeeper", "housekeeping",
         "night auditor", "hotel manager", "concierge",
@@ -283,6 +295,7 @@ FITNESS = _register(IndustryDimension(
     key="fitness_wellness",
     display_name="Fitness & Wellness",
     description="Gyms, yoga studios, spas — where local studios compete with Planet Fitness, LA Fitness",
+    aliases=("fitness", "gym", "wellness", "yoga", "pilates", "crossfit", "health club", "spa"),
     job_search_terms=(
         "personal trainer", "fitness instructor", "gym attendant",
         "yoga instructor", "front desk gym", "spin instructor",
@@ -310,6 +323,7 @@ CHILDCARE = _register(IndustryDimension(
     key="childcare",
     display_name="Childcare & Early Education",
     description="Daycares and preschools — where local centers compete with KinderCare, Bright Horizons",
+    aliases=("daycare", "day care", "preschool", "early education", "early childhood", "nursery", "after school"),
     job_search_terms=(
         "daycare teacher", "preschool teacher", "childcare worker",
         "early childhood", "infant teacher", "toddler teacher",
@@ -338,6 +352,7 @@ HAIR_BEAUTY = _register(IndustryDimension(
     key="hair_beauty",
     display_name="Hair & Beauty Services",
     description="Hair salons, barbershops, beauty services — where independent stylists and shop owners compete with Great Clips, Supercuts, Sport Clips. Local owners often pay better (booth rent vs commission) but lack recruiting reach.",
+    aliases=("hair", "salon", "barber", "beauty", "barbershop", "hair salon", "cosmetology", "nail", "esthetician"),
     job_search_terms=(
         "hair stylist", "hairdresser", "barber", "cosmetologist",
         "salon manager", "colorist", "shampoo assistant",
@@ -370,6 +385,7 @@ AUTO_REPAIR = _register(IndustryDimension(
     key="auto_repair",
     display_name="Auto Repair & Maintenance",
     description="Oil change shops, tire centers, general repair — where independent mechanics and local shops compete with Jiffy Lube, Midas, Firestone. Local shops often pay significantly more for skilled techs but can't recruit against franchise ad budgets.",
+    aliases=("mechanics", "mechanic", "auto", "automotive", "car repair", "car shop", "garage", "oil change", "tire", "auto service"),
     job_search_terms=(
         "auto mechanic", "automotive technician", "lube tech",
         "oil change technician", "tire technician", "auto tech",
@@ -404,6 +420,7 @@ HVAC_SKILLED_TRADES = _register(IndustryDimension(
     key="hvac_skilled_trades",
     display_name="HVAC & Skilled Trades",
     description="Heating, cooling, plumbing, electrical — where local contractors compete with franchise service chains like Service Experts, Aire Serv, Mr. Electric. Skilled tradespeople are in extreme demand; local shops often pay $5-15/hr more but have zero recruiting presence.",
+    aliases=("hvac", "plumber", "electrician", "skilled trades", "trades", "plumbing", "electrical", "contractor", "heating", "cooling", "air conditioning"),
     job_search_terms=(
         "HVAC technician", "HVAC installer", "HVAC service tech",
         "plumber", "electrician", "maintenance technician",
