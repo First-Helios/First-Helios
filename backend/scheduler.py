@@ -150,6 +150,45 @@ def init_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # ── QCEW ground-truth — monthly 1st at 7am ──────────────────
+    qcew_cron = sched_cfg.get("qcew", {}).get("cron", {})
+    scheduler.add_job(
+        _run_qcew,
+        "cron",
+        day=qcew_cron.get("day", 1),
+        hour=qcew_cron.get("hour", 7),
+        minute=qcew_cron.get("minute", 0),
+        id="qcew",
+        name="QCEW Establishment Data",
+        replace_existing=True,
+    )
+
+    # ── Census CBP — monthly Monday 8am ──────────────────────────
+    cbp_cron = sched_cfg.get("cbp", {}).get("cron", {})
+    scheduler.add_job(
+        _run_cbp,
+        "cron",
+        day_of_week=cbp_cron.get("day_of_week", "mon"),
+        hour=cbp_cron.get("hour", 8),
+        minute=cbp_cron.get("minute", 0),
+        id="cbp",
+        name="Census CBP ZIP Establishments",
+        replace_existing=True,
+    )
+
+    # ── Baseline recompute — weekly Sunday 4am ───────────────────
+    baseline_cron = sched_cfg.get("baseline_recompute", {}).get("cron", {})
+    scheduler.add_job(
+        _run_baseline_recompute,
+        "cron",
+        day_of_week=baseline_cron.get("day_of_week", "sun"),
+        hour=baseline_cron.get("hour", 4),
+        minute=baseline_cron.get("minute", 0),
+        id="baseline_recompute",
+        name="Labor Market Baseline Recompute",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
@@ -330,3 +369,71 @@ def _run_osm() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] OSM job failed: %s", e)
+
+
+def _run_qcew() -> None:
+    """Scheduled job: QCEW county-level establishment & employment data.
+
+    Only fetches in months when new quarterly data is expected
+    (Jan, Apr, Jul, Oct — approximately 6 months after the quarter ends).
+    """
+    try:
+        from datetime import datetime
+        from scrapers.qcew_adapter import scrape_qcew
+
+        # Check if this is an active month for QCEW
+        active_months = [1, 4, 7, 10]
+        current_month = datetime.utcnow().month
+        if current_month not in active_months:
+            logger.info("[Scheduler] QCEW: skipping (month %d not in active months)", current_month)
+            return
+
+        logger.info("[Scheduler] Running QCEW establishment data fetch")
+        signals = scrape_qcew(region="austin_tx")
+        logger.info("[Scheduler] QCEW: %d signals", len(signals))
+
+        # Recompute baselines after fresh ground-truth data
+        if signals:
+            _run_baseline_recompute()
+
+    except Exception as e:
+        logger.error("[Scheduler] QCEW job failed: %s", e)
+
+
+def _run_cbp() -> None:
+    """Scheduled job: Census CBP ZIP-level establishment data.
+
+    Annual data — only worth checking around April each year.
+    """
+    try:
+        from datetime import datetime
+        from scrapers.cbp_adapter import scrape_cbp
+
+        active_months = [4]
+        current_month = datetime.utcnow().month
+        if current_month not in active_months:
+            logger.info("[Scheduler] CBP: skipping (month %d not in active months)", current_month)
+            return
+
+        logger.info("[Scheduler] Running Census CBP fetch")
+        signals = scrape_cbp(region="austin_tx")
+        logger.info("[Scheduler] CBP: %d signals", len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] CBP job failed: %s", e)
+
+
+def _run_baseline_recompute() -> None:
+    """Scheduled job: Recompute labor market baselines from ground-truth data."""
+    try:
+        from backend.baseline import compute_baselines
+
+        logger.info("[Scheduler] Recomputing labor market baselines")
+        results = compute_baselines(region="austin_tx")
+        logger.info(
+            "[Scheduler] Baselines: %d NAICS codes computed",
+            len(results),
+        )
+
+    except Exception as e:
+        logger.error("[Scheduler] Baseline recompute failed: %s", e)

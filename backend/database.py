@@ -18,6 +18,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
@@ -205,6 +206,304 @@ class WageIndex(Base):
             "source": self.source,
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
             "source_url": self.source_url,
+        }
+
+
+class QCEWRecord(Base):
+    """County-level establishment & employment from BLS QCEW.
+
+    Quarterly Census of Employment & Wages — the authoritative
+    denominator for all posting-based metrics.  Updated quarterly
+    with ~6 month lag.
+    """
+
+    __tablename__ = "qcew_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fips_code = Column(String(5), nullable=False, index=True)  # county FIPS
+    naics_code = Column(String(6), nullable=False, index=True)
+    naics_title = Column(String, nullable=True)
+    year = Column(Integer, nullable=False)
+    quarter = Column(Integer, nullable=False)  # 1-4
+    ownership_code = Column(String(2), default="5")  # 5 = private
+    establishments = Column(Integer, nullable=True)
+    month1_employment = Column(Integer, nullable=True)
+    month2_employment = Column(Integer, nullable=True)
+    month3_employment = Column(Integer, nullable=True)
+    total_wages = Column(Float, nullable=True)
+    avg_weekly_wage = Column(Float, nullable=True)
+    avg_annual_pay = Column(Float, nullable=True)
+    region = Column(String, nullable=True, index=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "fips_code", "naics_code", "year", "quarter", "ownership_code",
+            name="uq_qcew_record",
+        ),
+    )
+
+    @property
+    def avg_employment(self) -> float | None:
+        """Average employment across the 3 months of the quarter."""
+        vals = [v for v in [self.month1_employment, self.month2_employment, self.month3_employment] if v]
+        return sum(vals) / len(vals) if vals else None
+
+    @property
+    def avg_employees_per_establishment(self) -> float | None:
+        emp = self.avg_employment
+        if emp and self.establishments:
+            return emp / self.establishments
+        return None
+
+    def to_dict(self) -> dict:
+        return {
+            "fips_code": self.fips_code,
+            "naics_code": self.naics_code,
+            "naics_title": self.naics_title,
+            "year": self.year,
+            "quarter": self.quarter,
+            "establishments": self.establishments,
+            "avg_employment": self.avg_employment,
+            "avg_weekly_wage": self.avg_weekly_wage,
+            "avg_annual_pay": self.avg_annual_pay,
+            "avg_employees_per_establishment": self.avg_employees_per_establishment,
+            "region": self.region,
+            "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None,
+        }
+
+
+class CBPRecord(Base):
+    """ZIP-level establishment counts from Census County Business Patterns.
+
+    Annual release, ~18 month lag.  Gives sub-metro geographic granularity
+    for establishment density and employment.
+    """
+
+    __tablename__ = "cbp_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    zip_code = Column(String(5), nullable=False, index=True)
+    naics_code = Column(String(6), nullable=False, index=True)
+    year = Column(Integer, nullable=False)
+    establishments = Column(Integer, nullable=True)
+    employment = Column(Integer, nullable=True)
+    employment_noise_flag = Column(String(1), nullable=True)  # Census noise flag
+    annual_payroll_k = Column(Float, nullable=True)  # in thousands
+    region = Column(String, nullable=True, index=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "zip_code", "naics_code", "year",
+            name="uq_cbp_record",
+        ),
+    )
+
+    @property
+    def avg_employees_per_establishment(self) -> float | None:
+        if self.employment and self.establishments:
+            return self.employment / self.establishments
+        return None
+
+    def to_dict(self) -> dict:
+        return {
+            "zip_code": self.zip_code,
+            "naics_code": self.naics_code,
+            "year": self.year,
+            "establishments": self.establishments,
+            "employment": self.employment,
+            "annual_payroll_k": self.annual_payroll_k,
+            "avg_employees_per_establishment": self.avg_employees_per_establishment,
+            "region": self.region,
+        }
+
+
+class JOLTSRecord(Base):
+    """National/regional job openings & turnover from BLS JOLTS.
+
+    Gives expected turnover rate by industry — the benchmark that
+    distinguishes normal replacement hiring from staffing stress.
+    """
+
+    __tablename__ = "jolts_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    series_id = Column(String, nullable=False)
+    series_description = Column(String, nullable=True)
+    metric = Column(String, nullable=False)  # quits_rate, openings_rate, hires_rate, separations_rate
+    industry_code = Column(String, nullable=True)  # NAICS-like
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)  # 1-12
+    value = Column(Float, nullable=False)  # rate as percentage
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "series_id", "year", "month",
+            name="uq_jolts_record",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "series_id": self.series_id,
+            "metric": self.metric,
+            "industry_code": self.industry_code,
+            "year": self.year,
+            "month": self.month,
+            "value": self.value,
+        }
+
+
+class OEWSRecord(Base):
+    """MSA-level occupation employment & wages from BLS OEWS.
+
+    Maps SOC occupation codes to employment counts and wage percentiles.
+    """
+
+    __tablename__ = "oews_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    area_code = Column(String, nullable=False, index=True)  # MSA FIPS
+    area_title = Column(String, nullable=True)
+    occ_code = Column(String(7), nullable=False, index=True)  # SOC code e.g. 35-3023
+    occ_title = Column(String, nullable=True)
+    naics_code = Column(String(6), nullable=True)
+    employment = Column(Integer, nullable=True)
+    wage_mean_hourly = Column(Float, nullable=True)
+    wage_median_hourly = Column(Float, nullable=True)
+    wage_10pct = Column(Float, nullable=True)
+    wage_25pct = Column(Float, nullable=True)
+    wage_75pct = Column(Float, nullable=True)
+    wage_90pct = Column(Float, nullable=True)
+    year = Column(Integer, nullable=False)
+    region = Column(String, nullable=True, index=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "area_code", "occ_code", "year",
+            name="uq_oews_record",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "area_code": self.area_code,
+            "area_title": self.area_title,
+            "occ_code": self.occ_code,
+            "occ_title": self.occ_title,
+            "employment": self.employment,
+            "wage_mean_hourly": self.wage_mean_hourly,
+            "wage_median_hourly": self.wage_median_hourly,
+            "year": self.year,
+            "region": self.region,
+        }
+
+
+class LAUSRecord(Base):
+    """County-level unemployment from BLS Local Area Unemployment Statistics.
+
+    Monthly release with ~2 month lag.  Measures labor market tightness.
+    """
+
+    __tablename__ = "laus_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fips_code = Column(String(5), nullable=False, index=True)
+    area_title = Column(String, nullable=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    labor_force = Column(Integer, nullable=True)
+    employed = Column(Integer, nullable=True)
+    unemployed = Column(Integer, nullable=True)
+    unemployment_rate = Column(Float, nullable=True)
+    region = Column(String, nullable=True, index=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "fips_code", "year", "month",
+            name="uq_laus_record",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "fips_code": self.fips_code,
+            "area_title": self.area_title,
+            "year": self.year,
+            "month": self.month,
+            "labor_force": self.labor_force,
+            "unemployment_rate": self.unemployment_rate,
+        }
+
+
+class LaborMarketBaseline(Base):
+    """Pre-computed baseline metrics from ground-truth sources.
+
+    Combines QCEW, JOLTS, OEWS, and LAUS into the denominators
+    and benchmarks that the scoring engine needs.  Recomputed after
+    each ground-truth data fetch.
+    """
+
+    __tablename__ = "labor_market_baseline"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    region = Column(String, nullable=False, index=True)
+    naics_code = Column(String(6), nullable=False)
+    period_label = Column(String, nullable=False)  # e.g. "2025-Q3" or "2025-11"
+
+    # From QCEW
+    establishment_count = Column(Integer, nullable=True)
+    total_employment = Column(Integer, nullable=True)
+    avg_weekly_wage = Column(Float, nullable=True)
+    avg_employees_per_establishment = Column(Float, nullable=True)
+
+    # From JOLTS
+    expected_quits_rate = Column(Float, nullable=True)  # monthly %
+    expected_openings_rate = Column(Float, nullable=True)
+    expected_monthly_separations = Column(Integer, nullable=True)
+
+    # From OEWS
+    occupation_median_wage = Column(Float, nullable=True)
+    occupation_employment = Column(Integer, nullable=True)
+
+    # From LAUS
+    unemployment_rate = Column(Float, nullable=True)
+    labor_force = Column(Integer, nullable=True)
+
+    # Derived metrics
+    hiring_intensity_baseline = Column(Float, nullable=True)  # postings / establishment at normal
+    seasonal_index = Column(Float, nullable=True)  # month-over-month ratio vs annual avg
+
+    computed_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "region", "naics_code", "period_label",
+            name="uq_labor_baseline",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "region": self.region,
+            "naics_code": self.naics_code,
+            "period_label": self.period_label,
+            "establishment_count": self.establishment_count,
+            "total_employment": self.total_employment,
+            "avg_weekly_wage": self.avg_weekly_wage,
+            "avg_employees_per_establishment": self.avg_employees_per_establishment,
+            "expected_quits_rate": self.expected_quits_rate,
+            "expected_openings_rate": self.expected_openings_rate,
+            "expected_monthly_separations": self.expected_monthly_separations,
+            "occupation_median_wage": self.occupation_median_wage,
+            "unemployment_rate": self.unemployment_rate,
+            "hiring_intensity_baseline": self.hiring_intensity_baseline,
+            "seasonal_index": self.seasonal_index,
+            "computed_at": self.computed_at.isoformat() if self.computed_at else None,
         }
 
 

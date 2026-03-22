@@ -9,6 +9,7 @@ Usage:
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +136,76 @@ def get_http_config() -> dict[str, Any]:
 def get_bls_series() -> dict[str, dict[str, str]]:
     """Return BLS time series IDs and descriptions."""
     return _load()["bls_series"]
+
+
+def get_bls_series_by_category(category: str) -> dict[str, dict[str, str]]:
+    """Return BLS series filtered by category (ces, jolts, laus)."""
+    return {
+        k: v for k, v in get_bls_series().items()
+        if v.get("category") == category
+    }
+
+
+# ── QCEW helpers ─────────────────────────────────────────────────────────────
+
+def get_qcew_config() -> dict[str, Any]:
+    """Return QCEW configuration (county FIPS, NAICS codes, ownership)."""
+    return _load()["qcew"]
+
+
+def get_qcew_county_fips() -> dict[str, str]:
+    """Return mapping of county name → FIPS code."""
+    return _load()["qcew"]["county_fips"]
+
+
+def get_qcew_naics_codes() -> dict[str, str]:
+    """Return mapping of internal key → NAICS code."""
+    return _load()["qcew"]["naics_codes"]
+
+
+# ── Census CBP helpers ───────────────────────────────────────────────────────
+
+def get_cbp_config() -> dict[str, Any]:
+    """Return Census CBP configuration."""
+    cfg = _load()["cbp"]
+    # Allow env var override for API key
+    if cfg.get("api_key") is None:
+        cfg["api_key"] = os.environ.get("CBP_API_KEY")
+    return cfg
+
+
+def get_cbp_zip_codes() -> list[str]:
+    """Return list of ZIP codes for CBP queries."""
+    return _load()["cbp"]["zip_codes"]
+
+
+def get_cbp_naics_codes() -> dict[str, str]:
+    """Return CBP NAICS code mapping."""
+    return _load()["cbp"]["naics_codes"]
+
+
+# ── OEWS helpers ─────────────────────────────────────────────────────────────
+
+def get_oews_config() -> dict[str, Any]:
+    """Return OEWS configuration (area code, occupations)."""
+    return _load()["oews"]
+
+
+def get_oews_occupations() -> dict[str, dict[str, str]]:
+    """Return OEWS occupation definitions."""
+    return _load()["oews"]["occupations"]
+
+
+# ── Scoring baseline & seasonal helpers ──────────────────────────────────────
+
+def get_baseline_config() -> dict[str, Any]:
+    """Return baseline indexing configuration."""
+    return _load()["scoring"].get("baseline", {})
+
+
+def get_seasonal_config() -> dict[str, Any]:
+    """Return seasonal adjustment configuration."""
+    return _load()["scoring"].get("seasonal", {})
 
 
 # ── Scheduler helpers ────────────────────────────────────────────────────────

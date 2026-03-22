@@ -146,22 +146,181 @@ http:
   user_agent: "ChainStaffingTracker/1.0"
 
 bls_series:
+  # ── CES (Current Employment Statistics) — existing ─────────────
   austin_food_service_employment:
     series_id: "SMU48124207072200001"
     description: "Austin-Round Rock MSA, Food Services and Drinking Places, All Employees (thousands)"
+    category: "ces"
   austin_leisure_hospitality_employment:
     series_id: "SMU48124207000000001"
     description: "Austin-Round Rock MSA, Leisure and Hospitality, All Employees (thousands)"
+    category: "ces"
   austin_accommodation_food_employment:
     series_id: "SMU48124207072000001"
     description: "Austin-Round Rock MSA, Accommodation and Food Services, All Employees (thousands)"
+    category: "ces"
   national_food_service_hourly:
     series_id: "CEU7072200003"
     description: "National Food Services and Drinking Places, Average Hourly Earnings (all employees)"
+    category: "ces"
   national_food_service_employment:
     series_id: "CEU7072200001"
     description: "National Food Services and Drinking Places, All Employees (thousands)"
+    category: "ces"
 
+  # ── JOLTS (Job Openings & Labor Turnover) ──────────────────────
+  jolts_accom_food_quits:
+    series_id: "JTS720000000000000QUR"
+    description: "Accommodation & Food Services, Quits Rate (seasonally adjusted)"
+    category: "jolts"
+    metric: "quits_rate"
+    industry_code: "72"
+  jolts_accom_food_openings:
+    series_id: "JTS720000000000000JOR"
+    description: "Accommodation & Food Services, Job Openings Rate (seasonally adjusted)"
+    category: "jolts"
+    metric: "openings_rate"
+    industry_code: "72"
+  jolts_accom_food_hires:
+    series_id: "JTS720000000000000HIR"
+    description: "Accommodation & Food Services, Hires Rate (seasonally adjusted)"
+    category: "jolts"
+    metric: "hires_rate"
+    industry_code: "72"
+  jolts_accom_food_separations:
+    series_id: "JTS720000000000000TSR"
+    description: "Accommodation & Food Services, Total Separations Rate (seasonally adjusted)"
+    category: "jolts"
+    metric: "separations_rate"
+    industry_code: "72"
+
+  # ── LAUS (Local Area Unemployment Statistics) ──────────────────
+  laus_travis_county_unemployment:
+    series_id: "LAUCN484530000000003"
+    description: "Travis County TX, Unemployment Rate"
+    category: "laus"
+    fips_code: "48453"
+  laus_williamson_county_unemployment:
+    series_id: "LAUCN484910000000003"
+    description: "Williamson County TX, Unemployment Rate"
+    category: "laus"
+    fips_code: "48491"
+  laus_hays_county_unemployment:
+    series_id: "LAUCN482090000000003"
+    description: "Hays County TX, Unemployment Rate"
+    category: "laus"
+    fips_code: "48209"
+
+# ── QCEW Configuration ──────────────────────────────────────────────────────
+qcew:
+  # County FIPS codes covering the Austin MSA
+  county_fips:
+    travis: "48453"
+    williamson: "48491"
+    hays: "48209"
+    bastrop: "48021"
+    caldwell: "48055"
+  # NAICS codes to fetch from QCEW
+  naics_codes:
+    coffee_shops: "722515"        # Snack and Nonalcoholic Beverage Bars
+    limited_service_restaurants: "722513"
+    full_service_restaurants: "722511"
+    food_services_total: "7225"   # Restaurants and Other Eating Places
+    accommodation_food: "72"      # Accommodation and Food Services
+  ownership_code: "5"  # private sector
+
+# ── Census CBP Configuration ────────────────────────────────────────────────
+cbp:
+  # Census API key (free, register at api.census.gov/data/key_signup.html)
+  api_key: null  # set via CBP_API_KEY env var if null
+  # ZIP codes covering the Austin metro area core
+  zip_codes:
+    - "78701"  # Downtown Austin
+    - "78702"  # East Austin
+    - "78703"  # Tarrytown/Clarksville
+    - "78704"  # South Austin
+    - "78705"  # UT area
+    - "78745"  # South Austin/Manchaca
+    - "78748"  # South Austin
+    - "78749"  # Southwest Austin
+    - "78750"  # NW Austin/Jollyville
+    - "78751"  # Hyde Park
+    - "78752"  # North Loop
+    - "78753"  # N Austin/Rundberg
+    - "78756"  # Brentwood/Rosedale
+    - "78757"  # Crestview
+    - "78758"  # N Austin
+    - "78759"  # Great Hills/Arboretum
+    - "78660"  # Pflugerville
+    - "78664"  # Round Rock
+    - "78665"  # Round Rock
+    - "78681"  # Round Rock/Brushy Creek
+    - "78634"  # Hutto
+    - "78641"  # Leander
+    - "78613"  # Cedar Park
+    - "78717"  # Brushy Creek
+    - "78626"  # Georgetown
+  naics_codes:
+    coffee_shops: "722515"
+    limited_service_restaurants: "722513"
+    full_service_restaurants: "722511"
+
+# ── OEWS series (via BLS OEWS flat files or API) ────────────────────────────
+oews:
+  area_code: "12420"  # Austin-Round Rock-Georgetown MSA
+  occupations:
+    food_prep_serving:
+      soc_code: "35-0000"
+      title: "Food Preparation and Serving Related"
+    fast_food_counter:
+      soc_code: "35-3023"
+      title: "Fast Food and Counter Workers"
+    food_prep_workers:
+      soc_code: "35-2021"
+      title: "Food Preparation Workers"
+    first_line_food_supervisors:
+      soc_code: "35-1012"
+      title: "First-Line Supervisors of Food Preparation and Serving Workers"
+    baristas:
+      soc_code: "35-3021"
+      title: "Combined Food Preparation and Serving Workers, Including Fast Food"
+
+# ── Economically-grounded scoring (replaces ad-hoc weights) ─────────────────
+scoring:
+  weights:
+    demand_pressure: 0.35         # postings per establishment / regional baseline
+    wage_competitiveness: 0.25    # chain wage vs market wage
+    churn_signal: 0.25            # posting velocity vs expected turnover (JOLTS)
+    qualitative: 0.15             # sentiment (Reddit + Google Reviews)
+
+  posting_age_decay:
+    fresh_days: 7
+    stale_days: 90
+
+  tiers:
+    critical:
+      min_percentile: 67
+      label: "critical"
+    elevated:
+      min_percentile: 33
+      label: "elevated"
+    adequate:
+      min_percentile: 0
+      label: "adequate"
+
+  # Baseline indexing — track metrics relative to a reference period
+  baseline:
+    reference_period: "2025-Q3"   # first full quarter of data collection
+    reindex_on_new_qcew: true     # recompute baselines when QCEW data arrives
+
+  # Seasonal adjustment — month-over-month indices
+  seasonal:
+    enabled: true
+    # Typical hiring surge months for food service (BLS historical)
+    peak_months: [5, 6, 7]        # May-Jul summer surge
+    trough_months: [1, 2]         # Jan-Feb slowdown
+
+# ── Scheduler ────────────────────────────────────────────────────────────────
 scheduler:
   careers_api:
     cron:
@@ -182,4 +341,34 @@ scheduler:
     cron:
       day_of_week: "mon"
       hour: 6
+      minute: 0
+  # Ground-truth data fetches (match government release cycles)
+  qcew:
+    cron:
+      day: 1            # 1st of the month
+      hour: 7
+      minute: 0
+    # Only check in months after quarterly release: Jan, Apr, Jul, Oct
+    active_months: [1, 4, 7, 10]
+  cbp:
+    cron:
+      day_of_week: "mon"
+      hour: 8
+      minute: 0
+    # Annual check — only worth trying April each year
+    active_months: [4]
+  jolts:
+    cron:
+      day_of_week: "mon"
+      hour: 6
+      minute: 30
+  laus:
+    cron:
+      day_of_week: "mon"
+      hour: 6
+      minute: 45
+  baseline_recompute:
+    cron:
+      day_of_week: "sun"
+      hour: 4
       minute: 0

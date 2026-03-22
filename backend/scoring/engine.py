@@ -1,40 +1,56 @@
 """
 Composite scoring engine for ChainStaffingTracker.
 
-Pulls signals from tracker.db, delegates to sub-score modules
-(careers, sentiment, wage), and writes final Score rows.
+Economically grounded scoring that uses government labor market data
+as denominators and benchmarks, not arbitrary weighted averages.
 
-Weights are configurable in config/chains.yaml under scoring.weights:
-  careers_api: 40%
-  job_boards:  35%
-  sentiment:   25%
+Score formula:
+  Composite = w₁·demand_pressure + w₂·wage_competitiveness + w₃·churn_signal + w₄·qualitative
 
-If a source has no data for a store, its weight is redistributed
-proportionally to available sources.
+Where:
+  demand_pressure     = (postings per establishment) / regional baseline
+  wage_competitiveness = (market median - chain wage) / market median
+  churn_signal         = posting velocity / expected turnover (from JOLTS)
+  qualitative          = sentiment score (Reddit + Google Reviews)
 
-Depends on: backend.database, backend.scoring.{careers, sentiment, wage}, config.loader
+Each component has an economic interpretation.  If ground-truth data
+(QCEW, JOLTS) is not yet available, falls back to the previous
+percentile-based approach.
+
+Weights are in config/chains.yaml under scoring.weights:
+  demand_pressure:      35%
+  wage_competitiveness: 25%
+  churn_signal:         25%
+  qualitative:          15%
+
+Depends on: backend.database, backend.baseline, backend.scoring.{careers, sentiment, wage}
 Called by: backend/scheduler.py, server.py (after ingestion)
 """
 
 import logging
 from datetime import datetime
 
-from backend.database import Score, Signal, Store, WageIndex, get_session, init_db
-from backend.scoring.careers import compute_careers_score
+from backend.database import (
+    Score,
+    Signal,
+    Store,
+    WageIndex,
+    get_session,
+    init_db,
+)
+from backend.scoring.careers import compute_careers_score, weighted_listing_count
 from backend.scoring.sentiment import compute_sentiment_score
 from backend.scoring.wage import compute_wage_score
-from config.loader import get_score_tiers, get_scoring_weights
+from config.loader import get_score_tiers, get_scoring_weights, get_seasonal_config
 
 logger = logging.getLogger(__name__)
 
 
 def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]:
-    """Compute composite scores for all stores in a region.
+    """Compute economically-grounded composite scores for all stores.
 
-    1. Gather signals from tracker.db grouped by store and source.
-    2. Compute sub-scores via careers, sentiment, and wage modules.
-    3. Compute weighted composite score.
-    4. Write Score rows to DB.
+    Uses ground-truth baselines (QCEW establishment counts, JOLTS turnover,
+    OEWS wages) when available, with percentile fallback when not.
 
     Args:
         region: Region key, e.g. 'austin_tx'.
@@ -44,9 +60,10 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
         Mapping of store_num -> {
             'composite': float,
             'tier': str,
-            'careers': dict|None,
-            'sentiment': dict|None,
-            'wage': dict|None,
+            'demand_pressure': dict|None,
+            'wage_competitiveness': dict|None,
+            'churn_signal': dict|None,
+            'qualitative': dict|None,
         }
     """
     engine = init_db()
@@ -68,6 +85,9 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
         store_nums = [s.store_num for s in stores]
         store_map = {s.store_num: s for s in stores}
 
+        # ── Load ground-truth baseline ───────────────────────────────
+        baseline = _load_baseline(region, chain)
+
         # ── Gather signals by store and type ─────────────────────────
         signals = (
             session.query(Signal)
@@ -76,11 +96,8 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
             .all()
         )
 
-        # Group listings (careers_api + jobspy)
         store_listings: dict[str, list[dict]] = {sn: [] for sn in store_nums}
-        # Group sentiment signals
         store_sentiment: dict[str, list[dict]] = {sn: [] for sn in store_nums}
-        # Group wage data
         store_wages: dict[str, dict] = {sn: {} for sn in store_nums}
 
         for sig in signals:
@@ -103,7 +120,6 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
                     "source": sig.source,
                 })
             elif sig.signal_type == "wage":
-                # Keep latest wage data per store
                 if not store_wages[sn]:
                     store_wages[sn] = {
                         "wage_min": meta.get("wage_min"),
@@ -112,13 +128,19 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
                     }
 
         # ── Compute sub-scores ───────────────────────────────────────
-        careers_scores = compute_careers_score(store_listings)
+        # 1. Demand pressure (postings-per-establishment based)
+        demand_scores = _compute_demand_pressure(store_listings, baseline)
 
-        sentiment_scores = compute_sentiment_score(store_sentiment)
-
-        # Get local average wage for wage gap computation
+        # 2. Wage competitiveness
         local_avg = _get_local_avg_wage(session, region, chain)
-        wage_scores = compute_wage_score(store_wages, local_avg)
+        market_median = baseline.get("occupation_median_wage") if baseline else None
+        wage_scores = _compute_wage_competitiveness(store_wages, local_avg, market_median)
+
+        # 3. Churn signal (posting velocity vs expected turnover)
+        churn_scores = _compute_churn_signal(store_listings, baseline)
+
+        # 4. Qualitative (sentiment — unchanged methodology)
+        qualitative_scores = compute_sentiment_score(store_sentiment)
 
         # ── Compute composite ────────────────────────────────────────
         results: dict[str, dict] = {}
@@ -127,33 +149,48 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
             sub_scores: dict[str, float | None] = {}
             available_weights: dict[str, float] = {}
 
-            # Careers (covers both careers_api and job_boards weight)
-            c = careers_scores.get(sn)
-            if c and store_listings.get(sn):
-                # Split careers weight between careers_api and job_boards
-                sub_scores["careers_api"] = c["value"]
-                available_weights["careers_api"] = weights.get("careers_api", 0.4)
-                available_weights["job_boards"] = weights.get("job_boards", 0.35)
-                sub_scores["job_boards"] = c["value"]  # same source for now
-            else:
-                sub_scores["careers_api"] = None
-                sub_scores["job_boards"] = None
+            # Demand pressure
+            dp = demand_scores.get(sn)
+            if dp is not None:
+                sub_scores["demand_pressure"] = dp["value"]
+                available_weights["demand_pressure"] = weights.get("demand_pressure", 0.35)
 
-            # Sentiment
-            s = sentiment_scores.get(sn)
-            if s and store_sentiment.get(sn):
-                sub_scores["sentiment"] = s["value"]
-                available_weights["sentiment"] = weights.get("sentiment", 0.25)
-            else:
-                sub_scores["sentiment"] = None
+            # Wage competitiveness
+            wc = wage_scores.get(sn)
+            if wc is not None:
+                sub_scores["wage_competitiveness"] = wc["value"]
+                available_weights["wage_competitiveness"] = weights.get("wage_competitiveness", 0.25)
 
-            # Compute weighted average with redistribution
+            # Churn signal
+            cs = churn_scores.get(sn)
+            if cs is not None:
+                sub_scores["churn_signal"] = cs["value"]
+                available_weights["churn_signal"] = weights.get("churn_signal", 0.25)
+
+            # Qualitative
+            qs = qualitative_scores.get(sn)
+            if qs and store_sentiment.get(sn):
+                sub_scores["qualitative"] = qs["value"]
+                available_weights["qualitative"] = weights.get("qualitative", 0.15)
+
+            # Weighted average with redistribution
             total_weight = sum(available_weights.values()) or 1.0
             composite = 0.0
             for key, w in available_weights.items():
                 val = sub_scores.get(key)
                 if val is not None:
                     composite += (w / total_weight) * val
+
+            # Apply seasonal adjustment if available
+            seasonal_cfg = get_seasonal_config()
+            if seasonal_cfg.get("enabled") and baseline:
+                seasonal_idx = baseline.get("seasonal_index")
+                if seasonal_idx and seasonal_idx != 0:
+                    # Adjust composite: divide by seasonal index to normalize
+                    # During peak hiring months, raw scores are inflated
+                    composite = composite / seasonal_idx
+
+            composite = max(0.0, min(100.0, composite))
 
             # Determine tier
             tier = "adequate"
@@ -165,18 +202,20 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
             results[sn] = {
                 "composite": round(composite, 2),
                 "tier": tier,
-                "careers": careers_scores.get(sn),
-                "sentiment": sentiment_scores.get(sn),
-                "wage": wage_scores.get(sn),
+                "demand_pressure": demand_scores.get(sn),
+                "wage_competitiveness": wage_scores.get(sn),
+                "churn_signal": churn_scores.get(sn),
+                "qualitative": qualitative_scores.get(sn),
+                "baseline_available": baseline is not None,
             }
 
         # ── Write scores to DB ───────────────────────────────────────
         _write_scores(session, results)
 
         logger.info(
-            "[ScoringEngine] Scored %d stores for region=%s: %s",
-            len(results),
-            region,
+            "[ScoringEngine] Scored %d stores for region=%s (baseline=%s): %s",
+            len(results), region,
+            "yes" if baseline else "no",
             _tier_distribution(results),
         )
         return results
@@ -187,6 +226,219 @@ def compute_all_scores(region: str, chain: str | None = None) -> dict[str, dict]
         return {}
     finally:
         session.close()
+
+
+# ── Sub-score computation ────────────────────────────────────────────────────
+
+def _load_baseline(region: str, chain: str | None) -> dict | None:
+    """Load the latest labor market baseline for the region.
+
+    Maps chain → NAICS code and fetches the corresponding baseline.
+    """
+    try:
+        from backend.baseline import get_latest_baseline
+        from config.loader import get_chain
+
+        # Determine NAICS from chain config
+        naics = "7225"  # default: food services
+        if chain:
+            try:
+                chain_cfg = get_chain(chain)
+                industry = chain_cfg.get("industry", "")
+                # Map industry → NAICS
+                industry_naics = {
+                    "coffee_cafe": "722515",
+                    "fast_food": "722513",
+                    "full_service_restaurant": "722511",
+                    "food_service": "7225",
+                }
+                naics = industry_naics.get(industry, "7225")
+            except (KeyError, TypeError):
+                pass
+
+        baseline = get_latest_baseline(region, naics)
+        if baseline:
+            logger.info(
+                "[ScoringEngine] Loaded baseline: NAICS=%s, est=%s, emp=%s, quits=%.1f%%",
+                naics,
+                baseline.get("establishment_count", "?"),
+                baseline.get("total_employment", "?"),
+                baseline.get("expected_quits_rate", 0) or 0,
+            )
+        return baseline
+
+    except ImportError:
+        logger.debug("[ScoringEngine] baseline module not available — using fallback")
+        return None
+    except Exception as e:
+        logger.warning("[ScoringEngine] Failed to load baseline: %s", e)
+        return None
+
+
+def _compute_demand_pressure(
+    store_listings: dict[str, list[dict]],
+    baseline: dict | None,
+) -> dict[str, dict]:
+    """Compute demand pressure: postings per establishment / regional norm.
+
+    If baseline is available:
+      score = (weighted_listings / establishment_count) / regional_norm × 50
+      Capped at 100.  50 = exactly at norm.  100 = 2× norm.
+
+    Fallback: percentile rank within region (old behavior).
+    """
+    # Compute weighted listing counts
+    listing_counts: dict[str, float] = {}
+    for sn, listings in store_listings.items():
+        listing_counts[sn] = weighted_listing_count(listings)
+
+    establishment_count = None
+    if baseline:
+        establishment_count = baseline.get("establishment_count")
+
+    if establishment_count and establishment_count > 0:
+        # Ground-truth scoring: normalize by establishment count
+        total_listings = sum(listing_counts.values())
+        regional_per_est = total_listings / establishment_count if establishment_count else 0
+
+        scores: dict[str, dict] = {}
+        for sn, count in listing_counts.items():
+            if regional_per_est > 0:
+                # How many times above/below the regional per-establishment rate
+                ratio = count / regional_per_est
+                value = min(100.0, ratio * 50.0)  # 1× = 50, 2× = 100
+            else:
+                value = 50.0 if count > 0 else 0.0
+
+            scores[sn] = {
+                "value": round(value, 2),
+                "weighted_listings": round(count, 2),
+                "regional_per_establishment": round(regional_per_est, 3),
+                "establishment_count": establishment_count,
+                "method": "ground_truth",
+            }
+        return scores
+    else:
+        # Fallback: percentile rank
+        careers_scores = compute_careers_score(store_listings)
+        for sn in careers_scores:
+            careers_scores[sn]["method"] = "percentile_fallback"
+        return careers_scores
+
+
+def _compute_wage_competitiveness(
+    store_wages: dict[str, dict],
+    local_avg: float | None,
+    market_median: float | None,
+) -> dict[str, dict]:
+    """Compute wage competitiveness score.
+
+    Formula: gap_pct = (market_wage - chain_wage) / market_wage × 100
+    Score: 50 + gap_pct (so 50 = at market, 100 = 50% below market)
+    """
+    reference_wage = market_median or local_avg
+
+    scores: dict[str, dict] = {}
+    for sn, wages in store_wages.items():
+        if not wages:
+            continue
+
+        chain_wage = None
+        wmin = wages.get("wage_min")
+        wmax = wages.get("wage_max")
+        if wmin and wmax:
+            chain_wage = (wmin + wmax) / 2.0
+        elif wmin:
+            chain_wage = wmin
+        elif wmax:
+            chain_wage = wmax
+
+        if chain_wage is None:
+            continue
+
+        # Convert yearly to hourly if needed
+        if wages.get("wage_period") == "yearly" and chain_wage > 100:
+            chain_wage = chain_wage / 2080.0
+
+        if reference_wage and reference_wage > 0:
+            gap_pct = ((reference_wage - chain_wage) / reference_wage) * 100.0
+            value = max(0.0, min(100.0, 50.0 + gap_pct))
+        else:
+            value = 50.0  # no reference — neutral
+
+        scores[sn] = {
+            "value": round(value, 2),
+            "chain_wage": round(chain_wage, 2),
+            "market_reference": round(reference_wage, 2) if reference_wage else None,
+            "gap_pct": round(gap_pct, 2) if reference_wage else None,
+            "method": "oews_median" if market_median else ("local_avg" if local_avg else "none"),
+        }
+
+    return scores
+
+
+def _compute_churn_signal(
+    store_listings: dict[str, list[dict]],
+    baseline: dict | None,
+) -> dict[str, dict]:
+    """Compute churn signal: posting velocity vs expected turnover.
+
+    If JOLTS expected separations are available:
+      ratio = active_postings / expected_monthly_separations
+      score = ratio × 50  (1× = 50 = normal, 2× = 100 = 2× expected churn)
+
+    Fallback: just use weighted listing counts as a proxy.
+    """
+    expected_seps = None
+    quits_rate = None
+    if baseline:
+        expected_seps = baseline.get("expected_monthly_separations")
+        quits_rate = baseline.get("expected_quits_rate")
+
+    listing_counts: dict[str, float] = {}
+    for sn, listings in store_listings.items():
+        listing_counts[sn] = weighted_listing_count(listings)
+
+    scores: dict[str, dict] = {}
+
+    if expected_seps and expected_seps > 0:
+        total_listings = sum(listing_counts.values())
+        n_stores = len([c for c in listing_counts.values() if c > 0])
+
+        for sn, count in listing_counts.items():
+            if count == 0:
+                value = 0.0
+            else:
+                # Per-store expected = total separations / total stores
+                per_store_expected = expected_seps / max(n_stores, 1)
+                ratio = count / per_store_expected if per_store_expected > 0 else 1.0
+                value = min(100.0, ratio * 50.0)
+
+            scores[sn] = {
+                "value": round(value, 2),
+                "weighted_listings": round(count, 2),
+                "expected_monthly_separations": expected_seps,
+                "quits_rate": quits_rate,
+                "method": "jolts_benchmark",
+            }
+    else:
+        # Fallback: relative listing count (higher = more churn signal)
+        all_counts = list(listing_counts.values())
+        max_count = max(all_counts) if all_counts else 1.0
+
+        for sn, count in listing_counts.items():
+            if max_count > 0:
+                value = (count / max_count) * 100.0
+            else:
+                value = 0.0
+
+            scores[sn] = {
+                "value": round(value, 2),
+                "weighted_listings": round(count, 2),
+                "method": "relative_fallback",
+            }
+
+    return scores
 
 
 def _get_local_avg_wage(session, region: str, chain: str | None) -> float | None:
@@ -260,8 +512,8 @@ def _write_scores(session, results: dict[str, dict]) -> None:
                     computed_at=now,
                 ))
 
-            # Sub-scores
-            for sub_type in ("careers", "sentiment", "wage"):
+            # Sub-scores (new economically-grounded names)
+            for sub_type in ("demand_pressure", "wage_competitiveness", "churn_signal", "qualitative"):
                 sub = data.get(sub_type)
                 if sub is None:
                     continue
@@ -270,16 +522,17 @@ def _write_scores(session, results: dict[str, dict]) -> None:
                     .filter_by(store_num=store_num, score_type=sub_type)
                     .first()
                 )
+                val = sub["value"] if isinstance(sub, dict) else sub
                 if existing_sub:
-                    existing_sub.value = sub["value"]
-                    existing_sub.tier = sub.get("tier", "unknown")
+                    existing_sub.value = val
+                    existing_sub.tier = sub.get("tier", "unknown") if isinstance(sub, dict) else "unknown"
                     existing_sub.computed_at = now
                 else:
                     session.add(Score(
                         store_num=store_num,
                         score_type=sub_type,
-                        value=sub["value"],
-                        tier=sub.get("tier", "unknown"),
+                        value=val,
+                        tier=sub.get("tier", "unknown") if isinstance(sub, dict) else "unknown",
                         computed_at=now,
                     ))
 
