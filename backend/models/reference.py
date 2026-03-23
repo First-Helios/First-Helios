@@ -24,6 +24,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
@@ -315,6 +316,145 @@ class IndustryTaxonomy(Base):
             "worker_tier": self.worker_tier,
             "upward_mobility": self.upward_mobility,
             "overture_categories": self.overture_categories,
+        }
+
+
+class MobOccupation(Base):
+    """Occupation reference node for the upward mobility graph.
+
+    One row per unique SOC code appearing in the Emsi/Dashboard transition data.
+    Stores occupation metadata, occupational cluster, and pre-aggregated wage
+    trajectory outcomes (3yr/5yr/10yr) from the Dashboard-trajectories dataset.
+
+    Primary join key into the mobility graph:
+      internal_industry → ref_industry_taxonomy.primary_occ_code → soc_code
+      soc_code → mob_transitions.origin_soc / dest_soc
+
+    Source files: Emsi-dataset.dta, Dashboard-transitions-dataset.dta,
+                  Dashboard-trajectories-dataset.dta
+    Populated by: scripts/populate_mobility_data.py
+    """
+
+    __tablename__ = "mob_occupation"
+
+    soc_code = Column(String(10), primary_key=True)   # "35-3023" (2018 SOC / OES format)
+    census_code = Column(Integer, nullable=True, index=True)  # 2002 Census occ code (bridge to trajectories)
+    title = Column(String, nullable=False)             # from Emsi occ_title
+    occ_family_code = Column(Integer, nullable=True)   # 1-12 (Emsi occ_family)
+    occ_family_name = Column(String, nullable=True)    # "Personal Service"
+    cluster_code = Column(Integer, nullable=True)      # 1-14 (Dashboard-transitions Cluster)
+    cluster_name = Column(String, nullable=True)       # "Personal Service"
+    median_hourly_wage = Column(Float, nullable=True)  # Emsi h_median
+    job_zone = Column(Integer, nullable=True)          # O*NET job zone 1-5 (from Dashboard-trajectories)
+    internal_industry = Column(String, nullable=True, index=True)  # primary industry key for this SOC (origin side)
+
+    # Reverse crosswalk — for destinations: which internal_industry keys hire workers in this SOC?
+    # JSON list, e.g. ["healthcare", "nursing_care", "ambulatory_health"]
+    # Enables step 3 of the mobility map: dest_soc → nearby employers
+    # Populated by: exact match on ref_industry_taxonomy.primary_occ_code
+    #               + cluster_name → industry_keys for same-cluster industries
+    dest_industry_keys_json = Column(Text, nullable=True)
+
+    # Pre-aggregated trajectory outcomes (median across workers starting in this occupation)
+    traj_med_wage_growth_3yr  = Column(Float, nullable=True)   # median $ wage growth at 3yr
+    traj_med_wage_growth_5yr  = Column(Float, nullable=True)
+    traj_med_wage_growth_10yr = Column(Float, nullable=True)
+    traj_pct_earn_25plus_3yr  = Column(Float, nullable=True)   # fraction earning >$25/hr at 3yr
+    traj_pct_earn_25plus_5yr  = Column(Float, nullable=True)
+    traj_pct_earn_25plus_10yr = Column(Float, nullable=True)
+    traj_pct_same_cluster_3yr = Column(Float, nullable=True)   # % still in same occ cluster at 3yr
+
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "soc_code": self.soc_code,
+            "census_code": self.census_code,
+            "title": self.title,
+            "occ_family_code": self.occ_family_code,
+            "occ_family_name": self.occ_family_name,
+            "cluster_code": self.cluster_code,
+            "cluster_name": self.cluster_name,
+            "median_hourly_wage": self.median_hourly_wage,
+            "job_zone": self.job_zone,
+            "internal_industry": self.internal_industry,
+            "traj_med_wage_growth_3yr": self.traj_med_wage_growth_3yr,
+            "traj_med_wage_growth_5yr": self.traj_med_wage_growth_5yr,
+            "traj_med_wage_growth_10yr": self.traj_med_wage_growth_10yr,
+            "traj_pct_earn_25plus_3yr": self.traj_pct_earn_25plus_3yr,
+            "traj_pct_earn_25plus_5yr": self.traj_pct_earn_25plus_5yr,
+            "traj_pct_earn_25plus_10yr": self.traj_pct_earn_25plus_10yr,
+            "traj_pct_same_cluster_3yr": self.traj_pct_same_cluster_3yr,
+        }
+
+
+class MobTransition(Base):
+    """Directed edge in the upward mobility graph: origin occupation → destination occupation.
+
+    One row per (origin_soc, dest_soc) pair.  Combines:
+      - Actual transition frequency from Dashboard-transitions (TransitionOrder)
+      - Skill transferability from Emsi ISA dimension deltas
+      - Wage change from Emsi median wage delta
+      - License requirement flag from Emsi
+
+    Query pattern for a store:
+      store.industry → ref_industry_taxonomy.primary_occ_code
+        → mob_transitions WHERE origin_soc = ?
+        → JOIN mob_occupation ON dest_soc
+        → filter/rank by wage_direction, avg_skill_gap, same_cluster
+
+    Source files: Emsi-dataset.dta, Dashboard-transitions-dataset.dta
+    Populated by: scripts/populate_mobility_data.py
+    """
+
+    __tablename__ = "mob_transition"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    origin_soc = Column(String(10), nullable=False, index=True)
+    dest_soc   = Column(String(10), nullable=False, index=True)
+
+    # Transition frequency (1 = most common actual move workers make)
+    transition_order = Column(Integer, nullable=True)
+
+    # Wage outcome
+    wage_change_dollars = Column(Float, nullable=True)   # dest_median - origin_median
+    wage_direction      = Column(Integer, nullable=True) # -1 down / 0 lateral / 1 up
+
+    # Aggregate direction probabilities (from Emsi — distribution across workers who made this move)
+    pct_upward   = Column(Float, nullable=True)
+    pct_lateral  = Column(Float, nullable=True)
+    pct_downward = Column(Float, nullable=True)
+
+    # Skill transferability (from Emsi ISA dimensions; lower = easier transition)
+    avg_skill_gap    = Column(Float, nullable=True)   # mean absolute ISA delta across 12 dims
+    skill_gap_json   = Column(Text, nullable=True)    # JSON: {dim: delta, ...} for all 12
+
+    # Structural flags
+    requires_new_license = Column(Boolean, default=False)
+    same_cluster         = Column(Boolean, nullable=True)  # True = in-industry path
+
+    __table_args__ = (
+        UniqueConstraint("origin_soc", "dest_soc", name="uq_mob_transition"),
+        Index("ix_mob_transition_origin_direction", "origin_soc", "wage_direction"),
+    )
+
+    def get_skill_gaps(self) -> dict:
+        import json
+        return json.loads(self.skill_gap_json) if self.skill_gap_json else {}
+
+    def to_dict(self) -> dict:
+        return {
+            "origin_soc": self.origin_soc,
+            "dest_soc": self.dest_soc,
+            "transition_order": self.transition_order,
+            "wage_change_dollars": self.wage_change_dollars,
+            "wage_direction": self.wage_direction,
+            "pct_upward": self.pct_upward,
+            "pct_lateral": self.pct_lateral,
+            "pct_downward": self.pct_downward,
+            "avg_skill_gap": self.avg_skill_gap,
+            "requires_new_license": self.requires_new_license,
+            "same_cluster": self.same_cluster,
         }
 
 
