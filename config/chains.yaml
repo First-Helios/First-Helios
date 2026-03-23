@@ -1,518 +1,111 @@
-# ChainStaffingTracker Configuration
-# All chain targets, scoring weights, region definitions, and BLS series IDs.
-# No hardcoded values in the codebase — everything comes from here via config/loader.py.
-
+_comment: "AUTO-GENERATED from OEWS data by scripts/generate_config_from_oews.py\n\
+  Source: Austin-Round Rock-San Marcos, TX MSA OEWS data (area code 12420) ONLY.\n\
+  Do not edit manually \u2014 regenerate from data using the script.\nGenerated: 2026-03-22T21:56:58.652599"
 regions:
   austin_tx:
-    display_name: "Austin, TX"
+    display_name: Austin, TX
     center_lat: 30.2672
     center_lng: -97.7431
     radius_mi: 25
-    location_string: "Austin, TX"
-    state: "TX"
-
-industries:
-  coffee_cafe:
-    display_name: "Coffee & Café"
-    search_terms:
-      - "barista"
-      - "coffee"
-      - "cafe"
-      - "shift supervisor"
-    local_search_terms:
-      - "barista"
-      - "cafe worker"
-      - "coffee shop"
-    subreddits:
-      - "starbucks"
-      - "starbucksbaristas"
-      - "Austin"
-    sentiment_keywords:
-      negative:
-        - "understaffed"
-        - "skeleton crew"
-        - "short staffed"
-        - "no one working"
-        - "only one person"
-        - "waited forever"
-        - "closed early"
-        - "drive thru only"
-        - "lobby closed"
-        - "hiring desperately"
-        - "quitting"
-        - "turnover"
-        - "burned out"
-        - "overworked"
-      positive:
-        - "fully staffed"
-        - "great service"
-        - "quick"
-        - "well run"
-        - "good team"
-
-chains:
-  starbucks:
-    display_name: "Starbucks"
-    industry: "coffee_cafe"
-    careers_api:
-      base_url: "https://www.starbucks.com/careers/"
-      search_url: "https://starbucks.wd1.myworkdayjobs.com/en-US/StarbucksExternalCareerSite"
-      api_url: "https://starbucks.wd1.myworkdayjobs.com/wday/cxs/starbucks/StarbucksExternalCareerSite/jobs"
-      location_filter: "Austin, TX, US"
-      radius_km: 40
-      page_size: 20
-    store_num_prefix: "SB"
-    maps_search_query: "Starbucks Austin TX"
-    target_roles:
-      - "barista"
-      - "shift supervisor"
-      - "shift manager"
-      - "store manager"
-    standing_postings_per_store: 2
-    standard_roles:
-      - "barista"
-      - "shift supervisor"
-
-  dutch_bros:
-    display_name: "Dutch Bros"
-    industry: "coffee_cafe"
-    careers_api:
-      base_url: "https://careers.dutchbros.com/"
-      search_url: null
-      api_url: null
-      location_filter: "Austin, TX"
-      radius_km: 40
-      page_size: 20
-    store_num_prefix: "DB"
-    maps_search_query: "Dutch Bros Austin TX"
-    target_roles:
-      - "broista"
-      - "shift lead"
-    standing_postings_per_store: 1
-    standard_roles:
-      - "broista"
-
-scoring:
-  weights:
-    careers_api: 0.40
-    job_boards: 0.35
-    sentiment: 0.25
-
-  posting_age_decay:
-    fresh_days: 7
-    stale_days: 90
-
-  tiers:
-    critical:
-      min_percentile: 67
-      label: "critical"
-    elevated:
-      min_percentile: 33
-      label: "elevated"
-    adequate:
-      min_percentile: 0
-      label: "adequate"
-
-targeting:
-  weights:
-    staffing_stress: 0.40
-    wage_gap: 0.30
-    isolation: 0.20
-    local_alternatives: 0.10
-  tiers:
-    prime:
-      min_score: 70
-    strong:
-      min_score: 45
-    moderate:
-      min_score: 0
-  local_radius_mi: 2.0
-
-rate_limits:
-  careers_api:
-    delay_seconds: 1.0
-  google_maps:
-    delay_min_seconds: 3.0
-    delay_max_seconds: 5.0
-  reddit:
-    delay_seconds: 2.0
-  bls:
-    delay_seconds: 1.0
-  nlrb:
-    delay_seconds: 2.0   # NLRB public search — be polite, no documented limit
-  warn:
-    delay_seconds: 1.0   # Socrata API — generous limits, 1s is sufficient
-
-http:
-  timeout_seconds: 30
-  max_retries: 3
-  backoff_factor: 2.0
-  user_agent: "ChainStaffingTracker/1.0"
-
-bls_series:
-  # ── CES (Current Employment Statistics) — existing ─────────────
-  austin_food_service_employment:
-    series_id: "SMU48124207072200001"
-    description: "Austin-Round Rock MSA, Food Services and Drinking Places, All Employees (thousands)"
-    category: "ces"
-  austin_leisure_hospitality_employment:
-    series_id: "SMU48124207000000001"
-    description: "Austin-Round Rock MSA, Leisure and Hospitality, All Employees (thousands)"
-    category: "ces"
-  austin_accommodation_food_employment:
-    series_id: "SMU48124207072000001"
-    description: "Austin-Round Rock MSA, Accommodation and Food Services, All Employees (thousands)"
-    category: "ces"
-  national_food_service_hourly:
-    series_id: "CEU7072200003"
-    description: "National Food Services and Drinking Places, Average Hourly Earnings (all employees)"
-    category: "ces"
-  national_food_service_employment:
-    series_id: "CEU7072200001"
-    description: "National Food Services and Drinking Places, All Employees (thousands)"
-    category: "ces"
-
-  # ── JOLTS (Job Openings & Labor Turnover) ──────────────────────
-  jolts_accom_food_quits:
-    series_id: "JTS720000000000000QUR"
-    description: "Accommodation & Food Services, Quits Rate (seasonally adjusted)"
-    category: "jolts"
-    metric: "quits_rate"
-    industry_code: "72"
-  jolts_accom_food_openings:
-    series_id: "JTS720000000000000JOR"
-    description: "Accommodation & Food Services, Job Openings Rate (seasonally adjusted)"
-    category: "jolts"
-    metric: "openings_rate"
-    industry_code: "72"
-  jolts_accom_food_hires:
-    series_id: "JTS720000000000000HIR"
-    description: "Accommodation & Food Services, Hires Rate (seasonally adjusted)"
-    category: "jolts"
-    metric: "hires_rate"
-    industry_code: "72"
-  jolts_accom_food_separations:
-    series_id: "JTS720000000000000TSR"
-    description: "Accommodation & Food Services, Total Separations Rate (seasonally adjusted)"
-    category: "jolts"
-    metric: "separations_rate"
-    industry_code: "72"
-
-  # ── CES — Austin MSA broader economy (new) ─────────────────────
-  austin_total_nonfarm_employment:
-    series_id: "SMU48124200000000001"
-    description: "Austin-Round Rock MSA, Total Nonfarm Employment (thousands)"
-    category: "ces"
-  austin_total_private_employment:
-    series_id: "SMU48124200500000001"
-    description: "Austin-Round Rock MSA, Total Private Employment (thousands)"
-    category: "ces"
-  austin_total_private_weekly_earnings:
-    series_id: "SMU48124200500000011"
-    description: "Austin-Round Rock MSA, Total Private, Average Weekly Earnings ($)"
-    category: "ces"
-  austin_total_private_weekly_hours:
-    series_id: "SMU48124200500000003"
-    description: "Austin-Round Rock MSA, Total Private, Average Weekly Hours"
-    category: "ces"
-  austin_trade_transport_employment:
-    series_id: "SMU48124204100000001"
-    description: "Austin-Round Rock MSA, Trade/Transport/Utilities Employment (thousands)"
-    category: "ces"
-  austin_professional_business_employment:
-    series_id: "SMU48124206500000001"
-    description: "Austin-Round Rock MSA, Professional & Business Services Employment (thousands)"
-    category: "ces"
-
-  # ── CES — National benchmarks (new) ────────────────────────────
-  national_all_private_hourly_earnings:
-    series_id: "CEU0500000003"
-    description: "National All Private, Average Hourly Earnings ($)"
-    category: "ces"
-  national_all_private_employment:
-    series_id: "CEU0500000001"
-    description: "National All Private, Total Employment (thousands)"
-    category: "ces"
-
-  # ── JOLTS — Total private cross-industry baseline (new) ─────────
-  jolts_total_private_quits:
-    series_id: "JTS000000000000000QUR"
-    description: "Total Private, Quits Rate — cross-industry baseline"
-    category: "jolts"
-    metric: "quits_rate"
-    industry_code: "total_private"
-  jolts_total_private_openings:
-    series_id: "JTS000000000000000JOR"
-    description: "Total Private, Job Openings Rate — cross-industry baseline"
-    category: "jolts"
-    metric: "openings_rate"
-    industry_code: "total_private"
-  jolts_total_private_hires:
-    series_id: "JTS000000000000000HIR"
-    description: "Total Private, Hires Rate — cross-industry baseline"
-    category: "jolts"
-    metric: "hires_rate"
-    industry_code: "total_private"
-  jolts_total_private_separations:
-    series_id: "JTS000000000000000TSR"
-    description: "Total Private, Total Separations Rate — cross-industry baseline"
-    category: "jolts"
-    metric: "separations_rate"
-    industry_code: "total_private"
-  jolts_retail_quits:
-    series_id: "JTS440000000000000QUR"
-    description: "Retail Trade, Quits Rate — adjacent sector comparison"
-    category: "jolts"
-    metric: "quits_rate"
-    industry_code: "44"
-  jolts_retail_openings:
-    series_id: "JTS440000000000000JOR"
-    description: "Retail Trade, Job Openings Rate — adjacent sector comparison"
-    category: "jolts"
-    metric: "openings_rate"
-    industry_code: "44"
-
-  # ── LAUS (Local Area Unemployment Statistics) ──────────────────
-  laus_travis_county_unemployment:
-    series_id: "LAUCN484530000000003"
-    description: "Travis County TX, Unemployment Rate"
-    category: "laus"
-    fips_code: "48453"
-  laus_williamson_county_unemployment:
-    series_id: "LAUCN484910000000003"
-    description: "Williamson County TX, Unemployment Rate"
-    category: "laus"
-    fips_code: "48491"
-  laus_hays_county_unemployment:
-    series_id: "LAUCN482090000000003"
-    description: "Hays County TX, Unemployment Rate"
-    category: "laus"
-    fips_code: "48209"
-
-  # ── LAUS — remaining QCEW counties + MSA aggregate (new) ────────
-  laus_bastrop_county_unemployment:
-    series_id: "LAUCN480210000000003"
-    description: "Bastrop County TX, Unemployment Rate"
-    category: "laus"
-    fips_code: "48021"
-  laus_caldwell_county_unemployment:
-    series_id: "LAUCN480550000000003"
-    description: "Caldwell County TX, Unemployment Rate"
-    category: "laus"
-    fips_code: "48055"
-  laus_austin_msa_unemployment_rate:
-    series_id: "LAUMT481242000000003"
-    description: "Austin-Round Rock-Georgetown MSA, Unemployment Rate"
-    category: "laus"
-    fips_code: "MSA-12420"
-  laus_austin_msa_unemployed_persons:
-    series_id: "LAUMT481242000000004"
-    description: "Austin-Round Rock-Georgetown MSA, Unemployed Persons (level)"
-    category: "laus"
-    fips_code: "MSA-12420"
-  laus_austin_msa_employed_persons:
-    series_id: "LAUMT481242000000005"
-    description: "Austin-Round Rock-Georgetown MSA, Employed Persons (level)"
-    category: "laus"
-    fips_code: "MSA-12420"
-  laus_austin_msa_labor_force:
-    series_id: "LAUMT481242000000006"
-    description: "Austin-Round Rock-Georgetown MSA, Civilian Labor Force"
-    category: "laus"
-    fips_code: "MSA-12420"
-
-  # ── CPI (Consumer Price Index) — inflation context (new) ────────
-  cpi_us_all_items:
-    series_id: "CUUR0000SA0"
-    description: "US City Average CPI-U, All Items"
-    category: "cpi"
-  cpi_south_all_items:
-    series_id: "CUURS37ASA0"
-    description: "South Urban CPI-U, All Items (semi-annual)"
-    category: "cpi"
-  cpi_us_food_away_from_home:
-    series_id: "CUUR0000SEFA"
-    description: "US CPI-U, Food Away From Home — deflates restaurant wage comparisons"
-    category: "cpi"
-  cpi_us_all_food:
-    series_id: "CUUR0000SAF1"
-    description: "US CPI-U, All Food"
-    category: "cpi"
-
-  # ── ECI (Employment Cost Index) — labor cost trend (new) ────────
-  eci_private_wages_salaries:
-    series_id: "CIU2020000000000A"
-    description: "Employment Cost Index, Private Sector Wages & Salaries (quarterly)"
-    category: "eci"
-
-# ── QCEW Configuration ──────────────────────────────────────────────────────
+    location_string: Austin, TX
+    state: TX
+target_industries: all
+industries: {}
 qcew:
-  # County FIPS codes covering the Austin MSA
   county_fips:
-    travis: "48453"
-    williamson: "48491"
-    hays: "48209"
-    bastrop: "48021"
-    caldwell: "48055"
-  # NAICS codes to fetch from QCEW
-  naics_codes:
-    coffee_shops: "722515"        # Snack and Nonalcoholic Beverage Bars
-    limited_service_restaurants: "722513"
-    full_service_restaurants: "722511"
-    food_services_total: "7225"   # Restaurants and Other Eating Places
-    accommodation_food: "72"      # Accommodation and Food Services
-  ownership_code: "5"  # private sector
-
-# ── Census CBP Configuration ────────────────────────────────────────────────
+    travis: '48453'
+    williamson: '48491'
+    hays: '48209'
+    bastrop: '48021'
+    caldwell: '48055'
+  fetch_all_industries: true
+  comment: Generated from OEWS data. Set fetch_all_industries=true to ingest all industries.
+  ownership_code: '5'
 cbp:
-  # Census API key (free, register at api.census.gov/data/key_signup.html)
-  api_key: null  # set via CBP_API_KEY env var if null
-  # ZIP codes covering the Austin metro area core
+  api_key: null
   zip_codes:
-    - "78701"  # Downtown Austin
-    - "78702"  # East Austin
-    - "78703"  # Tarrytown/Clarksville
-    - "78704"  # South Austin
-    - "78705"  # UT area
-    - "78745"  # South Austin/Manchaca
-    - "78748"  # South Austin
-    - "78749"  # Southwest Austin
-    - "78750"  # NW Austin/Jollyville
-    - "78751"  # Hyde Park
-    - "78752"  # North Loop
-    - "78753"  # N Austin/Rundberg
-    - "78756"  # Brentwood/Rosedale
-    - "78757"  # Crestview
-    - "78758"  # N Austin
-    - "78759"  # Great Hills/Arboretum
-    - "78660"  # Pflugerville
-    - "78664"  # Round Rock
-    - "78665"  # Round Rock
-    - "78681"  # Round Rock/Brushy Creek
-    - "78634"  # Hutto
-    - "78641"  # Leander
-    - "78613"  # Cedar Park
-    - "78717"  # Brushy Creek
-    - "78626"  # Georgetown
-  naics_codes:
-    coffee_shops: "722515"
-    limited_service_restaurants: "722513"
-    full_service_restaurants: "722511"
-
-# ── OEWS series (via BLS OEWS flat files or API) ────────────────────────────
+  - '78701'
+  - '78702'
+  - '78703'
+  - '78704'
+  - '78705'
+  - '78745'
+  - '78748'
+  - '78749'
+  - '78750'
+  - '78751'
+  - '78752'
+  - '78753'
+  - '78756'
+  - '78757'
+  - '78758'
+  - '78759'
+  - '78660'
+  - '78664'
+  - '78665'
+  - '78681'
+  - '78634'
+  - '78641'
+  - '78613'
+  - '78717'
+  - '78626'
+  fetch_all_industries: true
+  comment: Generated from OEWS data. Fetches all industries at ZIP level.
 oews:
-  area_code: "12420"  # Austin-Round Rock-Georgetown MSA
-  occupations:
-    food_prep_serving:
-      soc_code: "35-0000"
-      title: "Food Preparation and Serving Related"
-    fast_food_counter:
-      soc_code: "35-3023"
-      title: "Fast Food and Counter Workers"
-    food_prep_workers:
-      soc_code: "35-2021"
-      title: "Food Preparation Workers"
-    first_line_food_supervisors:
-      soc_code: "35-1012"
-      title: "First-Line Supervisors of Food Preparation and Serving Workers"
-    baristas:
-      soc_code: "35-3021"
-      title: "Combined Food Preparation and Serving Workers, Including Fast Food"
-
-# ── Economically-grounded scoring (replaces ad-hoc weights) ─────────────────
+  area_code: '12420'
+  fetch_all_occupations: true
+  comment: Generated from OEWS data. Includes all 638 Austin-Round Rock-San Marcos,
+    TX MSA occupations (area code 12420).
 scoring:
   weights:
-    demand_pressure: 0.35         # postings per establishment / regional baseline
-    wage_competitiveness: 0.25    # chain wage vs market wage
-    churn_signal: 0.25            # posting velocity vs expected turnover (JOLTS)
-    qualitative: 0.15             # sentiment (Reddit + Google Reviews)
-
+    demand_pressure: 0.35
+    wage_competitiveness: 0.25
+    churn_signal: 0.25
+    qualitative: 0.15
   posting_age_decay:
     fresh_days: 7
     stale_days: 90
-
   tiers:
     critical:
       min_percentile: 67
-      label: "critical"
+      label: critical
     elevated:
       min_percentile: 33
-      label: "elevated"
+      label: elevated
     adequate:
       min_percentile: 0
-      label: "adequate"
-
-  # Baseline indexing — track metrics relative to a reference period
+      label: adequate
   baseline:
-    reference_period: "2025-Q3"   # first full quarter of data collection
-    reindex_on_new_qcew: true     # recompute baselines when QCEW data arrives
-
-  # Seasonal adjustment — month-over-month indices
+    reference_period: 2025-Q3
+    reindex_on_new_qcew: true
   seasonal:
     enabled: true
-    # Typical hiring surge months for food service (BLS historical)
-    peak_months: [5, 6, 7]        # May-Jul summer surge
-    trough_months: [1, 2]         # Jan-Feb slowdown
-
-# ── Scheduler ────────────────────────────────────────────────────────────────
-scheduler:
-  careers_api:
-    cron:
-      hour: 3
-      minute: 0
-  jobspy:
-    cron:
-      hour: 4
-      minute: 0
-  reddit:
-    interval_hours: 6
-  google_maps:
-    cron:
-      day_of_week: "mon"
-      hour: 5
-      minute: 0
-  bls:
-    cron:
-      day_of_week: "mon"
-      hour: 6
-      minute: 0
-  # Ground-truth data fetches (match government release cycles)
-  qcew:
-    cron:
-      day: 1            # 1st of the month
-      hour: 7
-      minute: 0
-    # Only check in months after quarterly release: Jan, Apr, Jul, Oct
-    active_months: [1, 4, 7, 10]
-  cbp:
-    cron:
-      day_of_week: "mon"
-      hour: 8
-      minute: 0
-    # Annual check — only worth trying April each year
-    active_months: [4]
-  jolts:
-    cron:
-      day_of_week: "mon"
-      hour: 6
-      minute: 30
-  laus:
-    cron:
-      day_of_week: "mon"
-      hour: 6
-      minute: 45
-  baseline_recompute:
-    cron:
-      day_of_week: "sun"
-      hour: 4
-      minute: 0
-  nlrb:
-    cron:
-      day_of_week: "wed"  # Mid-week; NLRB updates case data continuously
-      hour: 7
-      minute: 0
-  warn_tx:
-    cron:
-      day_of_week: "tue"  # Texas ODP updates ~monthly; weekly check is fine
-      hour: 7
-      minute: 0
+    peak_months:
+    - 5
+    - 6
+    - 7
+    trough_months:
+    - 1
+    - 2
+chains:
+  starbucks:
+    display_name: Starbucks
+    industry: soc_35
+    careers_api:
+      base_url: https://www.starbucks.com/careers/
+      search_url: https://starbucks.wd1.myworkdayjobs.com/en-US/StarbucksExternalCareerSite
+      api_url: https://starbucks.wd1.myworkdayjobs.com/wday/cxs/starbucks/StarbucksExternalCareerSite/jobs
+      location_filter: Austin, TX, US
+      radius_km: 40
+      page_size: 20
+    store_num_prefix: SB
+    maps_search_query: Starbucks Austin TX
+  dutch_bros:
+    display_name: Dutch Bros
+    industry: soc_35
+    careers_api:
+      base_url: https://careers.dutchbros.com/
+      location_filter: Austin, TX
+      radius_km: 40
+    store_num_prefix: DB
+    maps_search_query: Dutch Bros Austin TX

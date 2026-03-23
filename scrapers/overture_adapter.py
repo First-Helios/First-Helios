@@ -32,6 +32,9 @@ from scrapers.base import BaseScraper, ScraperSignal
 logger = logging.getLogger(__name__)
 config = get_config()
 
+# Populated at ingest time from ref_brands; avoids repeated DB lookups per feature
+_BRAND_INDUSTRY_CACHE: dict[str, str] = {}
+
 
 def _get_overture_s3_path() -> str:
     """Get the S3 parquet path for the latest Overture Maps release."""
@@ -46,22 +49,186 @@ def _get_overture_s3_path() -> str:
     )
 
 # Overture category → industry mapping
+# Covers all physical-location employer categories — food, trades, healthcare, auto, personal care, etc.
 CATEGORY_INDUSTRY_MAP: dict[str, str] = {
-    "coffee_shop": "coffee_cafe",
-    "cafe": "coffee_cafe",
-    "donut_shop": "coffee_cafe",
-    "tea_house": "coffee_cafe",
-    "fast_food_restaurant": "fast_food",
-    "sandwich_shop": "fast_food",
-    "burger_restaurant": "fast_food",
-    "pizza_restaurant": "fast_food",
-    "mexican_restaurant": "fast_food",
-    "grocery_store": "retail_general",
-    "convenience_store": "retail_general",
-    "clothing_store": "retail_general",
-    "department_store": "retail_general",
-    "hotel": "hospitality",
-    "motel": "hospitality",
+    # ── Food & Beverage ──────────────────────────────────────────────────────
+    "coffee_shop":           "coffee_cafe",
+    "cafe":                  "coffee_cafe",
+    "donut_shop":            "coffee_cafe",
+    "tea_house":             "coffee_cafe",
+    "fast_food_restaurant":  "fast_food",
+    "sandwich_shop":         "fast_food",
+    "burger_restaurant":     "fast_food",
+    "pizza_restaurant":      "fast_food",
+    "mexican_restaurant":    "fast_food",
+    "taco_restaurant":       "fast_food",
+    "food_truck":            "fast_food",
+    "restaurant":            "food_full_service",
+    "american_restaurant":   "food_full_service",
+    "barbecue_restaurant":   "food_full_service",
+    "bakery":                "food_full_service",
+    "bar":                   "bar_nightlife",
+    # ── Retail ──────────────────────────────────────────────────────────────
+    "grocery_store":         "retail_general",
+    "convenience_store":     "retail_general",
+    "clothing_store":        "retail_general",
+    "department_store":      "retail_general",
+    "furniture_store":       "retail_general",
+    "electronics":           "retail_general",
+    "jewelry_store":         "retail_general",
+    "liquor_store":          "retail_general",
+    "flowers_and_gifts_shop":"retail_general",
+    "mobile_phone_store":    "retail_general",
+    "retail":                "retail_general",
+    "pharmacy":              "retail_pharmacy",
+    # ── Hospitality ─────────────────────────────────────────────────────────
+    "hotel":                 "hospitality",
+    "motel":                 "hospitality",
+    # ── Automotive ──────────────────────────────────────────────────────────
+    "automotive_repair":     "auto_services",
+    "auto_body_shop":        "auto_services",
+    "gas_station":           "auto_services",
+    "key_and_locksmith":     "auto_services",
+    "car_dealer":            "auto_dealer",
+    # ── Personal Care & Beauty ───────────────────────────────────────────────
+    "beauty_salon":          "personal_care",
+    "hair_salon":            "personal_care",
+    "nail_salon":            "personal_care",
+    "barber":                "personal_care",
+    "spas":                  "personal_care",
+    "massage_therapy":       "personal_care",
+    "massage":               "personal_care",
+    "beauty_and_spa":        "personal_care",
+    "medical_spa":           "personal_care",
+    "tattoo_and_piercing":   "personal_care",
+    # ── Fitness ─────────────────────────────────────────────────────────────
+    "gym":                   "fitness",
+    "martial_arts_club":     "fitness",
+    # ── Skilled Trades & Home Services ──────────────────────────────────────
+    "hvac_services":         "skilled_trades",
+    "contractor":            "skilled_trades",
+    "roofing":               "skilled_trades",
+    "landscaping":           "skilled_trades",
+    "home_service":          "skilled_trades",
+    "home_cleaning":         "skilled_trades",
+    "construction_services": "skilled_trades",
+    "building_supply_store": "skilled_trades",
+    "industrial_equipment":  "skilled_trades",
+    # ── Healthcare ──────────────────────────────────────────────────────────
+    "doctor":                "healthcare",
+    "dentist":               "healthcare",
+    "chiropractor":          "healthcare",
+    "physical_therapy":      "healthcare",
+    "hospital":              "healthcare",
+    "medical_center":        "healthcare",
+    "optometrist":           "healthcare",
+    "health_and_medical":    "healthcare",
+    "counseling_and_mental_health": "healthcare",
+    "naturopathic_holistic": "healthcare",
+    "veterinarian":          "healthcare",
+    # ── Finance ─────────────────────────────────────────────────────────────
+    "bank_credit_union":     "finance",
+    "banks":                 "finance",
+    "financial_service":     "finance",
+    "insurance_agency":      "finance",
+    # ── Education ───────────────────────────────────────────────────────────
+    "elementary_school":     "education",
+    "preschool":             "education",
+    "college_university":    "education",
+    "education":             "education",
+    # ── Staffing / Professional ──────────────────────────────────────────────
+    "employment_agencies":        "staffing",
+    "it_service_and_computer_repair": "tech_services",
+    "printing_services":          "professional_services",
+    # ── Upward Mobility: Professional / Office ───────────────────────────────
+    "professional_services":      "professional_services",
+    "software_development":       "tech_services",
+    "corporate_office":           "professional_services",
+    "lawyer":                     "professional_services",
+    "legal_services":             "professional_services",
+    "marketing_agency":           "professional_services",
+    "advertising_agency":         "professional_services",
+    "financial_advising":         "finance",
+    "mortgage_broker":            "finance",
+    "mortgage_lender":            "finance",
+    "information_technology_company": "tech_services",
+    "accountant":                 "professional_services",
+    "interior_design":            "professional_services",
+    "engineering_services":       "professional_services",
+    "event_planning":             "professional_services",
+    "architectural_designer":     "professional_services",
+    "credit_union":               "finance",
+    # ── Additional Healthcare ────────────────────────────────────────────────
+    "general_dentistry":          "healthcare",
+    "pediatrician":               "healthcare",
+    "obstetrician_and_gynecologist": "healthcare",
+    "cardiologist":               "healthcare",
+    "orthopedist":                "healthcare",
+    "acupuncture":                "healthcare",
+    "home_health_care":           "healthcare",
+    "retirement_home":            "healthcare",
+    # ── Additional Skilled Trades ────────────────────────────────────────────
+    "plumbing":                   "skilled_trades",
+    "electrician":                "skilled_trades",
+    "garage_door_service":        "skilled_trades",
+    "home_improvement_store":     "skilled_trades",
+    # ── Additional Auto ──────────────────────────────────────────────────────
+    "used_car_dealer":            "auto_dealer",
+    "car_wash":                   "auto_services",
+    "tire_dealer_and_repair":     "auto_services",
+    "automotive_parts_and_accessories": "auto_services",
+    "automotive":                 "auto_services",
+    # ── Additional Fitness / Wellness ────────────────────────────────────────
+    "yoga_studio":                "fitness",
+    "dance_school":               "fitness",
+    # ── Additional Food ──────────────────────────────────────────────────────
+    "ice_cream_shop":             "food_full_service",
+    "smoothie_juice_bar":         "food_full_service",
+    # ── Additional Retail ────────────────────────────────────────────────────
+    "shoe_store":                 "retail_general",
+    "womens_clothing_store":      "retail_general",
+    "cosmetic_and_beauty_supplies": "retail_general",
+    "pet_store":                  "retail_general",
+    # ── Logistics ────────────────────────────────────────────────────────────
+    "courier_and_delivery_services": "logistics",
+    # ── Nonprofit / Community ────────────────────────────────────────────────
+    "community_services_non_profits": "nonprofit",
+    "social_service_organizations":   "nonprofit",
+}
+
+# Categories that represent upward mobility from service/entry-level work.
+# These employers are destinations a food service / retail / hospitality worker
+# could realistically target for career advancement — or entry points for
+# workers coming from outside the service sector.
+UPWARD_MOBILITY_CATEGORIES: set[str] = {
+    # Office / professional
+    "professional_services", "corporate_office", "marketing_agency",
+    "advertising_agency", "interior_design", "engineering_services",
+    "event_planning", "architectural_designer", "printing_services",
+    "accountant",
+    # Tech
+    "software_development", "information_technology_company",
+    "it_service_and_computer_repair", "tech_services",
+    # Legal / finance
+    "lawyer", "legal_services", "financial_advising", "financial_service",
+    "mortgage_broker", "mortgage_lender", "bank_credit_union", "banks",
+    "credit_union", "insurance_agency",
+    # Staffing / employment
+    "employment_agencies", "staffing",
+    # Education
+    "education", "college_university", "elementary_school", "preschool",
+    "dance_school",
+    # Skilled trades (certification-based, good wages)
+    "hvac_services", "electrician", "plumbing", "contractor",
+    "roofing", "construction_services",
+    # Healthcare (many non-clinical roles)
+    "hospital", "medical_center", "home_health_care",
+    # Nonprofit / community
+    "community_services_non_profits", "social_service_organizations",
+    # Hospitality management
+    "hotel", "motel",
+    # Logistics
+    "courier_and_delivery_services",
 }
 
 # Chain names to exclude from local employer queries (lowercase LIKE patterns)
@@ -378,6 +545,212 @@ class OvertureLocalAdapter(BaseScraper):
             return []
 
 
+def ingest_local_geojson(geojson_path: str, region: str = "austin_tx") -> dict:
+    """Ingest cached Overture GeoJSON file into chain_locations and local_employers.
+
+    Reads local cached GeoJSON (instead of S3 DuckDB queries) and:
+      - Matches known chains by name pattern
+      - Maps categories to industries for local employers
+      - Upserts to appropriate tables
+
+    Args:
+        geojson_path: Path to local .geojson file
+        region: Region key for all records (default: austin_tx)
+
+    Returns:
+        dict with chain_locations and local_employers counts
+    """
+    import json
+    from pathlib import Path
+
+    geojson_file = Path(geojson_path)
+    if not geojson_file.exists():
+        logger.error("[Overture Local] File not found: %s", geojson_path)
+        return {"error": "File not found", "chain_locations": 0, "local_employers": 0}
+
+    logger.info("[Overture Local] Loading GeoJSON from %s", geojson_file.name)
+
+    try:
+        engine = init_db()
+        session = get_session(engine)
+    except Exception as e:
+        logger.error("[Overture Local] Failed to initialize DB: %s", e)
+        return {"error": str(e), "chain_locations": 0, "local_employers": 0}
+
+    chain_count = 0
+    local_count = 0
+    skipped_count = 0
+
+    # Build brand_key → internal_industry lookup so chain rows get correct industry on insert
+    global _BRAND_INDUSTRY_CACHE
+    try:
+        from sqlalchemy import text as _text
+        _rows = session.execute(_text("SELECT brand_key, internal_industry FROM ref_brands")).fetchall()
+        _BRAND_INDUSTRY_CACHE = {r[0]: r[1] for r in _rows if r[1]}
+    except Exception:
+        _BRAND_INDUSTRY_CACHE = {}
+
+    try:
+        with open(geojson_file) as f:
+            geojson_data = json.load(f)
+
+        features = geojson_data.get("features", [])
+        logger.info("[Overture Local] Processing %d features", len(features))
+
+        for feature in features:
+            try:
+                props = feature.get("properties", {})
+                geom = feature.get("geometry", {})
+                coords = geom.get("coordinates", [None, None])
+
+                # Extract fields
+                overture_id = props.get("id", "")
+                store_name = props.get("names", {}).get("primary", "")
+                category_primary = props.get("categories", {}).get("primary", "")
+                confidence = props.get("confidence", 0.5)
+                coords_lng = float(coords[0]) if coords[0] is not None else None
+                coords_lat = float(coords[1]) if coords[1] is not None else None
+
+                # Get address
+                addresses = props.get("addresses", [])
+                address_str = ""
+                if addresses:
+                    addr = addresses[0]
+                    parts = [
+                        addr.get("freeform", ""),
+                        addr.get("locality", ""),
+                        addr.get("region", ""),
+                    ]
+                    address_str = ", ".join(p for p in parts if p)
+
+                # Get brand name
+                brand_name = props.get("brand", {}).get("names", {}).get("primary", None)
+
+                # Check if it's a known chain
+                is_chain = False
+                chain_key = None
+                if brand_name:
+                    brand_lower = brand_name.lower()
+                    for ckey, pattern in OvertureChainAdapter.CHAIN_NAME_FILTERS.items():
+                        # Pattern like "%starbucks%" → check if brand contains "starbucks"
+                        search_str = pattern.strip("%")
+                        if search_str.lower() in brand_lower:
+                            is_chain = True
+                            chain_key = ckey
+                            break
+
+                if is_chain and chain_key:
+                    # Upsert to chain_locations
+                    store_num = f"OV-{chain_key.upper()}-{overture_id[-8:]}"
+                    # Resolve industry from ref_brands if available
+                    _brand_industry = _BRAND_INDUSTRY_CACHE.get(chain_key, "unknown")
+                    store = Store(
+                        store_num=store_num,
+                        brand_key=chain_key,
+                        chain=brand_name or "Unknown Chain",
+                        industry=_brand_industry,
+                        store_name=store_name,
+                        address=address_str,
+                        lat=coords_lat,
+                        lng=coords_lng,
+                        region=region,
+                        source_discovery="overture_local",
+                        is_active=props.get("operating_status", "unknown") == "open",
+                    )
+                    session.merge(store)
+                    chain_count += 1
+
+                else:
+                    # Try to map category to industry
+                    industry = CATEGORY_INDUSTRY_MAP.get(category_primary, None)
+
+                    # Skip if category doesn't map and name looks like a chain
+                    if not industry:
+                        name_lower = (store_name or "").lower()
+                        is_excluded_chain = any(
+                            ex in name_lower for ex in CHAIN_EXCLUSIONS
+                        )
+                        if is_excluded_chain:
+                            skipped_count += 1
+                            continue
+
+                        # Skip uncategorized
+                        skipped_count += 1
+                        continue
+
+                    # Upsert to local_employers (must query first — autoincrement PK)
+                    is_mobility = (
+                        category_primary in UPWARD_MOBILITY_CATEGORIES
+                        or industry in UPWARD_MOBILITY_CATEGORIES
+                    )
+                    existing_local = (
+                        session.query(LocalEmployer)
+                        .filter_by(overture_id=overture_id)
+                        .first()
+                    )
+                    if existing_local:
+                        existing_local.name = store_name or existing_local.name
+                        existing_local.category = category_primary
+                        existing_local.industry = industry
+                        existing_local.address = address_str or existing_local.address
+                        existing_local.lat = coords_lat
+                        existing_local.lng = coords_lng
+                        existing_local.confidence = confidence
+                        existing_local.upward_mobility = is_mobility
+                        existing_local.last_seen = datetime.utcnow()
+                    else:
+                        session.add(LocalEmployer(
+                            overture_id=overture_id,
+                            name=store_name or f"POI {overture_id[-6:]}",
+                            category=category_primary,
+                            industry=industry,
+                            address=address_str,
+                            lat=coords_lat,
+                            lng=coords_lng,
+                            region=region,
+                            source_discovery="overture_local",
+                            confidence=confidence,
+                            upward_mobility=is_mobility,
+                            is_active=props.get("operating_status", "unknown") == "open",
+                            first_seen=datetime.utcnow(),
+                            last_seen=datetime.utcnow(),
+                        ))
+                    local_count += 1
+
+                # Commit every 500 records
+                if (chain_count + local_count) % 500 == 0:
+                    session.commit()
+                    logger.debug(
+                        "[Overture Local] Committed %d + %d records",
+                        chain_count,
+                        local_count,
+                    )
+
+            except Exception as row_e:
+                logger.debug("[Overture Local] Error processing feature: %s", row_e)
+                continue
+
+        session.commit()
+        logger.info(
+            "[Overture Local] Ingestion complete: %d chains, %d local employers, %d skipped",
+            chain_count,
+            local_count,
+            skipped_count,
+        )
+        return {
+            "chain_locations": chain_count,
+            "local_employers": local_count,
+            "skipped": skipped_count,
+        }
+
+    except Exception as e:
+        logger.error("[Overture Local] GeoJSON ingestion failed: %s", e, exc_info=True)
+        session.rollback()
+        return {"error": str(e), "chain_locations": 0, "local_employers": 0}
+    finally:
+        session.close()
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -386,12 +759,24 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     parser = argparse.ArgumentParser(description="Overture Maps POI scraper")
-    parser.add_argument("--mode", choices=["chain", "local"], required=True)
+    parser.add_argument("--mode", choices=["chain", "local"], default=None)
     parser.add_argument("--chain", default="starbucks")
     parser.add_argument("--industry", default="coffee_cafe")
     parser.add_argument("--region", default="austin_tx")
+    parser.add_argument("--local-file", type=str, help="Path to local GeoJSON file for ingestion")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+
+    # Local GeoJSON file ingestion
+    if args.local_file:
+        print(f"\nIngesting from local GeoJSON: {args.local_file}")
+        result = ingest_local_geojson(args.local_file, region=args.region)
+        print(f"Result: {result}")
+        sys.exit(0)
+
+    # S3-based ingestion (existing mode)
+    if not args.mode:
+        parser.error("--mode is required unless using --local-file")
 
     if args.mode == "chain":
         adapter: BaseScraper = OvertureChainAdapter()

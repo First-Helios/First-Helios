@@ -29,6 +29,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from backend.database import (
+    ChainLocation,
     LocalEmployer,
     Score,
     Signal,
@@ -123,18 +124,21 @@ def scan_status():
 
 @app.route("/api/scan", methods=["POST"])
 def trigger_scan():
-    """Trigger a scrape for a chain/region.
+    """Trigger a scrape for a chain/region using public data sources.
 
-    Body: {"chain": "starbucks", "region": "austin_tx", "force": false}
+    Body: {"chain": "starbucks", "region": "austin_tx"}
+
+    NOTE: Direct website scraping (careers_api) has been moved to
+    future_plans/web_scraping/. This endpoint now uses JobSpy.
     """
     data = request.get_json(silent=True) or {}
     chain = data.get("chain", "starbucks")
     region = data.get("region", "austin_tx")
 
     try:
-        from scrapers.careers_api import scrape_careers_api
+        from scrapers.jobspy_adapter import scrape_jobspy
 
-        signals = scrape_careers_api(region=region, chain=chain, ingest=True)
+        signals = scrape_jobspy(chain=chain, region=region, mode="chain")
         compute_all_scores(region=region, chain=chain)
 
         return jsonify({
@@ -142,6 +146,7 @@ def trigger_scan():
             "signals_scraped": len(signals),
             "chain": chain,
             "region": region,
+            "source": "jobspy",
         })
     except Exception as e:
         logger.error("[Server] Scan failed: %s", e)

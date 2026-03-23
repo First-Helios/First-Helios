@@ -272,16 +272,39 @@ def _upsert_baseline(
 
 
 def _naics_to_jolts_industry(naics_code: str) -> str | None:
-    """Map a specific NAICS code to the broader JOLTS industry code.
+    """Map a specific NAICS code to the JOLTS industry_code stored in jolts_data.
 
-    JOLTS publishes at the supersector level (2-digit NAICS).
+    Current JOLTS data contains these industry_code values:
+      - "72"            → Accommodation & Food Services
+      - "44"            → Retail Trade
+      - "total_private" → Total Private (all-industry fallback)
+
+    As more JOLTS series are fetched, expand this mapping to match.
     """
-    # All food/accommodation NAICS (72xxxx) map to JOLTS industry "72"
-    if naics_code.startswith("72"):
-        return "72"
-    if naics_code.startswith("44") or naics_code.startswith("45"):
-        return "44-45"  # Retail Trade
-    return None
+    # Direct mappings to JOLTS industry codes in the database
+    mapping = {
+        # Accommodation & Food Services
+        "72":  "72",
+        "721": "72",
+        "722": "72",
+
+        # Retail Trade
+        "44":  "44",
+        "45":  "44",
+        "441": "44",
+        "445": "44",
+        "452": "44",
+        "456": "44",
+    }
+
+    # Try progressively shorter prefixes (6→5→4→3→2 chars)
+    for length in range(min(6, len(naics_code)), 1, -1):
+        prefix = naics_code[:length]
+        if prefix in mapping:
+            return mapping[prefix]
+
+    # Fallback: use total_private as a cross-industry baseline
+    return "total_private"
 
 
 def _compute_seasonal_index(

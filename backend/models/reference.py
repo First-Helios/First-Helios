@@ -6,13 +6,14 @@ These give the intake pipeline context for classifying incoming POI data
 and power the frontend filter dropdowns.
 
 Tables:
-    ref_industry     — NAICS-based industry hierarchy
-    ref_brands       — Known chain profiles (Wikidata + curated)
-    ref_regions      — Regional economic context (BLS / Census)
-    ref_category_map — External taxonomy → internal industry crosswalk
+    ref_industry          — NAICS-based industry hierarchy
+    ref_brands            — Known chain profiles (Wikidata + curated)
+    ref_regions           — Regional economic context (BLS / Census)
+    ref_category_map      — External taxonomy → internal industry crosswalk
+    ref_soc_major_groups  — SOC 2-digit major occupation groups
 
 Depends on: backend.database.Base
-Called by: scripts/populate_reference_data.py, server.py /api/ref/*
+Called by: scripts/populate_reference_data.py, server.py /api/ref/*, revelio_ingest.py
 """
 
 import logging
@@ -240,4 +241,101 @@ class CategoryMapping(Base):
             "source_value": self.source_value,
             "internal_industry": self.internal_industry,
             "confidence": self.confidence,
+        }
+
+
+class IndustryTaxonomy(Base):
+    """Master cross-walk: internal industry key → all external classification systems.
+
+    Single source of truth replacing the scattered hardcoded maps in:
+      - scrapers/overture_adapter.py  (CATEGORY_INDUSTRY_MAP, UPWARD_MOBILITY_CATEGORIES)
+      - backend/scoring/engine.py     (industry_naics)
+      - backend/baseline.py           (_naics_to_jolts_industry)
+
+    Wage data sourced from OEWS (Austin MSA) and Revelio (Texas) determines
+    upward_mobility and worker_tier — not editorial judgment.
+
+    upward_mobility logic:
+      baseline_wage_hr = median hourly wage of the dominant front-line occupation
+      SERVICE_BASELINE = ~$14.20/hr  (avg of fast food, cashier, waiter)
+      MOBILITY_THRESHOLD = SERVICE_BASELINE * 1.25 = ~$17.75/hr
+      upward_mobility = True if baseline_wage_hr >= MOBILITY_THRESHOLD
+
+    worker_tier values:
+      service      — core labor pool (fast food, retail, hotel front desk, hair/nail)
+      trades       — skilled/certified work, physical (mechanics, HVAC, electricians)
+      professional — office/knowledge work, healthcare practitioners, finance
+    """
+
+    __tablename__ = "ref_industry_taxonomy"
+
+    industry_key = Column(String, primary_key=True)      # e.g. "fast_food"
+    display_name = Column(String, nullable=False)         # e.g. "Fast Food & QSR"
+
+    # BLS / NAICS cross-walk
+    naics_code = Column(String(6), nullable=True)         # primary NAICS (e.g. "7225")
+    naics2d_code = Column(Integer, nullable=True)         # 2-digit sector (e.g. 72)
+    jolts_industry_code = Column(String, nullable=True)   # JOLTS series industry code
+
+    # Revelio cross-walk
+    revelio_sector = Column(String, nullable=True)        # naics2d_name in revelio_* tables
+    revelio_soc_group = Column(String, nullable=True)     # soc2d_name for primary occupation
+
+    # OEWS occupation benchmark (front-line / entry-level role)
+    primary_occ_code = Column(String(10), nullable=True)  # OEWS occ_code
+    primary_occ_title = Column(String, nullable=True)
+    baseline_wage_hr = Column(Float, nullable=True)       # OEWS median hourly wage
+    wage_source = Column(String, nullable=True)           # "oews_austin" | "revelio_texas"
+
+    # Classification (data-driven from wage comparison)
+    worker_tier = Column(String, nullable=False, default="service")
+    # service | trades | professional
+    upward_mobility = Column(Boolean, default=False)
+    # True if baseline_wage_hr >= SERVICE_BASELINE * 1.25
+
+    # Overture intake categories (comma-separated list)
+    overture_categories = Column(Text, nullable=True)
+
+    notes = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "industry_key": self.industry_key,
+            "display_name": self.display_name,
+            "naics_code": self.naics_code,
+            "naics2d_code": self.naics2d_code,
+            "jolts_industry_code": self.jolts_industry_code,
+            "revelio_sector": self.revelio_sector,
+            "revelio_soc_group": self.revelio_soc_group,
+            "primary_occ_code": self.primary_occ_code,
+            "primary_occ_title": self.primary_occ_title,
+            "baseline_wage_hr": self.baseline_wage_hr,
+            "wage_source": self.wage_source,
+            "worker_tier": self.worker_tier,
+            "upward_mobility": self.upward_mobility,
+            "overture_categories": self.overture_categories,
+        }
+
+
+class SOCMajorGroup(Base):
+    """2-digit Standard Occupational Classification (SOC) major groups.
+
+    Populated from unique (soc2d_code, soc2d_name) pairs extracted from
+    Revelio Labs employment data during ingestion.  Gives human-readable
+    occupation group names for all SOC codes in the database.
+    """
+
+    __tablename__ = "ref_soc_major_groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    soc2d_code = Column(Integer, unique=True, nullable=False, index=True)
+    soc2d_name = Column(String, nullable=False)
+    description = Column(String, nullable=True)  # Optional BLS standard description
+
+    def to_dict(self) -> dict:
+        return {
+            "soc2d_code": self.soc2d_code,
+            "soc2d_name": self.soc2d_name,
+            "description": self.description,
         }

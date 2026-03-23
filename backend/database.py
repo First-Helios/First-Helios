@@ -61,19 +61,28 @@ class Base(DeclarativeBase):
 
 # ── Models ───────────────────────────────────────────────────────────────────
 
-class Store(Base):
-    """One row per physical chain location."""
+class ChainLocation(Base):
+    """One row per physical chain / franchise location.
 
-    __tablename__ = "stores"
+    Represents large-cap multi-location organizations (Starbucks, Target,
+    Jiffy Lube, etc.).  Discovered via AllThePlaces, Overture, OSM, or
+    Google Maps.  Linked to ref_brands by brand_key.
+
+    Layer: Business Locations (Layer 2)
+    """
+
+    __tablename__ = "chain_locations"
 
     store_num = Column(String, primary_key=True)
-    chain = Column(String, nullable=False, index=True)
+    brand_key = Column(String, nullable=True, index=True)  # FK ref_brands.brand_key
+    chain = Column(String, nullable=False, index=True)      # Display name
     industry = Column(String, nullable=False)
     store_name = Column(String, nullable=False, default="")
     address = Column(String, nullable=False, default="")
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
     region = Column(String, nullable=False, index=True)
+    source_discovery = Column(String, nullable=True)  # alltheplaces, overture, osm, gmaps, jobspy
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
@@ -81,6 +90,7 @@ class Store(Base):
     def to_dict(self) -> dict:
         return {
             "store_num": self.store_num,
+            "brand_key": self.brand_key,
             "chain": self.chain,
             "industry": self.industry,
             "store_name": self.store_name,
@@ -88,10 +98,15 @@ class Store(Base):
             "lat": self.lat,
             "lng": self.lng,
             "region": self.region,
+            "source_discovery": self.source_discovery,
             "first_seen": self.first_seen.isoformat() if self.first_seen else None,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "is_active": self.is_active,
         }
+
+
+# Backward-compatible alias (use ChainLocation in new code)
+Store = ChainLocation
 
 
 class Signal(Base):
@@ -519,10 +534,12 @@ class LaborMarketBaseline(Base):
 
 
 class LocalEmployer(Base):
-    """Local (non-chain) employer POI.
+    """Local (non-chain) employer POI — businesses with 1-10 locations.
 
     Populated by OvertureLocalAdapter and OSM adapter.
     Used by targeting.py for local_alternatives score component.
+
+    Layer: Business Locations (Layer 2)
     """
 
     __tablename__ = "local_employers"
@@ -536,7 +553,10 @@ class LocalEmployer(Base):
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
     region = Column(String, nullable=True)
+    location_count = Column(Integer, nullable=True)  # estimated 1-10
+    source_discovery = Column(String, nullable=True)  # overture, osm, jobspy
     confidence = Column(Float, nullable=True)
+    upward_mobility = Column(Boolean, default=False)  # employer represents career step-up from service work
     is_active = Column(Boolean, default=True)
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow)
@@ -552,8 +572,46 @@ class LocalEmployer(Base):
             "lat": self.lat,
             "lng": self.lng,
             "region": self.region,
+            "location_count": self.location_count,
+            "source_discovery": self.source_discovery,
             "confidence": self.confidence,
             "is_active": self.is_active,
+        }
+
+
+class EmployerNameIndex(Base):
+    """Canonical name registry for every unique employer name seen in local_employers.
+
+    Classifies each name as national_chain, regional_chain, or local so the
+    scoring engine and UI can filter / weight accordingly.
+
+    Populated by scripts/build_name_index.py and refreshed weekly by the scheduler.
+
+    Layer: Reference Data (Layer 1)
+    """
+
+    __tablename__ = "ref_employer_name_index"
+
+    name = Column(String, primary_key=True)
+    austin_location_count = Column(Integer, default=1)   # occurrences in local_employers
+    classification = Column(String, nullable=False)       # national_chain | regional_chain | local
+    industry = Column(String, nullable=True)              # most common industry for this name
+    category = Column(String, nullable=True)              # most common Overture category
+    is_chain = Column(Boolean, default=False)             # True for regional + national
+    notes = Column(String, nullable=True)                 # e.g. "Texas regional", "excluded chain"
+    reviewed = Column(Boolean, default=False)             # manually reviewed flag
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "austin_location_count": self.austin_location_count,
+            "classification": self.classification,
+            "industry": self.industry,
+            "category": self.category,
+            "is_chain": self.is_chain,
+            "notes": self.notes,
+            "reviewed": self.reviewed,
         }
 
 
@@ -694,6 +752,214 @@ class RateBudget(Base):
             "utilization_pct": round(self.used / self.daily_limit * 100, 1) if self.daily_limit else 0,
             "last_request_at": self.last_request_at.isoformat() if self.last_request_at else None,
             "last_error": self.last_error,
+        }
+
+
+# ── Revelio Labs Labor Market Data ──────────────────────────────────────────
+
+class RevelioEmployment(Base):
+    """State-level employment counts from Revelio Labs proprietary data.
+
+    Monthly granularity by state, occupation (2-digit SOC), and industry (2-digit NAICS).
+    Includes both seasonally adjusted (SA) and non-seasonally adjusted (NSA) counts.
+    """
+
+    __tablename__ = "revelio_employment"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    month = Column(String, nullable=False, index=True)  # YYYY-MM format
+    state = Column(String, nullable=False, index=True)
+    naics2d_code = Column(Integer, nullable=True)  # Nullable: some data has ranges like "31-33"
+    naics2d_name = Column(String, nullable=True)
+    soc2d_code = Column(Integer, nullable=False)
+    soc2d_name = Column(String, nullable=True)
+    count_nsa = Column(Float, nullable=True)  # Non-seasonally adjusted
+    count_sa = Column(Float, nullable=True)   # Seasonally adjusted
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "month", "state", "naics2d_code", "soc2d_code",
+            name="uq_revelio_employment",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "month": self.month,
+            "state": self.state,
+            "naics2d_code": self.naics2d_code,
+            "naics2d_name": self.naics2d_name,
+            "soc2d_code": self.soc2d_code,
+            "soc2d_name": self.soc2d_name,
+            "count_nsa": self.count_nsa,
+            "count_sa": self.count_sa,
+        }
+
+
+class RevelioHiring(Base):
+    """State-level hiring and attrition rates from Revelio Labs.
+
+    Monthly granularity by state, occupation (2-digit SOC), and industry (2-digit NAICS).
+    Revelio proprietary hiring rate (rl_*) and attrition rate metrics.
+    """
+
+    __tablename__ = "revelio_hiring"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    month = Column(String, nullable=False, index=True)  # YYYY-MM format
+    state = Column(String, nullable=False, index=True)
+    naics2d_code = Column(Integer, nullable=True)  # Nullable: some data has ranges like "31-33"
+    naics2d_name = Column(String, nullable=True)
+    soc2d_code = Column(Integer, nullable=False)
+    soc2d_name = Column(String, nullable=True)
+    hiring_rate_nsa = Column(Float, nullable=True)      # Non-seasonally adjusted
+    hiring_rate_sa = Column(Float, nullable=True)       # Seasonally adjusted
+    attrition_rate_nsa = Column(Float, nullable=True)
+    attrition_rate_sa = Column(Float, nullable=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "month", "state", "naics2d_code", "soc2d_code",
+            name="uq_revelio_hiring",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "month": self.month,
+            "state": self.state,
+            "naics2d_code": self.naics2d_code,
+            "naics2d_name": self.naics2d_name,
+            "soc2d_code": self.soc2d_code,
+            "soc2d_name": self.soc2d_name,
+            "hiring_rate_nsa": self.hiring_rate_nsa,
+            "hiring_rate_sa": self.hiring_rate_sa,
+            "attrition_rate_nsa": self.attrition_rate_nsa,
+            "attrition_rate_sa": self.attrition_rate_sa,
+        }
+
+
+class RevelioPostings(Base):
+    """Active job postings from Revelio Labs aggregated data.
+
+    Monthly counts by state, occupation (2-digit SOC), and industry (2-digit NAICS).
+    Aggregated from 50+ job boards.
+    """
+
+    __tablename__ = "revelio_postings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    month = Column(String, nullable=False, index=True)  # YYYY-MM format
+    state = Column(String, nullable=False, index=True)
+    naics2d_code = Column(Integer, nullable=False)
+    naics2d_name = Column(String, nullable=True)
+    soc2d_code = Column(Integer, nullable=False)
+    soc2d_name = Column(String, nullable=True)
+    active_postings_nsa = Column(Float, nullable=True)  # Non-seasonally adjusted
+    active_postings_sa = Column(Float, nullable=True)   # Seasonally adjusted
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "month", "state", "naics2d_code", "soc2d_code",
+            name="uq_revelio_postings",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "month": self.month,
+            "state": self.state,
+            "naics2d_code": self.naics2d_code,
+            "naics2d_name": self.naics2d_name,
+            "soc2d_code": self.soc2d_code,
+            "soc2d_name": self.soc2d_name,
+            "active_postings_nsa": self.active_postings_nsa,
+            "active_postings_sa": self.active_postings_sa,
+        }
+
+
+class RevelioSalaries(Base):
+    """Salary data aggregated from job postings by Revelio Labs.
+
+    Monthly salary metrics by state, occupation (2-digit SOC), and industry (2-digit NAICS).
+    Derived from active job posting salary disclosures.
+    """
+
+    __tablename__ = "revelio_salaries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    month = Column(String, nullable=False, index=True)  # YYYY-MM format
+    state = Column(String, nullable=False, index=True)
+    naics2d_code = Column(Integer, nullable=False)
+    naics2d_name = Column(String, nullable=True)
+    soc2d_code = Column(Integer, nullable=False)
+    soc2d_name = Column(String, nullable=True)
+    salary_nsa = Column(Float, nullable=True)           # Annual salary USD, non-seasonally adjusted
+    salary_sa = Column(Float, nullable=True)            # Seasonally adjusted
+    salary_count = Column(Float, nullable=True)         # Number of postings with salary data
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "month", "state", "naics2d_code", "soc2d_code",
+            name="uq_revelio_salaries",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "month": self.month,
+            "state": self.state,
+            "naics2d_code": self.naics2d_code,
+            "naics2d_name": self.naics2d_name,
+            "soc2d_code": self.soc2d_code,
+            "soc2d_name": self.soc2d_name,
+            "salary_nsa": self.salary_nsa,
+            "salary_sa": self.salary_sa,
+            "salary_count": self.salary_count,
+        }
+
+
+class RevelioLayoffs(Base):
+    """Mass layoff notices from Revelio Labs (WARN Act filings).
+
+    Monthly aggregated data by state and industry. Includes both state-level
+    and industry-level (NAICS 2-digit) breakdowns of layoff activity.
+    """
+
+    __tablename__ = "revelio_layoffs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    month = Column(String, nullable=False, index=True)  # YYYY-MM format
+    state = Column(String, nullable=True, index=True)   # Nullable for 'total' records
+    naics2d_code = Column(Integer, nullable=True)       # Nullable for 'total' records
+    naics2d_name = Column(String, nullable=True)
+    layoff_type = Column(String, nullable=False)        # 'by_state' | 'by_naics' | 'total'
+    employees_notified = Column(Float, nullable=True)
+    notices_issued = Column(Float, nullable=True)
+    employees_laidoff = Column(Float, nullable=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "month", "state", "naics2d_code", "layoff_type",
+            name="uq_revelio_layoffs",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "month": self.month,
+            "state": self.state,
+            "naics2d_code": self.naics2d_code,
+            "naics2d_name": self.naics2d_name,
+            "layoff_type": self.layoff_type,
+            "employees_notified": self.employees_notified,
+            "notices_issued": self.notices_issued,
+            "employees_laidoff": self.employees_laidoff,
         }
 
 

@@ -41,17 +41,9 @@ def init_scheduler() -> BackgroundScheduler:
 
     sched_cfg = get_scheduler_config()
 
-    # ── Careers API — daily at 3am ───────────────────────────────────
-    careers_cron = sched_cfg.get("careers_api", {}).get("cron", {})
-    scheduler.add_job(
-        _run_careers_api,
-        "cron",
-        hour=careers_cron.get("hour", 3),
-        minute=careers_cron.get("minute", 0),
-        id="careers_api",
-        name="Careers API Scraper",
-        replace_existing=True,
-    )
+    # ── Careers API — MOVED to future_plans/web_scraping/ ────────────
+    # Direct website scraping is a separate project.
+    # See docs/PROJECT_INTENT_EVALUATION.md for rationale.
 
     # ── JobSpy — daily at 4am ────────────────────────────────────────
     jobspy_cron = sched_cfg.get("jobspy", {}).get("cron", {})
@@ -240,20 +232,14 @@ def get_scheduler_status() -> dict:
 # ── Job functions ────────────────────────────────────────────────────────────
 
 def _run_careers_api() -> None:
-    """Scheduled job: Run careers API scraper."""
-    try:
-        from scrapers.careers_api import scrape_careers_api
-        from backend.scoring.engine import compute_all_scores
+    """Scheduled job: DEPRECATED — careers API moved to future_plans/web_scraping/.
 
-        logger.info("[Scheduler] Running careers API scraper")
-        signals = scrape_careers_api(region="austin_tx", chain="starbucks")
-        logger.info("[Scheduler] Careers API: %d signals", len(signals))
-
-        # Recompute scores after new data
-        compute_all_scores(region="austin_tx")
-
-    except Exception as e:
-        logger.error("[Scheduler] Careers API job failed: %s", e)
+    Direct website scraping is a separate project.
+    """
+    logger.warning(
+        "[Scheduler] careers_api job called but this scraper has been moved "
+        "to future_plans/web_scraping/. Use JobSpy for job posting signals."
+    )
 
 
 def _run_jobspy() -> None:

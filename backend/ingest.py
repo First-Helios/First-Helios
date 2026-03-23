@@ -15,6 +15,7 @@ import logging
 from datetime import datetime
 
 from backend.database import (
+    ChainLocation,
     Score,
     Signal,
     Snapshot,
@@ -28,6 +29,12 @@ from config.loader import get_chain
 from scrapers.base import ScraperSignal
 
 logger = logging.getLogger(__name__)
+
+# Prefixes that indicate pseudo-store records (economic data, not real locations).
+# These must NEVER enter the chain_locations table.
+_PSEUDO_STORE_PREFIXES = (
+    "BLS-", "QCEW-", "CPI-", "ECI-", "JOLTS-", "OEWS-", "LAUS-", "CBP-",
+)
 
 
 def ingest_signals(
@@ -67,10 +74,19 @@ def ingest_signals(
         store_nums_seen: set[str] = set()
 
         for sig in signals:
-            # ── Upsert Store ─────────────────────────────────────────
+            # ── Reject pseudo-stores (economic data masquerading as locations)
+            if any(sig.store_num.startswith(p) for p in _PSEUDO_STORE_PREFIXES):
+                logger.warning(
+                    "[Ingest] Rejected pseudo-store %s — economic data "
+                    "does not belong in chain_locations",
+                    sig.store_num,
+                )
+                continue
+
+            # ── Upsert ChainLocation ─────────────────────────────────
             if sig.store_num not in store_nums_seen:
                 store_nums_seen.add(sig.store_num)
-                existing = session.query(Store).filter_by(
+                existing = session.query(ChainLocation).filter_by(
                     store_num=sig.store_num
                 ).first()
 
@@ -80,14 +96,16 @@ def ingest_signals(
                 else:
                     # Try to get industry from chain config
                     industry = "unknown"
+                    brand_key = sig.chain
                     try:
                         chain_cfg = get_chain(sig.chain)
                         industry = chain_cfg.get("industry", "unknown")
                     except (KeyError, TypeError):
                         pass
 
-                    store = Store(
+                    store = ChainLocation(
                         store_num=sig.store_num,
+                        brand_key=brand_key,
                         chain=sig.chain,
                         industry=industry,
                         store_name=sig.metadata.get("store_name", ""),
@@ -95,6 +113,7 @@ def ingest_signals(
                         lat=sig.metadata.get("lat"),
                         lng=sig.metadata.get("lng"),
                         region=region,
+                        source_discovery=sig.source,
                         first_seen=datetime.utcnow(),
                         last_seen=datetime.utcnow(),
                         is_active=True,
