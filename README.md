@@ -35,7 +35,7 @@ Public Sources (free, legal, no login required)
                                    │
                          Normalized ScraperSignal objects
                                    │
-                            SQLite (tracker.db)
+                        PostgreSQL (helios, port 5432)
                  stores / signals / scores / wage_index / mob_*
                                    │
              ┌─────────────────────┼──────────────────────┐
@@ -57,11 +57,12 @@ First-Helios/
 ├── README.md                        ← you are here
 ├── RUNBOOK.md                       ← server startup, debugging, ops
 ├── CLAUDE_DATA_ENGINEERING_HANDOFF.md ← detailed data digest for agents
-├── DATABASE_ASSESSMENT.md           ← DB layer architecture
 │
 ├── backend/
-│   ├── database.py                  ← SQLAlchemy models (24 tables) + init
-│   ├── ingest.py                    ← Signal ingestion pipeline
+│   ├── database.py                  ← SQLAlchemy models (26+ tables) + init
+│   ├── ingest.py                    ← Signal ingestion pipeline (scraper signals → DB)
+│   ├── ingest_layer.py              ← Employer write path (normalize → fingerprint → upsert brand_groups → upsert local_employers)
+│   ├── normalizer.py                ← Zero-DB normalization step upstream of ingest_layer
 │   ├── baseline.py                  ← Labor market baseline (QCEW+JOLTS+OEWS+LAUS)
 │   ├── scheduler.py                 ← APScheduler job definitions
 │   ├── scoring/
@@ -75,7 +76,8 @@ First-Helios/
 ├── scripts/
 │   ├── populate_reference_data.py   ← Brands, regions, categories
 │   ├── populate_industry_taxonomy.py ← ref_industry_taxonomy (SOC crosswalk)
-│   ├── populate_mobility_data.py    ← mob_occupation + mob_transition (256k rows)
+│   ├── populate_mobility_data.py    ← mob_occupation (781) + mob_transition (256k rows) + dest_industry_keys crosswalk
+│   ├── load_occupation_aliases.py   ← ref_occupation_aliases (18,981 Census job-title aliases for Pathfinder autocomplete)
 │   ├── populate_metadata.py         ← meta_table_catalog, meta_column_catalog
 │   ├── build_name_index.py          ← ref_employer_name_index
 │   ├── classify_local_employers.py  ← Backfill location_count + purge chain-like records
@@ -104,9 +106,7 @@ First-Helios/
 │   ├── chains.yaml                  ← Chain targets, scoring weights, regions
 │   └── loader.py                    ← Typed config access
 │
-├── data/
-│   ├── tracker.db                   ← Primary SQLite DB (auto-created on init)
-│   └── spiritpool.db                ← Extension DB (legacy — do not modify)
+├── .env                             ← DATABASE_URL and API keys (copy from .env.example)
 │
 ├── Data_analysis/                   ← Jupyter notebooks
 │   ├── data_exploration.ipynb       ← Score distribution, chain vs local analysis
@@ -127,7 +127,8 @@ First-Helios/
 | Table | Rows (est.) | Purpose |
 |---|---|---|
 | `chain_locations` | ~283 | Chain store locations (Starbucks, McDonald's, etc.) — ORM class `Store`, filtered by `brand_key` |
-| `local_employers` | ~39,825 | Truly-local non-chain employer POIs from Overture Maps |
+| `local_employers` | ~45,618 | Truly-local non-chain employer POIs from Overture Maps; includes `mobility_score` (wage-lift proxy) |
+| `brand_groups` | ~36,563 | Deduplicated employer brand clusters; `location_count >= 5` → chain classification |
 | `signals` | growing | Raw observations (job postings, reviews, Reddit) |
 | `scores` | growing | Composite staffing-stress scores per store |
 | `wage_index` | growing | Local vs chain pay comparison |
@@ -157,6 +158,7 @@ First-Helios/
 | `ref_category_map` | ~500 | External taxonomy → internal industry crosswalk |
 | `ref_employer_name_index` | growing | Employer name → chain/local classification |
 | `ref_soc_major_groups` | ~23 | 2-digit SOC major group labels |
+| `ref_occupation_aliases` | 18,981 | Census job-title aliases → SOC code crosswalk (powers Pathfinder autocomplete) |
 
 ### Mobility Graph Tables (Career Pathfinder)
 | Table | Rows | Purpose |
@@ -260,11 +262,12 @@ Weights (configurable in config/chains.yaml):
 
 ### Targeting Score
 ```
-Targeting = (staffing_stress × 0.40)
-          + (wage_gap        × 0.30)
-          + (isolation       × 0.20)
-          + (local_density   × 0.10)
+Targeting = (staffing_stress    × 0.40)
+          + (wage_gap           × 0.30)
+          + (isolation          × 0.20)
+          + (local_alternatives × 0.10)
 ```
+`local_alternatives` = weighted sum of `mobility_score` of nearby active employers (threshold: sum of 3.0 = 100). Higher score means more high-mobility employers are already in the area competing for the same workers.
 
 ### Career Pathfinder Ranking
 ```
@@ -284,24 +287,30 @@ Rank destinations by:
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Initialize DB + reference data
+# 2. Configure environment
+cp .env.example .env
+# Edit .env — set DATABASE_URL=postgresql://user:pass@localhost:5432/helios
+# Create the DB if it doesn't exist:  createdb helios
+
+# 3. Initialize DB + reference data
 python scripts/populate_reference_data.py
 python scripts/populate_industry_taxonomy.py
-python scripts/populate_mobility_data.py      # loads 256k career transition rows
+python scripts/populate_mobility_data.py      # loads 781 occupations + 256k career transitions
+python scripts/load_occupation_aliases.py     # loads 18,981 Census job-title aliases
 
-# 3. Ingest Overture POI data (local employers + chain locations)
+# 5. Ingest Overture POI data (local employers + chain locations)
 #    Either via S3/DuckDB:
 python scrapers/overture_adapter.py --mode local --region austin_tx
 #    Or from a locally downloaded GeoJSON:
 python scrapers/overture_adapter.py --local-file data/austin_places.geojson
 
-# 4. Classify and purge chain-like local employer records
+# 6. Classify and purge chain-like local employer records
 python scripts/classify_local_employers.py    # backfills location_count + purges chains
 
-# 5. Start server
+# 7. Start server
 python server.py --debug                      # http://localhost:8765
 
-# 6. (Optional) Run chain scrapers
+# 8. (Optional) Run chain scrapers
 python scrapers/careers_api.py --region austin_tx
 python scrapers/jobspy_adapter.py --chain starbucks --region austin_tx
 ```
@@ -328,7 +337,7 @@ All chain targets, scoring weights, and region definitions live in `config/chain
 
 ## Important Constraints
 
-**Do not touch `spiritpool/` or `data/spiritpool.db`** — browser extension on hiatus, preserved intact.
+**Do not touch `spiritpool/`** — browser extension on hiatus, preserved intact.
 
 **Public data only** — no logins, no paywalls, no bypassing access controls.
 

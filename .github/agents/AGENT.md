@@ -1,33 +1,37 @@
 # AGENT.md — Instructions for AI Coding Agents
 
-This file tells you everything you need to know to work on ChainStaffingTracker without asking clarifying questions. Read it completely before writing any code.
+This file tells you everything you need to know to work on First-Helios without asking clarifying questions. Read it completely before writing any code.
 
 ---
 
 ## 0. Read These First
 
 ```bash
-cat README.md                          # project overview, architecture, all third-party tools
-cat RUNBOOK.md                         # how to start the server, run scrapers, troubleshoot
-cat SPIRITPOOL_HANDOFF_SESSION3.md     # state of the codebase as of last session
+cat README.md                                  # project overview, architecture, all third-party tools
+cat RUNBOOK.md                                 # how to start the server, populate data, troubleshoot
+cat CLAUDE_DATA_ENGINEERING_HANDOFF.md         # data engineering guide — ingest architecture, DB state
 ```
 
 Then inventory what actually exists on disk — do not trust docs alone:
 
 ```bash
 find . -name "*.py" -not -path "./.venv/*" | sort
-wc -l server.py backend/*.py scraper/*.py 2>/dev/null
-head -80 scraper/scrape.py             # understand the existing scraper before touching it
+wc -l server.py backend/*.py scrapers/*.py 2>/dev/null
 cat config/chains.yaml 2>/dev/null || echo "CONFIG NOT YET CREATED"
+# Check DB row counts (PostgreSQL):
+psql -d helios -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;"
 ```
 
 ---
 
 ## 1. Mission
 
-Build a public data scraping pipeline that detects real staffing stress at chain employer locations in Austin TX, and outputs a ranked list of where community job fairs will have maximum labor market impact.
+Build and maintain a public labor market intelligence platform with two modes:
 
-This is a community economic justice tool. Every technical decision should be evaluated against: *does this make the output more useful for someone deciding where and when to show up with a hiring booth?*
+1. **Job Fair Targeting** — detects staffing stress at chain employer locations in Austin TX and outputs a ranked list of where community job fairs will have maximum impact
+2. **Career Pathfinder** — shows workers what jobs they can realistically move into from where they are now (256k+ real career transitions), how hard each move is, and maps where to apply nearby
+
+This is a community economic justice tool. Every technical decision should be evaluated against: *does this make the output more useful for someone deciding where to show up with a hiring booth, or a worker deciding what to do next?*
 
 ---
 
@@ -35,16 +39,13 @@ This is a community economic justice tool. Every technical decision should be ev
 
 | Component | Location | Status |
 |-----------|----------|--------|
-| Starbucks careers API scraper | `scraper/scrape.py` | Working — CLI must remain functional |
 | Flask server | `server.py` (port 8765) | Stable |
-| Leaflet map frontend | `frontend/` | Stable — do not modify CSS or JS |
-| SpiritPool SQLite backend | `backend/` + `data/spiritpool.db` | Working — do not touch |
+| Job Fair Map frontend | `frontend/` (app.js) | Stable |
+| Career Pathfinder frontend | `frontend/` (pathfinder.js) | Stable |
+| PostgreSQL backend | `backend/database.py` | Active — helios DB |
+| Employer ingest pipeline | `backend/ingest_layer.py` + `backend/normalizer.py` | Active write path |
+| Mobility graph | `mob_occupation` + `mob_transition` tables | 781 SOCs, 256,831 transitions loaded |
 | Browser extension | `spiritpool/` | **ON HIATUS — do not modify** |
-
-**The original scraper CLI must keep working after any refactoring:**
-```bash
-python scraper/scrape.py --location "Austin, TX, US" --radius 25  # must not break
-```
 
 ---
 
@@ -125,7 +126,7 @@ import praw
 reddit = praw.Reddit(
     client_id=os.getenv("REDDIT_CLIENT_ID"),
     client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
-    user_agent="ChainStaffingTracker/1.0"
+    user_agent="FirstHelios/1.0"
 )
 
 # If no credentials, fall back to public JSON API:
@@ -138,7 +139,7 @@ import requests
 
 # V1 API — no registration required
 url = "https://api.bls.gov/publicAPI/v1/timeseries/data/{SERIES_ID}"
-r = requests.get(url, headers={"User-Agent": "ChainStaffingTracker/1.0"}).json()
+r = requests.get(url, headers={"User-Agent": "FirstHelios/1.0"}).json()
 data = r["Results"]["series"][0]["data"]  # list of {year, period, value}
 ```
 
@@ -148,8 +149,19 @@ Series IDs for Austin food service wages are in `config/chains.yaml`.
 
 ## 5. Architecture Rules
 
+### Active database is PostgreSQL
+**DB:** `helios` on `localhost:5432`. Connection via `DATABASE_URL` env var in `.env`.
+**Do not use SQLite** — there is no `data/tracker.db`.
+
+### Employer data write path is `ingest_layer.py`
+All employer data (local employers + chain locations) flows through:
+1. `backend/normalizer.py` — zero-DB normalization (name cleaning, geocoding, industry classification)
+2. `backend/ingest_layer.py` — fingerprint → `brand_groups` upsert → `local_employers` upsert
+
+Never write employer records to the DB directly. Always go through this pipeline.
+
 ### Every scraper produces `ScraperSignal` objects
-All scrapers must implement `BaseScraper` from `scrapers/base.py` and return `list[ScraperSignal]`. No scraper writes directly to the database. The `backend/ingest.py` function `ingest_signals()` handles all DB writes.
+All scrapers must implement `BaseScraper` from `scrapers/base.py` and return `list[ScraperSignal]`. No scraper writes directly to the database. The `backend/ingest.py` function `ingest_signals()` handles all scraper signal DB writes (job postings, reviews, sentiment).
 
 ```python
 @dataclass
@@ -172,9 +184,8 @@ class ScraperSignal:
 ### Config drives everything
 Nothing is hardcoded. All chain names, API endpoints, scoring weights, region coordinates, and BLS series IDs come from `config/chains.yaml` via `config/loader.py`. If you find yourself hardcoding "Austin" or "Starbucks" anywhere other than config, stop and fix it.
 
-### Two separate databases
-- `data/tracker.db` — the new pipeline (stores, signals, snapshots, scores, wage_index)
-- `data/spiritpool.db` — the extension pipeline — **never write to this from new code**
+### Do not write to spiritpool
+- `spiritpool/` — extension on hiatus — **never write to this from new code**
 
 ### Fail gracefully, never crash the server
 Every scraper's `scrape()` method must catch all exceptions internally and return an empty list on failure. Log the error clearly. The server must stay up even if every scraper is down.
@@ -201,8 +212,8 @@ Every scraper must have configurable delays between requests. Defaults:
 
 ## 6. Database Schema
 
-**File:** `backend/database.py`  
-**DB file:** `data/tracker.db` (auto-created on first run)  
+**File:** `backend/database.py`
+**DB:** PostgreSQL `helios` on `localhost:5432` (connect via `DATABASE_URL` in `.env`)
 **ORM:** SQLAlchemy (already installed)
 
 ```python
@@ -404,14 +415,13 @@ Add it to the install command in `RUNBOOK.md`.
 | Do Not | Why |
 |--------|-----|
 | Modify `spiritpool/` | Extension is on hiatus |
-| Write to `data/spiritpool.db` | Extension DB must stay clean |
 | Write a custom Indeed scraper | JobSpy already does this |
 | Write a custom Google Maps scraper from scratch | `google-maps-scraper` already does this |
 | Scrape any page requiring login | Legal constraint — public data only |
 | Add ML/NLP libraries | Keyword matching is sufficient for v1 |
 | Add npm or Node.js build steps | Frontend is vanilla JS |
 | Change Flask port | Stays 8765 |
-| Break `python scraper/scrape.py --location "Austin, TX, US"` | Legacy CLI must stay working |
+| Use SQLite or create `data/tracker.db` | Active DB is PostgreSQL (helios) |
 | Hardcode "Austin" or "Starbucks" outside config | Config-driven means config-driven |
 | Add user authentication | Not needed for v1 |
 | Build for any region other than Austin TX | One city first |
@@ -423,24 +433,18 @@ Add it to the install command in `RUNBOOK.md`.
 Run this after completing your work:
 
 ```bash
-cd /home/fortune/CodeProjects/ChainStaffingTracker
+cd /home/fortune/CodeProjects/First-Helios
 
 # Server starts clean
 pkill -f "server.py" 2>/dev/null; sleep 1
 python server.py --debug &
 sleep 2
 
-# Legacy scraper still works
-python scraper/scrape.py --location "Austin, TX, US" --radius 25
-
-# SpiritPool still untouched
-curl -s http://localhost:8765/api/spiritpool/stats
-
-# New scrapers run without crashing
-python scrapers/careers_api.py --region austin_tx
-python scrapers/jobspy_adapter.py --chain starbucks --region austin_tx
-python scrapers/reddit_adapter.py --region austin_tx
-python scrapers/reviews_adapter.py --chain starbucks --region austin_tx
+# Core endpoints respond
+curl -s "http://localhost:8765/api/ref/summary?region=austin_tx" | python3 -m json.tool
+curl -s "http://localhost:8765/api/targeting?industry=coffee_cafe&region=austin_tx&limit=10" | python3 -m json.tool
+curl -s "http://localhost:8765/api/mobility/occupations" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('occupations',[])), 'occupations')"
+curl -s "http://localhost:8765/api/mobility/paths?soc=35-3023&wage_filter=up&limit=5" | python3 -m json.tool
 
 # Score distribution is NOT 87% critical
 curl -s "http://localhost:8765/api/scores?region=austin_tx" | python3 -c "
@@ -452,18 +456,14 @@ print(Counter(tiers))
 # Should show spread across tiers, not 87% critical
 "
 
-# Targeting and wage endpoints respond with real data
-curl -s "http://localhost:8765/api/targeting?industry=coffee_cafe&region=austin_tx&limit=10" | python3 -m json.tool
-curl -s "http://localhost:8765/api/wage-index?industry=coffee_cafe&region=austin_tx" | python3 -m json.tool
-
-# DB has data in all tables
-python3 -c "
-import sqlite3
-conn = sqlite3.connect('data/tracker.db')
-for t in ['stores','signals','snapshots','scores','wage_index']:
-    n = conn.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]
-    print(f'{t}: {n} rows')
-conn.close()
+# DB row counts (PostgreSQL)
+psql -d helios -c "
+SELECT 'chain_locations' AS tbl, COUNT(*) FROM chain_locations
+UNION ALL SELECT 'local_employers', COUNT(*) FROM local_employers
+UNION ALL SELECT 'brand_groups', COUNT(*) FROM brand_groups
+UNION ALL SELECT 'mob_occupation', COUNT(*) FROM mob_occupation
+UNION ALL SELECT 'mob_transition', COUNT(*) FROM mob_transition
+UNION ALL SELECT 'ref_occupation_aliases', COUNT(*) FROM ref_occupation_aliases;
 "
 ```
 
@@ -477,7 +477,7 @@ At the end of every session, create or update `HANDOFF_SESSION_N.md`:
 2. Tasks started but not finished and why
 3. Score distribution after fixes (what % are critical/elevated/adequate)
 4. Top 3 rows from `/api/targeting` output — paste actual JSON
-5. DB row counts per table in `tracker.db`
+5. DB row counts for key tables (psql -d helios -c "SELECT ...count...")
 6. Any new known issues discovered
 7. Deviations from these instructions and why
 8. Suggested next session priorities
@@ -499,20 +499,17 @@ python scrapers/jobspy_adapter.py --industry coffee_cafe --region austin_tx --mo
 python scrapers/reddit_adapter.py --region austin_tx
 python scrapers/reviews_adapter.py --chain starbucks --region austin_tx
 
-# Check DB
-python3 -c "
-import sqlite3; conn = sqlite3.connect('data/tracker.db')
-for t in ['stores','signals','snapshots','scores','wage_index']:
-    print(t, conn.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0])
-"
+# Check DB (PostgreSQL)
+psql -d helios -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;"
 
 # Install all dependencies
 pip install flask flask-sqlalchemy flask-cors requests tqdm playwright \
-            pyyaml apscheduler python-jobspy praw nltk pandas google-maps-scraper
+            pyyaml apscheduler python-jobspy praw pandas pyreadstat \
+            "psycopg[binary]" python-dotenv google-maps-scraper
 playwright install firefox
 playwright install chromium --with-deps
 ```
 
 ---
 
-*This file is the authoritative instruction set for agents working on this codebase. README.md explains what the project does. This file explains how to work on it. When in doubt, re-read §4 (don't build what exists) and §12 (what not to do).*
+*This file is the authoritative instruction set for agents working on First-Helios. README.md explains what the project does. RUNBOOK.md explains how to set it up and run it. This file explains the architecture rules. When in doubt, re-read §4 (don't build what exists) and §12 (what not to do).*
