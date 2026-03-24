@@ -15,17 +15,10 @@
     const AUSTIN_CENTER = [30.2672, -97.7431];
     const DEFAULT_ZOOM = 11;
 
-    // Tier / targeting colors
-    const TIER_COLORS = {
-        critical: '#e94560',
-        elevated: '#f0a500',
-        adequate: '#4ecca3',
-        unknown: '#666',
-        prime: '#e94560',
-        strong: '#f0a500',
-        moderate: '#4ecca3',
-    };
-
+    // Marker colors
+    // brand  = multi-location employer (H-E-B, CVS, etc.)  — amber
+    // local  = single-location independent employer         — purple
+    const BRAND_COLOR = '#f0a500';
     const LOCAL_COLOR = '#6c5ce7';
 
     // ── Map initialization ──────────────────────────────────────────
@@ -51,21 +44,28 @@
             const data = await resp.json();
             if (data.status !== 'ok') return;
 
-            // Chain filter
+            // Chain filter — driven by actual ingested data.
+            // Tracked chains (has_scores=true) have targeting data.
+            // Area chains (has_scores=false) are map-location-only.
             const chainSel = document.getElementById('chain-filter');
-            (data.brands || []).forEach(function (b) {
+            (data.chains || []).forEach(function (c) {
                 const opt = document.createElement('option');
-                opt.value = b.brand_key;
-                opt.textContent = b.display_name + (b.store_count ? ' (' + b.store_count + ')' : '');
+                opt.value = c.chain_key || c.chain_name;
+                var cnt = c.store_count || c.location_count || 0;
+                opt.textContent = c.chain_name + ' (' + cnt + ')';
                 chainSel.appendChild(opt);
             });
 
-            // Industry filter
+            // Industry filter — keyed by IndustryTaxonomy.industry_key, same key
+            // stored in Store.industry and LocalEmployer.industry.
             const indSel = document.getElementById('industry-filter');
             (data.industries || []).forEach(function (ind) {
                 const opt = document.createElement('option');
-                opt.value = ind.internal_key;
-                opt.textContent = ind.naics_title;
+                opt.value = ind.industry_key;
+                var label = ind.display_name;
+                var total = (ind.store_count || 0) + (ind.local_count || 0);
+                if (total) label += ' (' + total + ')';
+                opt.textContent = label;
                 indSel.appendChild(opt);
             });
 
@@ -84,102 +84,88 @@
         badge.textContent = parts.join(' · ') || '—';
     }
 
-    // ── Fetch and render scored stores ──────────────────────────────
-    async function loadScores() {
-        const chainFilter = document.getElementById('chain-filter').value;
-        const tierFilter = document.getElementById('tier-filter').value;
-        const industryFilter = document.getElementById('industry-filter').value;
+    // ── Unified map load ─────────────────────────────────────────────
+    // Fetches both chain stores and local employers from /api/map-employers.
+    // Industry and chain filters apply uniformly to both source types.
+    // show-local checkbox toggles local marker visibility without re-fetching.
+    // local-sample selector triggers a full reload with a new count.
 
-        let url = API_BASE + '/api/stores?region=austin_tx';
-        if (chainFilter) url += '&chain=' + chainFilter;
-        if (industryFilter) url += '&industry=' + industryFilter;
+    async function loadMapEmployers() {
+        const chainFilter    = document.getElementById('chain-filter').value;
+        const industryFilter = document.getElementById('industry-filter').value;
+        const sample         = document.getElementById('local-sample').value;
+        const showLocal      = document.getElementById('show-local').checked;
+
+        let url = API_BASE + '/api/map-employers?region=austin_tx';
+        if (chainFilter)    url += '&chain='    + encodeURIComponent(chainFilter);
+        if (industryFilter) url += '&industry=' + encodeURIComponent(industryFilter);
+        if (!industryFilter) url += '&sample=' + sample;
 
         try {
             const resp = await fetch(url);
             const data = await resp.json();
 
-            // Clear existing store markers
+            // Clear all existing markers
             storeMarkers.forEach(function (m) { map.removeLayer(m); });
             storeMarkers = [];
-
-            var stores = data.stores || [];
-            if (tierFilter) {
-                stores = stores.filter(function (s) { return s.tier === tierFilter; });
-            }
-
-            stores.forEach(function (store) {
-                if (!store.lat || !store.lng) return;
-
-                var color = TIER_COLORS[store.tier] || TIER_COLORS.unknown;
-                var marker = L.circleMarker([store.lat, store.lng], {
-                    radius: 8,
-                    fillColor: color,
-                    color: color,
-                    weight: 2,
-                    opacity: 0.9,
-                    fillOpacity: 0.6,
-                }).addTo(map);
-
-                marker.bindPopup(
-                    '<strong>' + (store.name || store.store_num) + '</strong><br>' +
-                    'Chain: ' + (store.chain || '—') + '<br>' +
-                    'Score: ' + (store.score != null ? store.score.toFixed(1) : 'n/a') + '<br>' +
-                    'Tier: <span style="color:' + color + '">' + store.tier + '</span><br>' +
-                    '<small>' + (store.address || '') + '</small>'
-                );
-                storeMarkers.push(marker);
-            });
-
-            // Update visible-count portion of badge
-            document.getElementById('store-count').textContent =
-                stores.length + ' visible' + (storeMarkers.length !== stores.length ? ' (' + storeMarkers.length + ' mapped)' : '');
-
-        } catch (err) {
-            console.error('Failed to load stores:', err);
-        }
-    }
-
-    // ── Fetch and render local employers ────────────────────────────
-    async function loadLocalEmployers() {
-        const industryFilter = document.getElementById('industry-filter').value;
-        let url = API_BASE + '/api/local-employers?region=austin_tx';
-        if (industryFilter) url += '&industry=' + industryFilter;
-
-        try {
-            const resp = await fetch(url);
-            const data = await resp.json();
-
-            // Clear existing local markers
             localMarkers.forEach(function (m) { map.removeLayer(m); });
             localMarkers = [];
 
+            var brandCount = 0, localCount = 0;
+
             (data.employers || []).forEach(function (emp) {
                 if (!emp.lat || !emp.lng) return;
+
+                var isBrand = emp.source_type === 'brand';
+                var color   = isBrand ? BRAND_COLOR : LOCAL_COLOR;
+                var radius  = isBrand ? 6 : 4;
+                var label   = isBrand ? (emp.location_count + ' locations') : 'Local employer';
+
                 var marker = L.circleMarker([emp.lat, emp.lng], {
-                    radius: 4,
-                    fillColor: LOCAL_COLOR,
-                    color: LOCAL_COLOR,
+                    radius: radius,
+                    fillColor: color,
+                    color: color,
                     weight: 1,
-                    opacity: 0.6,
-                    fillOpacity: 0.35,
-                }).addTo(map);
+                    opacity: isBrand ? 0.85 : 0.6,
+                    fillOpacity: isBrand ? 0.55 : 0.35,
+                });
+
+                if (showLocal || isBrand) marker.addTo(map);
 
                 marker.bindPopup(
                     '<strong>' + emp.name + '</strong><br>' +
-                    '<em>Local employer</em><br>' +
-                    (emp.category ? 'Category: ' + emp.category + '<br>' : '') +
+                    '<em>' + label + '</em><br>' +
+                    (emp.industry ? 'Industry: ' + emp.industry + '<br>' : '') +
                     '<small>' + (emp.address || '') + '</small>'
                 );
-                localMarkers.push(marker);
+
+                if (isBrand) {
+                    storeMarkers.push(marker);
+                    brandCount++;
+                } else {
+                    localMarkers.push(marker);
+                    localCount++;
+                }
             });
+
+            document.getElementById('store-count').textContent =
+                brandCount + ' brands · ' +
+                (showLocal ? localCount + ' local' : localCount + ' local (hidden)');
+
         } catch (err) {
-            console.error('Failed to load local employers:', err);
+            console.error('Failed to load map employers:', err);
         }
     }
 
     function clearLocalMarkers() {
         localMarkers.forEach(function (m) { map.removeLayer(m); });
         localMarkers = [];
+    }
+
+    function setLocalVisibility(visible) {
+        localMarkers.forEach(function (m) {
+            if (visible) { m.addTo(map); } else { map.removeLayer(m); }
+        });
     }
 
     // ── Fetch and render targeting sidebar ──────────────────────────
@@ -221,37 +207,69 @@
         }
     }
 
+    // ── Mode switching ───────────────────────────────────────────────
+    var currentMode = 'targeting';
+
+    function switchMode(mode) {
+        currentMode = mode;
+        var isTargeting = (mode === 'targeting');
+
+        document.getElementById('targeting-controls').style.display = isTargeting ? '' : 'none';
+        document.getElementById('pathfinder-controls').style.display = isTargeting ? 'none' : '';
+        document.getElementById('targeting-sidebar').style.display  = isTargeting ? '' : 'none';
+        document.getElementById('pathfinder-sidebar').style.display  = isTargeting ? 'none' : '';
+
+        document.getElementById('mode-targeting').classList.toggle('active', isTargeting);
+        document.getElementById('mode-pathfinder').classList.toggle('active', !isTargeting);
+
+        // Clear markers from the other mode
+        if (isTargeting) {
+            if (window.pathfinderClearMarkers) window.pathfinderClearMarkers();
+            loadMapEmployers();
+            loadTargets();
+        } else {
+            storeMarkers.forEach(function (m) { map.removeLayer(m); });
+            storeMarkers = [];
+            clearLocalMarkers();
+            if (window.pathfinderInit) window.pathfinderInit();
+        }
+    }
+
+    document.getElementById('mode-targeting').addEventListener('click', function () { switchMode('targeting'); });
+    document.getElementById('mode-pathfinder').addEventListener('click', function () { switchMode('pathfinder'); });
+
     // ── Event listeners ─────────────────────────────────────────────
     document.getElementById('refresh-btn').addEventListener('click', function () {
-        loadScores();
+        loadMapEmployers();
         loadTargets();
-        if (document.getElementById('show-local').checked) loadLocalEmployers();
     });
 
     document.getElementById('chain-filter').addEventListener('change', function () {
-        loadScores();
+        loadMapEmployers();
         loadTargets();
     });
-
-    document.getElementById('tier-filter').addEventListener('change', loadScores);
 
     document.getElementById('industry-filter').addEventListener('change', function () {
-        loadScores();
+        loadMapEmployers();
         loadTargets();
-        if (document.getElementById('show-local').checked) loadLocalEmployers();
     });
 
+    // show-local: toggle visibility without re-fetching
     document.getElementById('show-local').addEventListener('change', function () {
-        if (this.checked) {
-            loadLocalEmployers();
-        } else {
-            clearLocalMarkers();
-        }
+        setLocalVisibility(this.checked);
+    });
+
+    // local-sample: reload with new count
+    document.getElementById('local-sample').addEventListener('change', function () {
+        loadMapEmployers();
     });
 
     // ── Initial load ────────────────────────────────────────────────
     loadFilters().then(function () {
-        loadScores();
+        loadMapEmployers();
         loadTargets();
     });
+
+    // Expose map for pathfinder.js
+    window.sharedMap = map;
 })();

@@ -10,14 +10,17 @@ Called by: backend/ingest.py, backend/scoring/, backend/targeting.py, server.py
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -26,6 +29,8 @@ from sqlalchemy import (
     create_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +66,7 @@ class Base(DeclarativeBase):
 
 # ── Models ───────────────────────────────────────────────────────────────────
 
-class ChainLocation(Base):
+class Store(Base):
     """One row per physical chain / franchise location.
 
     Represents large-cap multi-location organizations (Starbucks, Target,
@@ -105,8 +110,7 @@ class ChainLocation(Base):
         }
 
 
-# Backward-compatible alias (use ChainLocation in new code)
-Store = ChainLocation
+# Removed duplicate alias ChainLocation — use Store everywhere.
 
 
 class Signal(Base):
@@ -533,30 +537,82 @@ class LaborMarketBaseline(Base):
         }
 
 
-class LocalEmployer(Base):
-    """Local (non-chain) employer POI — businesses with 1-10 locations.
+class BrandGroup(Base):
+    """Canonical brand identity — one row per unique business fingerprint.
 
-    Populated by OvertureLocalAdapter and OSM adapter.
-    Used by targeting.py for local_alternatives score component.
+    Maintained incrementally by backend/ingest_layer.py.
+    location_count is updated atomically on each employer insert so it is
+    always current without a full table scan.
+
+    A business is classified as a brand when location_count >= CHAIN_THRESHOLD (5).
+
+    Layer: Reference Data (Layer 1)
+    """
+
+    __tablename__ = "brand_groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fingerprint = Column(String, nullable=False, unique=True, index=True)
+    canonical_name = Column(String, nullable=False)
+    location_count = Column(Integer, nullable=False, default=0)
+    industry = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "fingerprint": self.fingerprint,
+            "canonical_name": self.canonical_name,
+            "location_count": self.location_count,
+            "industry": self.industry,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class LocalEmployer(Base):
+    """Every employer POI — brands and local businesses in a single table.
+
+    Populated exclusively through backend/ingest_layer.py, which normalizes
+    names and maintains brand_groups counts before writing here.
+
+    brand_group_id links to BrandGroup. Query brand_groups.location_count >= 5
+    to identify brand-class employers at read time.
 
     Layer: Business Locations (Layer 2)
     """
 
     __tablename__ = "local_employers"
 
+    # ── Internal stable key ───────────────────────────────────────────────────
     id = Column(Integer, primary_key=True, autoincrement=True)
-    overture_id = Column(String, unique=True, nullable=False)
-    name = Column(String, nullable=False)
+
+    # ── Source identity (not the PK — can be corrected without losing the row) ─
+    overture_id = Column(String, nullable=True, index=True)   # null for non-Overture sources
+    source = Column(String, nullable=False, default="overture")  # overture | bls | yelp | manual
+
+    # ── Name — both raw and normalized ───────────────────────────────────────
+    raw_name = Column(String, nullable=False)                  # exactly as ingested
+    name = Column(String, nullable=False)                      # canonical_name (display)
+    fingerprint = Column(String, nullable=True, index=True)    # rigour key for grouping
+
+    # ── Brand group link ──────────────────────────────────────────────────────
+    brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+    location_count = Column(Integer, nullable=True)            # denorm cache from brand_groups
+
+    # ── Classification ────────────────────────────────────────────────────────
     category = Column(String, nullable=True)
     industry = Column(String, nullable=True)
+    mobility_score = Column(Float, nullable=True)  # 0.0–1.0; wage lift + career ceiling vs service baseline
+
+    # ── Location ──────────────────────────────────────────────────────────────
     address = Column(String, nullable=True, default="")
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
     region = Column(String, nullable=True)
-    location_count = Column(Integer, nullable=True)  # estimated 1-10
-    source_discovery = Column(String, nullable=True)  # overture, osm, jobspy
+
+    # ── Provenance ────────────────────────────────────────────────────────────
+    source_discovery = Column(String, nullable=True)           # overture_local | osm | jobspy
     confidence = Column(Float, nullable=True)
-    upward_mobility = Column(Boolean, default=False)  # employer represents career step-up from service work
     is_active = Column(Boolean, default=True)
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow)
@@ -565,14 +621,19 @@ class LocalEmployer(Base):
         return {
             "id": self.id,
             "overture_id": self.overture_id,
+            "source": self.source,
+            "raw_name": self.raw_name,
             "name": self.name,
+            "fingerprint": self.fingerprint,
+            "brand_group_id": self.brand_group_id,
+            "location_count": self.location_count,
             "category": self.category,
             "industry": self.industry,
+            "mobility_score": self.mobility_score,
             "address": self.address,
             "lat": self.lat,
             "lng": self.lng,
             "region": self.region,
-            "location_count": self.location_count,
             "source_discovery": self.source_discovery,
             "confidence": self.confidence,
             "is_active": self.is_active,
@@ -966,11 +1027,20 @@ class RevelioLayoffs(Base):
 # ── Engine + Session factory ─────────────────────────────────────────────────
 
 def get_engine(db_path: Path | None = None):
-    """Create SQLAlchemy engine for tracker.db."""
+    """Create SQLAlchemy engine.
+
+    Priority:
+      1. DATABASE_URL environment variable → PostgreSQL (or any SQLAlchemy URL)
+      2. db_path argument → SQLite at that path
+      3. Default → SQLite at data/tracker.db
+    """
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        engine = create_engine(url, echo=False, pool_pre_ping=True)
+        return engine
     path = db_path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(f"sqlite:///{path}", echo=False)
-    return engine
+    return create_engine(f"sqlite:///{path}", echo=False)
 
 
 def init_db(db_path: Path | None = None):
@@ -979,7 +1049,8 @@ def init_db(db_path: Path | None = None):
     _import_metadata_models()
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
-    logger.info("[Database] Initialized tracker.db at %s", db_path or DB_PATH)
+    db_label = os.environ.get("DATABASE_URL") or str(db_path or DB_PATH)
+    logger.info("[Database] Initialized at %s", db_label)
     return engine
 
 

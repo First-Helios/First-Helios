@@ -1,4 +1,4 @@
-/* ChainStaffingTracker — Dark theme map UI */
+/* First Helios — Dark theme map UI */
 
 * {
     margin: 0;
@@ -20,30 +20,66 @@ body {
     padding: 12px 20px;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
     border-bottom: 1px solid #0f3460;
     flex-wrap: wrap;
 }
 
-#header h1 {
+#brand h1 {
     font-size: 1.3rem;
     color: #e94560;
     white-space: nowrap;
 }
 
-#header p {
-    font-size: 0.85rem;
+#brand p {
+    font-size: 0.78rem;
     color: #888;
     white-space: nowrap;
+    margin-top: 1px;
 }
 
-#controls {
+/* ── Mode switcher ────────────────────────────────────────────────── */
+#mode-switcher {
     display: flex;
+    gap: 4px;
+    background: #0f3460;
+    padding: 3px;
+    border-radius: 6px;
+}
+
+.mode-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    padding: 5px 14px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.mode-btn.active {
+    background: #e94560;
+    color: #fff;
+}
+
+.mode-btn:not(.active):hover {
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+
+/* ── Shared controls group ────────────────────────────────────────── */
+.controls-group {
+    display: flex;
+    align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
     margin-left: auto;
 }
 
-#controls select, #controls button {
+.controls-group select,
+.controls-group button,
+.controls-group input[type="text"] {
     background: #1a1a2e;
     color: #e0e0e0;
     border: 1px solid #0f3460;
@@ -53,18 +89,28 @@ body {
     cursor: pointer;
 }
 
-#controls button {
+.controls-group input[type="text"] {
+    cursor: text;
+    min-width: 200px;
+}
+
+.controls-group input[type="text"]::placeholder {
+    color: #555;
+}
+
+.controls-group button {
     background: #e94560;
     border-color: #e94560;
     color: #fff;
 }
 
-#controls button:hover {
+.controls-group button:hover {
     background: #c73a52;
 }
 
 /* Local employer toggle */
-#local-toggle {
+#local-toggle,
+#in-industry-toggle {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -72,15 +118,18 @@ body {
     color: #6c5ce7;
     cursor: pointer;
     user-select: none;
+    white-space: nowrap;
 }
 
-#local-toggle input[type="checkbox"] {
+#local-toggle input[type="checkbox"],
+#in-industry-toggle input[type="checkbox"] {
     accent-color: #6c5ce7;
     cursor: pointer;
 }
 
-/* Store count badge */
-#store-count {
+/* Store count / path status badge */
+#store-count,
+#path-status {
     display: inline-flex;
     align-items: center;
     padding: 4px 10px;
@@ -91,12 +140,118 @@ body {
     white-space: nowrap;
 }
 
+/* ── Pathfinder search autocomplete ──────────────────────────────── */
+#search-wrap {
+    position: relative;
+}
+
+#job-autocomplete {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 260px;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    z-index: 9999;
+    max-height: 220px;
+    overflow-y: auto;
+    display: none;
+}
+
+.ac-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    font-size: 0.84rem;
+    cursor: pointer;
+    border-bottom: 1px solid #0f3460;
+}
+
+.ac-item:last-child { border-bottom: none; }
+
+.ac-item:hover,
+.ac-item.ac-selected {
+    background: #0f3460;
+    color: #fff;
+}
+
+/* Transition-data availability dot */
+.ac-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.ac-dot-yes { background: #4ecca3; }
+.ac-dot-no  { background: #555; }
+
+.ac-title   { flex: 1; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ac-cluster {
+    font-size: 0.70rem;
+    color: #6c5ce7;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.ac-soc {
+    font-size: 0.72rem;
+    color: #888;
+}
+
+.ac-wage {
+    font-size: 0.72rem;
+    color: #4ecca3;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Fallback SOC note in paths list */
+.path-fallback-note {
+    font-size: 0.75rem;
+    color: #f0a500;
+    background: rgba(240,165,0,0.08);
+    border: 1px solid rgba(240,165,0,0.25);
+    border-radius: 4px;
+    padding: 5px 10px;
+    margin-bottom: 8px;
+}
+
 #map {
     flex: 1;
     min-height: 400px;
 }
 
-#sidebar {
+#map-legend {
+    position: absolute;
+    bottom: 28px;
+    left: 12px;
+    z-index: 1000;
+    background: rgba(22, 33, 62, 0.88);
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: #e0e0e0;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    pointer-events: none;
+}
+
+.legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+/* ── Shared sidebar ───────────────────────────────────────────────── */
+.sidebar {
     background: #16213e;
     padding: 12px 16px;
     max-height: 30vh;
@@ -104,7 +259,7 @@ body {
     border-top: 1px solid #0f3460;
 }
 
-#sidebar h2 {
+.sidebar h2 {
     font-size: 1rem;
     color: #e94560;
     margin-bottom: 8px;
@@ -141,7 +296,91 @@ body {
     margin-top: 4px;
 }
 
-/* Leaflet popup overrides for dark theme */
+/* ── Pathfinder origin banner ─────────────────────────────────────── */
+#pathfinder-origin {
+    background: #0f3460;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: 0.85rem;
+}
+
+#pathfinder-origin .origin-title {
+    font-weight: 600;
+    color: #fff;
+}
+
+#pathfinder-origin .origin-meta {
+    font-size: 0.78rem;
+    color: #aaa;
+    margin-top: 2px;
+}
+
+/* ── Path cards ───────────────────────────────────────────────────── */
+.path-card {
+    background: #1a1a2e;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.path-card:hover,
+.path-card.active {
+    border-color: #4ecca3;
+}
+
+.path-card .path-title {
+    font-weight: 600;
+    color: #fff;
+    font-size: 0.92rem;
+}
+
+.path-card .path-direction {
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-top: 3px;
+}
+
+.path-card .path-details {
+    font-size: 0.76rem;
+    color: #888;
+    margin-top: 4px;
+}
+
+.path-card .path-wage {
+    font-size: 0.82rem;
+    margin-top: 3px;
+}
+
+.path-card .wage-up   { color: #4ecca3; }
+.path-card .wage-same { color: #f0a500; }
+.path-card .wage-down { color: #e94560; }
+
+.path-card .path-meta {
+    font-size: 0.76rem;
+    color: #888;
+    margin-top: 4px;
+}
+
+.path-card .employer-count {
+    font-size: 0.76rem;
+    color: #6c5ce7;
+    margin-top: 3px;
+}
+
+.skill-bar {
+    display: inline-block;
+    height: 6px;
+    border-radius: 3px;
+    background: #6c5ce7;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+/* ── Leaflet popup overrides for dark theme ──────────────────────── */
 .leaflet-popup-content-wrapper {
     background: #16213e;
     color: #e0e0e0;

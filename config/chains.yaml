@@ -87,6 +87,24 @@ scoring:
     trough_months:
     - 1
     - 2
+targeting:
+  weights:
+    staffing_stress: 0.40
+    wage_gap: 0.30
+    isolation: 0.20
+    local_alternatives: 0.10
+  tiers:
+    prime:
+      min_score: 67
+      label: prime
+    strong:
+      min_score: 33
+      label: strong
+    moderate:
+      min_score: 0
+      label: moderate
+  local_radius_mi: 1.0
+
 chains:
   starbucks:
     display_name: Starbucks

@@ -29,7 +29,6 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from backend.database import (
-    ChainLocation,
     LocalEmployer,
     Score,
     Signal,
@@ -43,6 +42,10 @@ from backend.models.reference import (
     BrandProfile,
     CategoryMapping,
     IndustryCategory,
+    IndustryTaxonomy,
+    MobOccupation,
+    MobTransition,
+    OccupationAlias,
     RegionProfile,
 )
 from backend.scheduler import get_scheduler_status, init_scheduler
@@ -371,7 +374,7 @@ def get_stores():
             Store.lat.isnot(None),
         )
         if chain:
-            q = q.filter(Store.chain == chain)
+            q = q.filter(Store.brand_key == chain)
         if industry:
             q = q.filter(Store.industry == industry)
         stores = q.all()
@@ -406,27 +409,51 @@ def get_stores():
 
 # ── Local Employers endpoint ─────────────────────────────────────────────────
 
+CHAIN_THRESHOLD = 5  # location_count >= this → chain-like, exclude from local view
+
 @app.route("/api/local-employers")
 def get_local_employers():
-    """Return local (non-chain) employer POIs.
+    """Return local employer POIs.
+
+    Chain-like records (location_count >= CHAIN_THRESHOLD) have been purged
+    from the table by classify_local_employers.py, so no local_only filter
+    is needed here.
 
     Query params:
       - region (default: austin_tx)
-      - industry (optional): filter to one industry
+      - industry (optional): filter to one industry key.  When set, ALL
+            matching records are returned (per-industry counts are small).
+            When omitted, a random geographic sample is returned.
+      - sample (default: 3000): max records when no industry filter is set.
+            Pass sample=0 to return everything (may be slow for large regions).
     """
-    region = request.args.get("region", "austin_tx")
+    region   = request.args.get("region", "austin_tx")
     industry = request.args.get("industry")
+    sample   = request.args.get("sample", 3000, type=int)
 
     engine = init_db()
     session = get_session(engine)
 
     try:
-        q = session.query(LocalEmployer).filter_by(
-            region=region, is_active=True
+        from sqlalchemy import func as sqlfunc
+
+        q = session.query(LocalEmployer).filter(
+            LocalEmployer.region == region,
+            LocalEmployer.is_active.is_(True),
+            LocalEmployer.lat.isnot(None),
+            LocalEmployer.lng.isnot(None),
         )
         if industry:
-            q = q.filter_by(industry=industry)
-        employers = q.all()
+            q = q.filter(LocalEmployer.industry == industry)
+
+        if industry:
+            # Specific industry: return all matches (per-industry counts are small)
+            employers = q.all()
+        elif sample == 0:
+            employers = q.all()
+        else:
+            # No filter: random sample for geographic coverage
+            employers = q.order_by(sqlfunc.random()).limit(sample).all()
 
         return jsonify({
             "status": "ok",
@@ -438,15 +465,93 @@ def get_local_employers():
                     "address": e.address,
                     "lat": e.lat,
                     "lng": e.lng,
+                    "location_count": e.location_count,
                 }
                 for e in employers
-                if e.lat and e.lng
             ],
             "count": len(employers),
         })
 
     except Exception as e:
         logger.error("[Server] Local employers query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ── Unified map endpoint ─────────────────────────────────────────────────────
+
+@app.route("/api/map-employers")
+def get_map_employers():
+    """Map data sourced entirely from local_employers (Overture POI data).
+
+    Records with location_count >= CHAIN_THRESHOLD are classified as 'brand'
+    (multi-location area employer, e.g. H-E-B, CVS).
+    Records below threshold are classified as 'local' (truly independent).
+
+    The brand filter matches on LocalEmployer.name.
+    The industry filter matches on LocalEmployer.industry.
+
+    Query params:
+      - region (default: austin_tx)
+      - chain (optional): employer name to filter to (exact match on LocalEmployer.name)
+      - industry (optional): industry key filter
+      - sample (default: 3000): random sample size when no filters set; 0 = all
+    """
+    region   = request.args.get("region", "austin_tx")
+    chain    = request.args.get("chain")
+    industry = request.args.get("industry")
+    sample   = request.args.get("sample", 3000, type=int)
+
+    engine = init_db()
+    session = get_session(engine)
+
+    try:
+        from sqlalchemy import func as sqlfunc
+
+        q = session.query(LocalEmployer).filter(
+            LocalEmployer.region == region,
+            LocalEmployer.is_active.is_(True),
+            LocalEmployer.lat.isnot(None),
+            LocalEmployer.lng.isnot(None),
+        )
+        if chain:
+            q = q.filter(LocalEmployer.name == chain)
+        if industry:
+            q = q.filter(LocalEmployer.industry == industry)
+
+        if chain or industry or sample == 0:
+            employers = q.all()
+        else:
+            employers = q.order_by(sqlfunc.random()).limit(sample).all()
+
+        results = []
+        for e in employers:
+            is_brand = (e.location_count or 0) >= CHAIN_THRESHOLD
+            results.append({
+                "source_type": "brand" if is_brand else "local",
+                "name": e.name,
+                "address": e.address,
+                "lat": e.lat,
+                "lng": e.lng,
+                "industry": e.industry,
+                "category": e.category,
+                "location_count": e.location_count,
+                "mobility_score": e.mobility_score,
+            })
+
+        brand_count = sum(1 for r in results if r["source_type"] == "brand")
+        local_count = len(results) - brand_count
+        return jsonify({
+            "status": "ok",
+            "employers": results,
+            "count": len(results),
+            "brand_count": brand_count,
+            "local_count": local_count,
+        })
+
+    except Exception as e:
+        logger.error("[Server] Map employers query failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         session.close()
@@ -564,68 +669,77 @@ def ref_categories():
 
 @app.route("/api/ref/summary")
 def ref_summary():
-    """Return a combined summary: brands + industries + region + store counts.
+    """Return a combined summary: chains + industries + store counts.
 
-    Used by the frontend to populate all filter dropdowns in a single request.
+    Chains and industries are derived entirely from what is actually ingested
+    in the Store and LocalEmployer tables.  Reference tables (BrandProfile,
+    IndustryTaxonomy) supply display names / metadata only — they never gate
+    what appears in the dropdowns.
     """
     engine = init_db()
     session = get_session(engine)
     try:
-        brands = session.query(BrandProfile).filter(
-            BrandProfile.is_chain.is_(True)
-        ).order_by(BrandProfile.display_name).all()
-
-        industries = session.query(IndustryCategory).order_by(
-            IndustryCategory.naics_code
-        ).all()
-        # Only leaf industries
-        parent_codes = {c.parent_naics for c in industries if c.parent_naics}
-        leaf_industries = [c for c in industries if c.naics_code not in parent_codes]
-
-        regions = session.query(RegionProfile).all()
-
-        # Store count per chain
         from sqlalchemy import func
-        chain_counts = dict(
-            session.query(Store.chain, func.count(Store.store_num))
-            .filter(Store.is_active.is_(True))
-            .group_by(Store.chain)
+
+        # ── Brands: multi-location employers from local_employers.
+        # Any business appearing >= CHAIN_THRESHOLD times in Austin data
+        # is treated as a brand (area chain) and shown in the filter dropdown.
+        # Sorted by location count descending so biggest employers appear first.
+        brand_rows = (
+            session.query(LocalEmployer.name, func.count(LocalEmployer.id))
+            .filter(
+                LocalEmployer.is_active.is_(True),
+                LocalEmployer.location_count >= CHAIN_THRESHOLD,
+            )
+            .group_by(LocalEmployer.name)
+            .order_by(func.count(LocalEmployer.id).desc())
             .all()
         )
 
-        # Local employer count
-        local_count = session.query(LocalEmployer).filter(
-            LocalEmployer.is_active.is_(True)
-        ).count()
+        chain_list = [
+            {
+                "chain_key": name,
+                "chain_name": name,
+                "location_count": cnt,
+                "has_scores": False,
+            }
+            for name, cnt in brand_rows
+        ]
+
+        # ── Industries: built from local_employers (single source).
+        #    Display name resolved from IndustryTaxonomy.
+        local_counts_by_ind = dict(
+            session.query(LocalEmployer.industry, func.count(LocalEmployer.id))
+            .filter(LocalEmployer.is_active.is_(True), LocalEmployer.industry.isnot(None))
+            .group_by(LocalEmployer.industry)
+            .all()
+        )
+        taxonomy_map = {
+            t.industry_key: {"display_name": t.display_name, "worker_tier": t.worker_tier}
+            for t in session.query(IndustryTaxonomy).all()
+        }
+        industry_list = sorted(
+            [
+                {
+                    "industry_key": key,
+                    "display_name": taxonomy_map.get(key, {}).get("display_name") or key.replace("_", " ").title(),
+                    "worker_tier": taxonomy_map.get(key, {}).get("worker_tier"),
+                    "local_count": cnt,
+                }
+                for key, cnt in local_counts_by_ind.items()
+            ],
+            key=lambda x: x["display_name"],
+        )
+
+        brand_total = sum(cnt for _, cnt in brand_rows)
+        local_total = sum(local_counts_by_ind.values())
 
         return jsonify({
             "status": "ok",
-            "brands": [
-                {
-                    "brand_key": b.brand_key,
-                    "display_name": b.display_name,
-                    "internal_industry": b.internal_industry,
-                    "store_count": chain_counts.get(b.brand_key, 0),
-                }
-                for b in brands
-            ],
-            "industries": [
-                {
-                    "internal_key": c.internal_key,
-                    "naics_title": c.naics_title,
-                    "naics_code": c.naics_code,
-                }
-                for c in leaf_industries
-            ],
-            "regions": [
-                {
-                    "region_key": r.region_key,
-                    "display_name": r.display_name,
-                }
-                for r in regions
-            ],
-            "store_total": sum(chain_counts.values()),
-            "local_employer_total": local_count,
+            "chains": chain_list,
+            "industries": industry_list,
+            "brand_total": brand_total,
+            "local_employer_total": local_total,
         })
     except Exception as e:
         logger.error("[Server] Ref summary query failed: %s", e)
@@ -745,6 +859,350 @@ def rate_budget_scalability():
     except Exception as e:
         logger.error("[Server] Scalability report failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── Career Pathfinder — Mobility API ─────────────────────────────────────────
+
+@app.route("/api/mobility/occupations")
+def mobility_occupations():
+    """Return all occupations in the mobility graph for client-side filtering.
+
+    Returns all 781 mob_occupation rows with a compact set of alias keywords
+    per occupation (up to 15 per SOC), so the frontend can match common job
+    titles like 'barista' or 'personal trainer' without an extra API call.
+    """
+    try:
+        db = get_session(init_db())
+        occs = db.query(MobOccupation).order_by(MobOccupation.title).all()
+
+        origin_socs = {
+            r[0] for r in db.query(MobTransition.origin_soc).distinct().all()
+        }
+
+        # Build alias map: soc_code → [alias, alias, ...] (up to 15)
+        alias_rows = db.query(OccupationAlias.soc_code, OccupationAlias.alias).all()
+        alias_map: dict[str, list[str]] = {}
+        for soc, alias in alias_rows:
+            if soc not in alias_map:
+                alias_map[soc] = []
+            if len(alias_map[soc]) < 15:
+                alias_map[soc].append(alias)
+
+        return jsonify({
+            "status": "ok",
+            "occupations": [
+                {
+                    "soc_code":           o.soc_code,
+                    "title":              o.title,
+                    "median_hourly_wage": o.median_hourly_wage,
+                    "cluster_name":       o.cluster_name,
+                    "occ_family_name":    o.occ_family_name,
+                    "has_transitions":    o.soc_code in origin_socs,
+                    "aliases":            alias_map.get(o.soc_code, []),
+                }
+                for o in occs
+            ],
+        })
+    except Exception as e:
+        logger.error("[mobility/occupations] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/mobility/search")
+def mobility_search():
+    """Fuzzy-match a job title to SOC codes — searches titles AND Census aliases.
+
+    Query params:
+      q (alias: job_title) — job title string (required)
+      limit                — max results (default 10)
+
+    Searches mob_occupation.title first (official titles), then
+    ref_occupation_aliases.alias (28k Census job-title variants) so that
+    common terms like 'barista', 'cashier', 'CDL driver' resolve correctly.
+    """
+    q = (request.args.get("q") or request.args.get("job_title") or "").strip()
+    if not q:
+        return jsonify({"status": "error", "message": "q or job_title is required"}), 400
+    limit = min(int(request.args.get("limit", 10)), 50)
+
+    try:
+        db = get_session(init_db())
+
+        origin_socs = {
+            r[0] for r in db.query(MobTransition.origin_soc).distinct().all()
+        }
+
+        # 1. Title matches (official SOC titles)
+        title_matches = (
+            db.query(MobOccupation)
+            .filter(MobOccupation.title.ilike(f"%{q}%"))
+            .order_by(MobOccupation.median_hourly_wage.asc().nulls_last())
+            .limit(limit)
+            .all()
+        )
+        seen_socs = {o.soc_code for o in title_matches}
+
+        # 2. Alias matches — find SOC codes where an alias contains the query
+        alias_socs = (
+            db.query(OccupationAlias.soc_code)
+            .filter(OccupationAlias.alias.ilike(f"%{q}%"))
+            .distinct()
+            .limit(limit)
+            .all()
+        )
+        alias_soc_set = {r[0] for r in alias_socs} - seen_socs
+
+        alias_occs = []
+        if alias_soc_set:
+            alias_occs = (
+                db.query(MobOccupation)
+                .filter(MobOccupation.soc_code.in_(alias_soc_set))
+                .order_by(MobOccupation.median_hourly_wage.asc().nulls_last())
+                .limit(limit - len(title_matches))
+                .all()
+            )
+
+        all_matches = title_matches + alias_occs
+
+        return jsonify({
+            "status": "ok",
+            "query": q,
+            "matches": [
+                {
+                    **o.to_dict(),
+                    "has_transitions": o.soc_code in origin_socs,
+                }
+                for o in all_matches
+            ],
+        })
+    except Exception as e:
+        logger.error("[mobility/search] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/mobility/paths")
+def mobility_paths():
+    """Return ranked career transition paths from an origin SOC code.
+
+    Query params:
+      soc            — origin SOC code (required), e.g. "41-2011"
+      wage_filter    — "up" | "lateral_or_up" | "any"  (default: "lateral_or_up")
+      same_cluster   — "true" | "false" | "any"  (default: "any")
+      max_skill_gap  — float ceiling on avg_skill_gap (default: none)
+      limit          — max results (default: 15)
+
+    Returns list of destination occupations with transition metadata and
+    trajectory outcomes, ordered by frequency then skill gap.
+    """
+    soc = request.args.get("soc", "").strip()
+    if not soc:
+        return jsonify({"status": "error", "message": "soc is required"}), 400
+
+    wage_filter    = request.args.get("wage_filter", "")   # "up" | "lateral" | "" (any)
+    cluster_filter = request.args.get("same_cluster", "")  # "1"/"true" | ""
+    max_gap        = request.args.get("max_skill_gap")
+    limit          = min(int(request.args.get("limit", 15)), 50)
+
+    try:
+        db = get_session(init_db())
+
+        # Check if we have a direct origin or need to use fallback SOC
+        origin_occ = db.query(MobOccupation).filter_by(soc_code=soc).first()
+
+        # Find the effective origin SOC (may differ from requested if not in Emsi origins)
+        origin_count = db.query(MobTransition).filter_by(origin_soc=soc).count()
+        effective_soc = soc
+
+        if origin_count == 0:
+            # Attempt minor-group fallback (first 5 chars, e.g. "35-30")
+            fallback = (
+                db.query(MobTransition.origin_soc)
+                .filter(MobTransition.origin_soc.like(f"{soc[:5]}%"))
+                .join(MobOccupation, MobTransition.origin_soc == MobOccupation.soc_code)
+                .order_by(MobOccupation.median_hourly_wage.asc().nulls_last())
+                .first()
+            )
+            if not fallback:
+                # Major-group fallback (first 2 chars, e.g. "35")
+                fallback = (
+                    db.query(MobTransition.origin_soc)
+                    .filter(MobTransition.origin_soc.like(f"{soc[:2]}%"))
+                    .join(MobOccupation, MobTransition.origin_soc == MobOccupation.soc_code)
+                    .order_by(MobOccupation.median_hourly_wage.asc().nulls_last())
+                    .first()
+                )
+            effective_soc = fallback[0] if fallback else soc
+
+        # Build query
+        q = (
+            db.query(MobTransition, MobOccupation)
+            .join(MobOccupation, MobTransition.dest_soc == MobOccupation.soc_code)
+            .filter(MobTransition.origin_soc == effective_soc)
+        )
+
+        if wage_filter == "up":
+            q = q.filter(MobTransition.wage_direction == 1)
+        elif wage_filter in ("lateral", "lateral_or_up"):
+            q = q.filter(MobTransition.wage_direction >= 0)
+        # "" / "any" → no wage filter
+
+        if cluster_filter in ("1", "true"):
+            q = q.filter(MobTransition.same_cluster == True)  # noqa: E712
+
+        if max_gap:
+            q = q.filter(MobTransition.avg_skill_gap <= float(max_gap))
+
+        rows = (
+            q.order_by(
+                MobTransition.transition_order.asc().nulls_last(),
+                MobTransition.avg_skill_gap.asc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
+        import json as _json
+
+        paths = []
+        for t, dest in rows:
+            dest_keys = _json.loads(dest.dest_industry_keys_json) if dest.dest_industry_keys_json else []
+            paths.append({
+                "dest_soc":             t.dest_soc,
+                "dest_title":           dest.title,
+                "dest_median_wage":     dest.median_hourly_wage,
+                "dest_cluster":         dest.cluster_name,
+                "dest_traj_3yr":        dest.traj_med_wage_growth_3yr,
+                "transition_order":     t.transition_order,
+                "wage_direction":       t.wage_direction,
+                "wage_change_dollars":  t.wage_change_dollars,
+                "avg_skill_gap":        t.avg_skill_gap,
+                "requires_license":     t.requires_new_license,
+                "same_cluster":         t.same_cluster,
+                "dest_industry_keys":   dest_keys,
+            })
+
+        return jsonify({
+            "status": "ok",
+            "origin_soc":      soc,
+            "origin_soc_used": effective_soc,
+            "origin":          origin_occ.to_dict() if origin_occ else None,
+            "paths":           paths,
+        })
+    except Exception as e:
+        logger.error("[mobility/paths] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/mobility/employers")
+def mobility_employers():
+    """Return nearby employers for a destination SOC code.
+
+    Query params:
+      soc      — destination SOC code (required)
+      lat      — center latitude  (required)
+      lng      — center longitude (required)
+      radius   — search radius in miles (default: 10)
+      limit    — max results (default: 50)
+
+    Returns chain_locations and local_employers whose industry matches
+    the destination SOC's dest_industry_keys, ordered by distance.
+    Includes a direct job search URL for prototyping (before live scraping).
+    """
+    soc    = request.args.get("soc", "").strip()
+    lat    = request.args.get("lat")
+    lng    = request.args.get("lng")
+    if not soc or not lat or not lng:
+        return jsonify({"status": "error", "message": "soc, lat, lng are required"}), 400
+
+    lat    = float(lat)
+    lng    = float(lng)
+    radius = float(request.args.get("radius", 10))
+    limit  = min(int(request.args.get("limit", 50)), 200)
+
+    try:
+        import json as _json
+        import math
+        from sqlalchemy import func as sqlfunc
+
+        db = get_session(init_db())
+
+        occ = db.query(MobOccupation).filter_by(soc_code=soc).first()
+        if not occ or not occ.dest_industry_keys_json:
+            return jsonify({"status": "ok", "soc": soc, "employers": [], "industry_keys": []})
+
+        dest_keys = _json.loads(occ.dest_industry_keys_json)
+
+        # Approx degree-to-miles: 1 deg lat ≈ 69 miles, 1 deg lng ≈ 69*cos(lat) miles
+        lat_delta = radius / 69.0
+        lng_delta = radius / (69.0 * math.cos(math.radians(lat)))
+
+        employers = []
+
+        # Chain locations — random sample so results are geographically distributed
+        chains = (
+            db.query(Store)
+            .filter(
+                Store.industry.in_(dest_keys),
+                Store.lat.between(lat - lat_delta, lat + lat_delta),
+                Store.lng.between(lng - lng_delta, lng + lng_delta),
+                Store.is_active == True,  # noqa: E712
+            )
+            .order_by(sqlfunc.random())
+            .limit(limit)
+            .all()
+        )
+        for c in chains:
+            d = c.to_dict()
+            d["employer_type"] = "chain"
+            d["job_search_url"] = (
+                f"https://www.indeed.com/jobs?q={occ.title.replace(' ', '+')}"
+                f"&l={c.address.replace(' ', '+')}"
+            )
+            employers.append(d)
+
+        # Local employers — random sample so results are geographically distributed
+        remaining = limit - len(chains)
+        if remaining > 0:
+            locals_ = (
+                db.query(LocalEmployer)
+                .filter(
+                    LocalEmployer.industry.in_(dest_keys),
+                    LocalEmployer.lat.between(lat - lat_delta, lat + lat_delta),
+                    LocalEmployer.lng.between(lng - lng_delta, lng + lng_delta),
+                    LocalEmployer.is_active == True,  # noqa: E712
+                )
+                .order_by(sqlfunc.random())
+                .limit(remaining)
+                .all()
+            )
+            for loc in locals_:
+                d = loc.to_dict()
+                d["employer_type"] = "local"
+                d["job_search_url"] = (
+                    f"https://www.indeed.com/jobs?q={occ.title.replace(' ', '+')}"
+                    f"+{loc.name.replace(' ', '+')}&l=Austin+TX"
+                )
+                employers.append(d)
+
+        return jsonify({
+            "status": "ok",
+            "soc": soc,
+            "occupation": occ.title,
+            "industry_keys": dest_keys,
+            "employer_count": len(employers),
+            "employers": employers,
+        })
+    except Exception as e:
+        logger.error("[mobility/employers] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        db.close()
 
 
 # ── Server startup ───────────────────────────────────────────────────────────

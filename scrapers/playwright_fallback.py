@@ -333,8 +333,7 @@ class GoogleMapsStoreFinder(BaseScraper):
             return []
 
         # Upsert stores with real coordinates
-        from backend.database import ChainLocation
-        from backend.database import get_session, init_db
+        from backend.database import Store, get_session, init_db
 
         engine = init_db()
         session = get_session(engine)
@@ -345,7 +344,7 @@ class GoogleMapsStoreFinder(BaseScraper):
                 if store_data.get("permanently_closed"):
                     continue
                 existing = (
-                    session.query(ChainLocation)
+                    session.query(Store)
                     .filter_by(store_num=store_data["store_num"])
                     .first()
                 )
@@ -362,7 +361,7 @@ class GoogleMapsStoreFinder(BaseScraper):
                     except (KeyError, TypeError):
                         pass
 
-                    store = ChainLocation(
+                    store = Store(
                         store_num=store_data["store_num"],
                         brand_key=store_data["chain"],
                         chain=store_data["chain"],

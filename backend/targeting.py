@@ -105,7 +105,7 @@ def compute_targeting(
             Store.is_active.is_(True),
         )
         if chain:
-            query = query.filter(Store.chain == chain)
+            query = query.filter(Store.brand_key == chain)
         if industry:
             query = query.filter(Store.industry == industry)
 
@@ -319,18 +319,24 @@ def _compute_local_alternatives(
         try:
             employers = (
                 session.query(LocalEmployer)
-                .filter_by(industry=store.industry, is_active=True)
+                .filter(
+                    LocalEmployer.is_active.is_(True),
+                    LocalEmployer.mobility_score > 0.0,
+                )
                 .all()
             )
             if employers:
-                nearby = sum(
-                    1
+                # Weight each nearby employer by its mobility_score (0.0-1.0)
+                # so high-wage / career-advancing employers count more than
+                # another fast-food location in the same radius.
+                mobility_weight = sum(
+                    (e.mobility_score or 0.0)
                     for e in employers
                     if e.lat and e.lng
                     and _haversine(store.lat, store.lng, e.lat, e.lng) <= radius_mi
                 )
-                # Normalize: 5+ nearby = 100, 0 = 0
-                return min(nearby / 5.0, 1.0) * 100
+                # Normalize: weighted sum of 3.0+ = 100 (e.g. 3 healthcare locs at 1.0 each)
+                return min(mobility_weight / 3.0, 1.0) * 100
         except Exception:
             pass  # fall through to store_coords fallback
 

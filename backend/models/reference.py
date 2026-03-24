@@ -442,6 +442,28 @@ class MobTransition(Base):
         import json
         return json.loads(self.skill_gap_json) if self.skill_gap_json else {}
 
+
+class OccupationAlias(Base):
+    """Census Alphabetical Index of Occupations — job title aliases → SOC code.
+
+    Loaded by scripts/load_occupation_aliases.py from the Census Bureau's
+    December 2019 edition (~18,981 rows covering 647 SOC codes).
+    Enables the Career Pathfinder autocomplete to match common job titles
+    like 'barista' or 'personal trainer' to their official SOC codes.
+    """
+
+    __tablename__ = "ref_occupation_aliases"
+
+    id                   = Column(Integer, primary_key=True, autoincrement=True)
+    alias                = Column(String, nullable=False, index=True)   # lowercase
+    soc_code             = Column(String(10), nullable=False, index=True)
+    census_code          = Column(String(10), nullable=True)
+    industry_restriction = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_roa_alias_soc", "alias", "soc_code"),
+    )
+
     def to_dict(self) -> dict:
         return {
             "origin_soc": self.origin_soc,

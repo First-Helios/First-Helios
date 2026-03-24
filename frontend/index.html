@@ -3,40 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChainStaffingTracker — Austin TX</title>
+    <title>First Helios — Austin TX</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
     <div id="header">
-        <h1>ChainStaffingTracker</h1>
-        <p>Community Job Fair Targeting — Austin, TX</p>
-        <div id="controls">
+        <div id="brand">
+            <h1>First Helios</h1>
+            <p>Labor Intelligence — Austin, TX</p>
+        </div>
+        <div id="mode-switcher">
+            <button id="mode-targeting" class="mode-btn active">Job Fair Map</button>
+            <button id="mode-pathfinder" class="mode-btn">Career Pathfinder</button>
+        </div>
+
+        <!-- Targeting mode controls -->
+        <div id="targeting-controls" class="controls-group">
             <select id="industry-filter" title="Filter by industry">
                 <option value="">All Industries</option>
             </select>
-            <select id="chain-filter" title="Filter by chain">
-                <option value="">All Chains</option>
+            <select id="chain-filter" title="Focus on one employer brand (hides local layer)">
+                <option value="">All Brands</option>
             </select>
-            <select id="tier-filter">
-                <option value="">All Tiers</option>
-                <option value="critical">Critical</option>
-                <option value="elevated">Elevated</option>
-                <option value="adequate">Adequate</option>
-            </select>
-            <label id="local-toggle" title="Show local (non-chain) employers">
-                <input type="checkbox" id="show-local" /> Local
+            <label id="local-toggle" title="Show/hide local employer layer">
+                <input type="checkbox" id="show-local" checked /> Local
             </label>
+            <select id="local-sample" title="How many local employers to load">
+                <option value="500">500</option>
+                <option value="1000">1k</option>
+                <option value="2000">2k</option>
+                <option value="3000" selected>3k</option>
+                <option value="5000">5k</option>
+                <option value="10000">10k</option>
+                <option value="0">All</option>
+            </select>
             <button id="refresh-btn">Refresh</button>
             <span id="store-count" title="Visible stores">—</span>
         </div>
+
+        <!-- Pathfinder mode controls -->
+        <div id="pathfinder-controls" class="controls-group" style="display:none">
+            <div id="search-wrap">
+                <input id="job-search" type="text" placeholder="Your current job title…" autocomplete="off" />
+                <div id="job-autocomplete"></div>
+            </div>
+            <select id="wage-filter" title="Filter by wage direction">
+                <option value="">Any Direction</option>
+                <option value="up">Upward only</option>
+                <option value="lateral">Lateral or up</option>
+            </select>
+            <label id="in-industry-toggle" title="Only show destinations in the same industry cluster">
+                <input type="checkbox" id="in-industry-only" /> Same cluster
+            </label>
+            <button id="search-btn">Find Paths</button>
+            <span id="path-status">—</span>
+        </div>
     </div>
+
     <div id="map"></div>
-    <div id="sidebar">
+
+    <!-- Map legend -->
+    <div id="map-legend">
+        <span class="legend-dot" style="background:#f0a500"></span> Brand
+        <span class="legend-dot" style="background:#6c5ce7"></span> Local employer
+    </div>
+
+    <!-- Targeting sidebar -->
+    <div id="targeting-sidebar" class="sidebar">
         <h2>Top Targets</h2>
         <div id="targets-list"></div>
     </div>
+
+    <!-- Pathfinder sidebar -->
+    <div id="pathfinder-sidebar" class="sidebar" style="display:none">
+        <div id="pathfinder-origin"></div>
+        <h2>Where You Could Go</h2>
+        <div id="paths-list"></div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/pathfinder.js"></script>
 </body>
 </html>

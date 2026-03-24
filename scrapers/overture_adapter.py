@@ -25,7 +25,9 @@ from datetime import datetime
 import duckdb
 
 sys.path.insert(0, ".")
-from backend.database import LocalEmployer, Store, get_session, init_db
+from backend.database import Store, get_session, init_db
+from backend.ingest_layer import ingest_employers_bulk
+from backend.normalizer import CATEGORY_INDUSTRY_MAP, map_industry
 from config.loader import get_config
 from scrapers.base import BaseScraper, ScraperSignal
 
@@ -48,9 +50,9 @@ def _get_overture_s3_path() -> str:
         "/theme=places/type=place/*"
     )
 
-# Overture category → industry mapping
-# Covers all physical-location employer categories — food, trades, healthcare, auto, personal care, etc.
-CATEGORY_INDUSTRY_MAP: dict[str, str] = {
+# CATEGORY_INDUSTRY_MAP moved to backend/normalizer.py — imported above.
+
+_CATEGORY_INDUSTRY_MAP_PLACEHOLDER: dict[str, str] = {
     # ── Food & Beverage ──────────────────────────────────────────────────────
     "coffee_shop":           "coffee_cafe",
     "cafe":                  "coffee_cafe",
@@ -200,80 +202,13 @@ CATEGORY_INDUSTRY_MAP: dict[str, str] = {
 # These employers are destinations a food service / retail / hospitality worker
 # could realistically target for career advancement — or entry points for
 # workers coming from outside the service sector.
-UPWARD_MOBILITY_CATEGORIES: set[str] = {
-    # Office / professional
-    "professional_services", "corporate_office", "marketing_agency",
-    "advertising_agency", "interior_design", "engineering_services",
-    "event_planning", "architectural_designer", "printing_services",
-    "accountant",
-    # Tech
-    "software_development", "information_technology_company",
-    "it_service_and_computer_repair", "tech_services",
-    # Legal / finance
-    "lawyer", "legal_services", "financial_advising", "financial_service",
-    "mortgage_broker", "mortgage_lender", "bank_credit_union", "banks",
-    "credit_union", "insurance_agency",
-    # Staffing / employment
-    "employment_agencies", "staffing",
-    # Education
-    "education", "college_university", "elementary_school", "preschool",
-    "dance_school",
-    # Skilled trades (certification-based, good wages)
-    "hvac_services", "electrician", "plumbing", "contractor",
-    "roofing", "construction_services",
-    # Healthcare (many non-clinical roles)
-    "hospital", "medical_center", "home_health_care",
-    # Nonprofit / community
-    "community_services_non_profits", "social_service_organizations",
-    # Hospitality management
-    "hotel", "motel",
-    # Logistics
-    "courier_and_delivery_services",
-}
+# UPWARD_MOBILITY_CATEGORIES moved to backend/normalizer.py — imported above.
 
-# Chain names to exclude from local employer queries (lowercase LIKE patterns)
-CHAIN_EXCLUSIONS: list[str] = [
-    "starbucks",
-    "dutch bros",
-    "mcdonald",
-    "dunkin",
-    "taco bell",
-    "subway",
-    "chick-fil-a",
-    "whataburger",
-    "wendy",
-    "burger king",
-    "domino",
-    "pizza hut",
-    "panda express",
-    "chipotle",
-    "sonic",
-    "popeyes",
-    "jack in the box",
-    "in-n-out",
-    "five guys",
-    "panera",
-    "tim horton",
-    "peet",
-    "caribou",
-    "coffee bean",
-    "costa coffee",
-    "walmart",
-    "target",
-    "costco",
-    "heb",
-    "kroger",
-    "whole foods",
-    "trader joe",
-    "aldi",
-    "cvs",
-    "walgreen",
-    "holiday inn",
-    "marriott",
-    "hilton",
-    "hyatt",
-    "best western",
-]
+# No chain exclusions — all employers (brands and local) are ingested into local_employers.
+# Classification as brand vs. local is done post-ingest by classify_local_employers.py
+# using location_count (name frequency in Austin data). location_count >= CHAIN_THRESHOLD
+# marks a record as a brand; below threshold is treated as a local operator.
+CHAIN_EXCLUSIONS: list[str] = []
 
 
 def _bbox_from_region(region: str) -> dict[str, float]:
@@ -546,209 +481,95 @@ class OvertureLocalAdapter(BaseScraper):
 
 
 def ingest_local_geojson(geojson_path: str, region: str = "austin_tx") -> dict:
-    """Ingest cached Overture GeoJSON file into chain_locations and local_employers.
+    """Ingest cached Overture GeoJSON into local_employers via the ingest layer.
 
-    Reads local cached GeoJSON (instead of S3 DuckDB queries) and:
-      - Matches known chains by name pattern
-      - Maps categories to industries for local employers
-      - Upserts to appropriate tables
+    All records (brands and local) go through backend.ingest_layer.ingest_employers_bulk,
+    which normalizes names, fingerprints, upserts brand_groups, and deduplicates.
+    No direct DB writes happen here.
 
     Args:
         geojson_path: Path to local .geojson file
         region: Region key for all records (default: austin_tx)
 
     Returns:
-        dict with chain_locations and local_employers counts
+        dict with local_employers count and skipped count
     """
     import json
     from pathlib import Path
 
     geojson_file = Path(geojson_path)
     if not geojson_file.exists():
-        logger.error("[Overture Local] File not found: %s", geojson_path)
-        return {"error": "File not found", "chain_locations": 0, "local_employers": 0}
+        logger.error("[Overture] File not found: %s", geojson_path)
+        return {"error": "File not found", "local_employers": 0, "skipped": 0}
 
-    logger.info("[Overture Local] Loading GeoJSON from %s", geojson_file.name)
-
-    try:
-        engine = init_db()
-        session = get_session(engine)
-    except Exception as e:
-        logger.error("[Overture Local] Failed to initialize DB: %s", e)
-        return {"error": str(e), "chain_locations": 0, "local_employers": 0}
-
-    chain_count = 0
-    local_count = 0
-    skipped_count = 0
-
-    # Build brand_key → internal_industry lookup so chain rows get correct industry on insert
-    global _BRAND_INDUSTRY_CACHE
-    try:
-        from sqlalchemy import text as _text
-        _rows = session.execute(_text("SELECT brand_key, internal_industry FROM ref_brands")).fetchall()
-        _BRAND_INDUSTRY_CACHE = {r[0]: r[1] for r in _rows if r[1]}
-    except Exception:
-        _BRAND_INDUSTRY_CACHE = {}
+    logger.info("[Overture] Loading GeoJSON from %s", geojson_file.name)
 
     try:
         with open(geojson_file) as f:
             geojson_data = json.load(f)
+    except Exception as e:
+        logger.error("[Overture] Failed to read GeoJSON: %s", e)
+        return {"error": str(e), "local_employers": 0, "skipped": 0}
 
-        features = geojson_data.get("features", [])
-        logger.info("[Overture Local] Processing %d features", len(features))
+    features = geojson_data.get("features", [])
+    logger.info("[Overture] Parsing %d features…", len(features))
 
-        for feature in features:
-            try:
-                props = feature.get("properties", {})
-                geom = feature.get("geometry", {})
-                coords = geom.get("coordinates", [None, None])
+    records: list[dict] = []
+    skipped = 0
 
-                # Extract fields
-                overture_id = props.get("id", "")
-                store_name = props.get("names", {}).get("primary", "")
-                category_primary = props.get("categories", {}).get("primary", "")
-                confidence = props.get("confidence", 0.5)
-                coords_lng = float(coords[0]) if coords[0] is not None else None
-                coords_lat = float(coords[1]) if coords[1] is not None else None
+    for feature in features:
+        try:
+            props = feature.get("properties", {})
+            geom  = feature.get("geometry", {})
+            coords = geom.get("coordinates", [None, None])
 
-                # Get address
-                addresses = props.get("addresses", [])
-                address_str = ""
-                if addresses:
-                    addr = addresses[0]
-                    parts = [
+            store_name       = props.get("names", {}).get("primary", "") or ""
+            category_primary = props.get("categories", {}).get("primary", "") or ""
+            confidence       = props.get("confidence", 0.5)
+            lng = float(coords[0]) if coords[0] is not None else None
+            lat = float(coords[1]) if coords[1] is not None else None
+
+            # Industry must be mappable; skip uncategorized records
+            industry = map_industry(category_primary)
+            if not industry:
+                skipped += 1
+                continue
+
+            addresses = props.get("addresses", [])
+            address_str = ""
+            if addresses:
+                addr = addresses[0]
+                address_str = ", ".join(
+                    p for p in [
                         addr.get("freeform", ""),
                         addr.get("locality", ""),
                         addr.get("region", ""),
-                    ]
-                    address_str = ", ".join(p for p in parts if p)
+                    ] if p
+                )
 
-                # Get brand name
-                brand_name = props.get("brand", {}).get("names", {}).get("primary", None)
+            records.append({
+                "overture_id":  props.get("id", ""),
+                "name":         store_name or f"POI {props.get('id', '')[-6:]}",
+                "category":     category_primary,
+                "industry":     industry,
+                "address":      address_str,
+                "lat":          lat,
+                "lng":          lng,
+                "region":       region,
+                "confidence":   confidence,
+                # mobility_score computed by ingest_layer from IndustryTaxonomy
+                "is_active":    props.get("operating_status", "unknown") == "open",
+            })
+        except Exception as row_e:
+            logger.debug("[Overture] Error parsing feature: %s", row_e)
+            skipped += 1
+            continue
 
-                # Check if it's a known chain
-                is_chain = False
-                chain_key = None
-                if brand_name:
-                    brand_lower = brand_name.lower()
-                    for ckey, pattern in OvertureChainAdapter.CHAIN_NAME_FILTERS.items():
-                        # Pattern like "%starbucks%" → check if brand contains "starbucks"
-                        search_str = pattern.strip("%")
-                        if search_str.lower() in brand_lower:
-                            is_chain = True
-                            chain_key = ckey
-                            break
+    logger.info("[Overture] %d records to ingest, %d skipped (no industry mapping)", len(records), skipped)
 
-                if is_chain and chain_key:
-                    # Upsert to chain_locations
-                    store_num = f"OV-{chain_key.upper()}-{overture_id[-8:]}"
-                    # Resolve industry from ref_brands if available
-                    _brand_industry = _BRAND_INDUSTRY_CACHE.get(chain_key, "unknown")
-                    store = Store(
-                        store_num=store_num,
-                        brand_key=chain_key,
-                        chain=brand_name or "Unknown Chain",
-                        industry=_brand_industry,
-                        store_name=store_name,
-                        address=address_str,
-                        lat=coords_lat,
-                        lng=coords_lng,
-                        region=region,
-                        source_discovery="overture_local",
-                        is_active=props.get("operating_status", "unknown") == "open",
-                    )
-                    session.merge(store)
-                    chain_count += 1
-
-                else:
-                    # Try to map category to industry
-                    industry = CATEGORY_INDUSTRY_MAP.get(category_primary, None)
-
-                    # Skip if category doesn't map and name looks like a chain
-                    if not industry:
-                        name_lower = (store_name or "").lower()
-                        is_excluded_chain = any(
-                            ex in name_lower for ex in CHAIN_EXCLUSIONS
-                        )
-                        if is_excluded_chain:
-                            skipped_count += 1
-                            continue
-
-                        # Skip uncategorized
-                        skipped_count += 1
-                        continue
-
-                    # Upsert to local_employers (must query first — autoincrement PK)
-                    is_mobility = (
-                        category_primary in UPWARD_MOBILITY_CATEGORIES
-                        or industry in UPWARD_MOBILITY_CATEGORIES
-                    )
-                    existing_local = (
-                        session.query(LocalEmployer)
-                        .filter_by(overture_id=overture_id)
-                        .first()
-                    )
-                    if existing_local:
-                        existing_local.name = store_name or existing_local.name
-                        existing_local.category = category_primary
-                        existing_local.industry = industry
-                        existing_local.address = address_str or existing_local.address
-                        existing_local.lat = coords_lat
-                        existing_local.lng = coords_lng
-                        existing_local.confidence = confidence
-                        existing_local.upward_mobility = is_mobility
-                        existing_local.last_seen = datetime.utcnow()
-                    else:
-                        session.add(LocalEmployer(
-                            overture_id=overture_id,
-                            name=store_name or f"POI {overture_id[-6:]}",
-                            category=category_primary,
-                            industry=industry,
-                            address=address_str,
-                            lat=coords_lat,
-                            lng=coords_lng,
-                            region=region,
-                            source_discovery="overture_local",
-                            confidence=confidence,
-                            upward_mobility=is_mobility,
-                            is_active=props.get("operating_status", "unknown") == "open",
-                            first_seen=datetime.utcnow(),
-                            last_seen=datetime.utcnow(),
-                        ))
-                    local_count += 1
-
-                # Commit every 500 records
-                if (chain_count + local_count) % 500 == 0:
-                    session.commit()
-                    logger.debug(
-                        "[Overture Local] Committed %d + %d records",
-                        chain_count,
-                        local_count,
-                    )
-
-            except Exception as row_e:
-                logger.debug("[Overture Local] Error processing feature: %s", row_e)
-                continue
-
-        session.commit()
-        logger.info(
-            "[Overture Local] Ingestion complete: %d chains, %d local employers, %d skipped",
-            chain_count,
-            local_count,
-            skipped_count,
-        )
-        return {
-            "chain_locations": chain_count,
-            "local_employers": local_count,
-            "skipped": skipped_count,
-        }
-
-    except Exception as e:
-        logger.error("[Overture Local] GeoJSON ingestion failed: %s", e, exc_info=True)
-        session.rollback()
-        return {"error": str(e), "chain_locations": 0, "local_employers": 0}
-    finally:
-        session.close()
+    result = ingest_employers_bulk(records, source="overture")
+    result["skipped"] = skipped + result.get("skipped", 0)
+    return result
 
 
 if __name__ == "__main__":

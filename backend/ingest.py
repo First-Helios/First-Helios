@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 
 from backend.database import (
-    ChainLocation,
+    Store,
     Score,
     Signal,
     Snapshot,
@@ -83,10 +83,10 @@ def ingest_signals(
                 )
                 continue
 
-            # ── Upsert ChainLocation ─────────────────────────────────
+            # ── Upsert Store ─────────────────────────────────
             if sig.store_num not in store_nums_seen:
                 store_nums_seen.add(sig.store_num)
-                existing = session.query(ChainLocation).filter_by(
+                existing = session.query(Store).filter_by(
                     store_num=sig.store_num
                 ).first()
 
@@ -103,7 +103,7 @@ def ingest_signals(
                     except (KeyError, TypeError):
                         pass
 
-                    store = ChainLocation(
+                    store = Store(
                         store_num=sig.store_num,
                         brand_key=brand_key,
                         chain=sig.chain,

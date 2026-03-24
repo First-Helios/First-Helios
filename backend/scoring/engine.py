@@ -31,7 +31,7 @@ import logging
 from datetime import datetime
 
 from backend.database import (
-    ChainLocation,
+    Store,
     LocalEmployer,
     OEWSRecord,
     RevelioHiring,
