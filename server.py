@@ -61,6 +61,14 @@ app = Flask(
 )
 CORS(app)
 
+# ── Spirit Pool Blueprint ─────────────────────────────────────────────────────
+try:
+    from listings.spiritpool_routes import spiritpool_bp
+    app.register_blueprint(spiritpool_bp)
+    logger.info("Spirit Pool blueprint registered at /api/spiritpool")
+except ImportError:
+    pass
+
 
 # ── Frontend serving ─────────────────────────────────────────────────────────
 
@@ -74,30 +82,6 @@ def index():
 def static_files(path):
     """Serve static frontend files."""
     return send_from_directory(app.static_folder, path)
-
-
-# ── Legacy SpiritPool endpoint ───────────────────────────────────────────────
-
-@app.route("/api/spiritpool/stats")
-def spiritpool_stats():
-    """Legacy SpiritPool stats endpoint — returns basic status."""
-    spiritpool_db = Path(__file__).parent / "data" / "spiritpool.db"
-    if spiritpool_db.exists():
-        import sqlite3
-        try:
-            conn = sqlite3.connect(str(spiritpool_db))
-            tables = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-            stats = {}
-            for (table_name,) in tables:
-                count = conn.execute(f"SELECT COUNT(*) FROM [{table_name}]").fetchone()[0]
-                stats[table_name] = count
-            conn.close()
-            return jsonify({"status": "ok", "tables": stats})
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)})
-    return jsonify({"status": "no_database", "message": "spiritpool.db not found"})
 
 
 # ── Scan endpoints ───────────────────────────────────────────────────────────
