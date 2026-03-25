@@ -51,11 +51,16 @@
             <select id="wage-filter" title="Filter by wage direction">
                 <option value="">Any Direction</option>
                 <option value="up">Upward only</option>
-                <option value="lateral">Lateral or up</option>
+                <option value="lateral_or_up">Lateral or up</option>
+                <option value="lateral">Lateral only</option>
+                <option value="lateral_or_down">Lateral or down</option>
+                <option value="down">Down only</option>
             </select>
-            <label id="in-industry-toggle" title="Only show destinations in the same industry cluster">
-                <input type="checkbox" id="in-industry-only" /> Same cluster
-            </label>
+            <select id="cluster-filter" title="Filter by industry cluster">
+                <option value="">Any cluster</option>
+                <option value="in">Same industry</option>
+                <option value="out">Out of industry</option>
+            </select>
             <button id="search-btn">Find Paths</button>
             <span id="path-status">—</span>
         </div>

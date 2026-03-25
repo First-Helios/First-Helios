@@ -1,8 +1,12 @@
 """
 Typed configuration access for all ChainStaffingTracker modules.
 
-Loads config/chains.yaml once at import time and provides accessor functions
-so no module ever needs to parse YAML or hardcode values.
+Merges two YAML files at import time:
+  config/labor_market.yaml  — auto-generated from OEWS data (regions, scoring, targeting, BLS params)
+  config/chains.yaml        — manually maintained chain definitions (Starbucks, Dutch Bros, etc.)
+
+The merged result is cached and accessible via accessor functions.
+No module should ever parse YAML or hardcode config values directly.
 
 Usage:
     from config.loader import get_config, get_region, get_chain, get_scoring_weights
@@ -17,17 +21,26 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path(__file__).parent / "chains.yaml"
+_CONFIG_DIR = Path(__file__).parent
+_LABOR_MARKET_PATH = _CONFIG_DIR / "labor_market.yaml"
+_CHAINS_PATH = _CONFIG_DIR / "chains.yaml"
 _config: dict[str, Any] | None = None
 
 
 def _load() -> dict[str, Any]:
-    """Load and cache the YAML config. Called once on first access."""
+    """Load and merge both YAML configs. Called once on first access."""
     global _config
     if _config is None:
-        with open(_CONFIG_PATH, "r") as f:
-            _config = yaml.safe_load(f)
-        logger.info("[Config] Loaded %s", _CONFIG_PATH)
+        with open(_LABOR_MARKET_PATH, "r") as f:
+            _config = yaml.safe_load(f) or {}
+        logger.info("[Config] Loaded %s", _LABOR_MARKET_PATH)
+
+        with open(_CHAINS_PATH, "r") as f:
+            chains_cfg = yaml.safe_load(f) or {}
+        logger.info("[Config] Merged %s", _CHAINS_PATH)
+
+        # Merge chains.yaml on top (top-level keys only — no deep merge needed)
+        _config.update(chains_cfg)
     return _config
 
 

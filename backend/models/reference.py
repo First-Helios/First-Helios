@@ -11,9 +11,11 @@ Tables:
     ref_regions           — Regional economic context (BLS / Census)
     ref_category_map      — External taxonomy → internal industry crosswalk
     ref_soc_major_groups  — SOC 2-digit major occupation groups
+    ref_texaswages        — Texas MSA hourly wages by SOC (TWC / texaswages.com)
 
 Depends on: backend.database.Base
-Called by: scripts/populate_reference_data.py, server.py /api/ref/*, revelio_ingest.py
+Called by: scripts/populate_reference_data.py, server.py /api/ref/*, revelio_ingest.py,
+           scrapers/texaswages_ingest.py
 """
 
 import logging
@@ -500,4 +502,47 @@ class SOCMajorGroup(Base):
             "soc2d_code": self.soc2d_code,
             "soc2d_name": self.soc2d_name,
             "description": self.description,
+        }
+
+
+class TexasWages(Base):
+    """Texas MSA hourly wages by SOC occupation, sourced from texaswages.com (TWC).
+
+    Covers all 26 Texas MSAs plus statewide aggregates across four wage tiers:
+      entry_level, experienced, mean, median
+
+    Updated annually. Enables Austin entry-level vs experienced wage gap analysis
+    and cross-MSA wage comparison for the Career Pathfinder.
+
+    Source: data/reference/texaswages/
+    Ingest: scrapers/texaswages_ingest.py
+    """
+
+    __tablename__ = "ref_texaswages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    soc_code = Column(String(10), nullable=False, index=True)   # e.g. "35-3023"
+    soc_title = Column(String, nullable=False)
+    msa_name = Column(String, nullable=False, index=True)       # e.g. "Austin-Round Rock"
+    wage_tier = Column(String(20), nullable=False)              # entry_level | experienced | mean | median
+    hourly_wage = Column(Float, nullable=True)                  # null when suppressed by TWC
+    vintage_year = Column(Integer, nullable=False)              # e.g. 2024
+    loaded_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "soc_code", "msa_name", "wage_tier", "vintage_year",
+            name="uq_texaswages",
+        ),
+        Index("ix_texaswages_soc_msa", "soc_code", "msa_name"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "soc_code": self.soc_code,
+            "soc_title": self.soc_title,
+            "msa_name": self.msa_name,
+            "wage_tier": self.wage_tier,
+            "hourly_wage": self.hourly_wage,
+            "vintage_year": self.vintage_year,
         }

@@ -214,23 +214,25 @@
         currentMode = mode;
         var isTargeting = (mode === 'targeting');
 
-        document.getElementById('targeting-controls').style.display = isTargeting ? '' : 'none';
-        document.getElementById('pathfinder-controls').style.display = isTargeting ? 'none' : '';
-        document.getElementById('targeting-sidebar').style.display  = isTargeting ? '' : 'none';
-        document.getElementById('pathfinder-sidebar').style.display  = isTargeting ? 'none' : '';
+        document.getElementById('targeting-controls').style.display = isTargeting ? 'flex' : 'none';
+        document.getElementById('pathfinder-controls').style.display = isTargeting ? 'none' : 'flex';
+        document.getElementById('targeting-sidebar').style.display  = isTargeting ? 'block' : 'none';
+        document.getElementById('pathfinder-sidebar').style.display  = isTargeting ? 'none' : 'block';
 
         document.getElementById('mode-targeting').classList.toggle('active', isTargeting);
         document.getElementById('mode-pathfinder').classList.toggle('active', !isTargeting);
 
-        // Clear markers from the other mode
+        // Clear markers from the other mode and restore appropriate map state
         if (isTargeting) {
             if (window.pathfinderClearMarkers) window.pathfinderClearMarkers();
+            map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);   // undo any pathfinder fitBounds
             loadMapEmployers();
             loadTargets();
         } else {
             storeMarkers.forEach(function (m) { map.removeLayer(m); });
             storeMarkers = [];
             clearLocalMarkers();
+            map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);   // reset before pathfinder takes over
             if (window.pathfinderInit) window.pathfinderInit();
         }
     }

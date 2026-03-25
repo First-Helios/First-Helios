@@ -77,10 +77,10 @@ overturemaps download \
   --bbox=-98.0,30.1,-97.4,30.55 \
   -f geojson \
   --type=place \
-  -o data/overture_austin_places.geojson
+  -o data/reference/overture/overture_austin_places.geojson
 
 #    Then ingest:
-python scrapers/overture_adapter.py --local-file data/overture_austin_places.geojson
+python scrapers/overture_adapter.py --local-file data/reference/overture/overture_austin_places.geojson
 #    Result: ~45,618 local_employers, ~36,563 brand_groups
 
 # 4. Post-processing

@@ -1,109 +1,13 @@
-_comment: "AUTO-GENERATED from OEWS data by scripts/generate_config_from_oews.py\n\
-  Source: Austin-Round Rock-San Marcos, TX MSA OEWS data (area code 12420) ONLY.\n\
-  Do not edit manually \u2014 regenerate from data using the script.\nGenerated: 2026-03-22T21:56:58.652599"
-regions:
-  austin_tx:
-    display_name: Austin, TX
-    center_lat: 30.2672
-    center_lng: -97.7431
-    radius_mi: 25
-    location_string: Austin, TX
-    state: TX
-target_industries: all
-industries: {}
-qcew:
-  county_fips:
-    travis: '48453'
-    williamson: '48491'
-    hays: '48209'
-    bastrop: '48021'
-    caldwell: '48055'
-  fetch_all_industries: true
-  comment: Generated from OEWS data. Set fetch_all_industries=true to ingest all industries.
-  ownership_code: '5'
-cbp:
-  api_key: null
-  zip_codes:
-  - '78701'
-  - '78702'
-  - '78703'
-  - '78704'
-  - '78705'
-  - '78745'
-  - '78748'
-  - '78749'
-  - '78750'
-  - '78751'
-  - '78752'
-  - '78753'
-  - '78756'
-  - '78757'
-  - '78758'
-  - '78759'
-  - '78660'
-  - '78664'
-  - '78665'
-  - '78681'
-  - '78634'
-  - '78641'
-  - '78613'
-  - '78717'
-  - '78626'
-  fetch_all_industries: true
-  comment: Generated from OEWS data. Fetches all industries at ZIP level.
-oews:
-  area_code: '12420'
-  fetch_all_occupations: true
-  comment: Generated from OEWS data. Includes all 638 Austin-Round Rock-San Marcos,
-    TX MSA occupations (area code 12420).
-scoring:
-  weights:
-    demand_pressure: 0.35
-    wage_competitiveness: 0.25
-    churn_signal: 0.25
-    qualitative: 0.15
-  posting_age_decay:
-    fresh_days: 7
-    stale_days: 90
-  tiers:
-    critical:
-      min_percentile: 67
-      label: critical
-    elevated:
-      min_percentile: 33
-      label: elevated
-    adequate:
-      min_percentile: 0
-      label: adequate
-  baseline:
-    reference_period: 2025-Q3
-    reindex_on_new_qcew: true
-  seasonal:
-    enabled: true
-    peak_months:
-    - 5
-    - 6
-    - 7
-    trough_months:
-    - 1
-    - 2
-targeting:
-  weights:
-    staffing_stress: 0.40
-    wage_gap: 0.30
-    isolation: 0.20
-    local_alternatives: 0.10
-  tiers:
-    prime:
-      min_score: 67
-      label: prime
-    strong:
-      min_score: 33
-      label: strong
-    moderate:
-      min_score: 0
-      label: moderate
-  local_radius_mi: 1.0
+# chains.yaml — Manually maintained chain definitions
+#
+# Add a chain here when you want Helios to:
+#   1. Pull job postings from the chain's careers API
+#   2. Track its locations separately from Overture-discovered POIs
+#   3. Include it in the chain filter dropdown in the UI
+#
+# This file is NOT auto-generated. Edit freely.
+# The labor market config (regions, scoring weights, OEWS params) lives in
+# config/labor_market.yaml — regenerate that file from OEWS data, not this one.
 
 chains:
   starbucks:
@@ -123,6 +27,7 @@ chains:
     industry: soc_35
     careers_api:
       base_url: https://careers.dutchbros.com/
+      search_url: https://careers.dutchbros.com/us/en/search-results
       location_filter: Austin, TX
       radius_km: 40
     store_num_prefix: DB

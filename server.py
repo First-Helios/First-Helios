@@ -1046,26 +1046,83 @@ def mobility_paths():
 
         if wage_filter == "up":
             q = q.filter(MobTransition.wage_direction == 1)
-        elif wage_filter in ("lateral", "lateral_or_up"):
+        elif wage_filter == "lateral":
+            q = q.filter(MobTransition.wage_direction == 0)
+        elif wage_filter == "lateral_or_up":
             q = q.filter(MobTransition.wage_direction >= 0)
+        elif wage_filter == "down":
+            q = q.filter(MobTransition.wage_direction == -1)
+        elif wage_filter == "lateral_or_down":
+            q = q.filter(MobTransition.wage_direction <= 0)
         # "" / "any" → no wage filter
 
         if cluster_filter in ("1", "true"):
-            q = q.filter(MobTransition.same_cluster == True)  # noqa: E712
+            q = q.filter(MobTransition.same_cluster == True)   # noqa: E712
+        elif cluster_filter in ("0", "false"):
+            q = q.filter(MobTransition.same_cluster == False)  # noqa: E712
 
         if max_gap:
             q = q.filter(MobTransition.avg_skill_gap <= float(max_gap))
 
+        # Fetch a larger pool then re-rank with composite score so the final
+        # ordering reflects more than just raw transition frequency.
         rows = (
             q.order_by(
                 MobTransition.transition_order.asc().nulls_last(),
                 MobTransition.avg_skill_gap.asc(),
             )
-            .limit(limit)
+            .limit(min(limit * 3, 50))
             .all()
         )
 
         import json as _json
+        import math as _math
+
+        def _path_score(t, dest):
+            """Composite career-path score.  Higher = better recommendation.
+
+            Components
+            ----------
+            accessibility  (40 %) — skill gap + how often workers make this move
+            wage_value     (35 %) — immediate pay outcome; lateral gets a bonus
+                                    because it opens future paths without friction
+            trajectory     (25 %) — 3-yr wage growth at the destination
+            """
+            gap   = t.avg_skill_gap or 0.5
+            order = t.transition_order or 99
+
+            # Piecewise gap score:
+            #   ≤ 0.30  → boost  (1.0–1.5)   easy to cross, prioritise heavily
+            #   0.30–0.40 → transition (1.0–0.7)
+            #   > 0.40  → steep penalty (0.7→0)  hard to break in
+            if gap <= 0.30:
+                gap_score = 1.0 + (0.30 - gap) / 0.30 * 0.50   # 0→1.50, 0.15→1.25, 0.30→1.0
+            elif gap <= 0.40:
+                gap_score = 1.0 - (gap - 0.30) * 3.0            # 0.30→1.0, 0.40→0.70
+            else:
+                gap_score = max(0.0, 0.70 - (gap - 0.40) * 1.75) # 0.40→0.70, 0.80→0.0
+
+            order_score = 1.0 / _math.log1p(order)          # 1→1.0, 2→0.63, 10→0.42
+            access      = 0.6 * gap_score + 0.4 * order_score
+            if t.requires_new_license:
+                access *= 0.80
+
+            if t.wage_direction == 1:
+                change = t.wage_change_dollars or 0
+                wage_val = 0.50 + min(change / 40.0, 0.50)  # 0.50–1.00
+            elif t.wage_direction == 0:
+                wage_val = 0.65                              # lateral bonus
+            else:
+                change   = abs(t.wage_change_dollars or 0)
+                wage_val = max(0.0, 0.35 - change / 25.0)   # 0–0.35
+
+            traj_3yr = dest.traj_med_wage_growth_3yr or 0
+            traj     = min(traj_3yr / 15.0, 1.0)
+
+            return 0.40 * access + 0.35 * wage_val + 0.25 * traj
+
+        scored = sorted(rows, key=lambda r: _path_score(r[0], r[1]), reverse=True)
+        rows   = scored[:limit]
 
         paths = []
         for t, dest in rows:
@@ -1082,6 +1139,7 @@ def mobility_paths():
                 "avg_skill_gap":        t.avg_skill_gap,
                 "requires_license":     t.requires_new_license,
                 "same_cluster":         t.same_cluster,
+                "ranking_score":        round(_path_score(t, dest), 3),
                 "dest_industry_keys":   dest_keys,
             })
 
