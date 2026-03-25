@@ -59,6 +59,18 @@ def _import_metadata_models() -> None:
         logger.debug("[Database] backend.metadata not found — skipping")
 
 
+def _import_listings_models() -> None:
+    """Import listings models so their tables register with Base.metadata.
+
+    Called lazily in init_db() to avoid circular-import issues.
+    The listings/ layer is optional — if absent the app starts normally.
+    """
+    try:
+        import listings.models  # noqa: F401
+    except ImportError:
+        logger.debug("[Database] listings.models not found — skipping")
+
+
 class Base(DeclarativeBase):
     """Declarative base for all tracker models."""
     pass
@@ -1047,6 +1059,7 @@ def init_db(db_path: Path | None = None):
     """Create all tables if they don't exist."""
     _import_reference_models()
     _import_metadata_models()
+    _import_listings_models()
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
     db_label = os.environ.get("DATABASE_URL") or str(db_path or DB_PATH)
