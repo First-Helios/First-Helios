@@ -42,6 +42,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from backend.database import (
     ApiRequestLog,
     ApiSource,
@@ -167,6 +170,21 @@ API_SOURCE_REGISTRY: list[dict] = [
         "reset_hour_utc": 0,
         "notes": "Aggressive rate limiting from job boards. python-jobspy handles internally.",
     },
+    {
+        "source_key": "jobicy",
+        "display_name": "Jobicy Remote Jobs API",
+        "base_url": "https://jobicy.com/api/v2/remote-jobs",
+        "auth_type": "none",
+        "daily_limit": 24,
+        "min_delay_seconds": 3600.0,
+        "reset_hour_utc": 0,
+        "notes": (
+            "ToS: once per hour (https://jobicy.com/jobs-rss-feed). "
+            "One call per run at count=100 (API max). "
+            "geo=usa is the only available region — all results tagged is_remote=True. "
+            "Hourly gate enforced in scrapers/jobicy_adapter.py via _hourly_gate_ok()."
+        ),
+    },
     # ── Reddit ───────────────────────────────────────────────────
     {
         "source_key": "reddit_json",
@@ -258,6 +276,9 @@ class RateManager:
         """Ensure all API_SOURCE_REGISTRY rows exist in api_sources."""
         session = get_session()
         try:
+            # Heal any out-of-sync autoincrement sequences before inserting
+            self._sync_sequence(session)
+
             for src in API_SOURCE_REGISTRY:
                 existing = session.query(ApiSource).filter_by(
                     source_key=src["source_key"]
@@ -305,33 +326,98 @@ class RateManager:
             return (now - timedelta(days=1)).date().isoformat()
         return now.date().isoformat()
 
+    def _sync_sequence(self, session) -> None:
+        """Reset autoincrement sequences to MAX(id) for rate-tracker tables.
+
+        Required after SQLite → PostgreSQL migrations where sequences were not
+        initialised from existing row data. Safe to call on every startup —
+        a no-op when sequences are already in sync.
+        """
+        try:
+            if session.bind.dialect.name != "postgresql":  # type: ignore[union-attr]
+                return
+            for table, col in [
+                ("rate_budgets", "id"),
+                ("api_sources", "id"),
+                ("api_request_log", "id"),
+            ]:
+                session.execute(text(
+                    f"SELECT setval("
+                    f"  pg_get_serial_sequence('{table}', '{col}'),"
+                    f"  COALESCE((SELECT MAX({col}) FROM {table}), 0) + 1,"
+                    f"  false"
+                    f")"
+                ))
+        except Exception as exc:
+            logger.warning("[RateManager] Sequence sync failed (non-fatal): %s", exc)
+
     def _get_or_create_budget(self, source_key: str, session) -> RateBudget:
-        """Get or create today's RateBudget row."""
+        """Atomically get or create today's RateBudget row.
+
+        Uses INSERT ... ON CONFLICT DO NOTHING so concurrent callers never
+        produce a duplicate-key error.
+        """
         today = self._today_str(source_key)
+
+        # Pull daily_limit from api_sources (0 fallback is fine — DO NOTHING
+        # means this value is only used on first insert)
+        src = session.query(ApiSource).filter_by(source_key=source_key).first()
+        limit = src.daily_limit if src else 10000
+
+        try:
+            dialect = session.bind.dialect.name  # type: ignore[union-attr]
+            if dialect == "postgresql":
+                stmt = (
+                    pg_insert(RateBudget)
+                    .values(
+                        source_key=source_key,
+                        date=today,
+                        daily_limit=limit,
+                        used=0,
+                        succeeded=0,
+                        failed=0,
+                        total_latency_ms=0,
+                        total_data_items=0,
+                        total_bytes=0,
+                    )
+                    .on_conflict_do_nothing(
+                        constraint="uq_rate_budget_source_date"
+                    )
+                )
+                session.execute(stmt)
+            else:
+                # SQLite: query-then-insert (single-writer dev environment)
+                existing = session.query(RateBudget).filter_by(
+                    source_key=source_key, date=today
+                ).first()
+                if not existing:
+                    session.add(RateBudget(
+                        source_key=source_key,
+                        date=today,
+                        daily_limit=limit,
+                        used=0,
+                        succeeded=0,
+                        failed=0,
+                        total_latency_ms=0,
+                        total_data_items=0,
+                        total_bytes=0,
+                    ))
+            session.flush()
+        except Exception as exc:
+            # Last-resort: if something unexpected slips through, roll back
+            # the flush and try a plain query — we'd rather return stale data
+            # than crash the rate tracker.
+            logger.warning("[RateManager] Budget upsert error (non-fatal): %s", exc)
+            session.rollback()
 
         budget = session.query(RateBudget).filter_by(
             source_key=source_key, date=today
         ).first()
 
-        if not budget:
-            # Pull daily_limit from api_sources
-            src = session.query(ApiSource).filter_by(source_key=source_key).first()
-            limit = src.daily_limit if src else 10000
-
-            budget = RateBudget(
-                source_key=source_key,
-                date=today,
-                daily_limit=limit,
-                used=0,
-                succeeded=0,
-                failed=0,
-                total_latency_ms=0,
-                total_data_items=0,
-                total_bytes=0,
+        if budget is None:
+            raise RuntimeError(
+                f"[RateManager] Could not get or create budget for {source_key}/{today}"
             )
-            session.add(budget)
-            session.flush()
-
         return budget
 
     # ── Public API ───────────────────────────────────────────────
