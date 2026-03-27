@@ -23,23 +23,11 @@
             <select id="industry-filter" title="Filter by industry">
                 <option value="">All Industries</option>
             </select>
-            <select id="chain-filter" title="Focus on one employer brand (hides local layer)">
+            <select id="chain-filter" title="Focus on one employer brand">
                 <option value="">All Brands</option>
             </select>
-            <label id="local-toggle" title="Show/hide local employer layer">
-                <input type="checkbox" id="show-local" checked /> Local
-            </label>
-            <select id="local-sample" title="How many local employers to load">
-                <option value="500">500</option>
-                <option value="1000">1k</option>
-                <option value="2000">2k</option>
-                <option value="3000" selected>3k</option>
-                <option value="5000">5k</option>
-                <option value="10000">10k</option>
-                <option value="0">All</option>
-            </select>
             <button id="refresh-btn">Refresh</button>
-            <span id="store-count" title="Visible stores">—</span>
+            <span id="store-count" title="Employer count">—</span>
         </div>
 
         <!-- Pathfinder mode controls -->
@@ -66,28 +54,46 @@
         </div>
     </div>
 
-    <div id="map"></div>
+    <div id="content-area">
+        <div id="map-wrap">
+            <div id="map"></div>
+            <!-- Map legend sits over the map -->
+            <div id="map-legend">
+                <span class="legend-dot" style="background:#f0a500"></span> Brand-heavy
+                <span class="legend-dot" style="background:#6c5ce7"></span> Local-heavy
+                <span style="opacity:0.6;font-size:11px"> · click hex for listings</span>
+            </div>
+        </div>
 
-    <!-- Map legend -->
-    <div id="map-legend">
-        <span class="legend-dot" style="background:#f0a500"></span> Brand
-        <span class="legend-dot" style="background:#6c5ce7"></span> Local employer
-    </div>
+        <!-- Right panel — targeting and pathfinder sidebars -->
+        <div id="right-panel">
+            <!-- Targeting sidebar -->
+            <div id="targeting-sidebar" class="sidebar">
+                <div id="sidebar-top-targets">
+                    <h2>Top Targets</h2>
+                    <div id="targets-list"></div>
+                </div>
+                <div id="sidebar-listings" style="display:none">
+                    <div class="listings-header">
+                        <button id="listings-back-btn" class="back-btn">← Back</button>
+                        <span id="listings-title"></span>
+                    </div>
+                    <div id="listings-list"></div>
+                </div>
+            </div>
 
-    <!-- Targeting sidebar -->
-    <div id="targeting-sidebar" class="sidebar">
-        <h2>Top Targets</h2>
-        <div id="targets-list"></div>
-    </div>
-
-    <!-- Pathfinder sidebar -->
-    <div id="pathfinder-sidebar" class="sidebar" style="display:none">
-        <div id="pathfinder-origin"></div>
-        <h2>Where You Could Go</h2>
-        <div id="paths-list"></div>
+            <!-- Pathfinder sidebar -->
+            <div id="pathfinder-sidebar" class="sidebar" style="display:none">
+                <div id="pathfinder-origin"></div>
+                <h2>Where You Could Go</h2>
+                <div id="paths-list"></div>
+            </div>
+        </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+    <script src="js/h3map.js"></script>
     <script src="js/app.js"></script>
     <script src="js/pathfinder.js"></script>
 </body>

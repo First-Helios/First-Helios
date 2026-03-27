@@ -504,7 +504,14 @@ def get_map_employers():
         if industry:
             q = q.filter(LocalEmployer.industry == industry)
 
-        if chain or industry or sample == 0:
+        # h3_cell: return only employers inside a specific H3 cell (for sidebar listings)
+        h3_cell    = request.args.get("h3_cell")
+        h3_res_arg = request.args.get("resolution", 7, type=int)
+        if h3_cell and h3_res_arg in (6, 7, 8, 9):
+            h3_col = f"h3_r{h3_res_arg}"
+            q = q.filter(getattr(LocalEmployer, h3_col) == h3_cell)
+
+        if chain or industry or h3_cell or sample == 0:
             employers = q.all()
         else:
             employers = q.order_by(sqlfunc.random()).limit(sample).all()
@@ -536,6 +543,83 @@ def get_map_employers():
 
     except Exception as e:
         logger.error("[Server] Map employers query failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/h3-map")
+def get_h3_map():
+    """Aggregated H3 hex map data for zoom-adaptive rendering.
+
+    Returns one record per occupied H3 cell instead of raw lat/lng points.
+    At resolution 7 (default zoom 11), 45K employers collapse to ~453 cells.
+
+    Query params:
+      resolution  (int, default 7)  — H3 resolution 6-9
+      region      (default: austin_tx)
+      industry    (optional)        — filter by industry key
+      chain       (optional)        — filter by employer name (brand)
+    """
+    import h3 as h3lib
+    from sqlalchemy import case, func as sqlfunc
+
+    resolution = request.args.get("resolution", 7, type=int)
+    region     = request.args.get("region", "austin_tx")
+    industry   = request.args.get("industry")
+    chain      = request.args.get("chain")
+
+    if resolution not in (6, 7, 8, 9):
+        return jsonify({"status": "error", "message": "resolution must be 6, 7, 8, or 9"}), 400
+
+    col     = f"h3_r{resolution}"
+    h3_col  = getattr(LocalEmployer, col)
+    is_brand = case((LocalEmployer.location_count >= CHAIN_THRESHOLD, 1), else_=0)
+
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        q = session.query(
+            h3_col.label("cell_id"),
+            sqlfunc.count().label("count"),
+            sqlfunc.sum(is_brand).label("brand_count"),
+            sqlfunc.avg(LocalEmployer.mobility_score).label("avg_score"),
+        ).filter(
+            LocalEmployer.region == region,
+            LocalEmployer.is_active.is_(True),
+            h3_col.isnot(None),
+        )
+
+        if industry:
+            q = q.filter(LocalEmployer.industry == industry)
+        if chain:
+            q = q.filter(LocalEmployer.name == chain)
+
+        q = q.group_by(h3_col)
+        rows = q.all()
+
+        cells = []
+        for row in rows:
+            cell_id = row.cell_id
+            lat, lng = h3lib.cell_to_latlng(cell_id)
+            cells.append({
+                "cell_id":     cell_id,
+                "count":       row.count,
+                "brand_count": row.brand_count or 0,
+                "avg_score":   round(row.avg_score, 1) if row.avg_score else None,
+                "lat":         lat,
+                "lng":         lng,
+            })
+
+        return jsonify({
+            "status":     "ok",
+            "resolution": resolution,
+            "cell_count": len(cells),
+            "cells":      cells,
+        })
+
+    except Exception as e:
+        logger.error("[Server] H3 map query failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         session.close()

@@ -104,6 +104,10 @@ class Store(Base):
     last_seen = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
 
+    # ── H3 hexagonal index ────────────────────────────────────────────────────
+    h3_r8 = Column(String(15), nullable=True, index=True)  # corridor  ~156 cells
+    h3_r9 = Column(String(15), nullable=True, index=True)  # block
+
     def to_dict(self) -> dict:
         return {
             "store_num": self.store_num,
@@ -621,6 +625,12 @@ class LocalEmployer(Base):
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
     region = Column(String, nullable=True)
+
+    # ── H3 hexagonal index (pre-computed at ingest / backfill) ────────────────
+    h3_r6 = Column(String(15), nullable=True, index=True)  # city overview   ~25 cells
+    h3_r7 = Column(String(15), nullable=True, index=True)  # neighborhood  ~453 cells
+    h3_r8 = Column(String(15), nullable=True, index=True)  # corridor     ~1915 cells
+    h3_r9 = Column(String(15), nullable=True, index=True)  # block        ~8000 cells
 
     # ── Provenance ────────────────────────────────────────────────────────────
     source_discovery = Column(String, nullable=True)           # overture_local | osm | jobspy

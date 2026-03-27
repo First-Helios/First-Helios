@@ -1,11 +1,11 @@
 /**
  * ChainStaffingTracker — Leaflet map application
  *
- * Fetches store scores, targeting data, and reference metadata from the
- * Flask API and renders them on a dark-themed Leaflet map.
+ * Map layer: H3 hex aggregates only — no individual dots.
+ * Sidebar: "Top Targets" by default; clicking a hex loads employer listings
+ * for that cell. Back button restores top targets.
  *
- * Filter dropdowns are populated dynamically from /api/ref/summary so
- * adding a new chain or industry only requires updating the reference DB.
+ * Filter dropdowns are populated dynamically from /api/ref/summary.
  */
 
 (function () {
@@ -14,12 +14,6 @@
     const API_BASE = '';
     const AUSTIN_CENTER = [30.2672, -97.7431];
     const DEFAULT_ZOOM = 11;
-
-    // Marker colors
-    // brand  = multi-location employer (H-E-B, CVS, etc.)  — amber
-    // local  = single-location independent employer         — purple
-    const BRAND_COLOR = '#f0a500';
-    const LOCAL_COLOR = '#6c5ce7';
 
     // ── Map initialization ──────────────────────────────────────────
     const map = L.map('map', {
@@ -34,9 +28,6 @@
         maxZoom: 19,
     }).addTo(map);
 
-    let storeMarkers = [];
-    let localMarkers = [];
-
     // ── Populate filter dropdowns from reference data ───────────────
     async function loadFilters() {
         try {
@@ -44,9 +35,6 @@
             const data = await resp.json();
             if (data.status !== 'ok') return;
 
-            // Chain filter — driven by actual ingested data.
-            // Tracked chains (has_scores=true) have targeting data.
-            // Area chains (has_scores=false) are map-location-only.
             const chainSel = document.getElementById('chain-filter');
             (data.chains || []).forEach(function (c) {
                 const opt = document.createElement('option');
@@ -56,8 +44,6 @@
                 chainSel.appendChild(opt);
             });
 
-            // Industry filter — keyed by IndustryTaxonomy.industry_key, same key
-            // stored in Store.industry and LocalEmployer.industry.
             const indSel = document.getElementById('industry-filter');
             (data.industries || []).forEach(function (ind) {
                 const opt = document.createElement('option');
@@ -69,112 +55,35 @@
                 indSel.appendChild(opt);
             });
 
-            // Store count badge
-            updateCountBadge(data.store_total, data.local_employer_total);
+            var badge = document.getElementById('store-count');
+            if (badge && data.local_employer_total != null) {
+                badge.textContent = data.local_employer_total + ' employers';
+            }
         } catch (err) {
             console.warn('Could not load reference data — using defaults', err);
         }
     }
 
-    function updateCountBadge(storeTotal, localTotal) {
-        var badge = document.getElementById('store-count');
-        var parts = [];
-        if (storeTotal != null) parts.push(storeTotal + ' stores');
-        if (localTotal != null) parts.push(localTotal + ' local');
-        badge.textContent = parts.join(' · ') || '—';
+    // ── Map refresh — always H3 hex, no dots ────────────────────────
+    function refreshMap() {
+        var industry = document.getElementById('industry-filter').value;
+        var chain    = document.getElementById('chain-filter').value;
+        if (window.h3map) window.h3map.refresh(industry, chain);
     }
 
-    // ── Unified map load ─────────────────────────────────────────────
-    // Fetches both chain stores and local employers from /api/map-employers.
-    // Industry and chain filters apply uniformly to both source types.
-    // show-local checkbox toggles local marker visibility without re-fetching.
-    // local-sample selector triggers a full reload with a new count.
+    // Re-render on zoom (resolution changes)
+    map.on('zoomend', function () {
+        if (currentMode !== 'targeting') return;
+        refreshMap();
+    });
 
-    async function loadMapEmployers() {
-        const chainFilter    = document.getElementById('chain-filter').value;
-        const industryFilter = document.getElementById('industry-filter').value;
-        const sample         = document.getElementById('local-sample').value;
-        const showLocal      = document.getElementById('show-local').checked;
-
-        let url = API_BASE + '/api/map-employers?region=austin_tx';
-        if (chainFilter)    url += '&chain='    + encodeURIComponent(chainFilter);
-        if (industryFilter) url += '&industry=' + encodeURIComponent(industryFilter);
-        if (!industryFilter) url += '&sample=' + sample;
-
-        try {
-            const resp = await fetch(url);
-            const data = await resp.json();
-
-            // Clear all existing markers
-            storeMarkers.forEach(function (m) { map.removeLayer(m); });
-            storeMarkers = [];
-            localMarkers.forEach(function (m) { map.removeLayer(m); });
-            localMarkers = [];
-
-            var brandCount = 0, localCount = 0;
-
-            (data.employers || []).forEach(function (emp) {
-                if (!emp.lat || !emp.lng) return;
-
-                var isBrand = emp.source_type === 'brand';
-                var color   = isBrand ? BRAND_COLOR : LOCAL_COLOR;
-                var radius  = isBrand ? 6 : 4;
-                var label   = isBrand ? (emp.location_count + ' locations') : 'Local employer';
-
-                var marker = L.circleMarker([emp.lat, emp.lng], {
-                    radius: radius,
-                    fillColor: color,
-                    color: color,
-                    weight: 1,
-                    opacity: isBrand ? 0.85 : 0.6,
-                    fillOpacity: isBrand ? 0.55 : 0.35,
-                });
-
-                if (showLocal || isBrand) marker.addTo(map);
-
-                marker.bindPopup(
-                    '<strong>' + emp.name + '</strong><br>' +
-                    '<em>' + label + '</em><br>' +
-                    (emp.industry ? 'Industry: ' + emp.industry + '<br>' : '') +
-                    '<small>' + (emp.address || '') + '</small>'
-                );
-
-                if (isBrand) {
-                    storeMarkers.push(marker);
-                    brandCount++;
-                } else {
-                    localMarkers.push(marker);
-                    localCount++;
-                }
-            });
-
-            document.getElementById('store-count').textContent =
-                brandCount + ' brands · ' +
-                (showLocal ? localCount + ' local' : localCount + ' local (hidden)');
-
-        } catch (err) {
-            console.error('Failed to load map employers:', err);
-        }
-    }
-
-    function clearLocalMarkers() {
-        localMarkers.forEach(function (m) { map.removeLayer(m); });
-        localMarkers = [];
-    }
-
-    function setLocalVisibility(visible) {
-        localMarkers.forEach(function (m) {
-            if (visible) { m.addTo(map); } else { map.removeLayer(m); }
-        });
-    }
-
-    // ── Fetch and render targeting sidebar ──────────────────────────
+    // ── Sidebar: Top Targets ────────────────────────────────────────
     async function loadTargets() {
         const industryFilter = document.getElementById('industry-filter').value;
-        const chainFilter = document.getElementById('chain-filter').value;
+        const chainFilter    = document.getElementById('chain-filter').value;
         let url = API_BASE + '/api/targeting?region=austin_tx&limit=10';
         if (industryFilter) url += '&industry=' + industryFilter;
-        if (chainFilter) url += '&chain=' + chainFilter;
+        if (chainFilter)    url += '&chain='    + chainFilter;
 
         try {
             const resp = await fetch(url);
@@ -200,12 +109,83 @@
             });
 
             if (!(data.targets || []).length) {
-                container.innerHTML = '<div class="target-card"><div class="details">No targeting data yet. Run a scan first.</div></div>';
+                container.innerHTML = '<div class="target-card"><div class="details">No targeting data yet.</div></div>';
             }
         } catch (err) {
             console.error('Failed to load targets:', err);
         }
     }
+
+    // ── Sidebar: Hex cell listings ──────────────────────────────────
+    // Shows employer listing cards when a hex is clicked.
+
+    function showTopTargetsView() {
+        document.getElementById('sidebar-top-targets').style.display = 'block';
+        document.getElementById('sidebar-listings').style.display = 'none';
+    }
+
+    function showListingsView(title) {
+        document.getElementById('sidebar-top-targets').style.display = 'none';
+        var listingsPanel = document.getElementById('sidebar-listings');
+        listingsPanel.style.display = 'block';
+        document.getElementById('listings-title').textContent = title;
+        document.getElementById('listings-list').innerHTML =
+            '<div class="listing-card"><div class="listing-name">Loading…</div></div>';
+    }
+
+    async function loadCellListings(cellId, resolution) {
+        var industry = document.getElementById('industry-filter').value;
+        var chain    = document.getElementById('chain-filter').value;
+
+        var url = API_BASE + '/api/map-employers?region=austin_tx' +
+            '&h3_cell=' + encodeURIComponent(cellId) +
+            '&resolution=' + resolution;
+        if (industry) url += '&industry=' + encodeURIComponent(industry);
+        if (chain)    url += '&chain='    + encodeURIComponent(chain);
+
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            const container = document.getElementById('listings-list');
+            container.innerHTML = '';
+
+            var employers = data.employers || [];
+            if (!employers.length) {
+                container.innerHTML = '<div class="listing-card"><div class="listing-name">No employers found in this cell.</div></div>';
+                return;
+            }
+
+            // Sort: brands first, then alphabetical
+            employers.sort(function (a, b) {
+                var ab = a.source_type === 'brand' ? 0 : 1;
+                var bb = b.source_type === 'brand' ? 0 : 1;
+                return ab - bb || a.name.localeCompare(b.name);
+            });
+
+            employers.forEach(function (emp) {
+                var isBrand = emp.source_type === 'brand';
+                var card = document.createElement('div');
+                card.className = 'listing-card';
+                card.innerHTML =
+                    '<div class="listing-name">' + emp.name +
+                        (isBrand ? '<span class="listing-badge brand">brand</span>' : '<span class="listing-badge local">local</span>') +
+                    '</div>' +
+                    (emp.address ? '<div class="listing-addr">' + emp.address + '</div>' : '') +
+                    (emp.industry ? '<div class="listing-meta">' + emp.industry + '</div>' : '');
+                container.appendChild(card);
+            });
+        } catch (err) {
+            console.error('Failed to load cell listings:', err);
+        }
+    }
+
+    // Called by h3map.js on hex click
+    window.onHexClick = function (cellId, resolution, count, brandCount) {
+        var localCount = count - brandCount;
+        var title = count + ' employers — ' + brandCount + ' brand · ' + localCount + ' local';
+        showListingsView(title);
+        loadCellListings(cellId, resolution);
+    };
 
     // ── Mode switching ───────────────────────────────────────────────
     var currentMode = 'targeting';
@@ -222,17 +202,15 @@
         document.getElementById('mode-targeting').classList.toggle('active', isTargeting);
         document.getElementById('mode-pathfinder').classList.toggle('active', !isTargeting);
 
-        // Clear markers from the other mode and restore appropriate map state
         if (isTargeting) {
             if (window.pathfinderClearMarkers) window.pathfinderClearMarkers();
-            map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);   // undo any pathfinder fitBounds
-            loadMapEmployers();
+            map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);
+            showTopTargetsView();
+            refreshMap();
             loadTargets();
         } else {
-            storeMarkers.forEach(function (m) { map.removeLayer(m); });
-            storeMarkers = [];
-            clearLocalMarkers();
-            map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);   // reset before pathfinder takes over
+            if (window.h3map) window.h3map.clear();
+            map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);
             if (window.pathfinderInit) window.pathfinderInit();
         }
     }
@@ -242,33 +220,30 @@
 
     // ── Event listeners ─────────────────────────────────────────────
     document.getElementById('refresh-btn').addEventListener('click', function () {
-        loadMapEmployers();
+        showTopTargetsView();
+        refreshMap();
         loadTargets();
     });
 
     document.getElementById('chain-filter').addEventListener('change', function () {
-        loadMapEmployers();
+        showTopTargetsView();
+        refreshMap();
         loadTargets();
     });
 
     document.getElementById('industry-filter').addEventListener('change', function () {
-        loadMapEmployers();
+        showTopTargetsView();
+        refreshMap();
         loadTargets();
     });
 
-    // show-local: toggle visibility without re-fetching
-    document.getElementById('show-local').addEventListener('change', function () {
-        setLocalVisibility(this.checked);
-    });
-
-    // local-sample: reload with new count
-    document.getElementById('local-sample').addEventListener('change', function () {
-        loadMapEmployers();
+    document.getElementById('listings-back-btn').addEventListener('click', function () {
+        showTopTargetsView();
     });
 
     // ── Initial load ────────────────────────────────────────────────
     loadFilters().then(function () {
-        loadMapEmployers();
+        refreshMap();
         loadTargets();
     });
 
