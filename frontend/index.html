@@ -16,6 +16,7 @@
         <div id="mode-switcher">
             <button id="mode-targeting" class="mode-btn active">Job Fair Map</button>
             <button id="mode-pathfinder" class="mode-btn">Career Pathfinder</button>
+            <button id="mode-jobfinder" class="mode-btn">Job Finder</button>
         </div>
 
         <!-- Targeting mode controls -->
@@ -28,6 +29,19 @@
             </select>
             <button id="refresh-btn">Refresh</button>
             <span id="store-count" title="Employer count">—</span>
+        </div>
+
+        <!-- Job Finder mode controls -->
+        <div id="jobfinder-controls" class="controls-group" style="display:none">
+            <select id="job-category-filter" title="Filter by job category">
+                <option value="">All Categories</option>
+            </select>
+            <div id="location-mode-toggle">
+                <button class="location-btn active" data-mode="remote">Remote</button>
+                <button class="location-btn" data-mode="local">Local</button>
+                <button class="location-btn" data-mode="all">All</button>
+            </div>
+            <span id="job-count" title="Job count">—</span>
         </div>
 
         <!-- Pathfinder mode controls -->
@@ -58,10 +72,14 @@
         <div id="map-wrap">
             <div id="map"></div>
             <!-- Map legend sits over the map -->
-            <div id="map-legend">
+            <div id="map-legend" class="legend-targeting">
                 <span class="legend-dot" style="background:#f0a500"></span> Brand-heavy
                 <span class="legend-dot" style="background:#6c5ce7"></span> Local-heavy
                 <span style="opacity:0.6;font-size:11px"> · click hex for listings</span>
+            </div>
+            <div id="map-legend-jobs" class="legend-jobfinder" style="display:none">
+                <span class="legend-dot" style="background:#4ecca3"></span> Job density
+                <span style="opacity:0.6;font-size:11px"> · click hex to view listings</span>
             </div>
         </div>
 
@@ -88,12 +106,31 @@
                 <h2>Where You Could Go</h2>
                 <div id="paths-list"></div>
             </div>
+
+            <!-- Job Finder sidebar -->
+            <div id="jobfinder-sidebar" class="sidebar" style="display:none">
+                <!-- Default panel: remote/all job list -->
+                <div id="jf-default-panel">
+                    <h2 id="jf-list-title">Remote Jobs</h2>
+                    <div id="jf-remote-list"></div>
+                    <button id="jf-load-more" style="display:none">Load more</button>
+                </div>
+                <!-- Hex cell panel: jobs in clicked area -->
+                <div id="jf-cell-panel" style="display:none">
+                    <div class="listings-header">
+                        <button id="jf-back-btn" class="back-btn">← Back</button>
+                        <span id="jf-cell-title"></span>
+                    </div>
+                    <div id="jf-cell-list"></div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
     <script src="js/h3map.js"></script>
+    <script src="js/jobfinder.js"></script>
     <script src="js/app.js"></script>
     <script src="js/pathfinder.js"></script>
 </body>

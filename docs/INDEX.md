@@ -1,6 +1,6 @@
 # Documentation Index — First-Helios
 
-**Last Updated:** 2026-03-24
+**Last Updated:** 2026-03-27
 
 ## Data Dictionary
 
@@ -36,7 +36,7 @@ Documentation for the mobility graph (Career Pathfinder mode):
 
 ### 📥 Data Ingestion Guides
 
-- **[DATA_INGESTION_SUMMARY.md](./Data_Ingestion/DATA_INGESTION_SUMMARY.md)** — Ingestion status and step-by-step plan. Current state: OEWS Austin MSA loaded (638 occupations), mobility graph loaded (781 SOCs, 256k edges). Revelio tables remain unpopulated.
+- **[DATA_INGESTION_SUMMARY.md](./Data_Ingestion/DATA_INGESTION_SUMMARY.md)** — Ingestion status and step-by-step plan. Current state: OEWS Austin MSA loaded (638 occupations), mobility graph loaded (781 SOCs, 256k edges), Jobicy remote jobs ingested via `scrapers/jobicy_adapter.py`. Revelio tables remain unpopulated.
 
 **Use case:** "Where does staffing stress score come from?" → Open README, search for "score", jump to DATA_DICTIONARY_TABLES.md for detail
 **Use case:** "Why is my baseline stale?" → Open BLS_GROUND_TRUTH_GUIDE.md, check refresh schedules
@@ -46,8 +46,9 @@ Documentation for the mobility graph (Career Pathfinder mode):
 
 ## System Architecture & Operations
 
-- **[../README.md](../README.md)** — Project overview, architecture, API endpoints, quickstart
-- **[../RUNBOOK.md](../RUNBOOK.md)** — Server startup, PostgreSQL setup, populate-data sequence, troubleshooting
+- **[../README.md](../README.md)** — Project overview, three-mode architecture, API endpoints, quickstart
+- **[../RUNBOOK.md](../RUNBOOK.md)** — Server startup, PostgreSQL setup, populate-data sequence, full scheduler table, troubleshooting
+- **[../PLAYBOOK.md](../PLAYBOOK.md)** — Development workflows: adding scrapers, job posting sources, API endpoints, map modes, conventions
 - **[../CLAUDE_DATA_ENGINEERING_HANDOFF.md](../CLAUDE_DATA_ENGINEERING_HANDOFF.md)** — Data engineering guide: 6-layer architecture, ingest pipeline, validation rules, multi-industry setup
 - **[../DATABASE_DESIGN_BEST_PRACTICES.md](../DATABASE_DESIGN_BEST_PRACTICES.md)** — 6-layer database architecture, metadata design, data contracts, lineage tracking
 
@@ -100,6 +101,14 @@ Documentation for the mobility graph (Career Pathfinder mode):
 → Data: [DATA_DICTIONARY_TABLES.md → Mobility Graph](./Data_Dicts/DATA_DICTIONARY_TABLES.md)
 → API: [../README.md](../README.md) — Mobility endpoints section
 → Frontend: [../frontend/js/pathfinder.js](../frontend/js/pathfinder.js)
+
+**...understand Job Finder**
+→ Model: [../listings/models.py](../listings/models.py) — JobPosting table (job_postings)
+→ Ingest: [../listings/ingest.py](../listings/ingest.py) — single write path for all job posting sources
+→ Scraper: [../scrapers/jobicy_adapter.py](../scrapers/jobicy_adapter.py) — remote jobs with hourly gate + file cache
+→ API: [../README.md](../README.md) — Job Finder endpoints section
+→ Frontend: [../frontend/js/jobfinder.js](../frontend/js/jobfinder.js)
+→ Workflow: [../PLAYBOOK.md](../PLAYBOOK.md) — Adding a New Job Posting Source
 
 **...see what data is stale** (weekly health check)
 → Run: `python scripts/system_health_dashboard.py`

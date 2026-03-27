@@ -1,9 +1,10 @@
 # First Helios
 
-A public labor market intelligence platform with two modes:
+A public labor market intelligence platform with three modes:
 
 1. **Job Fair Targeting** — detects staffing stress at chain employer locations and surfaces where community job fairs have maximum impact
 2. **Career Pathfinder** — shows workers what jobs they can realistically move into from where they are now, and maps where to apply nearby
+3. **Job Finder** — H3 hex map of local and remote job postings with filterable sidebar listings
 
 **Current focus:** Austin, TX. One city, done right, before scaling.
 
@@ -21,30 +22,37 @@ Given a job title (or future: a resume), shows:
 - How hard the skill gap is to bridge (12 ISA skill dimensions)
 - A map of nearby employers in the destination industries where they can apply today
 
+### Mode 3: Job Finder (Job Seeker Tool)
+Aggregates active job postings into H3 hex cells for geographic browsing. Three views:
+- **Remote** — sidebar list of remote-friendly postings (no map interaction required)
+- **Local** — hex map of on-site openings; click a hex to view listings in that area
+- **All** — both hex layer and remote sidebar simultaneously
+- Category filter and paginated job cards (employer, title, wage, apply link)
+
 ---
 
 ## How It Works
 
 ```
 Public Sources (free, legal, no login required)
-┌─────────────────┐ ┌─────────────┐ ┌──────────────┐ ┌──────────────┐
-│ Chain Careers   │ │ Indeed /    │ │ Reddit API   │ │ Google Maps  │
-│ APIs            │ │ Glassdoor   │ │ (public)     │ │ + Yelp       │
-└────────┬────────┘ └──────┬──────┘ └──────┬───────┘ └──────┬───────┘
-         └─────────────────┴───────────────┴─────────────────┘
+┌─────────────────┐ ┌─────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ Overture Maps   │ │ JobSpy      │ │ Reddit API   │ │ Google Maps  │ │ Jobicy       │
+│ (employer POIs) │ │ (job boards)│ │ (sentiment)  │ │ (reviews)    │ │ (remote jobs)│
+└────────┬────────┘ └──────┬──────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
+         └─────────────────┴───────────────┴─────────────────┴─────────────────┘
                                    │
-                         Normalized ScraperSignal objects
+                     ScraperSignal / JobPosting normalization
                                    │
                         PostgreSQL (helios, port 5432)
-                 stores / signals / scores / wage_index / mob_*
+              local_employers / job_postings / signals / scores
                                    │
              ┌─────────────────────┼──────────────────────┐
              │                     │                      │
-      Scoring Engine        Mobility Graph          Targeting Score
-      (staffing stress)     (career transitions)    (job fair timing)
+      Scoring Engine        Mobility Graph          Job Finder Hex
+      (staffing stress)     (career transitions)    (H3 r7/r8 aggregation)
              │                     │                      │
-                        Flask API + Dual-Mode Frontend
-                     Job Fair Map  |  Career Pathfinder
+                   Flask API + Three-Mode Leaflet Frontend
+              Job Fair Map  |  Career Pathfinder  |  Job Finder
 ```
 
 ---
@@ -55,7 +63,8 @@ Public Sources (free, legal, no login required)
 First-Helios/
 │
 ├── README.md                        ← you are here
-├── RUNBOOK.md                       ← server startup, debugging, ops
+├── RUNBOOK.md                       ← server startup, scheduler, ops
+├── PLAYBOOK.md                      ← development workflows and conventions
 ├── CLAUDE_DATA_ENGINEERING_HANDOFF.md ← detailed data digest for agents
 │
 ├── backend/
@@ -64,7 +73,8 @@ First-Helios/
 │   ├── ingest_layer.py              ← Employer write path (normalize → fingerprint → upsert brand_groups → upsert local_employers)
 │   ├── normalizer.py                ← Zero-DB normalization step upstream of ingest_layer
 │   ├── baseline.py                  ← Labor market baseline (QCEW+JOLTS+OEWS+LAUS)
-│   ├── scheduler.py                 ← APScheduler job definitions
+│   ├── rate_manager.py              ← Centralized API rate tracking (api_sources, rate_budgets, api_request_log)
+│   ├── scheduler.py                 ← APScheduler job definitions (13 scheduled jobs)
 │   ├── scoring/
 │   │   ├── engine.py                ← 4-component composite staffing score
 │   │   ├── careers.py               ← Careers API sub-score
@@ -72,6 +82,12 @@ First-Helios/
 │   │   └── wage.py                  ← Wage gap sub-score
 │   └── models/
 │       └── reference.py             ← Reference + mobility graph models
+│
+├── listings/                        ← Job postings layer (separate from employer data)
+│   ├── models.py                    ← JobPosting SQLAlchemy model (job_postings table)
+│   ├── ingest.py                    ← Single write path: normalize → geocode → H3 → match → upsert
+│   ├── matcher.py                   ← Match job posting to LocalEmployer by fingerprint + proximity
+│   └── config.py                    ← POSTING_TTL_DAYS, PROXIMITY_THRESHOLD_M, MIN_MATCH_CONFIDENCE
 │
 ├── scripts/
 │   ├── populate_reference_data.py   ← Brands, regions, categories
@@ -86,24 +102,32 @@ First-Helios/
 │
 ├── scrapers/
 │   ├── base.py                      ← BaseScraper + ScraperSignal dataclass
-│   ├── careers_api.py               ← Chain careers APIs (Starbucks, Dutch Bros)
+│   ├── jobicy_adapter.py            ← Jobicy remote jobs API → JobPosting (file cache, hourly gate)
 │   ├── jobspy_adapter.py            ← python-jobspy → ScraperSignal
 │   ├── reddit_adapter.py            ← PRAW → ScraperSignal
 │   ├── reviews_adapter.py           ← Google Maps / Yelp → ScraperSignal
 │   ├── overture_adapter.py          ← Overture Maps → store/employer discovery
+│   ├── alltheplaces_adapter.py      ← AllThePlaces GeoJSON → chain store discovery
+│   ├── osm_adapter.py               ← OSM Overpass → chain store fallback
+│   ├── qcew_adapter.py              ← BLS QCEW county employment data
+│   ├── cbp_adapter.py               ← Census CBP ZIP establishment counts
+│   ├── nlrb_adapter.py              ← NLRB labor unrest cases
+│   ├── warn_adapter.py              ← Texas WARN Act filings
 │   └── geocoding.py                 ← Nominatim + overrides
 │
 ├── server.py                        ← Flask API (port 8765)
 │
 ├── frontend/
-│   ├── index.html                   ← Dual-mode SPA (Leaflet map)
+│   ├── index.html                   ← Three-mode SPA (Leaflet map)
 │   ├── css/style.css
 │   └── js/
-│       ├── app.js                   ← Job Fair Map mode: unified /api/map-employers loader, filters, mode switcher
-│       └── pathfinder.js            ← Career Pathfinder mode
+│       ├── app.js                   ← Mode switcher, filter dropdowns, hex click handlers, location toggle
+│       ├── h3map.js                 ← Targeting mode: H3 hex layer for employer density (r6–r9)
+│       ├── jobfinder.js             ← Job Finder mode: H3 hex layer + job card sidebar
+│       └── pathfinder.js            ← Career Pathfinder mode: occupation search + path display
 │
 ├── config/
-│   ├── chains.yaml                  ← Chain targets, scoring weights, regions
+│   ├── chains.yaml                  ← Chain targets, scoring weights, regions, scheduler crons
 │   └── loader.py                    ← Typed config access
 │
 ├── .env                             ← DATABASE_URL and API keys (copy from .env.example)
@@ -121,7 +145,7 @@ First-Helios/
 
 ---
 
-## Database Tables (26 total)
+## Database Tables
 
 ### Operational / Signal Tables
 | Table | Rows (est.) | Purpose |
@@ -129,6 +153,7 @@ First-Helios/
 | `chain_locations` | ~283 | Chain store locations (Starbucks, McDonald's, etc.) — ORM class `Store`, filtered by `brand_key` |
 | `local_employers` | ~45,618 | Truly-local non-chain employer POIs from Overture Maps; includes `mobility_score` (wage-lift proxy) |
 | `brand_groups` | ~36,563 | Deduplicated employer brand clusters; `location_count >= 5` → chain classification |
+| `job_postings` | growing | Normalized job listings from all sources; H3-indexed (r7/r8), TTL-managed, employer-matched |
 | `signals` | growing | Raw observations (job postings, reviews, Reddit) |
 | `scores` | growing | Composite staffing-stress scores per store |
 | `wage_index` | growing | Local vs chain pay comparison |
@@ -138,15 +163,28 @@ First-Helios/
 - `chain_locations` — scraped from career APIs / Overture with `brand_key` set (canonical key, e.g. `"starbucks"`)
 - `local_employers` — all other POIs from Overture; chain-like records (≥5 locations in Austin) were purged by `scripts/classify_local_employers.py`
 
+**Job Postings key fields:**
+- `source` / `external_id` — dedup key (unique constraint)
+- `h3_r7` / `h3_r8` — pre-computed H3 hex cells at ingest; NULL for fully-remote postings
+- `is_active` / `expires_at` — TTL-managed; nightly sweep marks expired rows inactive
+- `local_employer_id` — nullable FK to `local_employers`; NULL = unmatched (valid state)
+
 ### BLS Ground Truth (Reference Denominators)
 | Table | Purpose |
 |---|---|
 | `qcew_data` | County employment + wages (quarterly) |
 | `cbp_data` | ZIP establishment counts (annual) |
 | `jolts_data` | National job openings + quits rates |
-| `oews_data` | MSA-level occupation wages (annual) |
+| `oews_data` | MSA-level occupation wages (annual) — 638 Austin MSA occupations loaded |
 | `laus_data` | County unemployment rates (monthly) |
 | `labor_market_baseline` | Pre-computed denominators from above |
+
+### Rate Tracking Tables
+| Table | Purpose |
+|---|---|
+| `api_sources` | Registry of all 17 external APIs with daily limits + delay settings |
+| `rate_budgets` | Daily rollup: used/remaining/success rate per source per day |
+| `api_request_log` | Per-request log: URL, status, latency, bytes, data items |
 
 ### Reference Tables
 | Table | Rows | Purpose |
@@ -195,7 +233,7 @@ store.industry (e.g. "fast_food")
   → mob_transition WHERE origin_soc = ?     (ranked by transition_order, wage_direction)
   → mob_occupation dest metadata            (title, wage, 3yr growth, dest_industry_keys)
   → chain_locations / local_employers       (WHERE industry IN dest_industry_keys AND near lat/lng)
-  → [future] scraped job postings           (live openings at those employers)
+  → job_postings                            (active listings at those employers)
 ```
 
 ### SOC Coverage Notes
@@ -212,8 +250,16 @@ store.industry (e.g. "fast_food")
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/map-employers?region=austin_tx` | **Unified** — chain stores + local employers in one call; `chain` and `industry` filters apply to both |
-| `GET` | `/api/stores?region=austin_tx` | Chain store locations only (chain filter uses `brand_key`) |
+| `GET` | `/api/map-employers?region=austin_tx&h3_cell=<id>&resolution=<n>` | Employers within a specific H3 cell (targeting mode hex click) |
+| `GET` | `/api/stores?region=austin_tx` | Chain store locations only |
 | `GET` | `/api/local-employers?region=austin_tx&sample=3000` | Local employer POIs; random sample for geographic coverage |
+
+### Job Finder
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/jobs/h3-map?region=austin_tx&resolution=7&mode=local` | H3 hex aggregates of job postings; `mode` = local/remote/all; optional `category` filter |
+| `GET` | `/api/jobs/listings?region=austin_tx&mode=remote&page=1&limit=20` | Paginated job listing cards; optional `h3_cell` + `resolution` for hex drill-down |
+| `GET` | `/api/jobs/categories?region=austin_tx` | Distinct job categories with counts for filter dropdown |
 
 ### Scoring & Targeting
 | Method | Endpoint | Description |
@@ -234,8 +280,8 @@ store.industry (e.g. "fast_food")
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/scan` | Trigger scrape `{chain, region}` |
-| `GET` | `/api/scheduler/status` | Next scheduled run times |
-| `GET` | `/api/rate-budget` | API quota usage |
+| `GET` | `/api/scheduler/status` | Next scheduled run times for all 13 jobs |
+| `GET` | `/api/rate-budget` | API quota usage across all 17 registered sources |
 
 ### Mobility (Career Pathfinder)
 | Method | Endpoint | Description |
@@ -298,21 +344,21 @@ python scripts/populate_industry_taxonomy.py
 python scripts/populate_mobility_data.py      # loads 781 occupations + 256k career transitions
 python scripts/load_occupation_aliases.py     # loads 18,981 Census job-title aliases
 
-# 5. Ingest Overture POI data (local employers + chain locations)
-#    Either via S3/DuckDB:
-python scrapers/overture_adapter.py --mode local --region austin_tx
-#    Or from a locally downloaded GeoJSON:
-python scrapers/overture_adapter.py --local-file data/austin_places.geojson
+# 4. Ingest Overture POI data (local employers + chain locations)
+overturemaps download \
+  --bbox=-98.0,30.1,-97.4,30.55 \
+  -f geojson --type=place \
+  -o data/reference/overture/overture_austin_places.geojson
+python scrapers/overture_adapter.py --local-file data/reference/overture/overture_austin_places.geojson
 
-# 6. Classify and purge chain-like local employer records
-python scripts/classify_local_employers.py    # backfills location_count + purges chains
+# 5. Classify and purge chain-like local employer records
+python scripts/classify_local_employers.py
+
+# 6. (Optional) Ingest remote job postings from Jobicy
+python scrapers/jobicy_adapter.py
 
 # 7. Start server
 python server.py --debug                      # http://localhost:8765
-
-# 8. (Optional) Run chain scrapers
-python scrapers/careers_api.py --region austin_tx
-python scrapers/jobspy_adapter.py --chain starbucks --region austin_tx
 ```
 
 ---
@@ -326,12 +372,33 @@ python scrapers/jobspy_adapter.py --chain starbucks --region austin_tx
 | `PRAW` | Reddit API → worker sentiment |
 | `google-maps-scraper` | Store ratings, lat/lng, permanently_closed flag |
 | `Leaflet.js` | Interactive map in the frontend |
+| `h3-js` | H3 hexagonal indexing in the browser (cellToBoundary for polygon rendering) |
+| `h3` (Python) | H3 hexagonal indexing at ingest time (latlng_to_cell for pre-computation) |
+| `APScheduler` | Background job scheduler (runs 13 scraping/refresh jobs on cron/interval) |
 
 ---
 
 ## Configuration
 
-All chain targets, scoring weights, and region definitions live in `config/chains.yaml`. No hardcoded values in the codebase (exception: Emsi ISA column names, which are fixed by the dataset schema).
+All chain targets, scoring weights, region definitions, and scheduler crons live in `config/chains.yaml`. No hardcoded values in the codebase (exception: Emsi ISA column names, which are fixed by the dataset schema).
+
+Key sections in `chains.yaml`:
+- `chains` — chain targets with brand keys and scoring weights
+- `regions` — region bounding boxes and context
+- `scheduler` — cron expressions for all background jobs
+- `bls_series` — BLS series IDs to fetch per region
+
+---
+
+## Rate Manager
+
+All external API calls go through `backend/rate_manager.py` singleton. It tracks:
+- **Daily budgets** per source (used / remaining / limit)
+- **Per-request logs** (URL, HTTP status, latency, bytes, data items returned)
+- **Daily rollups** in `rate_budgets` table
+- **Scalability report** available at `/api/rate-budget`
+
+Sources with strict limits: Jobicy (24/day, ≥1hr between calls), JobSpy (50/day), BLS v1 (500/day).
 
 ---
 
@@ -343,6 +410,8 @@ All chain targets, scoring weights, and region definitions live in `config/chain
 
 **Austin TX first** — the config supports multi-region; the pipeline focuses on one city until it's right.
 
+**Jobicy hourly gate** — `scrapers/jobicy_adapter.py` enforces a 60-minute minimum interval between API calls and caches the last response in `data/jobicy_cache.json`. The TTL is checked before any rate-manager or budget logic runs.
+
 ---
 
 ## Background
@@ -352,5 +421,6 @@ Chain employers capture labor from local communities while wages and profits flo
 This platform gives both sides better tools:
 - **Organizers** get data-driven timing and placement for community job fairs
 - **Workers** get a clear map of what they can realistically move into and where to apply
+- **Job seekers** get a geographic view of local and remote openings filtered by category
 
 Everything uses publicly accessible sources. The legal framework was designed before any code was written.

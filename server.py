@@ -1331,6 +1331,200 @@ def mobility_employers():
         db.close()
 
 
+# ── Job Finder endpoints ─────────────────────────────────────────────────────
+
+@app.route("/api/jobs/h3-map")
+def jobs_h3_map():
+    """H3 hex aggregation of active job_postings that have coordinates.
+
+    JobPosting only stores h3_r7 and h3_r8, so resolution is clamped to 7–8.
+
+    Query params:
+      resolution  (int, default 7)  — 7 or 8
+      region      (default: austin_tx)
+      category    (optional)        — industry string filter
+      mode        local | remote | all  (default: local)
+                  local  = jobs where is_remote is not True
+                  remote = jobs where is_remote is True
+                  all    = no is_remote filter
+    """
+    import h3 as h3lib
+    from sqlalchemy import func as sqlfunc
+    from listings.models import JobPosting
+
+    resolution = request.args.get("resolution", 7, type=int)
+    region     = request.args.get("region", "austin_tx")
+    category   = request.args.get("category")
+    mode       = request.args.get("mode", "local")
+
+    resolution = max(7, min(8, resolution))
+    h3_col = getattr(JobPosting, f"h3_r{resolution}")
+
+    engine  = init_db()
+    session = get_session(engine)
+    try:
+        q = session.query(
+            h3_col.label("cell_id"),
+            sqlfunc.count().label("count"),
+        ).filter(
+            JobPosting.region   == region,
+            JobPosting.is_active.is_(True),
+            h3_col.isnot(None),
+        )
+
+        if mode == "local":
+            q = q.filter(JobPosting.is_remote.isnot(True))
+        elif mode == "remote":
+            q = q.filter(JobPosting.is_remote.is_(True))
+
+        if category:
+            q = q.filter(JobPosting.industry == category)
+
+        rows = q.group_by(h3_col).all()
+
+        cells = []
+        for row in rows:
+            lat, lng = h3lib.cell_to_latlng(row.cell_id)
+            cells.append({"cell_id": row.cell_id, "count": row.count, "lat": lat, "lng": lng})
+
+        return jsonify({"status": "ok", "resolution": resolution, "cell_count": len(cells), "cells": cells})
+
+    except Exception as e:
+        logger.error("[jobs/h3-map] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/jobs/listings")
+def jobs_listings():
+    """Paginated job postings, optionally filtered to a single H3 cell.
+
+    Query params:
+      region      (default: austin_tx)
+      h3_cell     (optional) — restrict to one H3 cell (ignores mode filter)
+      resolution  (int, default 7) — which h3 column to use when h3_cell given
+      mode        local | remote | all  (default: all)
+      category    (optional) — industry string filter
+      page        (int, default 1)
+      limit       (int, default 20, max 100)
+    """
+    from listings.models import JobPosting
+
+    region     = request.args.get("region", "austin_tx")
+    h3_cell    = request.args.get("h3_cell")
+    resolution = request.args.get("resolution", 7, type=int)
+    mode       = request.args.get("mode", "all")
+    category   = request.args.get("category")
+    page       = max(1, request.args.get("page", 1, type=int))
+    limit      = min(100, request.args.get("limit", 20, type=int))
+
+    engine  = init_db()
+    session = get_session(engine)
+    try:
+        q = session.query(JobPosting).filter(
+            JobPosting.region   == region,
+            JobPosting.is_active.is_(True),
+        )
+
+        if h3_cell:
+            resolution = max(7, min(8, resolution))
+            h3_col = getattr(JobPosting, f"h3_r{resolution}")
+            q = q.filter(h3_col == h3_cell)
+        elif mode == "local":
+            q = q.filter(JobPosting.is_remote.isnot(True))
+        elif mode == "remote":
+            q = q.filter(JobPosting.is_remote.is_(True))
+
+        if category:
+            q = q.filter(JobPosting.industry == category)
+
+        total    = q.count()
+        postings = (
+            q.order_by(JobPosting.posted_date.desc())
+             .offset((page - 1) * limit)
+             .limit(limit)
+             .all()
+        )
+
+        def _wage(jp):
+            if not jp.wage_min and not jp.wage_max:
+                return None
+            if jp.wage_period == "yearly":
+                lo = f"${int(jp.wage_min / 1000)}k" if jp.wage_min else None
+                hi = f"${int(jp.wage_max / 1000)}k" if jp.wage_max else None
+            else:
+                lo = f"${jp.wage_min:.0f}" if jp.wage_min else None
+                hi = f"${jp.wage_max:.0f}" if jp.wage_max else None
+            suffix = "/yr" if jp.wage_period == "yearly" else "/hr"
+            return "\u2013".join(filter(None, [lo, hi])) + suffix
+
+        jobs = [
+            {
+                "id":          jp.id,
+                "employer":    jp.raw_employer_name,
+                "role_title":  jp.role_title,
+                "industry":    jp.industry,
+                "wage":        _wage(jp),
+                "is_remote":   jp.is_remote,
+                "raw_address": jp.raw_address,
+                "source_url":  jp.source_url,
+                "posted_date": jp.posted_date.isoformat() if jp.posted_date else None,
+                "source":      jp.source,
+            }
+            for jp in postings
+        ]
+
+        return jsonify({
+            "status": "ok",
+            "page":   page,
+            "pages":  max(1, (total + limit - 1) // limit),
+            "total":  total,
+            "jobs":   jobs,
+        })
+
+    except Exception as e:
+        logger.error("[jobs/listings] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+@app.route("/api/jobs/categories")
+def jobs_categories():
+    """Distinct industry categories present in active job_postings.
+
+    Query params:
+      region  (default: austin_tx)
+    """
+    from sqlalchemy import func as sqlfunc
+    from listings.models import JobPosting
+
+    region  = request.args.get("region", "austin_tx")
+    engine  = init_db()
+    session = get_session(engine)
+    try:
+        rows = (
+            session.query(JobPosting.industry, sqlfunc.count().label("count"))
+            .filter(
+                JobPosting.region   == region,
+                JobPosting.is_active.is_(True),
+                JobPosting.industry.isnot(None),
+            )
+            .group_by(JobPosting.industry)
+            .order_by(sqlfunc.count().desc())
+            .all()
+        )
+        categories = [{"key": r.industry, "label": r.industry, "count": r.count} for r in rows]
+        return jsonify({"status": "ok", "categories": categories})
+
+    except Exception as e:
+        logger.error("[jobs/categories] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
 # ── Server startup ───────────────────────────────────────────────────────────
 
 def create_app() -> Flask:
