@@ -238,6 +238,17 @@ API_SOURCE_REGISTRY: list[dict] = [
         "reset_hour_utc": 0,
         "notes": "CC-0. Soft limit ~60s query timeout. Single batch per brand refresh.",
     },
+    # ── USAJobs ───────────────────────────────────────────────────
+    {
+        "source_key": "usajobs",
+        "display_name": "USAJobs API",
+        "base_url": "https://data.usajobs.gov/api/",
+        "auth_type": "api_key",
+        "daily_limit": 1000,
+        "min_delay_seconds": 0.5,
+        "reset_hour_utc": 0,
+        "notes": "Federal job listings. Requires USAJOBS_API_KEY + USAJOBS_EMAIL env vars. Up to 500 results/page.",
+    },
     # ── Map tiles (frontend, browser-side) ───────────────────────
     {
         "source_key": "carto_tiles",

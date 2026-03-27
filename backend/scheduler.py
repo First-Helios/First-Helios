@@ -502,3 +502,16 @@ def _run_warn() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] WARN job failed: %s", e)
+
+
+def _run_usajobs() -> None:
+    """Scheduled job: Fetch federal job listings from USAJobs API."""
+    try:
+        from scrapers.usajobs_adapter import scrape_usajobs
+
+        logger.info("[Scheduler] Running USAJobs federal listings fetch")
+        signals = scrape_usajobs(region="austin_tx", location="Austin, TX", max_pages=2)
+        logger.info("[Scheduler] USAJobs: %d signals", len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] USAJobs job failed: %s", e)
