@@ -2,7 +2,12 @@
 APScheduler job definitions for ChainStaffingTracker.
 
 Runs scraping jobs on configurable schedules inside the Flask process.
-Schedule configuration comes from config/chains.yaml under 'scheduler'.
+Schedule configuration comes from config/scheduler.yaml (loaded via
+config.loader.get_scheduler_config). Hardcoded defaults in add_job calls
+are used only when a key is absent from scheduler.yaml.
+
+Each job respects an `enabled` flag in scheduler.yaml — set to false to
+disable a job without removing it from the code.
 
 Depends on: apscheduler, config.loader, scrapers.*, backend.scoring.engine
 Called by: server.py (on startup)
@@ -17,6 +22,11 @@ from config.loader import get_scheduler_config
 logger = logging.getLogger(__name__)
 
 _scheduler: BackgroundScheduler | None = None
+
+
+def _job_enabled(sched_cfg: dict, job_id: str) -> bool:
+    """Return True if the job is enabled in scheduler.yaml (default: True)."""
+    return sched_cfg.get(job_id, {}).get("enabled", True)
 
 
 def get_scheduler() -> BackgroundScheduler:
@@ -43,204 +53,133 @@ def init_scheduler() -> BackgroundScheduler:
 
     # ── Careers API — MOVED to future_plans/web_scraping/ ────────────
     # Direct website scraping is a separate project.
-    # See docs/PROJECT_INTENT_EVALUATION.md for rationale.
 
-    # ── JobSpy — daily at 4am ────────────────────────────────────────
-    jobspy_cron = sched_cfg.get("jobspy", {}).get("cron", {})
-    scheduler.add_job(
-        _run_jobspy,
-        "cron",
-        hour=jobspy_cron.get("hour", 4),
-        minute=jobspy_cron.get("minute", 0),
-        id="jobspy",
-        name="JobSpy Scraper",
-        replace_existing=True,
-    )
+    # ── Job Postings ─────────────────────────────────────────────────
 
-    # ── Reddit — every 6 hours ───────────────────────────────────────
-    reddit_interval = sched_cfg.get("reddit", {}).get("interval_hours", 6)
-    scheduler.add_job(
-        _run_reddit,
-        "interval",
-        hours=reddit_interval,
-        id="reddit",
-        name="Reddit Sentiment Scraper",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "jobspy"):
+        _c = sched_cfg.get("jobspy", {}).get("cron", {})
+        scheduler.add_job(_run_jobspy, "cron",
+            hour=_c.get("hour", 4), minute=_c.get("minute", 0),
+            id="jobspy", name="JobSpy Scraper", replace_existing=True)
 
-    # ── Google Maps — weekly Monday 5am ──────────────────────────────
-    gmaps_cron = sched_cfg.get("google_maps", {}).get("cron", {})
-    scheduler.add_job(
-        _run_reviews,
-        "cron",
-        day_of_week=gmaps_cron.get("day_of_week", "mon"),
-        hour=gmaps_cron.get("hour", 5),
-        minute=gmaps_cron.get("minute", 0),
-        id="google_maps",
-        name="Google Maps Reviews Scraper",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "reddit"):
+        _iv = sched_cfg.get("reddit", {}).get("interval_hours", 6)
+        scheduler.add_job(_run_reddit, "interval",
+            hours=_iv,
+            id="reddit", name="Reddit Sentiment Scraper", replace_existing=True)
 
-    # ── BLS — weekly ─────────────────────────────────────────────────
-    bls_cron = sched_cfg.get("bls", {}).get("cron", {})
-    scheduler.add_job(
-        _run_bls,
-        "cron",
-        day_of_week=bls_cron.get("day_of_week", "mon"),
-        hour=bls_cron.get("hour", 6),
-        minute=bls_cron.get("minute", 0),
-        id="bls",
-        name="BLS Wage Data Fetcher",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "austin_gov"):
+        _c = sched_cfg.get("austin_gov", {}).get("cron", {})
+        scheduler.add_job(_run_austin_gov, "cron",
+            hour=_c.get("hour", 5), minute=_c.get("minute", 30),
+            id="austin_gov", name="Austin City Gov Job Listings", replace_existing=True)
 
-    # ── AllThePlaces store discovery — weekly Sunday 2am ────────────
-    scheduler.add_job(
-        _run_alltheplaces,
-        "cron",
-        day_of_week="sun",
-        hour=2,
-        minute=0,
-        id="atp_starbucks_austin",
-        name="AllThePlaces Starbucks Austin",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "usajobs"):
+        _c = sched_cfg.get("usajobs", {}).get("cron", {})
+        scheduler.add_job(_run_usajobs, "cron",
+            hour=_c.get("hour", 6), minute=_c.get("minute", 0),
+            id="usajobs", name="USAJobs Federal Listings", replace_existing=True)
 
-    # ── Overture chain cross-validation — weekly Sunday 2:15am ────
-    scheduler.add_job(
-        _run_overture_chain,
-        "cron",
-        day_of_week="sun",
-        hour=2,
-        minute=15,
-        id="overture_starbucks_austin",
-        name="Overture Chain Starbucks Austin",
-        replace_existing=True,
-    )
+    # ── Labor Market / Regulatory Data ───────────────────────────────
 
-    # ── OSM fallback — weekly Sunday 2:30am ──────────────────────
-    scheduler.add_job(
-        _run_osm,
-        "cron",
-        day_of_week="sun",
-        hour=2,
-        minute=30,
-        id="osm_starbucks_austin",
-        name="OSM Starbucks Austin",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "bls"):
+        _c = sched_cfg.get("bls", {}).get("cron", {})
+        scheduler.add_job(_run_bls, "cron",
+            day_of_week=_c.get("day_of_week", "mon"),
+            hour=_c.get("hour", 6), minute=_c.get("minute", 0),
+            id="bls", name="BLS Wage Data Fetcher", replace_existing=True)
 
-    # ── Overture local employers — weekly Sunday 3am ─────────────
-    scheduler.add_job(
-        _run_overture_local,
-        "cron",
-        day_of_week="sun",
-        hour=3,
-        minute=0,
-        id="overture_local_austin",
-        name="Overture Local Employers Austin",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "qcew"):
+        _c = sched_cfg.get("qcew", {}).get("cron", {})
+        scheduler.add_job(_run_qcew, "cron",
+            day=_c.get("day", 1),
+            hour=_c.get("hour", 7), minute=_c.get("minute", 0),
+            id="qcew", name="QCEW Establishment Data", replace_existing=True)
 
-    # ── QCEW ground-truth — monthly 1st at 7am ──────────────────
-    qcew_cron = sched_cfg.get("qcew", {}).get("cron", {})
-    scheduler.add_job(
-        _run_qcew,
-        "cron",
-        day=qcew_cron.get("day", 1),
-        hour=qcew_cron.get("hour", 7),
-        minute=qcew_cron.get("minute", 0),
-        id="qcew",
-        name="QCEW Establishment Data",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "cbp"):
+        _c = sched_cfg.get("cbp", {}).get("cron", {})
+        scheduler.add_job(_run_cbp, "cron",
+            day_of_week=_c.get("day_of_week", "mon"),
+            hour=_c.get("hour", 8), minute=_c.get("minute", 0),
+            id="cbp", name="Census CBP ZIP Establishments", replace_existing=True)
 
-    # ── Census CBP — monthly Monday 8am ──────────────────────────
-    cbp_cron = sched_cfg.get("cbp", {}).get("cron", {})
-    scheduler.add_job(
-        _run_cbp,
-        "cron",
-        day_of_week=cbp_cron.get("day_of_week", "mon"),
-        hour=cbp_cron.get("hour", 8),
-        minute=cbp_cron.get("minute", 0),
-        id="cbp",
-        name="Census CBP ZIP Establishments",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "nlrb"):
+        _c = sched_cfg.get("nlrb", {}).get("cron", {})
+        scheduler.add_job(_run_nlrb, "cron",
+            day_of_week=_c.get("day_of_week", "wed"),
+            hour=_c.get("hour", 7), minute=_c.get("minute", 0),
+            id="nlrb", name="NLRB Labor Unrest Cases", replace_existing=True)
 
-    # ── Baseline recompute — weekly Sunday 4am ───────────────────
-    baseline_cron = sched_cfg.get("baseline_recompute", {}).get("cron", {})
-    scheduler.add_job(
-        _run_baseline_recompute,
-        "cron",
-        day_of_week=baseline_cron.get("day_of_week", "sun"),
-        hour=baseline_cron.get("hour", 4),
-        minute=baseline_cron.get("minute", 0),
-        id="baseline_recompute",
-        name="Labor Market Baseline Recompute",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "warn_tx"):
+        _c = sched_cfg.get("warn_tx", {}).get("cron", {})
+        scheduler.add_job(_run_warn, "cron",
+            day_of_week=_c.get("day_of_week", "tue"),
+            hour=_c.get("hour", 7), minute=_c.get("minute", 0),
+            id="warn_tx", name="Texas WARN Act Filings", replace_existing=True)
 
-    # ── NLRB labor unrest — weekly Wednesday 7am ─────────────────
-    nlrb_cron = sched_cfg.get("nlrb", {}).get("cron", {})
-    scheduler.add_job(
-        _run_nlrb,
-        "cron",
-        day_of_week=nlrb_cron.get("day_of_week", "wed"),
-        hour=nlrb_cron.get("hour", 7),
-        minute=nlrb_cron.get("minute", 0),
-        id="nlrb",
-        name="NLRB Labor Unrest Cases",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "baseline_recompute"):
+        _c = sched_cfg.get("baseline_recompute", {}).get("cron", {})
+        scheduler.add_job(_run_baseline_recompute, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 4), minute=_c.get("minute", 0),
+            id="baseline_recompute", name="Labor Market Baseline Recompute",
+            replace_existing=True)
 
-    # ── Texas WARN Act — weekly Tuesday 7am ──────────────────────
-    warn_cron = sched_cfg.get("warn_tx", {}).get("cron", {})
-    scheduler.add_job(
-        _run_warn,
-        "cron",
-        day_of_week=warn_cron.get("day_of_week", "tue"),
-        hour=warn_cron.get("hour", 7),
-        minute=warn_cron.get("minute", 0),
-        id="warn_tx",
-        name="Texas WARN Act Filings",
-        replace_existing=True,
-    )
+    # ── Store / Employer Discovery (Sunday stagger) ──────────────────
 
-    # ── Austin City Gov — daily at 5am ────────────────────────────
-    austin_gov_cron = sched_cfg.get("austin_gov", {}).get("cron", {})
-    scheduler.add_job(
-        _run_austin_gov,
-        "cron",
-        hour=austin_gov_cron.get("hour", 5),
-        minute=austin_gov_cron.get("minute", 30),
-        id="austin_gov",
-        name="Austin City Gov Job Listings",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "atp_starbucks_austin"):
+        _c = sched_cfg.get("atp_starbucks_austin", {}).get("cron", {})
+        scheduler.add_job(_run_alltheplaces, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 2), minute=_c.get("minute", 0),
+            id="atp_starbucks_austin", name="AllThePlaces Starbucks Austin",
+            replace_existing=True)
 
-    # ── Job posting expiry sweep — nightly at 3am ────────────────
-    scheduler.add_job(
-        _run_posting_expiry,
-        "cron",
-        hour=3,
-        minute=0,
-        id="posting_expiry",
-        name="Job Posting Expiry Sweep",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "overture_starbucks_austin"):
+        _c = sched_cfg.get("overture_starbucks_austin", {}).get("cron", {})
+        scheduler.add_job(_run_overture_chain, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 2), minute=_c.get("minute", 15),
+            id="overture_starbucks_austin", name="Overture Chain Starbucks Austin",
+            replace_existing=True)
 
-    # ── Hard purge of ancient postings — weekly Sunday 3:30am ────
-    scheduler.add_job(
-        _run_posting_purge,
-        "cron",
-        day_of_week="sun",
-        hour=3,
-        minute=30,
-        id="posting_purge",
-        name="Purge Ancient Job Postings",
-        replace_existing=True,
-    )
+    if _job_enabled(sched_cfg, "osm_starbucks_austin"):
+        _c = sched_cfg.get("osm_starbucks_austin", {}).get("cron", {})
+        scheduler.add_job(_run_osm, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 2), minute=_c.get("minute", 30),
+            id="osm_starbucks_austin", name="OSM Starbucks Austin",
+            replace_existing=True)
+
+    if _job_enabled(sched_cfg, "overture_local_austin"):
+        _c = sched_cfg.get("overture_local_austin", {}).get("cron", {})
+        scheduler.add_job(_run_overture_local, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 3), minute=_c.get("minute", 0),
+            id="overture_local_austin", name="Overture Local Employers Austin",
+            replace_existing=True)
+
+    # ── Maintenance ───────────────────────────────────────────────────
+
+    if _job_enabled(sched_cfg, "google_maps"):
+        _c = sched_cfg.get("google_maps", {}).get("cron", {})
+        scheduler.add_job(_run_reviews, "cron",
+            day_of_week=_c.get("day_of_week", "mon"),
+            hour=_c.get("hour", 5), minute=_c.get("minute", 0),
+            id="google_maps", name="Google Maps Reviews Scraper", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "posting_expiry"):
+        _c = sched_cfg.get("posting_expiry", {}).get("cron", {})
+        scheduler.add_job(_run_posting_expiry, "cron",
+            hour=_c.get("hour", 3), minute=_c.get("minute", 0),
+            id="posting_expiry", name="Job Posting Expiry Sweep", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "posting_purge"):
+        _c = sched_cfg.get("posting_purge", {}).get("cron", {})
+        scheduler.add_job(_run_posting_purge, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 3), minute=_c.get("minute", 30),
+            id="posting_purge", name="Purge Ancient Job Postings", replace_existing=True)
 
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))

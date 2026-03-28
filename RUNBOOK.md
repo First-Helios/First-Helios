@@ -103,7 +103,7 @@ python server.py --debug
 The server will:
 1. Connect to PostgreSQL (helios DB) and create any missing tables
 2. Seed `api_sources` registry (17 external sources) in rate_manager
-3. Start the APScheduler background jobs (13 scheduled jobs)
+3. Start the APScheduler background jobs (17 scheduled jobs)
 4. Serve the Leaflet map frontend at `/`
 5. Expose all API endpoints
 
@@ -112,6 +112,12 @@ The server will:
 ```bash
 # Jobicy remote jobs (respects 1hr rate gate + file cache)
 python scrapers/jobicy_adapter.py
+
+# USAJobs federal listings (requires USAJOBS_API_KEY + USAJOBS_EMAIL in .env)
+python scrapers/usajobs_adapter.py --location "Austin, TX" --max-pages 2
+
+# City of Austin Workday portal (dry run — prints results without DB write)
+python scrapers/workday_gov_adapter.py --dry-run
 
 # Job boards via JobSpy (chain mode — find chain repostings)
 python scrapers/jobspy_adapter.py --chain starbucks --region austin_tx --mode chain
@@ -133,30 +139,55 @@ python scrapers/bls_adapter.py --region austin_tx
 
 ## Scheduler
 
-The background scheduler (`backend/scheduler.py`) uses APScheduler and runs inside the Flask process. All schedules are configurable in `config/chains.yaml` under the `scheduler` key. The scheduler starts automatically when `server.py` starts.
+The background scheduler (`backend/scheduler.py`) uses APScheduler and runs inside the Flask process. Schedule configuration lives in `config/scheduler.yaml` — edit that file to change times or disable jobs without touching code. The scheduler starts automatically when `server.py` starts.
 
 Check status via API: `GET /api/scheduler/status` — returns next run time for each job.
 
+To disable a job without deleting it, set `enabled: false` in `config/scheduler.yaml`.
+
 ### Schedule Table
 
-| Job ID | Name | Trigger | Default Schedule | What It Does |
-|--------|------|---------|-----------------|--------------|
-| `jobspy` | JobSpy Scraper | cron | Daily 4:00 AM | Scrapes Indeed/Glassdoor for chain job postings + local wage data; recomputes all scores |
-| `reddit` | Reddit Sentiment | interval | Every 6 hours | Fetches r/Austin + chain subreddits for worker sentiment signals; recomputes scores |
-| `google_maps` | Google Maps Reviews | cron | Monday 5:00 AM | Scrapes ratings + reviews for tracked chain locations; recomputes scores |
-| `bls` | BLS Wage Data | cron | Monday 6:00 AM | Fetches BLS time-series data (v2 batch if BLS_API_KEY set, else v1 per-series) |
-| `atp_starbucks_austin` | AllThePlaces Discovery | cron | Sunday 2:00 AM | Downloads AllThePlaces GeoJSON for Starbucks, Dutch Bros, McDonald's in Austin |
-| `overture_starbucks_austin` | Overture Chain | cron | Sunday 2:15 AM | Cross-validates chain locations against Overture Maps data |
-| `osm_starbucks_austin` | OSM Fallback | cron | Sunday 2:30 AM | OSM Overpass fallback for chain store locations |
-| `overture_local_austin` | Overture Local | cron | Sunday 3:00 AM | Refreshes local employer POIs from Overture Maps |
-| `baseline_recompute` | Baseline Recompute | cron | Sunday 4:00 AM | Recomputes labor market baselines from QCEW + JOLTS + OEWS + LAUS |
-| `qcew` | QCEW Establishment Data | cron | 1st of month 7:00 AM | County employment + wages; **skips unless month ∈ {Jan, Apr, Jul, Oct}** (quarterly release) |
-| `cbp` | Census CBP ZIP | cron | Monday 8:00 AM | ZIP-level establishment counts; **skips unless month = April** (annual release) |
-| `nlrb` | NLRB Labor Unrest | cron | Wednesday 7:00 AM | Fetches NLRB labor relations cases for tracked chains; recomputes scores if new signals |
-| `warn_tx` | Texas WARN Act | cron | Tuesday 7:00 AM | Fetches Texas Workforce Commission WARN Act mass-layoff filings |
+**Job Postings**
+
+| Job ID | Trigger | Default Schedule | What It Does |
+|--------|---------|-----------------|--------------|
+| `jobspy` | cron | Daily 4:00 AM | Scrapes Indeed/Glassdoor for chain job postings + local wage data; recomputes all scores |
+| `reddit` | interval | Every 6 hours | Fetches r/Austin + chain subreddits for worker sentiment signals; recomputes scores |
+| `austin_gov` | cron | Daily 5:30 AM | City of Austin Workday portal — all active municipal postings with salary parsing |
+| `usajobs` | cron | Daily 6:00 AM | USAJobs federal listings — Austin TX location filter, up to 1000 results/day |
+
+**Labor Market / Regulatory Data**
+
+| Job ID | Trigger | Default Schedule | What It Does |
+|--------|---------|-----------------|--------------|
+| `bls` | cron | Monday 6:00 AM | Fetches BLS time-series data (v2 batch if BLS_API_KEY set, else v1 per-series) |
+| `qcew` | cron | 1st of month 7:00 AM | County employment + wages; **skips unless month ∈ {Jan, Apr, Jul, Oct}** (quarterly release) |
+| `cbp` | cron | Monday 8:00 AM | ZIP-level establishment counts; **skips unless month = April** (annual release) |
+| `nlrb` | cron | Wednesday 7:00 AM | Fetches NLRB labor relations cases for tracked chains; recomputes scores if new signals |
+| `warn_tx` | cron | Tuesday 7:00 AM | Fetches Texas Workforce Commission WARN Act mass-layoff filings |
+| `baseline_recompute` | cron | Sunday 4:00 AM | Recomputes labor market baselines from QCEW + JOLTS + OEWS + LAUS |
+
+**Store / Employer Discovery (Sunday stagger)**
+
+| Job ID | Trigger | Default Schedule | What It Does |
+|--------|---------|-----------------|--------------|
+| `atp_starbucks_austin` | cron | Sunday 2:00 AM | Downloads AllThePlaces GeoJSON for Starbucks, Dutch Bros, McDonald's in Austin |
+| `overture_starbucks_austin` | cron | Sunday 2:15 AM | Cross-validates chain locations against Overture Maps data |
+| `osm_starbucks_austin` | cron | Sunday 2:30 AM | OSM Overpass fallback for chain store locations |
+| `overture_local_austin` | cron | Sunday 3:00 AM | Refreshes local employer POIs from Overture Maps |
+
+**Maintenance**
+
+| Job ID | Trigger | Default Schedule | What It Does |
+|--------|---------|-----------------|--------------|
+| `google_maps` | cron | Monday 5:00 AM | Scrapes ratings + reviews for tracked chain locations; recomputes scores |
+| `posting_expiry` | cron | Daily 3:00 AM | Marks job postings `is_active=False` when `expires_at` has passed |
+| `posting_purge` | cron | Sunday 3:30 AM | Hard-deletes job postings older than `POSTING_PURGE_DAYS` (default 90) |
 
 ### Scheduler Design Notes
 
+- **Config file** — `config/scheduler.yaml` is the single source for all schedules. Hardcoded defaults in `scheduler.py` are fallbacks only; the YAML always wins.
+- **Enabled flag** — each job has `enabled: true/false`. Set false to pause a job without removing code.
 - **Daemon threads** — the scheduler runs as a daemon, so it exits cleanly when the Flask process exits.
 - **Skip guards** — QCEW only runs in Jan/Apr/Jul/Oct; CBP only runs in April. Running outside those months is a no-op with a log message.
 - **Score recompute** — JobSpy, Reddit, Reviews, and NLRB all call `compute_all_scores(region)` after ingesting signals so scores stay fresh.

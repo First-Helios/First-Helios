@@ -1,6 +1,6 @@
 # Documentation Index — First-Helios
 
-**Last Updated:** 2026-03-27
+**Last Updated:** 2026-03-27 (scheduler setup, USAJobs + WorkdayGov added)
 
 ## Data Dictionary
 
@@ -56,8 +56,10 @@ Documentation for the mobility graph (Career Pathfinder mode):
 
 ## Configuration
 
-- **[../config/chains.yaml](../config/chains.yaml)** — All tunable parameters (brands, regions, scoring weights, API configs, scraper schedules)
-- **[../.env.example](../.env.example)** — Environment variable templates (DATABASE_URL, BLS, Census, Reddit, Google)
+- **[../config/scheduler.yaml](../config/scheduler.yaml)** — All 17 scheduled job definitions: cron times, `enabled` flags, descriptions. Edit here to change schedules or disable jobs.
+- **[../config/chains.yaml](../config/chains.yaml)** — Manually maintained employer chain definitions (Starbucks, Dutch Bros) and gov employer portals
+- **[../config/labor_market.yaml](../config/labor_market.yaml)** — Auto-generated from OEWS: regions, scoring weights, BLS params (do not hand-edit)
+- **[../.env.example](../.env.example)** — Environment variable templates (DATABASE_URL, BLS, Census, Reddit, Google, USAJobs)
 
 ---
 
@@ -105,10 +107,15 @@ Documentation for the mobility graph (Career Pathfinder mode):
 **...understand Job Finder**
 → Model: [../listings/models.py](../listings/models.py) — JobPosting table (job_postings)
 → Ingest: [../listings/ingest.py](../listings/ingest.py) — single write path for all job posting sources
-→ Scraper: [../scrapers/jobicy_adapter.py](../scrapers/jobicy_adapter.py) — remote jobs with hourly gate + file cache
+→ Scrapers: [../scrapers/jobicy_adapter.py](../scrapers/jobicy_adapter.py) (remote, hourly gate), [../scrapers/usajobs_adapter.py](../scrapers/usajobs_adapter.py) (federal), [../scrapers/workday_gov_adapter.py](../scrapers/workday_gov_adapter.py) (City of Austin)
 → API: [../README.md](../README.md) — Job Finder endpoints section
 → Frontend: [../frontend/js/jobfinder.js](../frontend/js/jobfinder.js)
 → Workflow: [../PLAYBOOK.md](../PLAYBOOK.md) — Adding a New Job Posting Source
+
+**...add or change a scheduled job**
+→ Schedule config: [../config/scheduler.yaml](../config/scheduler.yaml) — set `enabled: false` to pause, edit `cron:` to reschedule
+→ Job functions: [../backend/scheduler.py](../backend/scheduler.py) — `_run_<id>()` functions, one per job
+→ Ops guide: [../RUNBOOK.md](../RUNBOOK.md) — full schedule table with descriptions
 
 **...see what data is stale** (weekly health check)
 → Run: `python scripts/system_health_dashboard.py`
@@ -117,6 +124,51 @@ Documentation for the mobility graph (Career Pathfinder mode):
 **...debug NULL values in the DB**
 → Open: [DATA_DICTIONARY_COLUMNS.md](./Data_Dicts/DATA_DICTIONARY_COLUMNS.md)
 → Find the column, check if Nullable=✓ (expected) or ✗ (indicates bug)
+
+---
+
+## Roadmap
+
+Ordered by priority. "Foundation" items unblock later work.
+
+### Near-term — Data Pipeline
+
+| Item | Status | Notes |
+|------|--------|-------|
+| USAJobs federal listings | ✅ Done | `scrapers/usajobs_adapter.py` — requires `USAJOBS_API_KEY` + `USAJOBS_EMAIL` in `.env` |
+| City of Austin Workday | ✅ Done | `scrapers/workday_gov_adapter.py` — salary parsed from HTML description |
+| Scheduler operational | ✅ Done | `config/scheduler.yaml` owns all 17 jobs; `enabled` flag per job |
+| WorkdayGov description parsing | 🔧 Incomplete | Section extraction works for most COA posts; edge cases exist where salary/location are in non-standard HTML structures — improve `_extract_sections()` and `_parse_salary_from_sections()` as more real examples surface |
+| Additional government job portals | 🔜 Planned | Travis County, Austin ISD, UT Austin — all use Workday; add entries to `WORKDAY_GOV_SITES` in `workday_gov_adapter.py` |
+| Texas state agency jobs | 🔜 Planned | CAPPS/WorkInTexas portal — separate adapter needed |
+
+### Near-term — Scoring & Intelligence
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Multi-industry scoring config | 🔧 Partial | Scoring weights in `config/labor_market.yaml` work for food service; other industries need tuning |
+| Job posting → employer match improvement | 🔜 Planned | `PROXIMITY_THRESHOLD_M = 150` (half a block) misses some valid matches; consider fuzzy name matching as secondary pass |
+| Federal/gov jobs in Job Fair map | 🔜 Planned | USAJobs and WorkdayGov postings are ingested but not yet surfaced on the h3 map as a distinct filter layer |
+
+### Medium-term — Staffing Intelligence Engine
+
+This is the core product goal from `Todos/StaffingEngine.md`:
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Staffing capacity model | 🔜 Planned | Estimate max staffing from store sq-ft + industry benchmarks (Space-to-Service formula) |
+| Review sentiment NLP | 🔜 Planned | Flag "understaffed", "short-staffed", "wait time" keywords in scraped Google/Yelp reviews — extend `reviews_adapter.py` |
+| Labor Pressure Index | 🔜 Planned | Composite 1–100 score: staffing stress + wage gap + dwell-time signal + review sentiment |
+| Recruitment heatmap | 🔜 Planned | Overlay "short-staffed" flags with BLS unemployment by ZIP — identify easy-hire zones |
+
+### Longer-term — Data Enrichment
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Mobile dwell-time signal | 💡 Research | Placer.ai / Near / Advan trial — anonymized pings to estimate current staff vs. customers |
+| Revelio Labs historical headcount | 💡 Research | Tables exist (`revelio_*`) but data unpopulated; licensing required |
+| Property tax / sq-ft data | 💡 Research | Austin Open Data portal has parcel records — free, no API key |
+| Competitor service decay tracking | 💡 Research | Track staffing-stress trend slope over 90-day windows per chain location |
 
 ---
 

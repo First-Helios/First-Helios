@@ -5,6 +5,9 @@ Merges two YAML files at import time:
   config/labor_market.yaml  — auto-generated from OEWS data (regions, scoring, targeting, BLS params)
   config/chains.yaml        — manually maintained chain definitions (Starbucks, Dutch Bros, etc.)
 
+Loaded independently:
+  config/scheduler.yaml     — APScheduler job schedules (cron/interval, enabled flag per job)
+
 The merged result is cached and accessible via accessor functions.
 No module should ever parse YAML or hardcode config values directly.
 
@@ -24,7 +27,9 @@ logger = logging.getLogger(__name__)
 _CONFIG_DIR = Path(__file__).parent
 _LABOR_MARKET_PATH = _CONFIG_DIR / "labor_market.yaml"
 _CHAINS_PATH = _CONFIG_DIR / "chains.yaml"
+_SCHEDULER_PATH = _CONFIG_DIR / "scheduler.yaml"
 _config: dict[str, Any] | None = None
+_scheduler_config: dict[str, Any] | None = None
 
 
 def _load() -> dict[str, Any]:
@@ -224,5 +229,19 @@ def get_seasonal_config() -> dict[str, Any]:
 # ── Scheduler helpers ────────────────────────────────────────────────────────
 
 def get_scheduler_config() -> dict[str, Any]:
-    """Return scheduler job definitions."""
-    return _load()["scheduler"]
+    """Return scheduler job config from config/scheduler.yaml.
+
+    Each key is a job ID. Values contain trigger type, cron/interval params,
+    enabled flag, and a human-readable description.
+    Returns an empty dict if the file is missing (all jobs use hardcoded defaults).
+    """
+    global _scheduler_config
+    if _scheduler_config is None:
+        if _SCHEDULER_PATH.exists():
+            with open(_SCHEDULER_PATH, "r") as f:
+                _scheduler_config = yaml.safe_load(f) or {}
+            logger.info("[Config] Loaded %s", _SCHEDULER_PATH)
+        else:
+            logger.warning("[Config] scheduler.yaml not found — using hardcoded defaults")
+            _scheduler_config = {}
+    return _scheduler_config
