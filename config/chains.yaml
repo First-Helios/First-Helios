@@ -32,3 +32,25 @@ chains:
       radius_km: 40
     store_num_prefix: DB
     maps_search_query: Dutch Bros Austin TX
+
+# ── Government employers ─────────────────────────────────────────────────────
+# These use scrapers/workday_gov_adapter.py instead of careers_api.py.
+# They are not chain-store employers — no store_num_prefix or maps_search_query.
+
+gov_employers:
+  austin_gov:
+    display_name: City of Austin
+    employer_name: City of Austin
+    industry: soc_99  # government / public administration
+    workday:
+      tenant: austintexas
+      wd_instance: wd5
+      site_id: COA_Careers
+      base_url: https://austintexas.wd5.myworkdayjobs.com
+      search_url: https://austintexas.wd5.myworkdayjobs.com/en-US/COA_Careers
+      api_url: https://austintexas.wd5.myworkdayjobs.com/wday/cxs/austintexas/COA_Careers/jobs
+      page_size: 20
+    default_location:
+      address: Austin, TX
+      lat: 30.2672
+      lng: -97.7431

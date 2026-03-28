@@ -249,6 +249,17 @@ API_SOURCE_REGISTRY: list[dict] = [
         "reset_hour_utc": 0,
         "notes": "Federal job listings. Requires USAJOBS_API_KEY + USAJOBS_EMAIL env vars. Up to 500 results/page.",
     },
+    # ── Government Workday portals ────────────────────────────────
+    {
+        "source_key": "austin_gov_workday",
+        "display_name": "City of Austin Workday Careers",
+        "base_url": "https://austintexas.wd5.myworkdayjobs.com/wday/cxs/austintexas/COA_Careers/",
+        "auth_type": "none",
+        "daily_limit": 1000,
+        "min_delay_seconds": 0.5,
+        "reset_hour_utc": 0,
+        "notes": "City of Austin municipal jobs. ~100-200 active postings. Detail page fetches for salary data. No auth required.",
+    },
     # ── Map tiles (frontend, browser-side) ───────────────────────
     {
         "source_key": "carto_tiles",

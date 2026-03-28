@@ -207,6 +207,41 @@ def init_scheduler() -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # ── Austin City Gov — daily at 5am ────────────────────────────
+    austin_gov_cron = sched_cfg.get("austin_gov", {}).get("cron", {})
+    scheduler.add_job(
+        _run_austin_gov,
+        "cron",
+        hour=austin_gov_cron.get("hour", 5),
+        minute=austin_gov_cron.get("minute", 30),
+        id="austin_gov",
+        name="Austin City Gov Job Listings",
+        replace_existing=True,
+    )
+
+    # ── Job posting expiry sweep — nightly at 3am ────────────────
+    scheduler.add_job(
+        _run_posting_expiry,
+        "cron",
+        hour=3,
+        minute=0,
+        id="posting_expiry",
+        name="Job Posting Expiry Sweep",
+        replace_existing=True,
+    )
+
+    # ── Hard purge of ancient postings — weekly Sunday 3:30am ────
+    scheduler.add_job(
+        _run_posting_purge,
+        "cron",
+        day_of_week="sun",
+        hour=3,
+        minute=30,
+        id="posting_purge",
+        name="Purge Ancient Job Postings",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
@@ -515,3 +550,70 @@ def _run_usajobs() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] USAJobs job failed: %s", e)
+
+
+def _run_austin_gov() -> None:
+    """Scheduled job: Fetch City of Austin job listings from Workday portal."""
+    try:
+        from scrapers.workday_gov_adapter import scrape_austin_gov
+
+        logger.info("[Scheduler] Running Austin City Gov Workday fetch")
+        signals = scrape_austin_gov(region="austin_tx")
+        logger.info("[Scheduler] Austin Gov: %d signals", len(signals))
+
+    except Exception as e:
+        logger.error("[Scheduler] Austin Gov job failed: %s", e)
+
+
+def _run_posting_expiry() -> None:
+    """Nightly sweep: mark postings past expires_at as inactive."""
+    try:
+        from backend.database import get_session, init_db
+        from listings.ingest import expire_stale_postings
+
+        engine = init_db()
+        session = get_session(engine)
+        try:
+            count = expire_stale_postings("austin_tx", session)
+            logger.info("[Scheduler] Expiry sweep: %d postings deactivated", count)
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.error("[Scheduler] Posting expiry sweep failed: %s", e)
+
+
+def _run_posting_purge() -> None:
+    """Weekly purge: DELETE rows inactive for 90+ days to keep the table lean.
+
+    Timeline rationale:
+      - Collection date (scraped_at) anchors the record.
+      - posted_date + TTL = expires_at → is_active flipped to False by sweep.
+      - After 90 days of is_active=False the row is deleted permanently.
+      - Gov postings (45-day TTL) survive ~135 days total from posting.
+      - JobSpy postings (30-day TTL) survive ~120 days total from posting.
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import text
+
+        from backend.database import get_engine
+
+        cutoff = datetime.utcnow() - timedelta(days=90)
+        with get_engine().connect() as conn:
+            result = conn.execute(
+                text(
+                    "DELETE FROM job_postings "
+                    "WHERE is_active = FALSE AND expires_at < :cutoff"
+                ),
+                {"cutoff": cutoff},
+            )
+            conn.commit()
+            logger.info(
+                "[Scheduler] Purge: deleted %d ancient postings (expired before %s)",
+                result.rowcount, cutoff.date(),
+            )
+
+    except Exception as e:
+        logger.error("[Scheduler] Posting purge failed: %s", e)

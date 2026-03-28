@@ -1471,6 +1471,7 @@ def jobs_listings():
                 "source_url":  jp.source_url,
                 "posted_date": jp.posted_date.isoformat() if jp.posted_date else None,
                 "source":      jp.source,
+                "detail":      jp.detail_json,
             }
             for jp in postings
         ]

@@ -629,6 +629,61 @@ body {
     border: 1px solid rgba(78, 204, 163, 0.3);
 }
 
+/* Time type badge (Full time / Part time) */
+.listing-badge.time-type {
+    background: rgba(74, 158, 255, 0.12);
+    color: #4a9eff;
+    border: 1px solid rgba(74, 158, 255, 0.25);
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+/* ── Job card: expandable detail sections ────────────────────────── */
+.job-detail-toggle {
+    font-size: 0.72rem;
+    color: #4a9eff;
+    cursor: pointer;
+    margin-top: 4px;
+    user-select: none;
+}
+
+.job-detail-toggle:hover {
+    color: #6db8ff;
+}
+
+.job-detail-body {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(15, 52, 96, 0.35);
+    border-radius: 4px;
+    border-left: 2px solid #4ecca3;
+}
+
+.job-detail-section {
+    margin-bottom: 6px;
+}
+
+.job-detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.job-detail-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #4ecca3;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 2px;
+}
+
+.job-detail-text {
+    font-size: 0.70rem;
+    color: #b0b0b0;
+    line-height: 1.4;
+}
+
 /* Job Finder: load more button */
 #jf-load-more {
     display: block;

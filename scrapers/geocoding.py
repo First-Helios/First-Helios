@@ -10,7 +10,9 @@ Depends on: geopy, config.loader
 Called by: scrapers/careers_api.py, scrapers/jobspy_adapter.py, backend/ingest.py
 """
 
+import json
 import logging
+import os
 import re
 import time
 
@@ -47,28 +49,117 @@ _OVERRIDES: dict[str, tuple[float, float]] = {
 }
 
 
+# ── Dynamic facility index ────────────────────────────────────────────────────
+# Loaded from data/reference/facility_index.json (built by
+# scripts/build_facility_index.py from Workday scrape data + Nominatim).
+# Maps lowercase facility names → (lat, lng).  Empty dict if file missing.
+
+_FACILITY_INDEX_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "reference", "facility_index.json",
+)
+
+
+def _load_facility_index() -> dict[str, tuple[float, float]]:
+    """Load facility_index.json → {lowercase_name: (lat, lng)}."""
+    if not os.path.exists(_FACILITY_INDEX_PATH):
+        logger.debug("[Geocoding] No facility index at %s", _FACILITY_INDEX_PATH)
+        return {}
+    try:
+        with open(_FACILITY_INDEX_PATH) as f:
+            raw = json.load(f)
+        idx = {}
+        for key, val in raw.items():
+            if isinstance(val, dict) and val.get("lat") and val.get("lng"):
+                idx[key.lower()] = (val["lat"], val["lng"])
+        logger.info("[Geocoding] Loaded %d facilities from index", len(idx))
+        return idx
+    except Exception as exc:
+        logger.warning("[Geocoding] Failed to load facility index: %s", exc)
+        return {}
+
+
+_FACILITY_INDEX: dict[str, tuple[float, float]] = _load_facility_index()
+
+
+def reload_facility_index() -> int:
+    """Reload the facility index from disk.  Returns count of entries."""
+    global _FACILITY_INDEX
+    _FACILITY_INDEX = _load_facility_index()
+    return len(_FACILITY_INDEX)
+
+
 def geocode(address: str) -> tuple[float | None, float | None]:
     """Geocode an address string to (lat, lng).
 
-    Checks local overrides first, then queries Nominatim via geopy.
-    Rate limit: 1.1 s sleep before each Nominatim call.
+    Resolution order:
+      1. Facility/landmark index from data/reference/facility_index.json
+      2. City-only overrides (no digits in address → "Austin, TX" etc.)
+      3. Nominatim free-form search
+      4. Nominatim with simplified address (strip suite/ZIP)
+      5. (None, None) on failure
 
-    Args:
-        address: Free-form address string.
-
-    Returns:
-        Tuple of (latitude, longitude) or (None, None) on failure.
-        Never raises.
+    Rate limit: 1.1 s sleep before each Nominatim call.  Never raises.
     """
     if not address or not address.strip():
         return None, None
 
-    # Check overrides (case-insensitive containment)
     addr_lower = address.lower().strip()
-    for key, coords in _OVERRIDES.items():
-        if key.lower() in addr_lower:
-            logger.debug("[Geocoding] Override hit for %r → %s", address, coords)
+    has_street = bool(re.search(r"\d", address))  # digits → likely a street address
+
+    # ── Facility / landmark lookup (always check, regardless of digits) ──
+    for key, coords in _FACILITY_INDEX.items():
+        if key in addr_lower:
+            logger.info("[Geocoding] Facility match %r → %s", address, coords)
             return coords
+
+    # ── City-only overrides (no digits → "Austin, TX" etc.) ──
+    if not has_street:
+        for key, coords in _OVERRIDES.items():
+            if key.lower() in addr_lower:
+                logger.debug("[Geocoding] Override hit for %r → %s", address, coords)
+                return coords
+
+    # ── Vague patterns even with digits ("3 Locations, Austin, TX") ──
+    if re.match(r"^\d+\s+locations?\b", addr_lower):
+        return _OVERRIDES.get("Austin, TX", (None, None))
+
+    # ── Sanitise address before Nominatim (strip appended description text) ──
+    clean_address = re.split(
+        r"\s+(?:When|Applicants|This\s+has|The\s+incumbent|See\s+locations|"
+        r"EEO\b|Schedule[:\s]|Work\s+location|Minimum\s+Qualif|Watch\b)",
+        address, maxsplit=1, flags=re.IGNORECASE,
+    )[0].strip().rstrip(",. ")
+    # Truncate after ZIP+junk: "78741 Some text..." → "78741"
+    clean_address = re.sub(r"(\d{5})\.\s+[A-Z].*$", r"\1", clean_address)
+    clean_address = re.sub(r"(\d{5})\s+[A-Z][a-z].*$", r"\1", clean_address)
+    # Handle "RLC Schedule" / "RLC" appended to address
+    clean_address = re.sub(r",?\s*RLC\b.*$", "", clean_address, flags=re.I).strip()
+    # Normalise Farm-to-Market road: "F.M. 620" → "FM 620"
+    clean_address = re.sub(r"F\.?M\.?\s+", "FM ", clean_address)
+    # Strip Building/Suite suffixes that confuse Nominatim
+    clean_address = re.sub(
+        r"\s*(?:Building|Bldg\.?)\s+[A-Z0-9]+(?:\s*,\s*Suite\s+\d+)?",
+        "", clean_address, flags=re.I,
+    ).strip()
+    # Truncate after city+state(+ZIP): "505 Barton Springs Rd. Austin, TX, One TX" → trimmed
+    m = re.search(
+        r"(?:Austin|Del\s+Valle)\s*,?\s*(?:TX|Texas)(?:\s*,?\s*\d{5})?",
+        clean_address, re.I,
+    )
+    if m:
+        clean_address = clean_address[:m.end()].strip().rstrip(",")
+    if len(clean_address) < 10:
+        clean_address = address.strip()
+
+    # If the cleaned address has no digits, it's probably a garbage
+    # description — fall back to city override rather than wasting
+    # a Nominatim call
+    if not re.search(r"\d", clean_address):
+        for key, coords in _OVERRIDES.items():
+            if key.lower() in clean_address.lower():
+                return coords
+        return None, None
 
     # Query Nominatim
     try:
@@ -77,7 +168,7 @@ def geocode(address: str) -> tuple[float | None, float | None]:
 
         time.sleep(1.1)  # Nominatim hard rate limit: 1 req/sec
         _t0 = _time_mod.time()
-        location = _geolocator.geocode(address, timeout=10)
+        location = _geolocator.geocode(clean_address, timeout=10)
         _lat_ms = int((_time_mod.time() - _t0) * 1000)
 
         if location:
@@ -88,7 +179,7 @@ def geocode(address: str) -> tuple[float | None, float | None]:
             )
             logger.info(
                 "[Geocoding] OK: %r → (%.4f, %.4f)",
-                address, location.latitude, location.longitude,
+                clean_address, location.latitude, location.longitude,
             )
             return location.latitude, location.longitude
 
@@ -99,8 +190,8 @@ def geocode(address: str) -> tuple[float | None, float | None]:
         )
 
         # Nominatim couldn't resolve — try a simplified version
-        simplified = _simplify_address(address)
-        if simplified != address:
+        simplified = _simplify_address(clean_address)
+        if simplified != clean_address:
             time.sleep(1.1)
             _t0 = _time_mod.time()
             location = _geolocator.geocode(simplified, timeout=10)
