@@ -31,14 +31,20 @@ _geolocator = Nominatim(
 _OVERRIDES: dict[str, tuple[float, float]] = {
     "Austin, TX": (30.2672, -97.7431),
     "Austin, TX, US": (30.2672, -97.7431),
+    "Austin, Texas": (30.2672, -97.7431),
     "Round Rock, TX": (30.5083, -97.6789),
     "Round Rock, TX, US": (30.5083, -97.6789),
+    "Round Rock, Texas": (30.5083, -97.6789),
     "Cedar Park, TX": (30.5052, -97.8203),
     "Cedar Park, TX, US": (30.5052, -97.8203),
+    "Cedar Park, Texas": (30.5052, -97.8203),
     "Pflugerville, TX": (30.4394, -97.6200),
     "Pflugerville, TX, US": (30.4394, -97.6200),
+    "Pflugerville, Texas": (30.4394, -97.6200),
     "Georgetown, TX": (30.6333, -97.6781),
+    "Georgetown, Texas": (30.6333, -97.6781),
     "San Marcos, TX": (29.8833, -97.9414),
+    "San Marcos, Texas": (29.8833, -97.9414),
     "Kyle, TX": (29.9889, -97.8772),
     "Buda, TX": (30.0852, -97.8392),
     "Lakeway, TX": (30.3639, -97.9795),
@@ -46,6 +52,11 @@ _OVERRIDES: dict[str, tuple[float, float]] = {
     "Leander, TX, US": (30.5788, -97.8531),
     "Del Valle, TX": (30.1869, -97.6083),
     "Del Valle, TX, US": (30.1869, -97.6083),
+    "Bluff Springs, TX": (30.1683, -97.7867),
+    "Manor, TX": (30.3427, -97.5569),
+    "Hutto, TX": (30.5374, -97.5467),
+    "Bastrop, TX": (30.1105, -97.3150),
+    "Dripping Springs, TX": (30.1902, -98.0867),
 }
 
 
