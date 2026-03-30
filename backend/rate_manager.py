@@ -185,6 +185,65 @@ API_SOURCE_REGISTRY: list[dict] = [
             "Hourly gate enforced in scrapers/jobicy_adapter.py via _hourly_gate_ok()."
         ),
     },
+    # ── Job API Sources ───────────────────────────────────────────────
+    {
+        "source_key": "serpapi_google_jobs",
+        "display_name": "SerpAPI Google Jobs",
+        "base_url": "https://serpapi.com/search.json",
+        "auth_type": "api_key",
+        "daily_limit": 3,
+        "min_delay_seconds": 2.0,
+        "reset_hour_utc": 0,
+        "notes": (
+            "100 total free credits (NOT daily-reset — treat like cash). "
+            "engine=google_jobs, location=Austin TX, broad query to maximise yield. "
+            "~10 results per credit. Cache TTL 8h. Key: SERPAPI_KEY env var."
+        ),
+    },
+    {
+        "source_key": "rapidapi_activejobs",
+        "display_name": "Active Jobs DB (RapidAPI)",
+        "base_url": "https://active-jobs-db.p.rapidapi.com",
+        "auth_type": "api_key",
+        "daily_limit": 1,
+        "min_delay_seconds": 3600.0,
+        "reset_hour_utc": 0,
+        "notes": (
+            "Hard caps: 25 requests/month AND 250 jobs/month. "
+            "One broad Austin TX call at limit=100 per day max. "
+            "Cache TTL 24h. Key: RAPIDAPI_KEY env var. "
+            "Host header: active-jobs-db.p.rapidapi.com."
+        ),
+    },
+    {
+        "source_key": "juju",
+        "display_name": "Juju Job Search API",
+        "base_url": "http://api.juju.com/jobs",
+        "auth_type": "api_key",
+        "daily_limit": 10,
+        "min_delay_seconds": 60.0,
+        "reset_hour_utc": 0,
+        "notes": (
+            "XML RSS 2.0 response. Requires JUJU_PARTNER_ID env var (publisher ID "
+            "from Juju partner registration). l=Austin,+TX r=50mi jpp=50 (max). "
+            "First 1000 results only per query. Cache TTL 12h."
+        ),
+    },
+    {
+        "source_key": "theirstack",
+        "display_name": "TheirStack Jobs & Company Intelligence",
+        "base_url": "https://api.theirstack.com",
+        "auth_type": "bearer",
+        "daily_limit": 6,
+        "min_delay_seconds": 60.0,
+        "reset_hour_utc": 0,
+        "notes": (
+            "200 requests/month hard cap → 6/day budget. "
+            "POST /v1/jobs/search with Austin/Round Rock location filter. "
+            "Broad query — no title filter — to maximise reuse of single cached response. "
+            "Cache TTL 24h. Key: THEIRSTACK_API_KEY env var (Bearer JWT)."
+        ),
+    },
     # ── Reddit ───────────────────────────────────────────────────
     {
         "source_key": "reddit_json",

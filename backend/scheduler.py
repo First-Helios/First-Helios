@@ -80,6 +80,35 @@ def init_scheduler() -> BackgroundScheduler:
             hour=_c.get("hour", 6), minute=_c.get("minute", 0),
             id="usajobs", name="USAJobs Federal Listings", replace_existing=True)
 
+    if _job_enabled(sched_cfg, "serpapi_jobs"):
+        _c = sched_cfg.get("serpapi_jobs", {}).get("cron", {})
+        scheduler.add_job(_run_serpapi_jobs, "cron",
+            hour=_c.get("hour", 7), minute=_c.get("minute", 0),
+            id="serpapi_jobs", name="SerpAPI Google Jobs", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "rapidapi_activejobs"):
+        _c = sched_cfg.get("rapidapi_activejobs", {}).get("cron", {})
+        scheduler.add_job(_run_activejobs, "cron",
+            hour=_c.get("hour", 8), minute=_c.get("minute", 0),
+            id="rapidapi_activejobs", name="Active Jobs DB (RapidAPI)", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "juju"):
+        _c = sched_cfg.get("juju", {}).get("cron", {})
+        scheduler.add_job(_run_juju, "cron",
+            hour=_c.get("hour", 8), minute=_c.get("minute", 30),
+            id="juju", name="Juju Job Search", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "theirstack"):
+        _c = sched_cfg.get("theirstack", {}).get("cron", {})
+        scheduler.add_job(_run_theirstack, "cron",
+            hour=_c.get("hour", 9), minute=_c.get("minute", 0),
+            id="theirstack", name="TheirStack Jobs & Companies", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "jobicy"):
+        scheduler.add_job(_run_jobicy, "interval",
+            hours=sched_cfg.get("jobicy", {}).get("interval_hours", 1),
+            id="jobicy", name="Jobicy Remote Jobs", replace_existing=True)
+
     # ── Labor Market / Regulatory Data ───────────────────────────────
 
     if _job_enabled(sched_cfg, "bls"):
@@ -502,6 +531,61 @@ def _run_austin_gov() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] Austin Gov job failed: %s", e)
+
+
+def _run_serpapi_jobs() -> None:
+    """Scheduled job: Fetch Google Jobs listings via SerpAPI."""
+    try:
+        from scrapers.serpapi_adapter import scrape_serpapi
+        logger.info("[Scheduler] Running SerpAPI Google Jobs fetch")
+        signals = scrape_serpapi(region="austin_tx")
+        logger.info("[Scheduler] SerpAPI: %d signals", len(signals))
+    except Exception as e:
+        logger.error("[Scheduler] SerpAPI job failed: %s", e)
+
+
+def _run_activejobs() -> None:
+    """Scheduled job: Fetch listings from Active Jobs DB (RapidAPI)."""
+    try:
+        from scrapers.activejobs_adapter import scrape_activejobs
+        logger.info("[Scheduler] Running Active Jobs DB fetch")
+        signals = scrape_activejobs(region="austin_tx")
+        logger.info("[Scheduler] Active Jobs DB: %d signals", len(signals))
+    except Exception as e:
+        logger.error("[Scheduler] Active Jobs DB job failed: %s", e)
+
+
+def _run_juju() -> None:
+    """Scheduled job: Fetch listings from Juju XML search API."""
+    try:
+        from scrapers.juju_adapter import scrape_juju
+        logger.info("[Scheduler] Running Juju job search fetch")
+        signals = scrape_juju(region="austin_tx")
+        logger.info("[Scheduler] Juju: %d signals", len(signals))
+    except Exception as e:
+        logger.error("[Scheduler] Juju job failed: %s", e)
+
+
+def _run_theirstack() -> None:
+    """Scheduled job: Fetch Austin-area jobs and company intelligence from TheirStack."""
+    try:
+        from scrapers.theirstack_adapter import scrape_theirstack
+        logger.info("[Scheduler] Running TheirStack fetch")
+        signals = scrape_theirstack(region="austin_tx")
+        logger.info("[Scheduler] TheirStack: %d signals", len(signals))
+    except Exception as e:
+        logger.error("[Scheduler] TheirStack job failed: %s", e)
+
+
+def _run_jobicy() -> None:
+    """Scheduled job: Fetch remote job listings from Jobicy API (hourly)."""
+    try:
+        from scrapers.jobicy_adapter import scrape_jobicy
+        logger.info("[Scheduler] Running Jobicy fetch")
+        signals = scrape_jobicy(region="austin_tx")
+        logger.info("[Scheduler] Jobicy: %d signals", len(signals))
+    except Exception as e:
+        logger.error("[Scheduler] Jobicy job failed: %s", e)
 
 
 def _run_posting_expiry() -> None:
