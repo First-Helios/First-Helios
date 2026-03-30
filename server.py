@@ -1469,6 +1469,7 @@ def jobs_listings():
                 "is_remote":   jp.is_remote,
                 "raw_address": jp.raw_address,
                 "source_url":  jp.source_url,
+                "referral_url": jp.referral_url,
                 "posted_date": jp.posted_date.isoformat() if jp.posted_date else None,
                 "source":      jp.source,
                 "detail":      jp.detail_json,
