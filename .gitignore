@@ -14,7 +14,7 @@ data/*
 # Data files (auto-generated)
 data/*.db
 
-*
+
 # Environment
 .env
 .env.local
