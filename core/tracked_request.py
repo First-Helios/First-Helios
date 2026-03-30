@@ -5,7 +5,7 @@ Thin wrapper around requests.get / requests.post that automatically logs
 every call through rate_manager.  Drop-in replacement for scrapers.
 
 Usage:
-    from backend.tracked_request import tracked_get, tracked_post
+    from core.tracked_request import tracked_get, tracked_post
 
     resp = tracked_get(
         "bls_v1", "series_fetch",
@@ -31,7 +31,7 @@ _mgr = None
 def _get_mgr():
     global _mgr
     if _mgr is None:
-        from backend.rate_manager import rate_manager
+        from core.rate_manager import rate_manager
         _mgr = rate_manager
     return _mgr
 

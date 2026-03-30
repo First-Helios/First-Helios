@@ -175,7 +175,7 @@ def geocode(address: str) -> tuple[float | None, float | None]:
     # Query Nominatim
     try:
         import time as _time_mod
-        from backend.tracked_request import log_external
+        from core.tracked_request import log_external
 
         time.sleep(1.1)  # Nominatim hard rate limit: 1 req/sec
         _t0 = _time_mod.time()

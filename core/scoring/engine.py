@@ -30,7 +30,7 @@ Called by: backend/scheduler.py, server.py (after ingestion)
 import logging
 from datetime import datetime
 
-from backend.database import (
+from core.database import (
     Store,
     LocalEmployer,
     OEWSRecord,
@@ -42,10 +42,10 @@ from backend.database import (
     get_session,
     init_db,
 )
-from backend.models.reference import BrandProfile
-from backend.scoring.careers import compute_careers_score, weighted_listing_count
-from backend.scoring.sentiment import compute_sentiment_score
-from backend.scoring.wage import compute_wage_score
+from core.models.reference import BrandProfile
+from core.scoring.careers import compute_careers_score, weighted_listing_count
+from core.scoring.sentiment import compute_sentiment_score
+from core.scoring.wage import compute_wage_score
 from config.loader import get_score_tiers, get_scoring_weights, get_seasonal_config
 
 logger = logging.getLogger(__name__)
@@ -321,7 +321,7 @@ def _load_baseline(region: str, chain: str | None) -> dict | None:
     Maps chain → NAICS code and fetches the corresponding baseline.
     """
     try:
-        from backend.baseline import get_latest_baseline
+        from core.baseline import get_latest_baseline
         from config.loader import get_chain
 
         # Determine NAICS from chain config

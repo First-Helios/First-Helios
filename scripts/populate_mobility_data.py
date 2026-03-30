@@ -41,8 +41,8 @@ import pandas as pd
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.database import get_session, init_db
-from backend.models.reference import IndustryTaxonomy, MobOccupation, MobTransition
+from core.database import get_session, init_db
+from core.models.reference import IndustryTaxonomy, MobOccupation, MobTransition
 from config.paths import EMSI_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")

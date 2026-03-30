@@ -32,8 +32,8 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.database import OEWSRecord, get_session, init_db
-from backend.metadata import MetaJobRun, MetaApiCall
+from core.database import OEWSRecord, get_session, init_db
+from core.metadata import MetaJobRun, MetaApiCall
 from config.paths import BLS_OEWS_DIR
 
 logger = logging.getLogger(__name__)

@@ -282,7 +282,7 @@ class BLSAdapter(BaseScraper):
 
     def _fetch_series(self, series_id: str) -> list[dict]:
         """Fetch time series data from BLS V1 API."""
-        from backend.tracked_request import check_budget, tracked_get
+        from core.tracked_request import check_budget, tracked_get
 
         if not check_budget("bls_v1"):
             logger.warning("[%s] BLS daily budget exhausted — skipping %s", self.name, series_id)
@@ -319,7 +319,7 @@ class BLSAdapter(BaseScraper):
 
     def _write_jolts_records(self, records: list[dict[str, Any]]) -> None:
         """Write JOLTS records to the jolts_data table (upsert)."""
-        from backend.database import JOLTSRecord, init_db, get_session
+        from core.database import JOLTSRecord, init_db, get_session
 
         engine = init_db()
         session = get_session(engine)
@@ -358,7 +358,7 @@ class BLSAdapter(BaseScraper):
 
     def _write_laus_records(self, records: list[dict[str, Any]]) -> None:
         """Write LAUS records to the laus_data table (upsert)."""
-        from backend.database import LAUSRecord, init_db, get_session
+        from core.database import LAUSRecord, init_db, get_session
 
         engine = init_db()
         session = get_session(engine)
@@ -404,7 +404,7 @@ def scrape_bls(
     signals = adapter.scrape(region)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain="bls", source="bls")
         logger.info("[BLS] Ingested %d signals", count)
 

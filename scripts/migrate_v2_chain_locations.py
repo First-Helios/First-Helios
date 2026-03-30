@@ -34,7 +34,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend.database import DB_PATH, Base, get_engine, get_session, init_db
+from core.database import DB_PATH, Base, get_engine, get_session, init_db
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger("migrate_v2")

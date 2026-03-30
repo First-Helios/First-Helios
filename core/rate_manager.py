@@ -15,7 +15,7 @@ Design goals:
   - Provide metrics for scalability planning
 
 Usage:
-    from backend.rate_manager import rate_manager  # singleton
+    from core.rate_manager import rate_manager  # singleton
 
     # Before making a request:
     if rate_manager.can_request("bls_v1"):
@@ -45,7 +45,7 @@ from typing import Optional
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from backend.database import (
+from core.database import (
     ApiRequestLog,
     ApiSource,
     RateBudget,

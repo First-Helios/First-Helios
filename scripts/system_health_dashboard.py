@@ -25,7 +25,7 @@ from sqlalchemy import text
 _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.database import get_session, init_db
+from core.database import get_session, init_db
 
 
 def print_header(title):

@@ -43,7 +43,7 @@ def _import_reference_models() -> None:
     Called lazily in init_db() to avoid circular-import issues.
     """
     try:
-        import backend.models.reference  # noqa: F401
+        import core.models.reference  # noqa: F401
     except ImportError:
         logger.debug("[Database] backend.models.reference not found — skipping")
 
@@ -54,7 +54,7 @@ def _import_metadata_models() -> None:
     Called lazily in init_db() to avoid circular-import issues.
     """
     try:
-        import backend.metadata  # noqa: F401
+        import core.metadata  # noqa: F401
     except ImportError:
         logger.debug("[Database] backend.metadata not found — skipping")
 

@@ -38,7 +38,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.tracked_request import check_budget, log_external
+from core.tracked_request import check_budget, log_external
 from collectors.base import BaseScraper, ScraperSignal
 
 logger = logging.getLogger(__name__)

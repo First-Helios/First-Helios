@@ -14,7 +14,7 @@ import json
 import logging
 from datetime import datetime
 
-from backend.database import (
+from core.database import (
     Store,
     Score,
     Signal,

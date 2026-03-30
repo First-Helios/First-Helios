@@ -138,7 +138,7 @@ class RedditAdapter(BaseScraper):
         posts: list[dict] = []
         try:
             import time as _t
-            from backend.tracked_request import log_external
+            from core.tracked_request import log_external
             sub = reddit.subreddit(subreddit)
             query = " OR ".join(search_terms[:5])
 
@@ -175,7 +175,7 @@ class RedditAdapter(BaseScraper):
         query = " OR ".join(search_terms[:3])
 
         try:
-            from backend.tracked_request import tracked_get
+            from core.tracked_request import tracked_get
             url = f"https://www.reddit.com/r/{subreddit}/search.json"
             resp = tracked_get(
                 "reddit_json", "subreddit_search",
@@ -282,7 +282,7 @@ def scrape_reddit(
     signals = adapter.scrape(region, radius_mi)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain=None, source="reddit")
         logger.info("[Reddit] Ingested %d signals", count)
 

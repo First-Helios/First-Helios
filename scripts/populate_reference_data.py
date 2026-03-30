@@ -25,8 +25,8 @@ import requests
 
 sys.path.insert(0, ".")
 
-from backend.database import Base, get_engine, get_session, init_db
-from backend.models.reference import (
+from core.database import Base, get_engine, get_session, init_db
+from core.models.reference import (
     BrandProfile,
     CategoryMapping,
     IndustryCategory,
@@ -553,7 +553,7 @@ def enrich_brands_from_wikidata(session) -> None:
     }}
     """
     try:
-        from backend.tracked_request import tracked_get
+        from core.tracked_request import tracked_get
         resp = tracked_get(
             "wikidata_sparql", "brand_enrichment",
             "https://query.wikidata.org/sparql",
@@ -805,7 +805,7 @@ def pull_bls_wages(session) -> None:
         return
 
     try:
-        from backend.tracked_request import tracked_post
+        from core.tracked_request import tracked_post
         resp = tracked_post(
             "bls_v1_post", "wage_series_batch",
             "https://api.bls.gov/publicAPI/v1/timeseries/data/",

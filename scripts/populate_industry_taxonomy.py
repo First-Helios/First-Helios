@@ -32,8 +32,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from backend.database import OEWSRecord, get_engine, get_session, init_db
-from backend.models.reference import IndustryTaxonomy
+from core.database import OEWSRecord, get_engine, get_session, init_db
+from core.models.reference import IndustryTaxonomy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

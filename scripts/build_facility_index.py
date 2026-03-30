@@ -255,7 +255,7 @@ def load_location_details_from_cache() -> list[dict]:
 def load_location_details_from_db() -> list[dict]:
     """Load location data from the job_postings table."""
     sys.path.insert(0, ROOT)
-    from backend.database import get_session
+    from core.database import get_session
     from postings.models import JobPosting
 
     session = get_session()

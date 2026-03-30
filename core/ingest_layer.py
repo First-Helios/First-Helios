@@ -37,8 +37,8 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from backend.database import BrandGroup, LocalEmployer, get_engine, get_session, init_db
-from backend.normalizer import make_fingerprint, map_industry, normalize_name
+from core.database import BrandGroup, LocalEmployer, get_engine, get_session, init_db
+from core.normalizer import make_fingerprint, map_industry, normalize_name
 
 # ── Mobility scoring constants ────────────────────────────────────────────────
 # Source: OEWS Austin MSA May 2024, fast food median = $13.90/hr
@@ -67,7 +67,7 @@ def _load_mobility_cache(session: Session) -> None:
     if _INDUSTRY_MOBILITY:
         return
     try:
-        from backend.models.reference import IndustryTaxonomy
+        from core.models.reference import IndustryTaxonomy
         rows = session.query(
             IndustryTaxonomy.industry_key,
             IndustryTaxonomy.baseline_wage_hr,

@@ -22,8 +22,8 @@ from datetime import datetime
 # Setup path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from backend.database import Base, get_engine, get_session, init_db
-import backend.models.reference  # Register models
+from core.database import Base, get_engine, get_session, init_db
+import core.models.reference  # Register models
 
 logging.basicConfig(
     level=logging.INFO,

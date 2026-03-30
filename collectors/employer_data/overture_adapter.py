@@ -25,9 +25,9 @@ from datetime import datetime
 import duckdb
 
 sys.path.insert(0, ".")
-from backend.database import Store, get_session, init_db
-from backend.ingest_layer import ingest_employers_bulk
-from backend.normalizer import CATEGORY_INDUSTRY_MAP, map_industry
+from core.database import Store, get_session, init_db
+from core.ingest_layer import ingest_employers_bulk
+from core.normalizer import CATEGORY_INDUSTRY_MAP, map_industry
 from config.loader import get_config
 from collectors.base import BaseScraper, ScraperSignal
 
@@ -279,7 +279,7 @@ class OvertureChainAdapter(BaseScraper):
             conn = _get_duckdb_conn()
             logger.info("[Overture] Querying (first run installs extensions, ~30s)...")
             import time as _t
-            from backend.tracked_request import log_external
+            from core.tracked_request import log_external
             _t0 = _t.time()
             rows = conn.execute(query).fetchall()
             _lat_ms = int((_t.time() - _t0) * 1000)
@@ -401,7 +401,7 @@ class OvertureLocalAdapter(BaseScraper):
             logger.info("[Overture] Querying local employers for region=%s", region)
             conn = _get_duckdb_conn()
             import time as _t
-            from backend.tracked_request import log_external
+            from core.tracked_request import log_external
             _t0 = _t.time()
             rows = conn.execute(query).fetchall()
             _lat_ms = int((_t.time() - _t0) * 1000)
@@ -575,7 +575,7 @@ def ingest_local_geojson(geojson_path: str, region: str = "austin_tx") -> dict:
 if __name__ == "__main__":
     import argparse
 
-    from backend.ingest import ingest_signals
+    from core.ingest import ingest_signals
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 

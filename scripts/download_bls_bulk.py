@@ -238,7 +238,7 @@ def fetch_series(
 # ── DB writers ────────────────────────────────────────────────────────────────
 
 def write_jolts(records: list[dict]) -> int:
-    from backend.database import JOLTSRecord, init_db, get_session
+    from core.database import JOLTSRecord, init_db, get_session
     engine = init_db()
     session = get_session(engine)
     written = 0
@@ -270,7 +270,7 @@ def write_jolts(records: list[dict]) -> int:
 
 
 def write_laus(records: list[dict], region: str = "austin_tx") -> int:
-    from backend.database import LAUSRecord, init_db, get_session
+    from core.database import LAUSRecord, init_db, get_session
     engine = init_db()
     session = get_session(engine)
     written = 0
@@ -301,7 +301,7 @@ def write_laus(records: list[dict], region: str = "austin_tx") -> int:
 
 
 def write_wage_index(records: list[dict]) -> int:
-    from backend.database import WageIndex, init_db, get_session
+    from core.database import WageIndex, init_db, get_session
     engine = init_db()
     session = get_session(engine)
     written = 0
@@ -328,7 +328,7 @@ def write_wage_index(records: list[dict]) -> int:
 
 def write_signals(records: list[dict]) -> int:
     """Write CPI/ECI indicator records directly to the signals table."""
-    from backend.database import Signal, Store, init_db, get_session
+    from core.database import Signal, Store, init_db, get_session
     engine = init_db()
     session = get_session(engine)
     written = 0
@@ -527,7 +527,7 @@ def main() -> None:
 
     if counts["jolts"] or counts["laus"]:
         logger.info("\nRecommended next step:")
-        logger.info("  python -c \"from backend.baseline import compute_baselines; compute_baselines('austin_tx')\"")
+        logger.info("  python -c \"from core.baseline import compute_baselines; compute_baselines('austin_tx')\"")
 
 
 if __name__ == "__main__":

@@ -76,9 +76,9 @@ def migrate(sqlite_path: Path, pg_url: str, dry_run: bool = False) -> None:
     # Init all ORM models on Postgres so tables exist
     logger.info("Creating schema on Postgres…")
     if not dry_run:
-        from backend.database import Base, init_db
-        import backend.models.reference  # noqa: F401 — registers reference models
-        import backend.metadata          # noqa: F401 — registers metadata models
+        from core.database import Base, init_db
+        import core.models.reference  # noqa: F401 — registers reference models
+        import core.metadata          # noqa: F401 — registers metadata models
         os.environ["DATABASE_URL"] = pg_url
         init_db()
 

@@ -144,7 +144,7 @@ class CBPAdapter(BaseScraper):
         The Census API accepts comma-separated ZIP codes in the 'for' param.
         We batch in groups of 50 to stay within URL length limits.
         """
-        from backend.tracked_request import check_budget, tracked_get
+        from core.tracked_request import check_budget, tracked_get
 
         records: list[dict[str, Any]] = []
         batch_size = 50
@@ -219,7 +219,7 @@ class CBPAdapter(BaseScraper):
         self, records: list[dict[str, Any]], region: str, year: int
     ) -> None:
         """Write CBP records to the cbp_data table (upsert)."""
-        from backend.database import CBPRecord, init_db, get_session
+        from core.database import CBPRecord, init_db, get_session
 
         engine = init_db()
         session = get_session(engine)
@@ -293,7 +293,7 @@ def scrape_cbp(region: str = "austin_tx", ingest: bool = True) -> list[ScraperSi
     signals = adapter.scrape(region)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain="census", source="cbp")
         logger.info("[CBP] Ingested %d signals", count)
 

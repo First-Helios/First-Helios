@@ -31,8 +31,8 @@ from typing import Any
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from backend.database import get_engine, get_session, init_db
-from backend.normalizer import make_fingerprint, map_industry, normalize_name
+from core.database import get_engine, get_session, init_db
+from core.normalizer import make_fingerprint, map_industry, normalize_name
 from postings.config import POSTING_TTL_DAYS
 from postings.matcher import match_posting_to_employer
 from postings.models import JobPosting

@@ -76,7 +76,7 @@ class GoogleMapsStoreFinder(BaseScraper):
     async def _scrape_async(self, region: str) -> list[dict]:
         """Returns list of store dicts with coordinates and metadata."""
         import time as _gm_t
-        from backend.tracked_request import log_external
+        from core.tracked_request import log_external
         _gm_t0 = _gm_t.time()
         try:
             region_cfg = get_region(region)
@@ -333,7 +333,7 @@ class GoogleMapsStoreFinder(BaseScraper):
             return []
 
         # Upsert stores with real coordinates
-        from backend.database import Store, get_session, init_db
+        from core.database import Store, get_session, init_db
 
         engine = init_db()
         session = get_session(engine)
@@ -469,7 +469,7 @@ if __name__ == "__main__":
         print(f"  ... and {len(signals) - 5} more")
 
     if not args.dry_run and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
 
         ingest_signals(signals, args.region, args.chain, signals[0].source)
         print(f"\nIngested {len(signals)} signals into tracker.db")

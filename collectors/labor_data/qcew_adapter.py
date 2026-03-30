@@ -165,7 +165,7 @@ class QCEWAdapter(BaseScraper):
         self, fips: str, year: int, quarter: int
     ) -> list[dict[str, str]]:
         """Fetch QCEW CSV for a county-quarter from BLS API."""
-        from backend.tracked_request import check_budget, tracked_get
+        from core.tracked_request import check_budget, tracked_get
 
         if not check_budget("bls_v1"):
             logger.warning("[%s] BLS budget exhausted", self.name)
@@ -225,7 +225,7 @@ class QCEWAdapter(BaseScraper):
 
     def _write_qcew_records(self, records: list[dict[str, Any]], region: str) -> None:
         """Write QCEW records to the qcew_data table (upsert)."""
-        from backend.database import QCEWRecord, init_db, get_session
+        from core.database import QCEWRecord, init_db, get_session
 
         engine = init_db()
         session = get_session(engine)
@@ -324,7 +324,7 @@ def scrape_qcew(region: str = "austin_tx", ingest: bool = True) -> list[ScraperS
     signals = adapter.scrape(region)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain="bls", source="qcew")
         logger.info("[QCEW] Ingested %d signals", count)
 

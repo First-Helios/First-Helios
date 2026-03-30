@@ -23,7 +23,7 @@ from datetime import datetime
 
 from sqlalchemy import func
 
-from backend.database import (
+from core.database import (
     Base,
     JOLTSRecord,
     LAUSRecord,

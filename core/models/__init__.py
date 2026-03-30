@@ -1,6 +1,6 @@
 """Reference/taxonomy models for ChainStaffingTracker."""
 
-from backend.models.reference import (
+from core.models.reference import (
     BrandProfile,
     CategoryMapping,
     IndustryCategory,

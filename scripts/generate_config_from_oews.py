@@ -40,7 +40,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.database import get_session, init_db, OEWSRecord
+from core.database import get_session, init_db, OEWSRecord
 
 logger = logging.getLogger(__name__)
 

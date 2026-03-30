@@ -36,15 +36,15 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.database import get_session, init_db
-from backend.database import (
+from core.database import get_session, init_db
+from core.database import (
     RevelioEmployment,
     RevelioHiring,
     RevelioPostings,
     RevelioSalaries,
     RevelioLayoffs,
 )
-from backend.models.reference import SOCMajorGroup
+from core.models.reference import SOCMajorGroup
 from config.paths import REVELIO_DIR
 
 logger = logging.getLogger(__name__)

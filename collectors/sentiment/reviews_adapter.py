@@ -139,7 +139,7 @@ class ReviewsAdapter(BaseScraper):
                 signals: list[ScraperSignal] = []
                 async with GoogleMapsScraper(config) as scraper:
                     import time as _t
-                    from backend.tracked_request import log_external
+                    from core.tracked_request import log_external
                     _t0 = _t.time()
                     result = await scraper.scrape_search(search_query)
                     _lat_ms = int((_t.time() - _t0) * 1000)
@@ -246,7 +246,7 @@ def scrape_reviews(
     signals = adapter.scrape(region, radius_mi)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain, "google_maps")
         logger.info("[Reviews] Ingested %d signals", count)
 

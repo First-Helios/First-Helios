@@ -83,7 +83,7 @@ def backfill(dry_run: bool = False):
 
     # ── Ingest ─────────────────────────────────────────────────────────────
     from postings.ingest import ingest_job_posting
-    from backend.database import get_session, init_db
+    from core.database import get_session, init_db
 
     engine = init_db()
     session = get_session(engine)

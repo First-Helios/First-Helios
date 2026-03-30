@@ -20,7 +20,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 
 sys.path.insert(0, ".")
-from backend.database import EmployerNameIndex, get_session, init_db
+from core.database import EmployerNameIndex, get_session, init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

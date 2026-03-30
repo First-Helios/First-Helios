@@ -28,8 +28,8 @@ import pandas as pd
 
 sys.path.insert(0, ".")
 
-from backend.database import init_db, get_session
-from backend.models.reference import OccupationAlias
+from core.database import init_db, get_session
+from core.models.reference import OccupationAlias
 from config.paths import REFERENCE_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -59,7 +59,7 @@ def _load_excel(path: Path) -> pd.DataFrame:
 
 def _get_mob_socs(session) -> set:
     """Return set of soc_codes that exist in mob_occupation."""
-    from backend.models.reference import MobOccupation
+    from core.models.reference import MobOccupation
     rows = session.query(MobOccupation.soc_code).all()
     return {r[0] for r in rows}
 

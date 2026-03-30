@@ -22,7 +22,7 @@ from datetime import datetime
 import requests
 
 sys.path.insert(0, ".")
-from backend.database import Store, get_session, init_db
+from core.database import Store, get_session, init_db
 from config.loader import get_config
 from collectors.base import BaseScraper, ScraperSignal
 
@@ -85,7 +85,7 @@ class OSMAdapter(BaseScraper):
             """
 
             logger.info("[OSM] Querying Overpass for %s in %s", brand, region)
-            from backend.tracked_request import tracked_post
+            from core.tracked_request import tracked_post
             resp = tracked_post(
                 "overpass_api", "brand_query",
                 OVERPASS_URL,
@@ -196,7 +196,7 @@ def scrape_osm(chain: str = "starbucks", region: str = "austin_tx") -> list[Scra
 if __name__ == "__main__":
     import argparse
 
-    from backend.ingest import ingest_signals
+    from core.ingest import ingest_signals
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 

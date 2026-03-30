@@ -249,7 +249,7 @@ def _run_jobspy() -> None:
     """Scheduled job: Run JobSpy scraper (chain + wage modes)."""
     try:
         from collectors.job_boards.jobspy_adapter import scrape_jobspy
-        from backend.scoring.engine import compute_all_scores
+        from core.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running JobSpy scraper")
 
@@ -271,7 +271,7 @@ def _run_reddit() -> None:
     """Scheduled job: Run Reddit sentiment scraper."""
     try:
         from collectors.sentiment.reddit_adapter import scrape_reddit
-        from backend.scoring.engine import compute_all_scores
+        from core.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running Reddit scraper")
         signals = scrape_reddit(region="austin_tx")
@@ -287,7 +287,7 @@ def _run_reviews() -> None:
     """Scheduled job: Run Google Maps reviews scraper."""
     try:
         from collectors.sentiment.reviews_adapter import scrape_reviews
-        from backend.scoring.engine import compute_all_scores
+        from core.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running reviews scraper")
         signals = scrape_reviews(chain="starbucks", region="austin_tx")
@@ -339,7 +339,7 @@ def _run_alltheplaces() -> None:
     """Scheduled job: AllThePlaces store discovery."""
     try:
         from collectors.employer_data.alltheplaces_adapter import AllThePlacesAdapter
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
 
         logger.info("[Scheduler] Running AllThePlaces discovery")
         for chain_key in ["starbucks", "dutch_bros", "mcdonalds"]:
@@ -358,7 +358,7 @@ def _run_overture_chain() -> None:
     """Scheduled job: Overture chain cross-validation."""
     try:
         from collectors.employer_data.overture_adapter import OvertureChainAdapter
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
 
         logger.info("[Scheduler] Running Overture chain discovery")
         for chain_key in ["starbucks", "dutch_bros"]:
@@ -377,7 +377,7 @@ def _run_overture_local() -> None:
     """Scheduled job: Overture local employers discovery."""
     try:
         from collectors.employer_data.overture_adapter import OvertureLocalAdapter
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
 
         logger.info("[Scheduler] Running Overture local employer discovery")
         adapter = OvertureLocalAdapter()
@@ -394,7 +394,7 @@ def _run_osm() -> None:
     """Scheduled job: OSM Overpass store fallback."""
     try:
         from collectors.employer_data.osm_adapter import OSMAdapter
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
 
         logger.info("[Scheduler] Running OSM Overpass discovery")
         for chain_key in ["starbucks", "dutch_bros", "mcdonalds"]:
@@ -464,7 +464,7 @@ def _run_cbp() -> None:
 def _run_baseline_recompute() -> None:
     """Scheduled job: Recompute labor market baselines from ground-truth data."""
     try:
-        from backend.baseline import compute_baselines
+        from core.baseline import compute_baselines
 
         logger.info("[Scheduler] Recomputing labor market baselines")
         results = compute_baselines(region="austin_tx")
@@ -481,7 +481,7 @@ def _run_nlrb() -> None:
     """Scheduled job: Fetch NLRB labor unrest cases for tracked chains."""
     try:
         from collectors.labor_data.nlrb_adapter import scrape_nlrb
-        from backend.scoring.engine import compute_all_scores
+        from core.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running NLRB labor unrest fetch")
         signals = scrape_nlrb(region="austin_tx")
@@ -591,7 +591,7 @@ def _run_jobicy() -> None:
 def _run_posting_expiry() -> None:
     """Nightly sweep: mark postings past expires_at as inactive."""
     try:
-        from backend.database import get_session, init_db
+        from core.database import get_session, init_db
         from postings.ingest import expire_stale_postings
 
         engine = init_db()
@@ -621,7 +621,7 @@ def _run_posting_purge() -> None:
 
         from sqlalchemy import text
 
-        from backend.database import get_engine
+        from core.database import get_engine
 
         cutoff = datetime.utcnow() - timedelta(days=90)
         with get_engine().connect() as conn:

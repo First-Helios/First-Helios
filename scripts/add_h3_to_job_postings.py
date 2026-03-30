@@ -23,7 +23,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from sqlalchemy import text
 
-from backend.database import get_engine, get_session, init_db
+from core.database import get_engine, get_session, init_db
 
 logger = logging.getLogger(__name__)
 

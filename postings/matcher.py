@@ -26,7 +26,7 @@ import math
 
 from sqlalchemy.orm import Session
 
-from backend.database import LocalEmployer
+from core.database import LocalEmployer
 from postings.config import PROXIMITY_THRESHOLD_M
 
 logger = logging.getLogger(__name__)

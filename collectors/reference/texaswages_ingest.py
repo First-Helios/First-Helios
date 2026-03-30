@@ -36,8 +36,8 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.database import get_session, init_db
-from backend.models.reference import TexasWages
+from core.database import get_session, init_db
+from core.models.reference import TexasWages
 from config.paths import TEXASWAGES_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

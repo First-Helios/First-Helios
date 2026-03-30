@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from backend.database import LocalEmployer, Score, Store, WageIndex, get_session, init_db
+from core.database import LocalEmployer, Score, Store, WageIndex, get_session, init_db
 from config.loader import (
     get_local_radius_mi,
     get_targeting_tiers,

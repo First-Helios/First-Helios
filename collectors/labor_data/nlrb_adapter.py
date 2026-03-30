@@ -152,7 +152,7 @@ class NLRBAdapter(BaseScraper):
         }
 
         try:
-            from backend.tracked_request import tracked_get
+            from core.tracked_request import tracked_get
             resp = tracked_get(
                 "nlrb", "case_search",
                 _NLRB_SEARCH_URL,
@@ -315,7 +315,7 @@ def scrape_nlrb(
     signals = adapter.scrape(region)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain=None, source="nlrb")
         logger.info("[NLRB] Ingested %d signals", count)
 

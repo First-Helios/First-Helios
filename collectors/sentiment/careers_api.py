@@ -147,7 +147,7 @@ class CareersAPIScraper(BaseScraper):
         search_url = self.api_cfg.get("search_url", "")
         if search_url:
             try:
-                from backend.tracked_request import log_external
+                from core.tracked_request import log_external
                 import time as _t
                 _t0 = _t.time()
                 session.get(search_url, timeout=self.http_cfg["timeout_seconds"])
@@ -169,7 +169,7 @@ class CareersAPIScraper(BaseScraper):
 
             try:
                 import time as _t
-                from backend.tracked_request import log_external
+                from core.tracked_request import log_external
                 _t0 = _t.time()
                 resp = session.post(
                     api_url,
@@ -336,7 +336,7 @@ def scrape_careers_api(
     signals = scraper.scrape(region, radius_mi)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain, "careers_api")
         logger.info("[CareersAPI] Ingested %d signals", count)
 

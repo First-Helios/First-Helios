@@ -75,7 +75,7 @@ class WorkdayScraper(BaseScraper):
         self, region: str, radius_mi: int = 25
     ) -> list[ScraperSignal]:
         import time as _pw_t
-        from backend.tracked_request import log_external
+        from core.tracked_request import log_external
         _pw_t0 = _pw_t.time()
         signals: list[ScraperSignal] = []
         try:

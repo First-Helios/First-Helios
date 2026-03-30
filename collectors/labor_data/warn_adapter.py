@@ -165,7 +165,7 @@ class WARNAdapter(BaseScraper):
         # naics_prefix filter is not available in the TX WARN dataset
 
         try:
-            from backend.tracked_request import tracked_get
+            from core.tracked_request import tracked_get
             resp = tracked_get(
                 "warn_tx", "socrata_warn",
                 _WARN_API_URL,
@@ -304,7 +304,7 @@ def scrape_warn(
     signals = adapter.scrape(region)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         count = ingest_signals(signals, region, chain=None, source="warn_tx")
         logger.info("[WARN] Ingested %d signals", count)
 

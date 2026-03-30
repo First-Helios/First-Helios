@@ -28,7 +28,7 @@ _PROJECT_ROOT = Path(__file__).parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.database import (
+from core.database import (
     LocalEmployer,
     Score,
     Signal,
@@ -38,7 +38,7 @@ from backend.database import (
     get_session,
     init_db,
 )
-from backend.models.reference import (
+from core.models.reference import (
     BrandProfile,
     CategoryMapping,
     IndustryCategory,
@@ -48,9 +48,9 @@ from backend.models.reference import (
     OccupationAlias,
     RegionProfile,
 )
-from backend.scheduler import get_scheduler_status, init_scheduler
-from backend.scoring.engine import compute_all_scores
-from backend.targeting import compute_targeting
+from core.scheduler import get_scheduler_status, init_scheduler
+from core.scoring.engine import compute_all_scores
+from core.targeting import compute_targeting
 
 logger = logging.getLogger(__name__)
 
@@ -838,7 +838,7 @@ def rate_budget_status():
       - source (optional): one source_key for detailed view
     """
     try:
-        from backend.rate_manager import rate_manager
+        from core.rate_manager import rate_manager
 
         source = request.args.get("source")
         if source:
@@ -871,7 +871,7 @@ def rate_budget_history():
     days = request.args.get("days", 30, type=int)
 
     try:
-        from backend.rate_manager import rate_manager
+        from core.rate_manager import rate_manager
         history = rate_manager.get_source_history(source, days=days)
         return jsonify({
             "status": "ok",
@@ -898,7 +898,7 @@ def rate_budget_log():
     failures_only = request.args.get("failures_only", "false").lower() == "true"
 
     try:
-        from backend.rate_manager import rate_manager
+        from core.rate_manager import rate_manager
         success_filter = False if failures_only else None
         logs = rate_manager.get_request_log(
             source_key=source, limit=limit, success_only=success_filter
@@ -921,7 +921,7 @@ def rate_budget_scalability():
     and failing sources (<80% success rate).
     """
     try:
-        from backend.rate_manager import rate_manager
+        from core.rate_manager import rate_manager
         report = rate_manager.get_scalability_report()
         return jsonify({"status": "ok", **report})
     except Exception as e:

@@ -15,8 +15,8 @@ from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, text
 
-from backend.database import get_session, init_db
-from backend.normalizer import normalize_name
+from core.database import get_session, init_db
+from core.normalizer import normalize_name
 from postings.ingest import ingest_job_posting
 from postings.models import JobPosting
 from collectors.base import ScraperSignal

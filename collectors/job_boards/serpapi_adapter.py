@@ -45,7 +45,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from dotenv import load_dotenv
 load_dotenv(_PROJECT_ROOT / ".env")
 
-from backend.tracked_request import check_budget, log_external
+from core.tracked_request import check_budget, log_external
 from collectors.base import BaseScraper, ScraperSignal
 from collectors.cache import read_cache, write_cache
 
@@ -204,7 +204,7 @@ def _hourly_gate_ok() -> bool:
     elapsed.
     """
     try:
-        from backend.rate_manager import rate_manager
+        from core.rate_manager import rate_manager
         status = rate_manager.get_source_status(_SOURCE_KEY)
         last_str = status.get("budget", {}).get("last_request_at")
         if not last_str:
@@ -466,7 +466,7 @@ def scrape_serpapi(
 
     if ingest and signals:
         from postings.ingest import ingest_job_posting
-        from backend.database import get_session, init_db
+        from core.database import get_session, init_db
 
         engine = init_db()
         session = get_session(engine)

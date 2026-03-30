@@ -103,7 +103,7 @@ class JobSpyAdapter(BaseScraper):
 
             try:
                 import time as _t
-                from backend.tracked_request import log_external
+                from core.tracked_request import log_external
                 _t0 = _t.time()
                 df = scrape_jobs(
                     site_name=["indeed", "glassdoor"],
@@ -160,7 +160,7 @@ class JobSpyAdapter(BaseScraper):
 
             try:
                 import time as _t
-                from backend.tracked_request import log_external
+                from core.tracked_request import log_external
                 _t0 = _t.time()
                 df = scrape_jobs(
                     site_name=["indeed", "glassdoor"],
@@ -308,7 +308,7 @@ def scrape_jobspy(
     signals = adapter.scrape(region, radius_mi)
 
     if ingest and signals:
-        from backend.ingest import ingest_signals
+        from core.ingest import ingest_signals
         chain_key = chain or (industry or "local")
         count = ingest_signals(signals, region, chain_key, "jobspy")
         logger.info("[JobSpy] Ingested %d signals", count)

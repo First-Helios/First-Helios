@@ -40,7 +40,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from backend.tracked_request import check_budget, log_external
+from core.tracked_request import check_budget, log_external
 from collectors.base import BaseScraper, ScraperSignal
 
 logger = logging.getLogger(__name__)
@@ -326,7 +326,7 @@ def scrape_usajobs(
 
     if ingest and signals:
         from postings.ingest import ingest_job_posting
-        from backend.database import get_session, init_db
+        from core.database import get_session, init_db
 
         engine = init_db()
         session = get_session(engine)

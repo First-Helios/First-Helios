@@ -32,7 +32,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 
-from backend.database import Base
+from core.database import Base
 
 
 class JobPosting(Base):

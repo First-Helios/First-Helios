@@ -31,7 +31,7 @@ sys.path.insert(0, ".")
 
 from sqlalchemy import func
 
-from backend.database import LocalEmployer, get_session, init_db
+from core.database import LocalEmployer, get_session, init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

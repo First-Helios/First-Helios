@@ -33,7 +33,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-from backend.database import Base
+from core.database import Base
 
 logger = logging.getLogger(__name__)
 

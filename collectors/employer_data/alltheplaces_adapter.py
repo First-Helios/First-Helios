@@ -21,7 +21,7 @@ from datetime import datetime
 import requests
 
 sys.path.insert(0, ".")
-from backend.database import Store, get_session, init_db
+from core.database import Store, get_session, init_db
 from config.loader import get_config
 from collectors.base import BaseScraper, ScraperSignal
 
@@ -84,7 +84,7 @@ class AllThePlacesAdapter(BaseScraper):
         #   GET {output_url_base}/output/{spider_name}.geojson
         urls_to_try: list[str] = [redirect_url]
         try:
-            from backend.tracked_request import tracked_get
+            from core.tracked_request import tracked_get
             meta_resp = tracked_get(
                 "atp_geojson", "latest_json",
                 f"{ATP_API_ROOT}/runs/latest.json",
@@ -105,7 +105,7 @@ class AllThePlacesAdapter(BaseScraper):
         for url in urls_to_try:
             try:
                 logger.info("[ATP] Trying %s", url)
-                from backend.tracked_request import tracked_get
+                from core.tracked_request import tracked_get
                 resp = tracked_get(
                     "atp_geojson", "geojson_download",
                     url,
@@ -168,7 +168,7 @@ class AllThePlacesAdapter(BaseScraper):
 
         # Resolve parquet URL from latest.json
         try:
-            from backend.tracked_request import tracked_get, log_external
+            from core.tracked_request import tracked_get, log_external
             meta_resp = tracked_get(
                 "atp_parquet", "latest_json",
                 f"{ATP_API_ROOT}/runs/latest.json",
@@ -362,7 +362,7 @@ class AllThePlacesAdapter(BaseScraper):
 if __name__ == "__main__":
     import argparse
 
-    from backend.ingest import ingest_signals
+    from core.ingest import ingest_signals
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
