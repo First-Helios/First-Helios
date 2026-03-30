@@ -44,9 +44,9 @@ def _preview_signals(signals, label):
 
 
 def backfill(dry_run: bool = False):
-    from scrapers.cache import read_cache
-    from scrapers.theirstack_adapter import TheirStackAdapter
-    from scrapers.serpapi_adapter import SerpApiAdapter
+    from collectors.cache import read_cache
+    from collectors.job_boards.theirstack_adapter import TheirStackAdapter
+    from collectors.job_boards.serpapi_adapter import SerpApiAdapter
 
     region = "austin_tx"
 
@@ -82,7 +82,7 @@ def backfill(dry_run: bool = False):
         return
 
     # ── Ingest ─────────────────────────────────────────────────────────────
-    from listings.ingest import ingest_job_posting
+    from postings.ingest import ingest_job_posting
     from backend.database import get_session, init_db
 
     engine = init_db()

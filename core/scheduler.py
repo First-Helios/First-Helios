@@ -248,7 +248,7 @@ def _run_careers_api() -> None:
 def _run_jobspy() -> None:
     """Scheduled job: Run JobSpy scraper (chain + wage modes)."""
     try:
-        from scrapers.jobspy_adapter import scrape_jobspy
+        from collectors.job_boards.jobspy_adapter import scrape_jobspy
         from backend.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running JobSpy scraper")
@@ -270,7 +270,7 @@ def _run_jobspy() -> None:
 def _run_reddit() -> None:
     """Scheduled job: Run Reddit sentiment scraper."""
     try:
-        from scrapers.reddit_adapter import scrape_reddit
+        from collectors.sentiment.reddit_adapter import scrape_reddit
         from backend.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running Reddit scraper")
@@ -286,7 +286,7 @@ def _run_reddit() -> None:
 def _run_reviews() -> None:
     """Scheduled job: Run Google Maps reviews scraper."""
     try:
-        from scrapers.reviews_adapter import scrape_reviews
+        from collectors.sentiment.reviews_adapter import scrape_reviews
         from backend.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running reviews scraper")
@@ -326,7 +326,7 @@ def _run_bls() -> None:
             )
         else:
             # Legacy v1 path: per-series GET via bls_adapter
-            from scrapers.bls_adapter import scrape_bls
+            from collectors.labor_data.bls_adapter import scrape_bls
             logger.info("[Scheduler] Running BLS fetcher (v1 fallback — set BLS_API_KEY for v2)")
             signals = scrape_bls(region="austin_tx")
             logger.info("[Scheduler] BLS: %d signals", len(signals))
@@ -338,7 +338,7 @@ def _run_bls() -> None:
 def _run_alltheplaces() -> None:
     """Scheduled job: AllThePlaces store discovery."""
     try:
-        from scrapers.alltheplaces_adapter import AllThePlacesAdapter
+        from collectors.employer_data.alltheplaces_adapter import AllThePlacesAdapter
         from backend.ingest import ingest_signals
 
         logger.info("[Scheduler] Running AllThePlaces discovery")
@@ -357,7 +357,7 @@ def _run_alltheplaces() -> None:
 def _run_overture_chain() -> None:
     """Scheduled job: Overture chain cross-validation."""
     try:
-        from scrapers.overture_adapter import OvertureChainAdapter
+        from collectors.employer_data.overture_adapter import OvertureChainAdapter
         from backend.ingest import ingest_signals
 
         logger.info("[Scheduler] Running Overture chain discovery")
@@ -376,7 +376,7 @@ def _run_overture_chain() -> None:
 def _run_overture_local() -> None:
     """Scheduled job: Overture local employers discovery."""
     try:
-        from scrapers.overture_adapter import OvertureLocalAdapter
+        from collectors.employer_data.overture_adapter import OvertureLocalAdapter
         from backend.ingest import ingest_signals
 
         logger.info("[Scheduler] Running Overture local employer discovery")
@@ -393,7 +393,7 @@ def _run_overture_local() -> None:
 def _run_osm() -> None:
     """Scheduled job: OSM Overpass store fallback."""
     try:
-        from scrapers.osm_adapter import OSMAdapter
+        from collectors.employer_data.osm_adapter import OSMAdapter
         from backend.ingest import ingest_signals
 
         logger.info("[Scheduler] Running OSM Overpass discovery")
@@ -417,7 +417,7 @@ def _run_qcew() -> None:
     """
     try:
         from datetime import datetime
-        from scrapers.qcew_adapter import scrape_qcew
+        from collectors.labor_data.qcew_adapter import scrape_qcew
 
         # Check if this is an active month for QCEW
         active_months = [1, 4, 7, 10]
@@ -445,7 +445,7 @@ def _run_cbp() -> None:
     """
     try:
         from datetime import datetime
-        from scrapers.cbp_adapter import scrape_cbp
+        from collectors.labor_data.cbp_adapter import scrape_cbp
 
         active_months = [4]
         current_month = datetime.utcnow().month
@@ -480,7 +480,7 @@ def _run_baseline_recompute() -> None:
 def _run_nlrb() -> None:
     """Scheduled job: Fetch NLRB labor unrest cases for tracked chains."""
     try:
-        from scrapers.nlrb_adapter import scrape_nlrb
+        from collectors.labor_data.nlrb_adapter import scrape_nlrb
         from backend.scoring.engine import compute_all_scores
 
         logger.info("[Scheduler] Running NLRB labor unrest fetch")
@@ -497,7 +497,7 @@ def _run_nlrb() -> None:
 def _run_warn() -> None:
     """Scheduled job: Fetch Texas WARN Act filings."""
     try:
-        from scrapers.warn_adapter import scrape_warn
+        from collectors.labor_data.warn_adapter import scrape_warn
 
         logger.info("[Scheduler] Running Texas WARN Act fetch")
         signals = scrape_warn(region="austin_tx")
@@ -510,7 +510,7 @@ def _run_warn() -> None:
 def _run_usajobs() -> None:
     """Scheduled job: Fetch federal job listings from USAJobs API."""
     try:
-        from scrapers.usajobs_adapter import scrape_usajobs
+        from collectors.job_boards.usajobs_adapter import scrape_usajobs
 
         logger.info("[Scheduler] Running USAJobs federal listings fetch")
         signals = scrape_usajobs(region="austin_tx", location="Austin, TX", max_pages=2)
@@ -523,7 +523,7 @@ def _run_usajobs() -> None:
 def _run_austin_gov() -> None:
     """Scheduled job: Fetch City of Austin job listings from Workday portal."""
     try:
-        from scrapers.workday_gov_adapter import scrape_austin_gov
+        from collectors.job_boards.workday_gov_adapter import scrape_austin_gov
 
         logger.info("[Scheduler] Running Austin City Gov Workday fetch")
         signals = scrape_austin_gov(region="austin_tx")
@@ -536,7 +536,7 @@ def _run_austin_gov() -> None:
 def _run_serpapi_jobs() -> None:
     """Scheduled job: Fetch Google Jobs listings via SerpAPI."""
     try:
-        from scrapers.serpapi_adapter import scrape_serpapi
+        from collectors.job_boards.serpapi_adapter import scrape_serpapi
         logger.info("[Scheduler] Running SerpAPI Google Jobs fetch")
         signals = scrape_serpapi(region="austin_tx")
         logger.info("[Scheduler] SerpAPI: %d signals", len(signals))
@@ -547,7 +547,7 @@ def _run_serpapi_jobs() -> None:
 def _run_activejobs() -> None:
     """Scheduled job: Fetch listings from Active Jobs DB (RapidAPI)."""
     try:
-        from scrapers.activejobs_adapter import scrape_activejobs
+        from collectors.job_boards.activejobs_adapter import scrape_activejobs
         logger.info("[Scheduler] Running Active Jobs DB fetch")
         signals = scrape_activejobs(region="austin_tx")
         logger.info("[Scheduler] Active Jobs DB: %d signals", len(signals))
@@ -558,7 +558,7 @@ def _run_activejobs() -> None:
 def _run_juju() -> None:
     """Scheduled job: Fetch listings from Juju XML search API."""
     try:
-        from scrapers.juju_adapter import scrape_juju
+        from collectors.job_boards.juju_adapter import scrape_juju
         logger.info("[Scheduler] Running Juju job search fetch")
         signals = scrape_juju(region="austin_tx")
         logger.info("[Scheduler] Juju: %d signals", len(signals))
@@ -569,7 +569,7 @@ def _run_juju() -> None:
 def _run_theirstack() -> None:
     """Scheduled job: Fetch Austin-area jobs and company intelligence from TheirStack."""
     try:
-        from scrapers.theirstack_adapter import scrape_theirstack
+        from collectors.job_boards.theirstack_adapter import scrape_theirstack
         logger.info("[Scheduler] Running TheirStack fetch")
         signals = scrape_theirstack(region="austin_tx")
         logger.info("[Scheduler] TheirStack: %d signals", len(signals))
@@ -580,7 +580,7 @@ def _run_theirstack() -> None:
 def _run_jobicy() -> None:
     """Scheduled job: Fetch remote job listings from Jobicy API (hourly)."""
     try:
-        from scrapers.jobicy_adapter import scrape_jobicy
+        from collectors.job_boards.jobicy_adapter import scrape_jobicy
         logger.info("[Scheduler] Running Jobicy fetch")
         signals = scrape_jobicy(region="austin_tx")
         logger.info("[Scheduler] Jobicy: %d signals", len(signals))
@@ -592,7 +592,7 @@ def _run_posting_expiry() -> None:
     """Nightly sweep: mark postings past expires_at as inactive."""
     try:
         from backend.database import get_session, init_db
-        from listings.ingest import expire_stale_postings
+        from postings.ingest import expire_stale_postings
 
         engine = init_db()
         session = get_session(engine)

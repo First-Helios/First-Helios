@@ -16,7 +16,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from backend.database import Store, get_session, init_db
-from scrapers.geocoding import geocode
+from collectors.geocoding import geocode
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)

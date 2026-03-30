@@ -66,7 +66,7 @@ def _import_listings_models() -> None:
     The listings/ layer is optional — if absent the app starts normally.
     """
     try:
-        import listings.models  # noqa: F401
+        import postings.models  # noqa: F401
     except ImportError:
         logger.debug("[Database] listings.models not found — skipping")
 

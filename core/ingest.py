@@ -26,7 +26,7 @@ from backend.database import (
     init_db,
 )
 from config.loader import get_chain
-from scrapers.base import ScraperSignal
+from collectors.base import ScraperSignal
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def ingest_signals(
                     # Auto-geocode if no coordinates provided
                     if store.lat is None and store.address:
                         try:
-                            from scrapers.geocoding import geocode
+                            from collectors.geocoding import geocode
                             store.lat, store.lng = geocode(store.address)
                         except Exception as e:
                             logger.warning(

@@ -63,7 +63,7 @@ CORS(app)
 
 # ── Spirit Pool Blueprint ─────────────────────────────────────────────────────
 try:
-    from listings.spiritpool_routes import spiritpool_bp
+    from postings.spiritpool_routes import spiritpool_bp
     app.register_blueprint(spiritpool_bp)
     logger.info("Spirit Pool blueprint registered at /api/spiritpool")
 except ImportError:
@@ -123,7 +123,7 @@ def trigger_scan():
     region = data.get("region", "austin_tx")
 
     try:
-        from scrapers.jobspy_adapter import scrape_jobspy
+        from collectors.job_boards.jobspy_adapter import scrape_jobspy
 
         signals = scrape_jobspy(chain=chain, region=region, mode="chain")
         compute_all_scores(region=region, chain=chain)
@@ -1350,7 +1350,7 @@ def jobs_h3_map():
     """
     import h3 as h3lib
     from sqlalchemy import func as sqlfunc
-    from listings.models import JobPosting
+    from postings.models import JobPosting
 
     resolution = request.args.get("resolution", 7, type=int)
     region     = request.args.get("region", "austin_tx")
@@ -1409,7 +1409,7 @@ def jobs_listings():
       page        (int, default 1)
       limit       (int, default 20, max 100)
     """
-    from listings.models import JobPosting
+    from postings.models import JobPosting
 
     region     = request.args.get("region", "austin_tx")
     h3_cell    = request.args.get("h3_cell")
@@ -1500,7 +1500,7 @@ def jobs_categories():
       region  (default: austin_tx)
     """
     from sqlalchemy import func as sqlfunc
-    from listings.models import JobPosting
+    from postings.models import JobPosting
 
     region  = request.args.get("region", "austin_tx")
     engine  = init_db()
