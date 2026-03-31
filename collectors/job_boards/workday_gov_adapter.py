@@ -197,31 +197,61 @@ _DOLLAR_RANGE_RE = re.compile(
     r"\$\s*([\d,]+(?:\.\d{1,2})?)",
 )
 
+# "$25.00 per hour" / "$19.50/hr" — single-value hourly
+_DOLLAR_HOURLY_RE = re.compile(
+    r"\$\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*hour|/\s*hr|an\s*hour)",
+    re.IGNORECASE,
+)
+
+# "$55,000 per year" / "$60,000/yr" / "$55,000 annually" — single-value yearly
+_DOLLAR_YEARLY_RE = re.compile(
+    r"\$\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*year|/\s*yr|annually|annual)",
+    re.IGNORECASE,
+)
+
 
 def _parse_salary_from_sections(sections: dict[str, str]) -> tuple[float | None, float | None, str | None]:
     """Extract (wage_min, wage_max, wage_period) from parsed sections.
 
-    Looks in the 'pay_range' section first, which covers:
-      "Pay Range: $22.48-$25.42"
-      "Pay Rate: $32.96 - $41.20"
-      "Salary: Commensurate …" (no numbers → returns None)
+    Checks pay_range section for:
+      Range:  "$22.48 - $25.42"    → heuristic period (hourly < 200, else yearly)
+      Hourly: "$25.00 per hour"    → hourly
+      Yearly: "$55,000 per year"   → yearly
     """
-    pay_text = sections.get("pay_range", "")
+    # Trim to first line — prevents capturing job body text when the section
+    # extractor runs to end-of-document (happens when no next header exists).
+    pay_text = (sections.get("pay_range") or "").split("\n")[0][:200].strip()
     if not pay_text:
         return None, None, None
 
-    match = _DOLLAR_RANGE_RE.search(pay_text)
-    if not match:
-        return None, None, None
+    # 1. Range pattern: $X - $Y
+    m = _DOLLAR_RANGE_RE.search(pay_text)
+    if m:
+        try:
+            wage_min = float(m.group(1).replace(",", ""))
+            wage_max = float(m.group(2).replace(",", ""))
+            wage_period = "hourly" if wage_max < 200 else "yearly"
+            return wage_min, wage_max, wage_period
+        except (ValueError, IndexError):
+            pass
 
-    try:
-        wage_min = float(match.group(1).replace(",", ""))
-        wage_max = float(match.group(2).replace(",", ""))
-        # Heuristic: if both values < 200, it's hourly; otherwise yearly
-        wage_period = "hourly" if wage_max < 200 else "yearly"
-        return wage_min, wage_max, wage_period
-    except (ValueError, IndexError):
-        return None, None, None
+    # 2. Single hourly: "$25.00 per hour"
+    m = _DOLLAR_HOURLY_RE.search(pay_text)
+    if m:
+        try:
+            return float(m.group(1).replace(",", "")), None, "hourly"
+        except ValueError:
+            pass
+
+    # 3. Single yearly: "$55,000 per year"
+    m = _DOLLAR_YEARLY_RE.search(pay_text)
+    if m:
+        try:
+            return float(m.group(1).replace(",", "")), None, "yearly"
+        except ValueError:
+            pass
+
+    return None, None, None
 
 
 # ── Location / address parsing ───────────────────────────────────────────────
@@ -252,6 +282,22 @@ def _parse_location_from_sections(sections: dict[str, str], fallback: str) -> st
             # Take first ~120 chars as address
             return loc_text[:120].strip()
     return fallback
+
+
+def _extract_summary(description_html: str) -> str | None:
+    """Extract the opening job summary from Workday description HTML.
+
+    Grabs the intro paragraph that appears BEFORE the first labelled section
+    (Pay Range, Minimum Qualifications, etc.).  This is the human-readable
+    "what this job is about" that should appear as the card excerpt.
+    """
+    if not description_html:
+        return None
+    text = _html_to_text(description_html)
+    first_head = _ALL_SECTION_HEADS_RE.search(text)
+    intro = text[:first_head.start()].strip() if first_head else text[:500]
+    intro = re.sub(r"\s+", " ", intro).strip()
+    return intro[:500] if intro else None
 
 
 def _parse_relative_date(posted_text: str) -> datetime | None:
@@ -516,15 +562,15 @@ class WorkdayGovAdapter(BaseScraper):
             # Build source URL
             source_url = _public_url(site, external_path) if external_path else None
 
-            # Build a compact job_excerpt from the key qualification sections
-            excerpt_parts = []
-            if sections.get("minimum_qualifications"):
-                excerpt_parts.append(f"Min Quals: {sections['minimum_qualifications']}")
-            elif sections.get("education"):
-                excerpt_parts.append(f"Education: {sections['education']}")
-            if sections.get("days_and_hours"):
-                excerpt_parts.append(f"Schedule: {sections['days_and_hours']}")
-            job_excerpt = " | ".join(excerpt_parts)[:600] or None
+            # Job excerpt: opening summary paragraph from description HTML.
+            # This is the human-readable "what this job is about" sentence(s)
+            # that appear before the structured sections (Pay Range, Min Quals, etc.).
+            job_excerpt = _extract_summary(description_html)
+
+            # Trim pay_range_raw to first line only — section extractor may
+            # capture the full job body when no next-section header follows.
+            raw_pay = sections.get("pay_range") or ""
+            pay_range_raw = raw_pay.split("\n")[0][:200].strip() or None
 
             signal = ScraperSignal(
                 store_num=job_req_id or "",
@@ -548,7 +594,7 @@ class WorkdayGovAdapter(BaseScraper):
                     "job_category": detail.get("jobFamilyGroup", "") if detail else "",
                     "job_excerpt": job_excerpt,
                     # Structured fields parsed from description
-                    "pay_range_raw": sections.get("pay_range"),
+                    "pay_range_raw": pay_range_raw,
                     "minimum_qualifications": sections.get("minimum_qualifications"),
                     "education": sections.get("education"),
                     "ksa": sections.get("ksa"),

@@ -104,7 +104,7 @@
         'serpapi_google_jobs':  'Google Jobs',
         'jobicy':               'Jobicy',
         'theirstack':           'TheirStack',
-        'workday_gov':          'City of Austin',
+        'workday_gov':          'austintexas.gov',
         'careers_api':          'Workday',
         'usajobs':              'USAJobs',
         'rapidapi_activejobs':  'ActiveJobs',
