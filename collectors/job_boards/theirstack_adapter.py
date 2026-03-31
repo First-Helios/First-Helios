@@ -14,7 +14,7 @@ API overview:
              All industries, all roles — maximum reuse per cached response.
 
 Caching strategy:
-  TTL = 1440 min (24 h) — one call per day is adequate for a 200/month budget.
+  TTL = 240 min (4 h) — matches polling interval (6 calls/day = ~180/month budget).
   MIN_INTERVAL = 240 min (4 h) — hard floor so re-runs don't burn quota.
   Cache key: "theirstack".  Only the parsed data list is cached.
 
@@ -49,8 +49,8 @@ _ENDPOINT = "/v1/jobs/search"
 _SEARCH_URL = _BASE_URL + _ENDPOINT
 _SOURCE_KEY = "theirstack"
 
-# 24 h TTL — API budget is 200 calls/month; treat each call as precious.
-_TTL_MINUTES = 1440
+# 4 h TTL — matches polling interval (6 calls/day = ~180/month within 200/month budget).
+_TTL_MINUTES = 240
 # Hard floor: do not call more often than every 4 hours even if cache is cold.
 _MIN_INTERVAL_MINUTES = 240
 
@@ -422,8 +422,8 @@ class TheirStackAdapter(BaseScraper):
             wage_max: float | None = None
             wage_period: str | None = None
 
-            raw_min = job.get("salary_min")
-            raw_max = job.get("salary_max")
+            raw_min = job.get("min_annual_salary_usd") or job.get("min_annual_salary")
+            raw_max = job.get("max_annual_salary_usd") or job.get("max_annual_salary")
             if raw_min is not None:
                 try:
                     wage_min = float(raw_min)

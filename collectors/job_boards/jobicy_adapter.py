@@ -333,7 +333,7 @@ class JobicyAdapter(BaseScraper):
                 except Exception:
                     posted_date = None
 
-            # Salary
+            # Salary — prefer structured fields; fall back to full description
             wage_min: float | None = None
             wage_max: float | None = None
             wage_period: str | None = None
@@ -349,6 +349,11 @@ class JobicyAdapter(BaseScraper):
                     wage_period = "yearly"
                 except (TypeError, ValueError):
                     pass
+            if wage_min is None and wage_max is None:
+                desc_html = job.get("jobDescription") or ""
+                if desc_html:
+                    from postings.description_extract import extract_salary as _ext_salary
+                    wage_min, wage_max, wage_period = _ext_salary(desc_html)
 
             # Stable external ID: prefer numeric job id, fall back to url hash
             if job_id:

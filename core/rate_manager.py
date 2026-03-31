@@ -191,13 +191,13 @@ API_SOURCE_REGISTRY: list[dict] = [
         "display_name": "SerpAPI Google Jobs",
         "base_url": "https://serpapi.com/search.json",
         "auth_type": "api_key",
-        "daily_limit": 3,
+        "daily_limit": 8,
         "min_delay_seconds": 2.0,
         "reset_hour_utc": 0,
         "notes": (
-            "100 total free credits (NOT daily-reset — treat like cash). "
+            "250 searches/month (monthly reset) → 8/day budget. "
             "engine=google_jobs, location=Austin TX, broad query to maximise yield. "
-            "~10 results per credit. Cache TTL 8h. Key: SERPAPI_KEY env var."
+            "~10 results per credit. Cache TTL 3h. Key: SERPAPI_KEY env var."
         ),
     },
     {

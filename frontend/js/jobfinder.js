@@ -99,6 +99,18 @@
 
     // ── Job card builder ──────────────────────────────────────────────────────
 
+    var _SOURCE_LABELS = {
+        'jobspy':               'LinkedIn / Indeed',
+        'serpapi_google_jobs':  'Google Jobs',
+        'jobicy':               'Jobicy',
+        'theirstack':           'TheirStack',
+        'workday_gov':          'City of Austin',
+        'careers_api':          'Workday',
+        'usajobs':              'USAJobs',
+        'rapidapi_activejobs':  'ActiveJobs',
+        'juju':                 'Juju',
+    };
+
     function _esc(s) {
         return String(s)
             .replace(/&/g, '&amp;')
@@ -121,6 +133,8 @@
         if (job.is_remote) emp += '<span class="listing-badge remote">remote</span>';
         var d = job.detail || {};
         if (d.time_type) emp += '<span class="listing-badge time-type">' + _esc(d.time_type) + '</span>';
+        var srcLabel = _SOURCE_LABELS[job.source] || job.source;
+        if (srcLabel) emp += '<span class="listing-badge source">' + _esc(srcLabel) + '</span>';
         emp += '</div>';
 
         var title = job.role_title
@@ -151,6 +165,13 @@
             ? '<div class="job-meta">' + _esc(meta.join(' · ')) + '</div>'
             : '';
 
+        // Job excerpt (description snippet)
+        var excerpt = '';
+        if (job.excerpt) {
+            var snippetText = job.excerpt.length > 200 ? job.excerpt.slice(0, 200) + '…' : job.excerpt;
+            excerpt = '<div class="job-excerpt">' + _esc(snippetText) + '</div>';
+        }
+
         // Detail sections (expandable)
         var detailHtml = '';
         var sections = [];
@@ -179,7 +200,7 @@
               + '" target="_blank" rel="noopener noreferrer">Apply →</a></div>'
             : '';
 
-        card.innerHTML = emp + title + wage + metaLine + detailHtml + apply;
+        card.innerHTML = emp + title + wage + metaLine + excerpt + detailHtml + apply;
 
         // Wire toggle
         var toggle = card.querySelector('.job-detail-toggle');

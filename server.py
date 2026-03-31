@@ -1450,13 +1450,23 @@ def jobs_listings():
         def _wage(jp):
             if not jp.wage_min and not jp.wage_max:
                 return None
-            if jp.wage_period == "yearly":
+            period = jp.wage_period or "hourly"
+            if period == "yearly":
                 lo = f"${int(jp.wage_min / 1000)}k" if jp.wage_min else None
                 hi = f"${int(jp.wage_max / 1000)}k" if jp.wage_max else None
-            else:
-                lo = f"${jp.wage_min:.0f}" if jp.wage_min else None
-                hi = f"${jp.wage_max:.0f}" if jp.wage_max else None
-            suffix = "/yr" if jp.wage_period == "yearly" else "/hr"
+                suffix = "/yr"
+            elif period == "monthly":
+                lo = f"${jp.wage_min:,.0f}" if jp.wage_min else None
+                hi = f"${jp.wage_max:,.0f}" if jp.wage_max else None
+                suffix = "/mo"
+            elif period == "weekly":
+                lo = f"${jp.wage_min:,.0f}" if jp.wage_min else None
+                hi = f"${jp.wage_max:,.0f}" if jp.wage_max else None
+                suffix = "/wk"
+            else:  # hourly
+                lo = f"${jp.wage_min:.2f}" if jp.wage_min else None
+                hi = f"${jp.wage_max:.2f}" if jp.wage_max else None
+                suffix = "/hr"
             return "\u2013".join(filter(None, [lo, hi])) + suffix
 
         jobs = [
@@ -1472,6 +1482,7 @@ def jobs_listings():
                 "referral_url": jp.referral_url,
                 "posted_date": jp.posted_date.isoformat() if jp.posted_date else None,
                 "source":      jp.source,
+                "excerpt":     jp.job_excerpt,
                 "detail":      jp.detail_json,
             }
             for jp in postings

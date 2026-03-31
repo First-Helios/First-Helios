@@ -81,10 +81,16 @@ def init_scheduler() -> BackgroundScheduler:
             id="usajobs", name="USAJobs Federal Listings", replace_existing=True)
 
     if _job_enabled(sched_cfg, "serpapi_jobs"):
-        _c = sched_cfg.get("serpapi_jobs", {}).get("cron", {})
-        scheduler.add_job(_run_serpapi_jobs, "cron",
-            hour=_c.get("hour", 7), minute=_c.get("minute", 0),
-            id="serpapi_jobs", name="SerpAPI Google Jobs", replace_existing=True)
+        _iv = sched_cfg.get("serpapi_jobs", {}).get("interval_hours")
+        if _iv:
+            scheduler.add_job(_run_serpapi_jobs, "interval",
+                hours=_iv,
+                id="serpapi_jobs", name="SerpAPI Google Jobs", replace_existing=True)
+        else:
+            _c = sched_cfg.get("serpapi_jobs", {}).get("cron", {})
+            scheduler.add_job(_run_serpapi_jobs, "cron",
+                hour=_c.get("hour", 7), minute=_c.get("minute", 0),
+                id="serpapi_jobs", name="SerpAPI Google Jobs", replace_existing=True)
 
     if _job_enabled(sched_cfg, "rapidapi_activejobs"):
         _c = sched_cfg.get("rapidapi_activejobs", {}).get("cron", {})
@@ -99,10 +105,16 @@ def init_scheduler() -> BackgroundScheduler:
             id="juju", name="Juju Job Search", replace_existing=True)
 
     if _job_enabled(sched_cfg, "theirstack"):
-        _c = sched_cfg.get("theirstack", {}).get("cron", {})
-        scheduler.add_job(_run_theirstack, "cron",
-            hour=_c.get("hour", 9), minute=_c.get("minute", 0),
-            id="theirstack", name="TheirStack Jobs & Companies", replace_existing=True)
+        _iv = sched_cfg.get("theirstack", {}).get("interval_hours")
+        if _iv:
+            scheduler.add_job(_run_theirstack, "interval",
+                hours=_iv,
+                id="theirstack", name="TheirStack Jobs & Companies", replace_existing=True)
+        else:
+            _c = sched_cfg.get("theirstack", {}).get("cron", {})
+            scheduler.add_job(_run_theirstack, "cron",
+                hour=_c.get("hour", 9), minute=_c.get("minute", 0),
+                id="theirstack", name="TheirStack Jobs & Companies", replace_existing=True)
 
     if _job_enabled(sched_cfg, "jobicy"):
         scheduler.add_job(_run_jobicy, "interval",

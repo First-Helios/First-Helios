@@ -8,7 +8,7 @@ write path for all JobPosting records.
 API overview:
   Endpoint:  GET https://serpapi.com/search.json
   Auth:      api_key query param — read from SERPAPI_KEY env var
-  Rate:      100 credits total. ONE call per run (start=0 only).
+  Rate:      250 searches/month (monthly reset). ONE call per run (start=0 only).
              Each additional page costs a credit, so pagination is disabled.
   Key params:
     engine   google_jobs
@@ -54,9 +54,9 @@ logger = logging.getLogger(__name__)
 _SERPAPI_URL = "https://serpapi.com/search.json"
 _SOURCE_KEY = "serpapi_google_jobs"
 
-# One call per run — 8-hour TTL mirrors the polling interval.
-_TTL_MINUTES = 480
-_MIN_INTERVAL_MINUTES = 480
+# One call per run — 3-hour TTL mirrors the polling interval (8 calls/day = 240/month).
+_TTL_MINUTES = 180
+_MIN_INTERVAL_MINUTES = 180
 
 
 # ── Address-extraction helpers (mirrored from jobicy_adapter) ─────────────────
@@ -122,8 +122,8 @@ def _find_address(text: str) -> tuple[str, str] | None:
 #   "$18 - $22 an hour"
 #   "50,000 USD annually"
 _SALARY_RE = re.compile(
-    r'\$?([\d,]+(?:\.\d+)?)'                            # first number
-    r'(?:\s*[-–]\s*\$?([\d,]+(?:\.\d+)?))?'             # optional second number
+    r'\$?([\d,]+(?:\.\d+)?[Kk]?)'                       # first number (optional K suffix)
+    r'(?:\s*[-–]\s*\$?([\d,]+(?:\.\d+)?[Kk]?))?'        # optional second number
     r'\s*(?:a\s+|an\s+|per\s+)?'
     r'(year|yr|annual|annually|month|week|wk|hour|hr)',  # period keyword
     re.IGNORECASE,
@@ -157,7 +157,9 @@ def _parse_salary(s: str) -> tuple[float | None, float | None, str | None]:
         if n is None:
             return None
         try:
-            return float(n.replace(",", ""))
+            n = n.strip()
+            multiplier = 1000 if n[-1:].lower() == "k" else 1
+            return float(n.rstrip("Kk").replace(",", "")) * multiplier
         except (TypeError, ValueError):
             return None
 
@@ -450,7 +452,7 @@ def scrape_serpapi(
     """One call, start=0, broad query — maximum single-request yield from SerpAPI.
 
     The interval gate inside SerpApiAdapter.scrape() prevents calling the API
-    more than once per 8-hour window to conserve the 100-credit lifetime budget.
+    more than once per 3-hour window (8 calls/day = ~240/month within 250/month limit).
 
     Args:
         region:  Region key for tagging ingested postings (default: austin_tx).

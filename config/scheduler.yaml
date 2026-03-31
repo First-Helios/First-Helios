@@ -46,6 +46,18 @@ usajobs:
     hour: 6
     minute: 0
 
+serpapi_jobs:
+  enabled: true
+  description: "SerpAPI Google Jobs — 250 searches/month, 8/day at 3-hour intervals"
+  trigger: interval
+  interval_hours: 3
+
+theirstack:
+  enabled: true
+  description: "TheirStack Jobs — 200 calls/month, 6/day at 4-hour intervals"
+  trigger: interval
+  interval_hours: 4
+
 # ── Labor Market / Regulatory Data ───────────────────────────────────────────
 
 bls:

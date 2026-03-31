@@ -11,6 +11,9 @@ Main entry point:
 Pipeline per signal:
   1. Extract employer name, address, lat/lng, posted_date, external_id
   2. Deduplicate via (source, external_id) — skip if active, reactivate if expired
+  2b. Soft-dedupe: if an active record already exists for (source, role_title,
+      fingerprint, region) with a different external_id, redirect the upsert to
+      that canonical row instead of inserting a duplicate.
   3. Normalize name + compute fingerprint (backend.normalizer)
   4. Geocode if lat/lng absent and raw_address present (scrapers.geocoding)
   5. Compute H3 cells (r7, r8) from lat/lng — NULL if coordinates unavailable
@@ -172,6 +175,35 @@ def ingest_job_posting(
     except (TypeError, ValueError):
         posting_lat = posting_lng = None
 
+    # ── 1b. Description fallback — wage and address ───────────────────────────
+    # When structured API fields are absent, attempt regex extraction from the
+    # job description / excerpt.  Only fires when the signal has no value —
+    # API-provided wages and addresses always take priority.
+    _desc_text = meta.get("job_excerpt") or meta.get("description") or ""
+    _desc_addr_method: str | None = None
+    if _desc_text:
+        if signal.wage_min is None and signal.wage_max is None:
+            from postings.description_extract import extract_salary as _ext_salary
+            _dw_min, _dw_max, _dw_period = _ext_salary(_desc_text)
+            if _dw_min is not None or _dw_max is not None:
+                signal.wage_min = _dw_min
+                signal.wage_max = _dw_max
+                signal.wage_period = _dw_period
+                logger.debug(
+                    "[ingest] desc-salary %s: %.0f–%.0f %s",
+                    signal.source, _dw_min or 0, _dw_max or 0, _dw_period,
+                )
+        if raw_address is None and posting_lat is None:
+            from postings.description_extract import extract_address as _ext_addr
+            _addr_result = _ext_addr(_desc_text)
+            if _addr_result:
+                raw_address, _desc_addr_method = _addr_result
+                _desc_addr_method = "desc_" + _desc_addr_method
+                logger.debug(
+                    "[ingest] desc-address %s: %r (%s)",
+                    signal.source, raw_address, _desc_addr_method,
+                )
+
     # Parse posted_date from metadata or fall back to observed_at
     posted_date: datetime | None = None
     raw_date = meta.get("posted_date") or meta.get("date_posted")
@@ -200,6 +232,35 @@ def ingest_job_posting(
         normalized = normalize_name(raw_employer)
         fingerprint = make_fingerprint(raw_employer)
 
+        # ── 3b. Soft-dedupe ───────────────────────────────────────────────────
+        # Some sources (e.g. SerpAPI) sometimes include a platform job_id and
+        # sometimes omit it, producing two different external_ids for the same
+        # listing.  Before the primary (source, external_id) upsert, check
+        # whether an active record for this source + role + employer + region
+        # already exists under a different external_id.  If so, redirect the
+        # upsert to that canonical row — prevents double-counting on the map.
+        if signal.role_title and fingerprint:
+            _scraped_cutoff = datetime.utcnow() - timedelta(days=ttl_days)
+            _canonical = (
+                session.query(JobPosting.external_id)
+                .filter(
+                    JobPosting.source      == signal.source,
+                    JobPosting.role_title  == signal.role_title,
+                    JobPosting.fingerprint == fingerprint,
+                    JobPosting.region      == region,
+                    JobPosting.is_active   .is_(True),
+                    JobPosting.external_id != external_id,
+                    JobPosting.scraped_at  > _scraped_cutoff,
+                )
+                .first()
+            )
+            if _canonical:
+                logger.debug(
+                    "[ingest] soft-dedupe %s: %r → merging into canonical ext_id %s",
+                    signal.source, signal.role_title, _canonical.external_id[:20],
+                )
+                external_id = _canonical.external_id
+
         # ── 4. Geocode ────────────────────────────────────────────────────────
         lat, lng, geocode_src = _geocode_if_needed(posting_lat, posting_lng, raw_address)
 
@@ -219,7 +280,7 @@ def ingest_job_posting(
         # ── 8. Remote flag + address audit ────────────────────────────────────
         is_remote_raw = meta.get("is_remote")
         is_remote: bool | None = bool(is_remote_raw) if is_remote_raw is not None else None
-        address_method: str | None = meta.get("address_method") or None
+        address_method: str | None = meta.get("address_method") or _desc_addr_method or None
         job_excerpt: str | None = (meta.get("job_excerpt") or "")[:600] or None
 
         # ── 8b. Rich detail (JSONB) ───────────────────────────────────────────
