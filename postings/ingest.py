@@ -31,6 +31,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import text as _sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -133,7 +134,7 @@ def ingest_job_posting(
     region: str,
     session: Session | None = None,
     ttl_days: int = POSTING_TTL_DAYS,
-) -> "JobPosting | None":
+) -> "tuple[JobPosting | None, bool]":
     """Normalise and upsert one job-posting signal into the job_postings table.
 
     Args:
@@ -144,10 +145,12 @@ def ingest_job_posting(
         ttl_days: Override the default posting TTL.
 
     Returns:
-        The JobPosting ORM row, or None if the signal was skipped / invalid.
+        Tuple of (JobPosting ORM row or None, is_new bool).
+        None is returned when the signal was skipped / invalid.
+        is_new is True for fresh inserts, False for updates.
     """
     if signal.signal_type != "listing":
-        return None
+        return None, False
 
     meta: dict[str, Any] = signal.metadata or {}
 
@@ -160,7 +163,7 @@ def ingest_job_posting(
     )
     if not raw_employer:
         logger.debug("[ListingsIngest] No employer name in signal — skipping")
-        return None
+        return None, False
 
     if "address" in meta:
         raw_address = meta["address"]  # explicit None respected — prevents geocoder fallback to "location"
@@ -384,26 +387,63 @@ def ingest_job_posting(
                     } if referral_url else {}),
                 },
             )
-            .returning(JobPosting.id)
+            .returning(JobPosting.id, _sa_text("(xmax = 0)").label("is_new"))
         )
 
         result = session.execute(stmt)
         session.commit()
-        row_id = result.scalar()
+        row = result.fetchone()
+        row_id, is_new = row[0], bool(row[1])
 
         logger.debug(
             "[ListingsIngest] Upserted job_posting id=%s  %r → employer=%s (method=%s conf=%.2f)",
             row_id, normalized, local_employer_id, method, confidence,
         )
-        return session.get(JobPosting, row_id)
+        return session.get(JobPosting, row_id), is_new
 
     except Exception as exc:
         logger.error("[ListingsIngest] Failed to ingest posting for %r: %s", raw_employer, exc)
         session.rollback()
-        return None
+        return None, False
     finally:
         if _owns_session:
             session.close()
+
+
+def log_collector_run(
+    source: str,
+    fetched: int,
+    new: int,
+    updated: int,
+    skipped: int,
+    industry_key: str | None = None,
+    search_term: str | None = None,
+) -> None:
+    """Write a CollectorRun row for one scraper pull."""
+    from core.database import get_session, init_db, CollectorRun
+    from datetime import datetime
+
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        run = CollectorRun(
+            source=source,
+            industry_key=industry_key,
+            search_term=search_term,
+            fetched=fetched,
+            new=new,
+            updated=updated,
+            skipped=skipped,
+            run_at=datetime.utcnow(),
+        )
+        session.add(run)
+        session.commit()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("[CollectorRun] Failed to log run: %s", exc)
+        session.rollback()
+    finally:
+        session.close()
 
 
 # ── Expiry sweep ──────────────────────────────────────────────────────────────

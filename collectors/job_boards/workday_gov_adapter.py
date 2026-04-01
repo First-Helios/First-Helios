@@ -629,7 +629,7 @@ def scrape_austin_gov(region: str = "austin_tx") -> list[ScraperSignal]:
 
     ingested = 0
     for signal in signals:
-        result = ingest_job_posting(signal, region=region)
+        result, _ = ingest_job_posting(signal, region=region)
         if result:
             ingested += 1
 
@@ -699,7 +699,7 @@ if __name__ == "__main__":
         from postings.ingest import ingest_job_posting
         ingested = 0
         for signal in signals:
-            result = ingest_job_posting(signal, region=args.region)
+            result, _ = ingest_job_posting(signal, region=args.region)
             if result:
                 ingested += 1
         print(f"Ingested {ingested}/{len(signals)} job postings from {args.site}")

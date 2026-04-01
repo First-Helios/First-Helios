@@ -140,7 +140,7 @@ def contribute():
                 continue
 
             try:
-                result = ingest_job_posting(signal, region=region, session=session)
+                result, _ = ingest_job_posting(signal, region=region, session=session)
                 if result is not None:
                     accepted += 1
                 else:

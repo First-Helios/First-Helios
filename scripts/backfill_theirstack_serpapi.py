@@ -91,7 +91,7 @@ def backfill(dry_run: bool = False):
         for label, sigs in [("TheirStack", ts_signals), ("SerpAPI", sp_signals)]:
             ingested = 0
             for signal in sigs:
-                result = ingest_job_posting(signal, region, session=session)
+                result, _ = ingest_job_posting(signal, region, session=session)
                 if result is not None:
                     ingested += 1
             logger.info("[Backfill] %s: ingested %d/%d", label, ingested, len(sigs))

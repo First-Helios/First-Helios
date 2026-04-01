@@ -504,18 +504,37 @@ def scrape_theirstack(
     logger.info("[TheirStack] %d signals for region=%s", len(signals), region)
 
     if ingest and signals:
-        from postings.ingest import ingest_job_posting
+        from postings.ingest import ingest_job_posting, log_collector_run
         from core.database import get_session, init_db
 
         engine = init_db()
         session = get_session(engine)
         ingested = 0
+        new_count = 0
+        updated_count = 0
+        skipped_count = 0
         try:
             for signal in signals:
-                result = ingest_job_posting(signal, region, session=session)
-                if result is not None:
+                posting, is_new = ingest_job_posting(signal, region, session=session)
+                if posting is not None:
                     ingested += 1
-            logger.info("[TheirStack] Ingested %d/%d postings", ingested, len(signals))
+                    if is_new:
+                        new_count += 1
+                    else:
+                        updated_count += 1
+                else:
+                    skipped_count += 1
+            log_collector_run(
+                source=_SOURCE_KEY,
+                fetched=len(signals),
+                new=new_count,
+                updated=updated_count,
+                skipped=skipped_count,
+                industry_key=None,
+                search_term=None,
+            )
+            logger.info("[TheirStack] Ingested %d/%d (%d new, %d updated)",
+                        ingested, len(signals), new_count, updated_count)
         finally:
             session.close()
 

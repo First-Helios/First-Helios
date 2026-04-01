@@ -1046,6 +1046,21 @@ class RevelioLayoffs(Base):
         }
 
 
+class CollectorRun(Base):
+    """Tracks per-pull stats for rate-limited job board collectors."""
+    __tablename__ = "collector_runs"
+
+    id           = Column(Integer, primary_key=True)
+    source       = Column(String(64), nullable=False, index=True)
+    industry_key = Column(String(64), nullable=True)
+    search_term  = Column(String(512), nullable=True)
+    fetched      = Column(Integer, default=0)
+    new          = Column(Integer, default=0)
+    updated      = Column(Integer, default=0)
+    skipped      = Column(Integer, default=0)
+    run_at       = Column(DateTime, nullable=False, index=True)
+
+
 # ── Engine + Session factory ─────────────────────────────────────────────────
 
 def get_engine(db_path: Path | None = None):

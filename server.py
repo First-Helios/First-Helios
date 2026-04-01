@@ -935,6 +935,66 @@ def rate_budget_scalability():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route("/api/collector/runs")
+def collector_runs():
+    """Per-source, per-industry-key pull stats for tracking search term success."""
+    from core.database import CollectorRun
+    from sqlalchemy import func
+    from datetime import timedelta
+
+    source = request.args.get("source")
+    days   = max(1, request.args.get("days", 30, type=int))
+    limit  = min(500, request.args.get("limit", 100, type=int))
+
+    engine  = init_db()
+    session = get_session(engine)
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        q = session.query(
+            CollectorRun.source,
+            CollectorRun.industry_key,
+            CollectorRun.search_term,
+            func.count().label("runs"),
+            func.sum(CollectorRun.fetched).label("total_fetched"),
+            func.sum(CollectorRun.new).label("total_new"),
+            func.sum(CollectorRun.updated).label("total_updated"),
+            func.max(CollectorRun.run_at).label("last_run"),
+        ).filter(CollectorRun.run_at >= cutoff)
+
+        if source:
+            q = q.filter(CollectorRun.source == source)
+
+        rows = (
+            q.group_by(CollectorRun.source, CollectorRun.industry_key, CollectorRun.search_term)
+             .order_by(func.sum(CollectorRun.new).desc())
+             .limit(limit)
+             .all()
+        )
+
+        return jsonify({
+            "status": "ok",
+            "days":   days,
+            "rows": [
+                {
+                    "source":        r.source,
+                    "industry_key":  r.industry_key,
+                    "search_term":   r.search_term,
+                    "runs":          r.runs,
+                    "total_fetched": int(r.total_fetched or 0),
+                    "total_new":     int(r.total_new or 0),
+                    "total_updated": int(r.total_updated or 0),
+                    "last_run":      r.last_run.isoformat() if r.last_run else None,
+                }
+                for r in rows
+            ],
+        })
+    except Exception as exc:
+        logger.error("/api/collector/runs error: %s", exc)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+    finally:
+        session.close()
+
+
 # ── Career Pathfinder — Mobility API ─────────────────────────────────────────
 
 @app.route("/api/mobility/occupations")
