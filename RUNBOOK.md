@@ -88,6 +88,42 @@ python collector_main.py --job <job_id>
 python collector_main.py --list-jobs
 ```
 
+### Manual test pull (SSH into OPi first)
+
+```bash
+ssh orangepi@192.168.0.104
+cd ~/First-Helios && source .venv/bin/activate
+
+# Test a single job board
+python collector_main.py --job theirstack
+python collector_main.py --job serpapi_jobs
+python collector_main.py --job jobicy
+python collector_main.py --job activejobs
+python collector_main.py --job jobspy
+python collector_main.py --job usajobs
+python collector_main.py --job austin_gov
+
+# Fire all job board jobs at once
+python collector_main.py --run-now
+```
+
+Expected output per job: `✓ <job_id> finished in Xs` with a signal count in the log line above it.
+
+**Gate notes — these will skip without error:**
+- `jobicy` — hourly gate (skips if run < 60 min after last run; clear with `rm data/jobicy_cache.json`)
+- `activejobs` — 24-hour gate (clear stale cache with `rm data/rapidapi_activejobs_cache.json`)
+- `serpapi_jobs` — no gate, rotates industry on each run
+- `theirstack` — no gate, but API times out occasionally; retry is safe
+
+**If a job returns 0 signals unexpectedly:**
+```bash
+# Check rate budget
+curl http://localhost:8765/api/rate-budget | python3 -m json.tool
+
+# Tail scheduler logs
+sudo journalctl -u helios-collector -n 50
+```
+
 ---
 
 ## Scheduler Jobs
