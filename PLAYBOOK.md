@@ -1,46 +1,142 @@
-# PLAYBOOK — First Helios
+# First-Helios Developer Playbook
 
-Development workflows, conventions, and design decisions. Read this before adding new scrapers, map modes, or API endpoints.
+## Overview
 
----
+First-Helios is a labor market intelligence platform for the Austin, TX MSA. It collects data from job boards, labor statistics APIs, employer databases, and sentiment sources, normalizes it, and surfaces it through a map-based frontend.
 
-## Contents
-
-1. [Architecture in One Page](#architecture-in-one-page)
-2. [Adding a New Scraper](#adding-a-new-scraper)
-3. [Adding a New Job Posting Source](#adding-a-new-job-posting-source)
-4. [Adding a New API Endpoint](#adding-a-new-api-endpoint)
-5. [Adding a New Map Mode](#adding-a-new-map-mode)
-6. [Frontend Conventions](#frontend-conventions)
-7. [Database Conventions](#database-conventions)
-8. [Rate Manager Protocol](#rate-manager-protocol)
-9. [Scheduler Conventions](#scheduler-conventions)
-10. [Testing](#testing)
-11. [Code Style](#code-style)
+The stack is:
+- **Backend:** Flask (`server.py`), served by Gunicorn on an OPi5
+- **Scheduler:** APScheduler via `collector_main.py` (runs separately from the web server)
+- **Database:** PostgreSQL (`helios` DB on localhost:5432, connection via `DATABASE_URL` in `.env`)
+- **Frontend:** Plain HTML/CSS/JS — no build step, no npm
 
 ---
 
-## Architecture in One Page
+## Repository Layout
 
 ```
-Scrapers → ScraperSignal → backend/ingest.py → signals / scores / wage_index
-                                             ↘
-        → JobPosting    → listings/ingest.py → job_postings
-                                             ↘
-Overture POI            → ingest_layer.py   → local_employers / brand_groups
-
-All employer data: single write path through ingest_layer.py
-All job postings:  single write path through listings/ingest.py
-
-server.py exposes Flask API
-frontend/ is a static SPA — no build step, plain JS + Leaflet
+server.py                    Flask app (port 8765)
+collector_main.py            Standalone scheduler entry point
+collectors/
+  base.py                    BaseScraper, ScraperSignal dataclass
+  cache.py                   File cache utilities
+  geocoding.py               Nominatim + facility index overrides
+  rotation.py                Industry tag rotation for multi-query scrapers
+  job_boards/                jobspy, jobicy, serpapi, usajobs, workday_gov,
+                             activejobs, juju, theirstack adapters
+  labor_data/                bls, qcew, cbp, nlrb, warn adapters
+  employer_data/             overture, alltheplaces, osm adapters
+  sentiment/                 reddit, reviews adapters
+core/
+  database.py                SQLAlchemy models (26+ tables), init, get_engine, get_session
+  ingest.py                  ScraperSignal → signals/scores tables
+  ingest_layer.py            Employer write path (normalize → fingerprint → upsert)
+  normalizer.py              Zero-DB normalization upstream of ingest_layer
+  scheduler.py               APScheduler job definitions (22 scheduled jobs)
+  rate_manager.py            Centralized API rate tracking
+  baseline.py                Labor market baseline computation
+  targeting.py               Targeting score computation
+  scoring/                   engine.py, careers.py, sentiment.py, wage.py
+  models/                    Reference + mobility graph models
+postings/
+  models.py                  JobPosting SQLAlchemy model
+  ingest.py                  Job posting write path (normalize → geocode → H3 → match → upsert)
+  matcher.py                 Match posting to LocalEmployer by fingerprint + proximity
+  config.py                  TTL, proximity threshold, match confidence settings
+config/
+  loader.py                  Config loading utilities
+  scheduler.yaml             Scheduled job intervals + enabled flags
+  search_rotation.yaml       20 industry rotation entries for multi-query scrapers
+scripts/                     One-time data population scripts
+dev/                         opi5_setup.sh, update.sh, sync_from_opi.sh
+frontend/
+  index.html
+  css/style.css
+  js/                        app.js, jobfinder.js, and per-mode modules
 ```
 
-**Key invariants:**
-- Never write directly to `local_employers` or `brand_groups` — always go through `backend/ingest_layer.py`
-- Never write directly to `job_postings` — always go through `listings/ingest.py`
-- Never call external APIs without going through `rate_manager.can_request()` + `rate_manager.log_request()`
-- All coordinates produce H3 cells at ingest time — never compute H3 at query time
+---
+
+## The Two Write Paths
+
+These are the only sanctioned paths for writing employer and posting records. Never insert directly into the underlying tables.
+
+### 1. Employer records
+
+```
+core/ingest_layer.py:ingest_employer(signal, region)
+```
+
+Pipeline: normalize → fingerprint → upsert `brand_groups` → upsert `local_employers`
+
+Call this from any adapter that collects employer/facility data (overture, alltheplaces, osm, etc.).
+
+### 2. Job postings
+
+```
+postings/ingest.py:ingest_job_posting(signal, region)
+```
+
+Pipeline: normalize → geocode → compute H3 → match to LocalEmployer → upsert `job_postings`
+
+Required fields on the `ScraperSignal`:
+
+| Field | Notes |
+|---|---|
+| `signal_type` | Must be `"listing"` |
+| `company` | Employer name string |
+| `address` | Street address (used for geocoding) |
+| `is_remote` | Boolean |
+| `posted_date` | datetime |
+| `external_path` or `job_url` | Source URL |
+
+Dedup key: `(source, external_id)` — unique constraint enforced in DB.
+
+Unmatched postings have `local_employer_id=NULL`. Fully remote postings have `h3_r7=NULL`. Both are valid states.
+
+---
+
+## Rate Manager Protocol
+
+Every external HTTP request must be gated through `core/rate_manager.py`.
+
+```python
+from core.rate_manager import rate_manager
+
+if not rate_manager.can_request(source_key):
+    return []
+
+try:
+    response = requests.get(url, ...)
+    rate_manager.log_request(source_key, success=True)
+except Exception as e:
+    rate_manager.log_request(source_key, success=False)
+    raise
+```
+
+`log_request()` must be called even on failure. New sources must be registered in `API_SOURCE_REGISTRY` inside `core/rate_manager.py`.
+
+---
+
+## Industry Rotation
+
+`serpapi_jobs` and `jobicy` rotate through `config/search_rotation.yaml` (20 industry entries). Each entry has:
+
+```yaml
+- key: healthcare
+  serpapi_query: "healthcare jobs Austin TX"
+  jobicy_tag: healthcare
+```
+
+In your adapter:
+
+```python
+from collectors.rotation import next_entry
+
+entry = next_entry(source_key, industries)
+```
+
+This advances the rotation slot and returns the next entry. State is file-persisted so it survives restarts.
 
 ---
 
@@ -48,29 +144,28 @@ frontend/ is a static SPA — no build step, plain JS + Leaflet
 
 ### 1. Create the adapter file
 
-Place in `scrapers/your_source_adapter.py`. Extend `BaseScraper` or write a standalone function — both patterns exist:
+Place at `collectors/<subcategory>/<source>_adapter.py`.
+
+Subcategories: `job_boards`, `labor_data`, `employer_data`, `sentiment`
 
 ```python
-# scrapers/example_adapter.py
-from scrapers.base import BaseScraper, ScraperSignal
-from backend.rate_manager import rate_manager
-import time, requests, logging
+from collectors.base import BaseScraper, ScraperSignal
+from core.rate_manager import rate_manager
+import logging, requests, time
 
 logger = logging.getLogger(__name__)
-SOURCE_KEY = "example_api"   # must match an entry in rate_manager.API_SOURCE_REGISTRY
+SOURCE_KEY = "mysource"
 
-
-class ExampleAdapter(BaseScraper):
+class MySourceAdapter(BaseScraper):
     def scrape(self, region: str) -> list[ScraperSignal]:
         if not rate_manager.can_request(SOURCE_KEY):
-            logger.warning("[Example] Daily budget exhausted")
+            logger.warning("[MySource] Daily budget exhausted")
             return []
 
         t0 = time.time()
         try:
-            resp = requests.get("https://example.com/api/data", timeout=10)
+            resp = requests.get("https://api.example.com/data", timeout=10)
             resp.raise_for_status()
-            data = resp.json()
             rate_manager.log_request(
                 source_key=SOURCE_KEY,
                 request_type="data_fetch",
@@ -78,273 +173,198 @@ class ExampleAdapter(BaseScraper):
                 status_code=resp.status_code,
                 success=True,
                 latency_ms=int((time.time() - t0) * 1000),
-                data_items=len(data.get("items", [])),
+                data_items=len(resp.json().get("items", [])),
             )
-            return self._parse(data, region)
+            return self._parse(resp.json(), region)
         except Exception as exc:
             rate_manager.log_request(
                 source_key=SOURCE_KEY, request_type="data_fetch",
                 success=False, error_message=str(exc),
                 latency_ms=int((time.time() - t0) * 1000),
             )
-            logger.error("[Example] Fetch failed: %s", exc)
+            logger.error("[MySource] Fetch failed: %s", exc)
             return []
-
-    def _parse(self, data, region) -> list[ScraperSignal]:
-        signals = []
-        for item in data.get("items", []):
-            signals.append(ScraperSignal(
-                source="example_api",
-                signal_type="stress",     # or "listing", "sentiment", "review"
-                chain=item.get("brand"),
-                region=region,
-                # ... other fields
-            ))
-        return signals
 ```
 
-### 2. Register the source in rate_manager
+### 2. Register the source
 
-Add an entry to `API_SOURCE_REGISTRY` in `backend/rate_manager.py`:
+Add an entry to `API_SOURCE_REGISTRY` in `core/rate_manager.py`:
 
 ```python
 {
-    "source_key": "example_api",
-    "display_name": "Example Data API",
-    "base_url": "https://example.com/api/",
-    "auth_type": "none",          # "none" | "api_key" | "oauth" | "browser"
-    "daily_limit": 1000,          # hard cap; use 10000 for uncapped sources
+    "source_key": "mysource",
+    "display_name": "My Source",
+    "base_url": "https://api.example.com/",
+    "auth_type": "api_key",
+    "daily_limit": 500,
     "min_delay_seconds": 1.0,
     "reset_hour_utc": 0,
-    "notes": "Brief description of rate limits and data source.",
 },
 ```
 
-The registry is seeded into `api_sources` table on server startup. The `daily_limit` is authoritative for `can_request()` checks.
+### 3. Wire up signal routing
 
-### 3. Wire into the scheduler
+- Labor/scoring data → `core.ingest.ingest_signals(signals, region)`
+- Employer records → `core.ingest_layer.ingest_employer(signal, region)`
+- Job postings → `postings.ingest.ingest_job_posting(signal, region="austin_tx")`
 
-Add a job function and `scheduler.add_job()` call in `backend/scheduler.py` — see existing jobs for the pattern. Add a cron entry to `config/scheduler.yaml` with `enabled: true`, `trigger: cron`, and a `cron:` block. The scheduler reads this file at startup; hardcoded defaults in `add_job()` are only used if your key is absent.
+### 4. Add a scheduler job
 
-### 4. Ingest the signals
+In `core/scheduler.py`:
 
-Call `backend.ingest.ingest_signals(signals, region)` — this normalizes and stores to `signals` table and optionally triggers score recompute.
+```python
+def _run_mysource() -> None:
+    try:
+        from collectors.job_boards.mysource_adapter import MySourceAdapter
+        logger.info("[Scheduler] Running MySource fetch")
+        signals = MySourceAdapter().scrape("austin_tx")
+        logger.info("[Scheduler] MySource: %d signals", len(signals))
+    except Exception as e:
+        logger.error("[Scheduler] MySource job failed: %s", e)
+```
+
+Then wire it with `scheduler.add_job(_run_mysource, ...)` and add a YAML entry in `config/scheduler.yaml`:
+
+```yaml
+mysource:
+  enabled: true
+  trigger: cron
+  cron:
+    hour: 10
+    minute: 0
+```
 
 ---
 
-## Adding a New Job Posting Source
+## Adding a Flask Endpoint
 
-Job posting sources write to `job_postings` via `listings/ingest.py`, not the `signals` table.
-
-### 1. Produce `ScraperSignal` with `signal_type = "listing"`
-
-Required metadata keys:
-```python
-ScraperSignal(
-    source="your_source",
-    signal_type="listing",
-    source_url="https://...",          # direct apply link
-    role_title="Software Engineer",
-    wage_min=80000.0,
-    wage_max=120000.0,
-    wage_period="yearly",              # "hourly" | "yearly"
-    metadata={
-        "company": "Acme Corp",        # raw employer name
-        "address": "123 Main St, Austin TX",  # or None for remote
-        "lat": 30.2672,                # optional; skips geocoding if provided
-        "lng": -97.7431,
-        "is_remote": False,            # True | False | None
-        "posted_date": "2026-03-01",
-        "external_path": "unique-id-from-source",  # or "job_url" for JobSpy
-    },
-)
-```
-
-### 2. Call `ingest_job_posting`
+All routes live in `server.py`. Pattern:
 
 ```python
-from listings.ingest import ingest_job_posting
-for signal in signals:
-    ingest_job_posting(signal, region="austin_tx")
-```
-
-`ingest_job_posting` handles: normalization → geocoding → H3 cells → employer matching → upsert.
-
-### 3. Dedup key
-
-The unique constraint is `(source, external_id)`. `external_id` is derived automatically in `listings/ingest.py`:
-- `careers_api` source → uses `metadata["external_path"]`
-- `jobspy` source → uses `metadata["job_url"]` (hashed if > 255 chars)
-- All others → content hash of employer + title + address + date
-
-### 4. File cache pattern (for rate-limited feeds)
-
-If the source publishes a feed you should not poll more than once per hour, use the Jobicy pattern: write a `_read_cache()` / `_write_cache()` pair that reads/writes `data/<source>_cache.json` with a `fetched_at` timestamp. Check the cache at the top of `scrape()` before any rate-manager logic.
-
----
-
-## Adding a New API Endpoint
-
-All routes live in `server.py`. The file is organized into sections by feature area. Add your route in the appropriate section, or create a new section with a comment header.
-
-Pattern for a new GET endpoint:
-
-```python
-@app.route('/api/your-endpoint')
-def your_endpoint():
+@app.route('/api/my-endpoint')
+def my_endpoint():
     region = request.args.get('region', 'austin_tx')
     limit  = min(int(request.args.get('limit', 50)), 200)
 
+    session = get_session()
     try:
-        session = get_session()
-        try:
-            results = session.query(YourModel).filter(
-                YourModel.region == region,
-                YourModel.is_active.is_(True),
-            ).limit(limit).all()
-
-            return jsonify({
-                "status": "ok",
-                "count": len(results),
-                "items": [r.to_dict() for r in results],
-            })
-        finally:
-            session.close()
+        results = session.execute(
+            text("SELECT ... FROM ... WHERE region = :region LIMIT :limit"),
+            {"region": region, "limit": limit}
+        ).fetchall()
+        return jsonify({"status": "ok", "count": len(results), "items": [dict(r) for r in results]})
     except Exception as exc:
-        logger.error("/api/your-endpoint error: %s", exc)
+        logger.error("/api/my-endpoint error: %s", exc)
         return jsonify({"status": "error", "message": str(exc)}), 500
+    finally:
+        session.close()
 ```
 
-Conventions:
-- Always return `{"status": "ok", ...}` on success
-- Always return `{"status": "error", "message": "..."}` with an appropriate HTTP status on failure
-- Cap `limit` at a sensible maximum (50–200 depending on endpoint)
-- Accept `region` as a query param for all region-scoped endpoints
-- Document the endpoint in the API tables in README.md and RUNBOOK.md
+Always return `{"status": "ok", ...}` on success and `{"status": "error", "message": "..."}` with an HTTP error code on failure.
 
 ---
 
-## Adding a New Map Mode
+## Adding a Map Mode (Frontend)
 
-### Backend
-1. Add API endpoints needed by the new mode (see above)
-2. If new H3 aggregation is needed, use the same pattern as `/api/jobs/h3-map` or `/api/map-employers`
-
-### Frontend (4 files to touch)
+### Four files to touch
 
 **`frontend/index.html`**
-- Add a `<button id="mode-<name>" class="mode-btn">` in `#mode-switcher`
-- Add a `<div id="<name>-controls" class="controls-group" style="display:none">` with filter inputs
-- Add a `<div id="<name>-sidebar" class="sidebar" style="display:none">` in `#right-panel`
-- If the mode has its own map legend, add a `<div id="map-legend-<name>">` in `#map-wrap`
+- Add `<button id="mode-<name>" class="mode-btn">` in `#mode-switcher`
+- Add `<div id="<name>-controls" class="controls-group" style="display:none">` for filters
+- Add `<div id="<name>-sidebar" class="sidebar" style="display:none">` in `#right-panel`
 - Add `<script src="js/<name>.js">` before `app.js`
 
-**`frontend/js/<name>.js`**
-- Wrap everything in `(function() { 'use strict'; })();`
-- Use `window.sharedMap` to access the Leaflet map instance
-- Expose a `window.<name>` object with at minimum: `refresh()`, `clear()`, `onZoom()`
-- Handle panel switching internally (show/hide sub-panels)
+**`frontend/js/<name>.js`** — IIFE module:
 
-**`frontend/js/app.js`**
-- Add `isName = mode === '<name>'` to `switchMode()`
-- Toggle controls, sidebar, and legend visibility for the new mode
-- Add `document.getElementById('mode-<name>').classList.toggle('active', isName)`
-- Handle the mode's entry logic: clear other layers, call your module's `refresh()`
-- Add event listeners for any mode-specific filters
-- Add `window.jobfinder.onZoom()` pattern to `map.on('zoomend')` if needed
+```javascript
+(function () {
+    'use strict';
 
-**`frontend/css/style.css`**
-- Add styles for any new card/badge types
-- Follow the existing card pattern: `.your-card`, `.your-card:hover`
-- Active mode button colors: use the mode's accent color as `.mode-btn.active` background
-- Color palette: amber `#f0a500` (brands/stress), purple `#6c5ce7` (local), teal `#4ecca3` (jobs), blue `#4a9eff` (links)
+    var _layer = null;
+
+    function refresh() { ... }
+    function clear() { ... }
+    function onZoom() { ... }
+
+    window.myMode = { refresh: refresh, clear: clear, onZoom: onZoom };
+})();
+```
+
+**`frontend/js/app.js`** — add to `switchMode()`:
+- Toggle controls/sidebar visibility
+- Call `window.myMode.refresh()` on enter
+- Call `window.myMode.clear()` on exit
+- Add `map.on('zoomend')` handler if needed
+
+**`frontend/css/style.css`** — follow the existing card pattern.
 
 ---
 
 ## Frontend Conventions
 
-**No build step.** Plain HTML/CSS/JS. No TypeScript, no bundler, no npm. Scripts are loaded with `<script>` tags in `index.html`.
+- **No build step** — plain HTML/CSS/JS, no npm, no bundler
+- **`var` not `let`/`const`** — codebase convention, stay consistent
+- **Function declarations**, not arrow functions
+- **`_privateName`** prefix for module-private functions/variables
+- **No `console.log`** in committed code
+- **Shared map:** `window.sharedMap` — created in `app.js`, accessed by all modules
+- **HTML escaping:** always use `_esc()` when inserting API data into `innerHTML`
 
-**Module pattern.** Each JS file wraps its code in an IIFE:
-```javascript
-(function () {
-    'use strict';
-    // ... private state and functions ...
-    window.moduleName = { refresh, clear, onZoom }; // public API
-})();
-```
+**H3 resolution by layer:**
+- `job_postings`: `h3_r7`, `h3_r8` only — clamp jobfinder resolution to `{7, 8}`
+- `local_employers`: `h3_r6` through `h3_r9`
 
-**Shared Leaflet instance.** `app.js` creates the map and exposes it as `window.sharedMap`. All other modules read `window.sharedMap` — they do not create their own maps.
+**Color palette:**
 
-**HTML escaping.** When building HTML strings with user/API data, always use an `_esc()` function (see `jobfinder.js` for the pattern). Never interpolate raw API values directly into `innerHTML`.
-
-**No frameworks.** DOM manipulation is plain `document.createElement()` + `element.className` + `element.innerHTML`. Keep it simple.
-
-**H3 resolution clamping.** `job_postings` only has `h3_r7` and `h3_r8` — clamp all jobfinder hex requests to `resolution ∈ {7, 8}`. `local_employers` / `chain_locations` support r6–r9.
+| Use | Color |
+|---|---|
+| Brands / stress | `#f0a500` amber |
+| Local employers | `#6c5ce7` purple |
+| Job postings | `#4ecca3` teal |
+| Links | `#4a9eff` blue |
 
 ---
 
 ## Database Conventions
 
-**Two write paths; use them:**
-- Employer records → `backend/ingest_layer.py:ingest_employer()`
-- Job postings → `listings/ingest.py:ingest_job_posting()`
+**Session management** — always close in `finally`:
 
-**H3 cells are pre-computed at ingest.** Never call `h3.latlng_to_cell()` in a query. The `h3_r6`/`h3_r7`/`h3_r8`/`h3_r9` columns on `local_employers` and `h3_r7`/`h3_r8` on `job_postings` are always set at write time.
+```python
+session = get_session()
+try:
+    ...
+finally:
+    session.close()
+```
 
-**Upsert, don't insert-then-check.** Use `INSERT ... ON CONFLICT DO UPDATE` (PostgreSQL `pg_insert`) everywhere. The unique constraints are the dedup keys.
+**Upsert everywhere** — `INSERT ... ON CONFLICT DO UPDATE`, never check-then-insert.
 
-**Fingerprinting.** `backend/normalizer.make_fingerprint()` produces a stable lowercase slug from an employer name (strips punctuation, normalizes whitespace). It's the primary dedup key before proximity matching.
+**H3 cells** — pre-computed at ingest, never at query time. Never call `h3.latlng_to_cell()` outside the ingest pipeline.
 
-**NULL is a valid state.** `local_employer_id = NULL` on a job posting means "unmatched" — it's expected, not an error. `h3_r7 = NULL` on a job posting means "fully remote, no location" — also expected.
+**Fingerprinting** — use `core.normalizer.make_fingerprint()`. Stable lowercase slug derived from employer name. The primary dedup key across `brand_groups` and the matching key between postings and employers.
 
-**Adding columns.** Add to the SQLAlchemy model in `backend/database.py` (or `listings/models.py`). The server calls `Base.metadata.create_all()` on startup — new columns on existing tables need a manual `ALTER TABLE` or a migration script.
+**NULL is valid:**
+- `local_employer_id=NULL` on a posting → unmatched (not an error)
+- `h3_r7=NULL` on a posting → fully remote (not an error)
 
----
+**Schema changes** — `create_all()` does not add columns to existing tables. Write an explicit `ALTER TABLE` or a migration script in `scripts/`.
 
-## Rate Manager Protocol
-
-Before any external HTTP request:
-1. Call `rate_manager.can_request(source_key)` — returns `False` if daily budget is exhausted
-2. Make the request
-3. Call `rate_manager.log_request(...)` with success/fail status, latency, and data yield
-
-Never skip step 3, even on failure. Failed requests still count against the budget and are valuable for debugging success rates.
-
-If a source has a **minimum delay** (e.g., Nominatim requires ≥1 sec between requests), enforce it in the adapter — the rate manager does not sleep for you.
-
-If a source has a **per-session rate gate** beyond just daily limits (e.g., Jobicy's hourly restriction), enforce it in the adapter with a file-based or database-backed timestamp check before calling `can_request()`.
-
----
-
-## Scheduler Conventions
-
-- All scheduler job functions live in `backend/scheduler.py`
-- Name format: `_run_<source_name>()` (private, prefixed with underscore)
-- Each job function wraps its body in `try/except Exception as e: logger.error(...)`
-- Jobs that update scores call `compute_all_scores(region)` at the end
-- Jobs that are rarely useful (QCEW, CBP) have built-in month-guard `if current_month not in active_months: return`
-- Schedule config comes from `config/scheduler.yaml` — each top-level key is a job ID with `enabled`, `trigger`, and `cron`/`interval_hours` fields. Always add a hardcoded fallback default in `add_job()` in case the key is absent from the YAML
-- Check `GET /api/scheduler/status` after adding a new job to confirm it's registered
+**ORM vs raw SQL** — use ORM for simple lookups; `text()` or raw SQL for complex aggregations.
 
 ---
 
 ## Testing
 
-Tests live in `tests/`. Run with:
 ```bash
 pytest tests/
 ```
 
-Current test coverage focuses on:
-- `tests/test_ingest_layer.py` — employer normalization + fingerprinting
-- `tests/test_listings_ingest.py` — job posting ingest pipeline
-- `tests/test_scorer.py` — scoring engine output ranges
+Key test files:
+- `tests/test_ingest_layer.py` — employer write path
+- `tests/test_listings_ingest.py` — job posting write path (postings layer)
+- `tests/test_scorer.py` — scoring engine
 
-When adding a new scraper:
-- Write a test that parses a fixture response (save a sample API response to `tests/fixtures/`)
-- Test that required fields (`source`, `external_id`, `raw_employer_name`) are always populated
-- Do not mock the database in integration tests — use a real test DB or an in-memory SQLite for unit tests
+Use a real test DB or in-memory SQLite. Do not mock the database in integration tests. Fixture responses live in `tests/fixtures/`.
 
 ---
 
@@ -352,22 +372,28 @@ When adding a new scraper:
 
 **Python:**
 - Type hints on all function signatures
-- Docstrings on public functions (one-liner for simple helpers, full Args/Returns for complex ones)
-- `logger = logging.getLogger(__name__)` at module level; use `logger.info/warning/error` not `print`
-- `[ClassName]` prefix in log messages for easy grep: `logger.info("[Scheduler] Running JobSpy")`
+- `logger = logging.getLogger(__name__)` at module level
+- `[ClassName]` prefix in all log messages: `logger.info("[MySource] fetched %d signals", n)`
+- Docstrings on public functions
 
 **JavaScript:**
-- `var` not `let/const` — the codebase predates ES6 adoption for compatibility
+- `var` not `let`/`const`
 - Function declarations not arrow functions
-- `_privateName` prefix for module-private functions/variables
-- No console.log in committed code — use `console.warn` or `console.error` only
-
-**SQL (via SQLAlchemy):**
-- Use ORM queries for simple lookups
-- Use `text()` or raw SQL only for complex aggregations that would be unreadable in ORM
-- Always close sessions in `finally` blocks
+- `_privateName` prefix for private scope
+- No `console.log` in committed code
 
 **File naming:**
-- Scrapers: `<source>_adapter.py`
+- Collectors: `<source>_adapter.py`
 - Frontend JS modules: `<mode>.js`
-- Backend modules: `<function>.py` (no suffix)
+
+---
+
+## Key Invariants — Never Violate These
+
+1. All employer writes go through `core/ingest_layer.py:ingest_employer()`
+2. All job posting writes go through `postings/ingest.py:ingest_job_posting()`
+3. All external HTTP requests must call `rate_manager.can_request()` before and `rate_manager.log_request()` after (even on failure)
+4. H3 cells are computed at ingest — never at query time
+5. Fingerprints come from `core.normalizer.make_fingerprint()` — never roll your own slug
+6. Scheduler jobs wrap their body in `try/except Exception` — uncaught exceptions silently kill the job
+7. Jobs that update scores must call `compute_all_scores(region)` at the end of the job function
