@@ -194,10 +194,13 @@
             ? '<div class="job-title">' + _esc(job.role_title) + '</div>'
             : '';
 
-        // Wage: prefer parsed wage, fall back to raw pay range text
+        // Wage: show both hourly and yearly; fall back to raw pay range text
         var wage = '';
-        if (job.wage) {
-            wage = '<div class="job-wage">' + _esc(job.wage) + '</div>';
+        if (job.wage || job.wage_yr) {
+            var wageParts = [];
+            if (job.wage) wageParts.push(_esc(job.wage));
+            if (job.wage_yr) wageParts.push('<span class="job-wage-alt">' + _esc(job.wage_yr) + '</span>');
+            wage = '<div class="job-wage">' + wageParts.join(' <span class="job-wage-sep">·</span> ') + '</div>';
         } else if (d.pay_range_raw) {
             wage = '<div class="job-wage">' + _esc(d.pay_range_raw) + '</div>';
         }

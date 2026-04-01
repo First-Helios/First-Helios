@@ -691,6 +691,14 @@ body {
     color: #f0a500;
     margin-top: 2px;
 }
+.job-wage-alt {
+    color: #b07800;
+    font-size: 0.74rem;
+}
+.job-wage-sep {
+    color: #555;
+    font-size: 0.7rem;
+}
 
 .job-meta {
     font-size: 0.72rem;

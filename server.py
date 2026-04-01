@@ -1500,35 +1500,65 @@ def jobs_listings():
                 _deduped.append(jp)
         postings = _deduped
 
-        def _wage(jp):
-            if not jp.wage_min and not jp.wage_max:
-                return None
-            period = jp.wage_period or "hourly"
-            if period == "yearly":
-                lo = f"${int(jp.wage_min / 1000)}k" if jp.wage_min else None
-                hi = f"${int(jp.wage_max / 1000)}k" if jp.wage_max else None
-                suffix = "/yr"
-            elif period == "monthly":
-                lo = f"${jp.wage_min:,.0f}" if jp.wage_min else None
-                hi = f"${jp.wage_max:,.0f}" if jp.wage_max else None
-                suffix = "/mo"
-            elif period == "weekly":
-                lo = f"${jp.wage_min:,.0f}" if jp.wage_min else None
-                hi = f"${jp.wage_max:,.0f}" if jp.wage_max else None
-                suffix = "/wk"
-            else:  # hourly
-                lo = f"${jp.wage_min:.2f}" if jp.wage_min else None
-                hi = f"${jp.wage_max:.2f}" if jp.wage_max else None
-                suffix = "/hr"
-            return "\u2013".join(filter(None, [lo, hi])) + suffix
+        def _wage_both(jp):
+            """Return (primary_str, alt_str) showing both hourly and yearly.
 
-        jobs = [
-            {
+            primary is in the source period; alt is the conversion.
+            Both are None when no wage data exists.
+            """
+            if not jp.wage_min and not jp.wage_max:
+                return None, None
+            period = jp.wage_period or "hourly"
+
+            lo_raw = jp.wage_min or 0.0
+            hi_raw = jp.wage_max or 0.0
+
+            if period == "yearly":
+                lo_yr = lo_raw if jp.wage_min else None
+                hi_yr = hi_raw if jp.wage_max else None
+                lo_hr = round(lo_raw / 2080, 2) if jp.wage_min else None
+                hi_hr = round(hi_raw / 2080, 2) if jp.wage_max else None
+            elif period == "monthly":
+                lo_yr = lo_raw * 12 if jp.wage_min else None
+                hi_yr = hi_raw * 12 if jp.wage_max else None
+                lo_hr = round((lo_raw * 12) / 2080, 2) if jp.wage_min else None
+                hi_hr = round((hi_raw * 12) / 2080, 2) if jp.wage_max else None
+            elif period == "weekly":
+                lo_yr = lo_raw * 52 if jp.wage_min else None
+                hi_yr = hi_raw * 52 if jp.wage_max else None
+                lo_hr = round((lo_raw * 52) / 2080, 2) if jp.wage_min else None
+                hi_hr = round((hi_raw * 52) / 2080, 2) if jp.wage_max else None
+            else:  # hourly
+                lo_hr = lo_raw if jp.wage_min else None
+                hi_hr = hi_raw if jp.wage_max else None
+                lo_yr = round(lo_raw * 2080) if jp.wage_min else None
+                hi_yr = round(hi_raw * 2080) if jp.wage_max else None
+
+            def _fmt_hr(lo, hi):
+                parts = []
+                if lo: parts.append(f"${lo:.2f}")
+                if hi: parts.append(f"${hi:.2f}")
+                return "\u2013".join(parts) + "/hr" if parts else None
+
+            def _fmt_yr(lo, hi):
+                parts = []
+                if lo: parts.append(f"${int(lo / 1000)}k" if lo >= 1000 else f"${int(lo)}")
+                if hi: parts.append(f"${int(hi / 1000)}k" if hi >= 1000 else f"${int(hi)}")
+                return "\u2013".join(parts) + "/yr" if parts else None
+
+            hr_str = _fmt_hr(lo_hr, hi_hr)
+            yr_str = _fmt_yr(lo_yr, hi_yr)
+            return hr_str, yr_str
+
+        def _build_job(jp):
+            hr_str, yr_str = _wage_both(jp)
+            return {
                 "id":          jp.id,
                 "employer":    jp.raw_employer_name,
                 "role_title":  jp.role_title,
                 "industry":    jp.industry,
-                "wage":        _wage(jp),
+                "wage":        hr_str,
+                "wage_yr":     yr_str,
                 "is_remote":   jp.is_remote,
                 "raw_address": jp.raw_address,
                 "source_url":  jp.source_url,
@@ -1540,8 +1570,8 @@ def jobs_listings():
                 "h3_r7":       jp.h3_r7,
                 "h3_r8":       jp.h3_r8,
             }
-            for jp in postings
-        ]
+
+        jobs = [_build_job(jp) for jp in postings]
 
         return jsonify({
             "status": "ok",
