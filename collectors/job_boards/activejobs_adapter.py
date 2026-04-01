@@ -381,16 +381,12 @@ class ActiveJobsAdapter(BaseScraper):
             pre_filter_count, len(austin_jobs), successful_endpoint,
         )
 
-        # If the Austin filter yields nothing (e.g. the API doesn't return location
-        # data), fall back to the full set so we don't silently return empty results.
         if not austin_jobs and pre_filter_count > 0:
             logger.warning(
-                "[ActiveJobs] Austin filter removed all jobs — "
-                "falling back to full result set (%d jobs). "
-                "Check whether the API is returning location fields.",
+                "[ActiveJobs] Austin filter removed all %d jobs — "
+                "returning empty. Check whether the API is returning location fields.",
                 pre_filter_count,
             )
-            austin_jobs = [j for j in jobs if isinstance(j, dict)]
 
         write_cache(_SOURCE_KEY, austin_jobs)
         return self._jobs_to_signals(austin_jobs, region)

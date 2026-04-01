@@ -1488,6 +1488,18 @@ def jobs_listings():
              .all()
         )
 
+        # Cap per (source, fingerprint) so one employer+source can't flood a page.
+        # Keeps the N most-recent postings per group; others are pushed to later pages.
+        _MAX_PER_GROUP = 5
+        _grp: dict[tuple, int] = {}
+        _deduped = []
+        for jp in postings:
+            _k = (jp.source, jp.fingerprint or jp.raw_employer_name)
+            _grp[_k] = _grp.get(_k, 0) + 1
+            if _grp[_k] <= _MAX_PER_GROUP:
+                _deduped.append(jp)
+        postings = _deduped
+
         def _wage(jp):
             if not jp.wage_min and not jp.wage_max:
                 return None
