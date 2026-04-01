@@ -5,9 +5,15 @@
  * Sidebar: paginated job cards for remote jobs (default) or a clicked hex cell.
  *
  * Location mode toggle (controlled by app.js via jobfinder.refresh):
- *   local  — hex layer only; clicking a hex loads on-site job listings
+ *   local  — hex layer + sidebar list of local jobs; clicking hex zooms to cell
  *   remote — sidebar list of remote jobs; no hex layer
- *   all    — hex layer (jobs with coords) + remote sidebar list
+ *   all    — hex layer (jobs with coords) + sidebar list of all jobs
+ *
+ * Resolution override (controlled by app.js via jobfinder.setResolution):
+ *   auto   — resolution tracks zoom level (default)
+ *   8      — Small hexes (r8)
+ *   7      — Med hexes (r7)
+ *   6      — Large hexes (r6, aggregated from r7 server-side)
  *
  * Exposes window.jobfinder for app.js integration.
  */
@@ -16,14 +22,22 @@
     'use strict';
 
     // ── Internal state ────────────────────────────────────────────────────────
-    var _state = { region: 'austin_tx', category: '', mode: 'remote' };
+    var _state = { region: 'austin_tx', category: '', mode: 'remote', sort: 'date', q: '' };
 
     // ── Hex layer ─────────────────────────────────────────────────────────────
-    var _hexLayer  = null;
-    var _renderGen = 0;
+    var _hexLayer    = null;
+    var _cellPolys   = {};     // cell_id → L.polygon, for hover-to-glow
+    var _renderGen   = 0;
+    var _resOverride = null;   // null = auto; 6, 7, or 8 = manual override
+
+    var AUSTIN_LAT = 30.2672;
+    var AUSTIN_LNG = -97.7431;
 
     // JobPosting only has h3_r7 and h3_r8 — clamp zoom-derived resolution
-    function _jobRes(zoom) { return zoom >= 12 ? 8 : 7; }
+    function _jobRes(zoom) {
+        if (_resOverride !== null) return _resOverride;
+        return zoom >= 12 ? 8 : 7;
+    }
 
     function _hexOpacity(count, maxCount) {
         var t = maxCount > 0 ? count / maxCount : 0;
@@ -33,14 +47,19 @@
     function _clearHex() {
         var map = window.sharedMap;
         if (_hexLayer && map) map.removeLayer(_hexLayer);
-        _hexLayer = null;
+        _hexLayer  = null;
+        _cellPolys = {};
     }
 
     function _renderHex(resolution, region, category, mode) {
         var map = window.sharedMap;
         if (!map) return;
 
-        var url = '/api/jobs/h3-map?resolution=' + resolution
+        // r6 is not stored in DB — fetch r7 and aggregate client-side
+        var aggToR6  = resolution <= 6;
+        var fetchRes = aggToR6 ? 7 : resolution;
+
+        var url = '/api/jobs/h3-map?resolution=' + fetchRes
                 + '&region='   + encodeURIComponent(region)
                 + '&mode='     + encodeURIComponent(mode);
         if (category) url += '&category=' + encodeURIComponent(category);
@@ -54,28 +73,51 @@
                 if (myGen !== _renderGen) return;
                 if (data.status !== 'ok') return;
 
-                var maxCount = 1;
-                data.cells.forEach(function (c) { if (c.count > maxCount) maxCount = c.count; });
-
-                var polys = [];
-                data.cells.forEach(function (cell) {
-                    var boundary = h3.cellToBoundary(cell.cell_id);
-                    var poly = L.polygon(boundary, {
-                        fillColor:   '#4ecca3',
-                        fillOpacity: _hexOpacity(cell.count, maxCount),
-                        color:       '#ffffff',
-                        weight:      0.6,
-                        opacity:     0.25,
+                // Aggregate r7 → r6 client-side when Large is selected
+                var cells = data.cells;
+                if (aggToR6) {
+                    var r6map = {};
+                    cells.forEach(function (c) {
+                        var parent = h3.cellToParent(c.cell_id, 6);
+                        if (!r6map[parent]) r6map[parent] = 0;
+                        r6map[parent] += c.count;
                     });
+                    cells = Object.keys(r6map).map(function (k) {
+                        return { cell_id: k, count: r6map[k] };
+                    });
+                }
 
-                    poly.bindTooltip(
-                        cell.count + ' job' + (cell.count !== 1 ? 's' : '') + ' · click to view',
-                        { sticky: true, className: 'h3-tooltip' }
-                    );
+                // Pre-compute the city-center cell at this resolution so we can
+                // highlight it differently — it aggregates all city-geocoded jobs.
+                var cityCell = h3.latLngToCell(AUSTIN_LAT, AUSTIN_LNG, resolution);
+
+                var maxCount = 1;
+                cells.forEach(function (c) { if (c.count > maxCount) maxCount = c.count; });
+
+                _cellPolys = {};
+                var polys = [];
+                cells.forEach(function (cell) {
+                    var boundary  = h3.cellToBoundary(cell.cell_id);
+                    var isCity    = (cell.cell_id === cityCell);
+
+                    var origStyle = {
+                        fillColor:   isCity ? '#f0a500' : '#4ecca3',
+                        fillOpacity: _hexOpacity(cell.count, maxCount),
+                        color:       isCity ? '#f0a500' : '#ffffff',
+                        weight:      isCity ? 1.5 : 0.6,
+                        opacity:     isCity ? 0.70 : 0.25,
+                    };
+                    var poly = L.polygon(boundary, origStyle);
+                    poly._origStyle = origStyle;
+                    _cellPolys[cell.cell_id] = poly;
+
+                    var tip = cell.count + ' job' + (cell.count !== 1 ? 's' : '') + ' · click to view';
+                    if (isCity) tip = '📍 ' + cell.count + ' Austin-area jobs · click to view';
+                    poly.bindTooltip(tip, { sticky: true, className: 'h3-tooltip' });
 
                     poly.on('click', function (e) {
                         L.DomEvent.stopPropagation(e);
-                        _showCellPanel(cell.cell_id, resolution, cell.count);
+                        _showCellPanel(cell.cell_id, resolution, cell.count, isCity);
                     });
 
                     poly.on('dblclick', function (e) {
@@ -90,8 +132,8 @@
 
                 var badge = document.getElementById('job-count');
                 if (badge) {
-                    var total = data.cells.reduce(function (s, c) { return s + c.count; }, 0);
-                    badge.textContent = data.cell_count + ' areas · ' + total + ' jobs';
+                    var total = cells.reduce(function (s, c) { return s + c.count; }, 0);
+                    badge.textContent = cells.length + ' areas · ' + total + ' jobs';
                 }
             })
             .catch(function (err) { console.error('[jobfinder] hex fetch failed:', err); });
@@ -125,9 +167,20 @@
         return d === 0 ? 'today' : d + 'd ago';
     }
 
+    function _glowCellId(job) {
+        // Returns the cell ID at the current map resolution for a job.
+        var res = window.sharedMap ? _jobRes(window.sharedMap.getZoom()) : 7;
+        if (res <= 6) {
+            return job.h3_r7 ? h3.cellToParent(job.h3_r7, 6) : null;
+        }
+        return job['h3_r' + res] || null;
+    }
+
     function _buildCard(job) {
         var card = document.createElement('div');
         card.className = 'job-card';
+        if (job.h3_r7) card.dataset.h3r7 = job.h3_r7;
+        if (job.h3_r8) card.dataset.h3r8 = job.h3_r8;
 
         var emp = '<div class="job-employer">' + _esc(job.employer || '—');
         if (job.is_remote) emp += '<span class="listing-badge remote">remote</span>';
@@ -214,6 +267,20 @@
             });
         }
 
+        // Hover-to-glow: highlight the hex this job is in
+        if (job.h3_r7 || job.h3_r8) {
+            card.addEventListener('mouseenter', function () {
+                var cellId = _glowCellId(job);
+                var poly = cellId && _cellPolys[cellId];
+                if (poly) poly.setStyle({ weight: 2.5, opacity: 1.0, fillOpacity: 0.85, color: '#ffffff' });
+            });
+            card.addEventListener('mouseleave', function () {
+                var cellId = _glowCellId(job);
+                var poly = cellId && _cellPolys[cellId];
+                if (poly && poly._origStyle) poly.setStyle(poly._origStyle);
+            });
+        }
+
         return card;
     }
 
@@ -226,8 +293,10 @@
         var url = '/api/jobs/listings?region=' + encodeURIComponent(region)
                 + '&mode='  + encodeURIComponent(mode)
                 + '&page='  + page
-                + '&limit=20';
-        if (category) url += '&category=' + encodeURIComponent(category);
+                + '&limit=20'
+                + '&sort='  + encodeURIComponent(_state.sort);
+        if (category)  url += '&category=' + encodeURIComponent(category);
+        if (_state.q)  url += '&q='        + encodeURIComponent(_state.q);
 
         if (!append) {
             container.innerHTML = '<div class="job-card"><div class="job-employer">Loading…</div></div>';
@@ -266,8 +335,10 @@
         var url = '/api/jobs/listings?region=' + encodeURIComponent(region)
                 + '&h3_cell='    + encodeURIComponent(cellId)
                 + '&resolution=' + resolution
-                + '&limit=50';
+                + '&limit=50'
+                + '&sort='       + encodeURIComponent(_state.sort);
         if (category) url += '&category=' + encodeURIComponent(category);
+        if (_state.q) url += '&q='        + encodeURIComponent(_state.q);
 
         fetch(url)
             .then(function (r) { return r.json(); })
@@ -296,24 +367,11 @@
 
         var mode = _state.mode;
 
-        // Local-only mode: no list panel — guide user to click a hex
-        if (mode === 'local') {
-            var title = document.getElementById('jf-list-title');
-            if (title) title.textContent = 'Local Jobs';
-            container.innerHTML =
-                '<div class="job-card"><div class="job-meta">' +
-                'Click a hex on the map to view local job listings in that area.' +
-                '</div></div>';
-            var moreBtn = document.getElementById('jf-load-more');
-            if (moreBtn) moreBtn.style.display = 'none';
-            return;
-        }
-
         _listPage = 1;
         _loadList(container, _state.region, _state.category, mode, 1, false);
     }
 
-    function _showCellPanel(cellId, resolution, count) {
+    function _showCellPanel(cellId, resolution, count, isCity) {
         var defPanel  = document.getElementById('jf-default-panel');
         var cellPanel = document.getElementById('jf-cell-panel');
         if (defPanel)  defPanel.style.display  = 'none';
@@ -321,7 +379,13 @@
 
         var cellTitle = document.getElementById('jf-cell-title');
         if (cellTitle) {
-            cellTitle.textContent = count + ' job' + (count !== 1 ? 's' : '') + ' in this area';
+            if (isCity) {
+                cellTitle.textContent = '📍 Austin area — city-geocoded jobs';
+            } else if (count != null) {
+                cellTitle.textContent = count + ' job' + (count !== 1 ? 's' : '') + ' in this area';
+            } else {
+                cellTitle.textContent = 'Jobs in this area';
+            }
         }
 
         var container = document.getElementById('jf-cell-list');
@@ -342,6 +406,37 @@
                 if (container) {
                     _listPage++;
                     _loadList(container, _state.region, _state.category, _state.mode, _listPage, true);
+                }
+            });
+        }
+
+        // ── Sidebar search input (debounced, server-side) ─────────────────────
+        var searchInput = document.getElementById('jf-search');
+        if (searchInput) {
+            var _searchTimer = null;
+            searchInput.addEventListener('input', function () {
+                clearTimeout(_searchTimer);
+                var val = this.value;
+                _searchTimer = setTimeout(function () {
+                    _state.q = val.trim();
+                    _listPage = 1;
+                    var container = document.getElementById('jf-remote-list');
+                    if (container) {
+                        _loadList(container, _state.region, _state.category, _state.mode, 1, false);
+                    }
+                }, 300);
+            });
+        }
+
+        // ── Sidebar sort select ───────────────────────────────────────────────
+        var sortSelect = document.getElementById('jf-sort-select');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', function () {
+                _state.sort = this.value;
+                _listPage = 1;
+                var container = document.getElementById('jf-remote-list');
+                if (container) {
+                    _loadList(container, _state.region, _state.category, _state.mode, 1, false);
                 }
             });
         }
@@ -388,6 +483,40 @@
             if (!map || _state.mode === 'remote') return;
             var res = _jobRes(map.getZoom());
             _renderHex(res, _state.region, _state.category, _state.mode);
+        },
+
+        /**
+         * setResolution(r)
+         * r = 'auto' | 7 | 8 — override zoom-based resolution for hex tiles.
+         */
+        setResolution: function (r) {
+            _resOverride = (r === 'auto') ? null : parseInt(r, 10);
+            var map = window.sharedMap;
+            if (!map || _state.mode === 'remote') return;
+            var res = _jobRes(map.getZoom());
+            _renderHex(res, _state.region, _state.category, _state.mode);
+        },
+
+        /**
+         * selectCityHex()
+         * Shows the cell panel for the H3 cell containing Austin city center.
+         * This surfaces jobs that were geocoded to "Austin, TX" (no precise address).
+         */
+        selectCityHex: function () {
+            var map = window.sharedMap;
+            var res = map ? _jobRes(map.getZoom()) : 7;
+            var cityCell = h3.latLngToCell(AUSTIN_LAT, AUSTIN_LNG, res);
+            _showCellPanel(cityCell, res, null, true);
+        },
+
+        /** Reset search/sort state (called by app.js when entering job finder mode). */
+        resetFilters: function () {
+            _state.q    = '';
+            _state.sort = 'date';
+            var searchEl = document.getElementById('jf-search');
+            if (searchEl) searchEl.value = '';
+            var sortEl = document.getElementById('jf-sort-select');
+            if (sortEl) sortEl.value = 'date';
         },
     };
 

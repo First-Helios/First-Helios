@@ -264,6 +264,10 @@
             map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);
             _jfMode = 'remote'; // reset to default mode
             _syncLocationBtns('remote');
+            // Reset hex resolution to auto and clear search/sort
+            _syncResBtns('auto');
+            if (window.jobfinder) window.jobfinder.setResolution('auto');
+            if (window.jobfinder) window.jobfinder.resetFilters();
             refreshJobFinder();
         }
     }
@@ -281,6 +285,25 @@
             _syncLocationBtns(_jfMode);
             refreshJobFinder();
         });
+    });
+
+    // ── Hex resolution toggle (Job Finder) ──────────────────────────
+    function _syncResBtns(activeRes) {
+        document.querySelectorAll('#hex-res-toggle .res-btn').forEach(function (btn) {
+            btn.classList.toggle('active', btn.dataset.res === activeRes);
+        });
+    }
+
+    document.querySelectorAll('#hex-res-toggle .res-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            _syncResBtns(this.dataset.res);
+            if (window.jobfinder) window.jobfinder.setResolution(this.dataset.res);
+        });
+    });
+
+    // ── City area shortcut (Job Finder) ─────────────────────────────
+    document.getElementById('jf-city-btn').addEventListener('click', function () {
+        if (window.jobfinder) window.jobfinder.selectCityHex();
     });
 
     // ── Event listeners ─────────────────────────────────────────────

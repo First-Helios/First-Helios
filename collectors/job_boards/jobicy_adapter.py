@@ -211,10 +211,12 @@ class JobicyAdapter(BaseScraper):
         self,
         industry: str | None = None,
         tag: str | None = None,
+        industry_key: str | None = None,
     ) -> None:
         super().__init__()
         self.industry = industry
         self.tag = tag
+        self.industry_key = industry_key  # rotation key (e.g. "healthcare") — used as category fallback
 
     def scrape(self, region: str, radius_mi: int = 25) -> list[ScraperSignal]:
         """Fetch listings from Jobicy and return as ScraperSignal list.
@@ -379,7 +381,7 @@ class JobicyAdapter(BaseScraper):
                     "address":          extracted_addr,
                     "address_method":   extracted_method,
                     "job_excerpt":      raw_excerpt,
-                    "category":     industry,
+                    "category":     industry or self.industry_key or None,
                     "job_type":     job_type,
                     "job_level":    job.get("jobLevel"),
                     "is_remote":    True,           # all Jobicy listings are remote
@@ -404,6 +406,7 @@ def scrape_jobicy(
     region: str = "austin_tx",
     industry: str | None = None,
     tag: str | None = None,
+    industry_key: str | None = None,
     ingest: bool = True,
 ) -> list[ScraperSignal]:
     """One call, count=100, geo=usa — maximum single-request yield from Jobicy.
@@ -412,15 +415,17 @@ def scrape_jobicy(
     Results are tagged region=austin_tx and is_remote=True.
 
     Args:
-        region:   Region key for tagging ingested postings (default: austin_tx).
-        industry: Optional Jobicy industry filter.
-        tag:      Optional keyword filter.
-        ingest:   If True, route all signals through ingest_job_posting.
+        region:       Region key for tagging ingested postings (default: austin_tx).
+        industry:     Optional Jobicy industry filter.
+        tag:          Optional keyword filter.
+        industry_key: Rotation key (e.g. "healthcare") — stored as category when
+                      Jobicy's own jobIndustry field is absent or unmappable.
+        ingest:       If True, route all signals through ingest_job_posting.
 
     Returns:
         List of ScraperSignals (may be empty if gate is active or API fails).
     """
-    adapter = JobicyAdapter(industry=industry, tag=tag)
+    adapter = JobicyAdapter(industry=industry, tag=tag, industry_key=industry_key)
     signals = adapter.scrape(region)
 
     logger.info("[Jobicy] %d signals for region=%s", len(signals), region)

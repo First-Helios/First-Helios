@@ -28,8 +28,10 @@ _CONFIG_DIR = Path(__file__).parent
 _LABOR_MARKET_PATH = _CONFIG_DIR / "labor_market.yaml"
 _CHAINS_PATH = _CONFIG_DIR / "chains.yaml"
 _SCHEDULER_PATH = _CONFIG_DIR / "scheduler.yaml"
+_SEARCH_ROTATION_PATH = _CONFIG_DIR / "search_rotation.yaml"
 _config: dict[str, Any] | None = None
 _scheduler_config: dict[str, Any] | None = None
+_search_rotation: list[dict] | None = None
 
 
 def _load() -> dict[str, Any]:
@@ -227,6 +229,29 @@ def get_seasonal_config() -> dict[str, Any]:
 
 
 # ── Scheduler helpers ────────────────────────────────────────────────────────
+
+def get_search_rotation() -> list[dict]:
+    """Return the industry search rotation list from config/search_rotation.yaml.
+
+    Each entry is a dict with keys:
+        key           — internal industry key (e.g. "healthcare")
+        serpapi_query — q= value for SerpAPI Google Jobs
+        jobicy_tag    — tag= value for Jobicy API
+
+    Returns an empty list if the file is missing.
+    """
+    global _search_rotation
+    if _search_rotation is None:
+        if _SEARCH_ROTATION_PATH.exists():
+            with open(_SEARCH_ROTATION_PATH, "r") as f:
+                raw = yaml.safe_load(f) or {}
+            _search_rotation = raw.get("industries", [])
+            logger.info("[Config] Loaded %s (%d industries)", _SEARCH_ROTATION_PATH, len(_search_rotation))
+        else:
+            logger.warning("[Config] search_rotation.yaml not found — rotation disabled")
+            _search_rotation = []
+    return _search_rotation
+
 
 def get_scheduler_config() -> dict[str, Any]:
     """Return scheduler job config from config/scheduler.yaml.

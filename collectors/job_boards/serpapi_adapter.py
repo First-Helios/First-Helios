@@ -227,18 +227,32 @@ class SerpApiAdapter(BaseScraper):
     """Fetch Austin-area job listings from SerpAPI Google Jobs.
 
     One call per run, start=0 — maximum single-request yield within the
-    100-credit lifetime budget. Broad query (q="jobs") maximises result count.
+    250-credit monthly budget (8 calls/day at 3-hour intervals).
+
+    Pass query= to target a specific industry (e.g. "healthcare nurse jobs").
+    The cache key includes the query so each industry is cached separately.
     """
 
     name = "SerpAPI"
 
-    def scrape(self, region: str, radius_mi: int = 25) -> list[ScraperSignal]:
+    def scrape(
+        self,
+        region: str,
+        radius_mi: int = 25,
+        query: str = "jobs",
+        industry_key: str | None = None,
+    ) -> list[ScraperSignal]:
         """Fetch listings from SerpAPI Google Jobs and return as ScraperSignal list.
 
         Args:
-            region:    Region key, e.g. "austin_tx". Used to tag postings.
-            radius_mi: Unused (API has no radius concept); kept for BaseScraper
-                       interface compatibility.
+            region:       Region key, e.g. "austin_tx". Used to tag postings.
+            radius_mi:    Unused (API has no radius concept); kept for BaseScraper
+                          interface compatibility.
+            query:        Google Jobs q= value. Defaults to "jobs" (broad).
+                          Pass an industry-specific string for targeted coverage,
+                          e.g. "healthcare nurse medical jobs".
+            industry_key: Internal industry key (e.g. "healthcare") to tag
+                          signals when the API doesn't return a category.
 
         Returns:
             List of ScraperSignal objects (signal_type="listing").
@@ -251,10 +265,15 @@ class SerpApiAdapter(BaseScraper):
             logger.warning("[SerpAPI] SERPAPI_KEY not set in environment — skipping")
             return []
 
+        # Per-query cache key: each industry gets its own 3-hour TTL slot.
+        # e.g. "serpapi_google_jobs__healthcare_nurse_medical_jobs"
+        safe_query = query.replace(" ", "_").replace("/", "_")[:60]
+        cache_key = f"{_SOURCE_KEY}__{safe_query}"
+
         # ── Cache check — skip API + rate-manager entirely if fresh ──────────
-        cached = read_cache(_SOURCE_KEY, ttl_minutes=_TTL_MINUTES)
+        cached = read_cache(cache_key, ttl_minutes=_TTL_MINUTES)
         if cached is not None:
-            return self._jobs_to_signals(cached, region)
+            return self._jobs_to_signals(cached, region, industry_key=industry_key)
 
         # ── Pre-flight: daily budget ──────────────────────────────────────────
         if not check_budget(_SOURCE_KEY):
@@ -270,9 +289,10 @@ class SerpApiAdapter(BaseScraper):
             return []
 
         # ── Build request ─────────────────────────────────────────────────────
+        logger.info("[SerpAPI] query=%r  industry_key=%s", query, industry_key or "none")
         params: dict[str, Any] = {
             "engine":   "google_jobs",
-            "q":        "jobs",
+            "q":        query,
             "location": "Austin, Texas, United States",
             "hl":       "en",
             "gl":       "us",
@@ -320,11 +340,16 @@ class SerpApiAdapter(BaseScraper):
         if not jobs:
             return []
 
-        write_cache(_SOURCE_KEY, jobs)
-        logger.info("[SerpAPI] %d jobs returned", len(jobs))
-        return self._jobs_to_signals(jobs, region)
+        write_cache(cache_key, jobs)
+        logger.info("[SerpAPI] %d jobs returned (query=%r)", len(jobs), query)
+        return self._jobs_to_signals(jobs, region, industry_key=industry_key)
 
-    def _jobs_to_signals(self, jobs: list[dict], region: str) -> list[ScraperSignal]:
+    def _jobs_to_signals(
+        self,
+        jobs: list[dict],
+        region: str,
+        industry_key: str | None = None,
+    ) -> list[ScraperSignal]:
         signals: list[ScraperSignal] = []
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -425,7 +450,7 @@ class SerpApiAdapter(BaseScraper):
                     "address":          extracted_addr,
                     "address_method":   extracted_method,
                     "job_excerpt":      description[:500] if description else None,
-                    "category":         None,           # not available from SerpAPI
+                    "category":         industry_key,   # set when rotation provides it
                     "job_type":         schedule_type,
                     "is_remote":        is_remote,
                     "source_platform":  "google_jobs",
@@ -448,21 +473,27 @@ class SerpApiAdapter(BaseScraper):
 def scrape_serpapi(
     region: str = "austin_tx",
     ingest: bool = True,
+    query: str = "jobs",
+    industry_key: str | None = None,
 ) -> list[ScraperSignal]:
-    """One call, start=0, broad query — maximum single-request yield from SerpAPI.
+    """One call, start=0 — maximum single-request yield from SerpAPI Google Jobs.
 
     The interval gate inside SerpApiAdapter.scrape() prevents calling the API
     more than once per 3-hour window (8 calls/day = ~240/month within 250/month limit).
 
     Args:
-        region:  Region key for tagging ingested postings (default: austin_tx).
-        ingest:  If True, route all signals through ingest_job_posting.
+        region:       Region key for tagging ingested postings (default: austin_tx).
+        ingest:       If True, route all signals through ingest_job_posting.
+        query:        Google Jobs q= value. Use industry-targeted strings for
+                      gap-filling, e.g. "healthcare nurse medical jobs".
+        industry_key: Internal industry key to tag postings when source doesn't
+                      provide a category (e.g. "healthcare").
 
     Returns:
         List of ScraperSignals (may be empty if gate is active or API fails).
     """
     adapter = SerpApiAdapter()
-    signals = adapter.scrape(region)
+    signals = adapter.scrape(region, query=query, industry_key=industry_key)
 
     logger.info("[SerpAPI] %d signals for region=%s", len(signals), region)
 

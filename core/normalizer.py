@@ -271,13 +271,22 @@ CATEGORY_INDUSTRY_MAP: dict[str, str] = {
 }
 
 
-def map_industry(category: str, name: str = "") -> str | None:
-    """Map an Overture category string to an internal industry key.
+_INTERNAL_INDUSTRY_KEYS: frozenset[str] = frozenset(CATEGORY_INDUSTRY_MAP.values())
 
-    Returns None if the category is not in the map (caller should decide
-    whether to skip or label as 'unknown').
+
+def map_industry(category: str, name: str = "") -> str | None:
+    """Map a category string to an internal industry key.
+
+    Accepts either:
+    - An Overture category string (e.g. "coffee_shop") → looks up CATEGORY_INDUSTRY_MAP
+    - An already-internal key (e.g. "coffee_cafe") → returned as-is
+
+    Returns None if unrecognized.
     """
-    return CATEGORY_INDUSTRY_MAP.get(category or "")
+    cat = category or ""
+    if cat in _INTERNAL_INDUSTRY_KEYS:
+        return cat
+    return CATEGORY_INDUSTRY_MAP.get(cat)
 
 
 # UPWARD_MOBILITY_CATEGORIES removed.

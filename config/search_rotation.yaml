@@ -1,0 +1,96 @@
+# config/search_rotation.yaml — Industry-targeted search query rotation
+#
+# Each entry maps an internal industry_key to per-source search parameters.
+# The rotation system (collectors/rotation.py) cycles through these one at a
+# time, advancing by one index per API call. With 20 industries and SerpAPI's
+# 8 calls/day, every industry gets fresh data every ~2.5 days.
+#
+# serpapi_query:
+#   Passed as the Google Jobs "q=" parameter. Location is fixed to
+#   "Austin, Texas, United States" in the adapter, so only include
+#   role/industry keywords here — no city name needed.
+#
+# jobicy_tag:
+#   Keyword passed to Jobicy's "tag=" parameter. Searches job title
+#   and description (remote jobs only). Keep short — Jobicy truncates.
+
+industries:
+  - key: healthcare
+    serpapi_query: "healthcare nurse medical clinical jobs"
+    jobicy_tag: "healthcare"
+
+  - key: tech_services
+    serpapi_query: "software engineer developer data analyst IT jobs"
+    jobicy_tag: "software engineer"
+
+  - key: retail_general
+    serpapi_query: "retail sales cashier store associate jobs"
+    jobicy_tag: "retail"
+
+  - key: fast_food
+    serpapi_query: "fast food crew member cashier QSR jobs"
+    jobicy_tag: "food service"
+
+  - key: food_full_service
+    serpapi_query: "restaurant server host bartender line cook jobs"
+    jobicy_tag: "restaurant"
+
+  - key: skilled_trades
+    serpapi_query: "electrician plumber HVAC technician contractor jobs"
+    jobicy_tag: "construction"
+
+  - key: education
+    serpapi_query: "teacher tutor instructor education childcare jobs"
+    jobicy_tag: "education"
+
+  - key: finance
+    serpapi_query: "finance banking accounting analyst insurance jobs"
+    jobicy_tag: "finance"
+
+  - key: professional_services
+    serpapi_query: "marketing project manager consultant legal jobs"
+    jobicy_tag: "marketing"
+
+  - key: logistics
+    serpapi_query: "driver delivery warehouse forklift logistics jobs"
+    jobicy_tag: "logistics"
+
+  - key: hospitality
+    serpapi_query: "hotel front desk housekeeper hospitality guest services jobs"
+    jobicy_tag: "hospitality"
+
+  - key: personal_care
+    serpapi_query: "hair stylist esthetician nail technician barber salon jobs"
+    jobicy_tag: "beauty"
+
+  - key: fitness
+    serpapi_query: "personal trainer fitness instructor gym coach jobs"
+    jobicy_tag: "fitness"
+
+  - key: auto_services
+    serpapi_query: "auto mechanic automotive technician service advisor jobs"
+    jobicy_tag: "automotive"
+
+  - key: auto_dealer
+    serpapi_query: "car sales finance manager dealership jobs"
+    jobicy_tag: "sales"
+
+  - key: coffee_cafe
+    serpapi_query: "barista coffee cafe bakery tea shop jobs"
+    jobicy_tag: "coffee"
+
+  - key: bar_nightlife
+    serpapi_query: "bartender bar nightclub cocktail server jobs"
+    jobicy_tag: "bartender"
+
+  - key: retail_pharmacy
+    serpapi_query: "pharmacy technician pharmacist drugstore jobs"
+    jobicy_tag: "pharmacy"
+
+  - key: nonprofit
+    serpapi_query: "nonprofit social services community outreach case manager jobs"
+    jobicy_tag: "nonprofit"
+
+  - key: staffing
+    serpapi_query: "recruiter HR human resources staffing coordinator jobs"
+    jobicy_tag: "recruiter"

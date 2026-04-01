@@ -41,6 +41,13 @@
                 <button class="location-btn" data-mode="local">Local</button>
                 <button class="location-btn" data-mode="all">All</button>
             </div>
+            <div id="hex-res-toggle" title="Hex size on map">
+                <button class="res-btn active" data-res="auto">Auto ⬡</button>
+                <button class="res-btn" data-res="8">Small ⬡</button>
+                <button class="res-btn" data-res="7">Med ⬡</button>
+                <button class="res-btn" data-res="6">Large ⬡</button>
+            </div>
+            <button id="jf-city-btn" title="Jobs geocoded to Austin city center (no precise address)">📍 Area</button>
             <span id="job-count" title="Job count">—</span>
         </div>
 
@@ -112,6 +119,13 @@
                 <!-- Default panel: remote/all job list -->
                 <div id="jf-default-panel">
                     <h2 id="jf-list-title">Remote Jobs</h2>
+                    <div id="jf-list-controls">
+                        <input id="jf-search" type="text" placeholder="Search jobs…" autocomplete="off" />
+                        <select id="jf-sort-select" title="Sort order">
+                            <option value="date">Newest</option>
+                            <option value="wage">Wage ↓</option>
+                        </select>
+                    </div>
                     <div id="jf-remote-list"></div>
                     <button id="jf-load-more" style="display:none">Load more</button>
                 </div>

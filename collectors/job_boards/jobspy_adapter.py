@@ -278,7 +278,7 @@ class JobSpyAdapter(BaseScraper):
                     "address": location_str,
                     "employer": company,
                     "is_chain": is_chain,
-                    "industry": self.industry_key or "unknown",
+                    "category": self.industry_key or None,
                     "wage_min": float(wage_min) if wage_min is not None else None,
                     "wage_max": float(wage_max) if wage_max is not None else None,
                     "wage_period": wage_period,

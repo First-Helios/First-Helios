@@ -518,6 +518,57 @@ body {
     border: 1px solid rgba(108, 92, 231, 0.3);
 }
 
+/* ── Job Finder: hex resolution toggle ───────────────────────────── */
+#hex-res-toggle {
+    display: flex;
+    gap: 2px;
+    background: #0f3460;
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.res-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.res-btn.active {
+    background: #6c5ce7;
+    color: #fff;
+    font-weight: 600;
+}
+
+.res-btn:not(.active):hover {
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+
+/* ── Job Finder: city area button ────────────────────────────────── */
+#jf-city-btn {
+    background: #0f3460;
+    border: 1px solid #2a4a80;
+    color: #aaa;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+#jf-city-btn:hover {
+    background: #f0a50022;
+    border-color: #f0a500;
+    color: #f0a500;
+}
+
 /* ── Job Finder: location mode toggle ────────────────────────────── */
 #location-mode-toggle {
     display: flex;
@@ -559,6 +610,50 @@ body {
     font-size: 0.78rem;
     color: #aaa;
     white-space: nowrap;
+}
+
+/* ── Job Finder: sidebar search + sort bar ───────────────────────── */
+#jf-list-controls {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+#jf-search {
+    flex: 1;
+    background: #1a1a2e;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    min-width: 0;
+    outline: none;
+}
+
+#jf-search:focus {
+    border-color: #4ecca3;
+}
+
+#jf-search::placeholder {
+    color: #444;
+}
+
+#jf-sort-select {
+    background: #1a1a2e;
+    border: 1px solid #0f3460;
+    color: #888;
+    padding: 5px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#jf-sort-select:focus {
+    outline: none;
+    border-color: #4ecca3;
 }
 
 /* ── Job Finder: job cards ────────────────────────────────────────── */

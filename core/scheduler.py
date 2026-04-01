@@ -546,11 +546,25 @@ def _run_austin_gov() -> None:
 
 
 def _run_serpapi_jobs() -> None:
-    """Scheduled job: Fetch Google Jobs listings via SerpAPI."""
+    """Scheduled job: Fetch Google Jobs listings via SerpAPI.
+
+    Rotates through all 20 industry keys (config/search_rotation.yaml),
+    advancing one slot per call. At 8 calls/day every industry is covered
+    within ~2.5 days, ensuring broad Austin-area gap-filling.
+    """
     try:
         from collectors.job_boards.serpapi_adapter import scrape_serpapi
-        logger.info("[Scheduler] Running SerpAPI Google Jobs fetch")
-        signals = scrape_serpapi(region="austin_tx")
+        from collectors.rotation import next_entry
+        from config.loader import get_search_rotation
+
+        industries = get_search_rotation()
+        entry = next_entry("serpapi", industries)
+        query = entry.get("serpapi_query", "jobs")
+        industry_key = entry.get("key") or None
+
+        logger.info("[Scheduler] Running SerpAPI fetch: query=%r  industry=%s",
+                    query, industry_key or "none")
+        signals = scrape_serpapi(region="austin_tx", query=query, industry_key=industry_key)
         logger.info("[Scheduler] SerpAPI: %d signals", len(signals))
     except Exception as e:
         logger.error("[Scheduler] SerpAPI job failed: %s", e)
@@ -590,11 +604,23 @@ def _run_theirstack() -> None:
 
 
 def _run_jobicy() -> None:
-    """Scheduled job: Fetch remote job listings from Jobicy API (hourly)."""
+    """Scheduled job: Fetch remote job listings from Jobicy API (hourly).
+
+    Rotates through industry tags (config/search_rotation.yaml) so each
+    hourly call targets a different remote job category.
+    """
     try:
         from collectors.job_boards.jobicy_adapter import scrape_jobicy
-        logger.info("[Scheduler] Running Jobicy fetch")
-        signals = scrape_jobicy(region="austin_tx")
+        from collectors.rotation import next_entry
+        from config.loader import get_search_rotation
+
+        industries = get_search_rotation()
+        entry = next_entry("jobicy", industries)
+        tag = entry.get("jobicy_tag") or None
+        industry_key = entry.get("key") or None
+
+        logger.info("[Scheduler] Running Jobicy fetch: tag=%s industry_key=%s", tag or "none", industry_key or "none")
+        signals = scrape_jobicy(region="austin_tx", tag=tag, industry_key=industry_key)
         logger.info("[Scheduler] Jobicy: %d signals", len(signals))
     except Exception as e:
         logger.error("[Scheduler] Jobicy job failed: %s", e)

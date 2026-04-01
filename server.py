@@ -48,7 +48,7 @@ from core.models.reference import (
     OccupationAlias,
     RegionProfile,
 )
-from core.scheduler import get_scheduler_status, init_scheduler
+from core.scheduler import get_scheduler_status
 from core.scoring.engine import compute_all_scores
 from core.targeting import compute_targeting
 
@@ -820,9 +820,15 @@ def ref_summary():
 
 @app.route("/api/scheduler/status")
 def scheduler_status():
-    """Return scheduler job status and next run times."""
+    """Return scheduler job status.
+
+    The scheduler now runs in collector_main.py (separate process).
+    This endpoint reflects that process's state only if it happens to share
+    this Python interpreter (dev mode); in production it will show running=false.
+    """
     try:
         status = get_scheduler_status()
+        status["note"] = "scheduler runs as collector_main.py — start that process separately"
         return jsonify({"status": "ok", **status})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1357,8 +1363,10 @@ def jobs_h3_map():
     category   = request.args.get("category")
     mode       = request.args.get("mode", "local")
 
-    resolution = max(7, min(8, resolution))
-    h3_col = getattr(JobPosting, f"h3_r{resolution}")
+    # h3_r6: aggregate r7 cells server-side; clamp to 6–8
+    resolution = max(6, min(8, resolution))
+    agg_to_r6  = resolution <= 6
+    h3_col     = JobPosting.h3_r7 if agg_to_r6 else getattr(JobPosting, f"h3_r{resolution}")
 
     engine  = init_db()
     session = get_session(engine)
@@ -1383,9 +1391,20 @@ def jobs_h3_map():
         rows = q.group_by(h3_col).all()
 
         cells = []
-        for row in rows:
-            lat, lng = h3lib.cell_to_latlng(row.cell_id)
-            cells.append({"cell_id": row.cell_id, "count": row.count, "lat": lat, "lng": lng})
+        if agg_to_r6:
+            from collections import defaultdict
+            r6_counts: dict = defaultdict(int)
+            for row in rows:
+                if row.cell_id:
+                    parent = h3lib.cell_to_parent(row.cell_id, 6)
+                    r6_counts[parent] += row.count
+            for cell_id, count in r6_counts.items():
+                lat, lng = h3lib.cell_to_latlng(cell_id)
+                cells.append({"cell_id": cell_id, "count": count, "lat": lat, "lng": lng})
+        else:
+            for row in rows:
+                lat, lng = h3lib.cell_to_latlng(row.cell_id)
+                cells.append({"cell_id": row.cell_id, "count": row.count, "lat": lat, "lng": lng})
 
         return jsonify({"status": "ok", "resolution": resolution, "cell_count": len(cells), "cells": cells})
 
@@ -1418,6 +1437,8 @@ def jobs_listings():
     category   = request.args.get("category")
     page       = max(1, request.args.get("page", 1, type=int))
     limit      = min(100, request.args.get("limit", 20, type=int))
+    sort       = request.args.get("sort", "date")   # "date" | "wage"
+    keyword    = request.args.get("q", "").strip()
 
     engine  = init_db()
     session = get_session(engine)
@@ -1428,9 +1449,15 @@ def jobs_listings():
         )
 
         if h3_cell:
-            resolution = max(7, min(8, resolution))
-            h3_col = getattr(JobPosting, f"h3_r{resolution}")
-            q = q.filter(h3_col == h3_cell)
+            if resolution <= 6:
+                # r6 cell: expand to all r7 children and filter on h3_r7
+                import h3 as h3lib_local
+                children = list(h3lib_local.cell_to_children(h3_cell, 7))
+                q = q.filter(JobPosting.h3_r7.in_(children))
+            else:
+                resolution = max(7, min(8, resolution))
+                h3_col = getattr(JobPosting, f"h3_r{resolution}")
+                q = q.filter(h3_col == h3_cell)
         elif mode == "local":
             q = q.filter(JobPosting.is_remote.isnot(True))
         elif mode == "remote":
@@ -1439,9 +1466,23 @@ def jobs_listings():
         if category:
             q = q.filter(JobPosting.industry == category)
 
-        total    = q.count()
+        if keyword:
+            like = f"%{keyword}%"
+            q = q.filter(
+                JobPosting.role_title.ilike(like) |
+                JobPosting.raw_employer_name.ilike(like)
+            )
+
+        total = q.count()
+
+        from sqlalchemy import nullslast
+        if sort == "wage":
+            order = [nullslast(JobPosting.wage_min.desc()), nullslast(JobPosting.posted_date.desc())]
+        else:
+            order = [nullslast(JobPosting.posted_date.desc())]
+
         postings = (
-            q.order_by(JobPosting.posted_date.desc())
+            q.order_by(*order)
              .offset((page - 1) * limit)
              .limit(limit)
              .all()
@@ -1484,6 +1525,8 @@ def jobs_listings():
                 "source":      jp.source,
                 "excerpt":     jp.job_excerpt,
                 "detail":      jp.detail_json,
+                "h3_r7":       jp.h3_r7,
+                "h3_r8":       jp.h3_r8,
             }
             for jp in postings
         ]
@@ -1517,6 +1560,10 @@ def jobs_categories():
     engine  = init_db()
     session = get_session(engine)
     try:
+        taxonomy_map = {
+            t.industry_key: t.display_name
+            for t in session.query(IndustryTaxonomy).all()
+        }
         rows = (
             session.query(JobPosting.industry, sqlfunc.count().label("count"))
             .filter(
@@ -1528,7 +1575,14 @@ def jobs_categories():
             .order_by(sqlfunc.count().desc())
             .all()
         )
-        categories = [{"key": r.industry, "label": r.industry, "count": r.count} for r in rows]
+        categories = [
+            {
+                "key":   r.industry,
+                "label": taxonomy_map.get(r.industry) or r.industry.replace("_", " ").title(),
+                "count": r.count,
+            }
+            for r in rows
+        ]
         return jsonify({"status": "ok", "categories": categories})
 
     except Exception as e:
@@ -1544,12 +1598,6 @@ def create_app() -> Flask:
     """Application factory for Flask."""
     # Initialize database
     init_db()
-
-    # Start scheduler
-    try:
-        init_scheduler()
-    except Exception as e:
-        logger.warning("[Server] Scheduler init failed (non-fatal): %s", e)
 
     return app
 
