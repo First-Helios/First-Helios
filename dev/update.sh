@@ -22,6 +22,6 @@ git reset --hard origin/main >> $LOG 2>&1
 # Install any new/changed deps
 .venv/bin/pip install -r requirements.txt -q >> $LOG 2>&1 || true
 
-# Restart server (passwordless sudo granted via /etc/sudoers.d/helios-restart)
-sudo systemctl restart helios >> $LOG 2>&1
+# Restart server (service runs as root via systemd, no sudo needed)
+systemctl restart helios >> $LOG 2>&1
 echo "$(date) Restart done" >> $LOG
