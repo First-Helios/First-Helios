@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_engine, get_session, init_db
 from core.normalizer import make_fingerprint, normalize_name
-from events.models import Event, Venue
+from events.models import BronzeEventPayload, Event, Venue
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,12 @@ class EventSignal:
     metadata: dict[str, Any] = field(default_factory=dict)
     observed_at: datetime = field(default_factory=datetime.utcnow)
 
+    # Bronze layer — raw API response for replay
+    raw_payload: dict[str, Any] | None = None
+
+    # Lineage — set by collector runner
+    collector_run_id: int | None = None
+
 
 # ── H3 computation ────────────────────────────────────────────────────────────
 
@@ -112,6 +118,154 @@ def _geocode_if_needed(
     except Exception as exc:
         logger.warning("[EventIngest] Geocode failed for %r: %s", address, exc)
     return None, None
+
+
+# ── Bronze payload storage ────────────────────────────────────────────────────
+
+def _save_bronze_payload(
+    session: Session,
+    signal: EventSignal,
+) -> None:
+    """Persist the raw API response before normalization."""
+    if signal.raw_payload is None:
+        return
+    try:
+        stmt = (
+            pg_insert(BronzeEventPayload)
+            .values(
+                source=signal.source,
+                external_id=signal.external_id,
+                collector_run_id=signal.collector_run_id,
+                raw_payload=signal.raw_payload,
+                scraped_at=datetime.utcnow(),
+            )
+            .on_conflict_do_nothing()   # no unique constraint — append-only
+        )
+        session.execute(stmt)
+    except Exception as exc:
+        logger.warning("[EventIngest] Failed to save bronze payload: %s", exc)
+
+
+# ── Social scoring computation ────────────────────────────────────────────────
+
+# Categories that tend to be interactive / social
+_HIGH_SOCIAL_CATEGORIES = {"community", "nightlife", "food", "outdoor", "family"}
+_MEDIUM_SOCIAL_CATEGORIES = {"music", "sports", "arts"}
+
+# Subcategory keywords that boost friend-making score
+_INTERACTIVE_KEYWORDS = frozenset({
+    "class", "workshop", "meetup", "open_mic", "trivia", "game",
+    "board_game", "run_club", "volunteer", "potluck", "mixer",
+    "social", "networking", "dance", "karaoke", "comedy",
+    "farmers_market", "craft", "book_club", "hiking",
+})
+
+# Keywords suggesting large anonymous crowds (lower friend-making)
+_SPECTATOR_KEYWORDS = frozenset({
+    "concert", "festival", "stadium", "arena", "conference",
+    "expo", "convention", "parade", "marathon", "race",
+})
+
+
+def _compute_social_scores(
+    signal: EventSignal,
+) -> tuple[list[str] | None, str | None, float | None]:
+    """Derive audience_tags, social_density, and friend_making_score.
+
+    Returns (audience_tags, social_density, friend_making_score).
+    """
+    # ── Audience tags ─────────────────────────────────────────────────────────
+    tags: list[str] = []
+
+    if signal.is_free:
+        tags.append("free")
+    if signal.price_min is not None and signal.price_min > 50:
+        tags.append("premium")
+
+    title_lower = (signal.title or "").lower()
+    desc_lower = (signal.description or "").lower()
+    combined = f"{title_lower} {desc_lower}"
+
+    if any(w in combined for w in ("family", "kid", "children", "all ages")):
+        tags.append("family")
+    if any(w in combined for w in ("21+", "21 and over", "bar", "cocktail")):
+        tags.append("21+")
+    if any(w in combined for w in ("beginner", "intro", "101", "first time")):
+        tags.append("beginner_friendly")
+    if any(w in combined for w in ("lgbtq", "pride", "queer", "drag")):
+        tags.append("lgbtq+")
+    if any(w in combined for w in ("nerd", "anime", "cosplay", "gaming", "d&d", "comic")):
+        tags.append("nerds")
+    if any(w in combined for w in ("outdoor", "park", "trail", "hike", "lake")):
+        tags.append("outdoor")
+    if any(w in combined for w in ("dog", "pet", "pup")):
+        tags.append("pet_friendly")
+
+    # ── Social density ────────────────────────────────────────────────────────
+    density: str | None = None
+    cap = signal.metadata.get("capacity")
+
+    if cap and isinstance(cap, (int, float)):
+        if cap <= 30:
+            density = "intimate"
+        elif cap <= 200:
+            density = "medium"
+        elif cap <= 2000:
+            density = "large"
+        else:
+            density = "festival"
+    else:
+        # Infer from category/subcategory/keywords
+        sub = (signal.subcategory or "").lower()
+        if any(w in combined for w in ("festival", "parade", "marathon", "expo")):
+            density = "festival"
+        elif any(w in combined for w in ("stadium", "arena", "amphitheater")):
+            density = "large"
+        elif any(w in combined for w in ("class", "workshop", "meetup", "book_club")):
+            density = "intimate"
+        elif signal.category in _HIGH_SOCIAL_CATEGORIES:
+            density = "medium"
+        else:
+            density = "medium"
+
+    # ── Friend-making score ───────────────────────────────────────────────────
+    score = 0.5  # baseline
+
+    sub_lower = (signal.subcategory or "").lower()
+    all_text = f"{combined} {sub_lower}"
+
+    # Boost for interactive formats
+    interactive_hits = sum(1 for kw in _INTERACTIVE_KEYWORDS if kw in all_text)
+    score += min(interactive_hits * 0.1, 0.3)
+
+    # Penalize spectator events
+    spectator_hits = sum(1 for kw in _SPECTATOR_KEYWORDS if kw in all_text)
+    score -= min(spectator_hits * 0.1, 0.2)
+
+    # Small groups → easier to meet people
+    if density == "intimate":
+        score += 0.15
+    elif density == "festival":
+        score -= 0.1
+
+    # Free events attract more casual/social attendees
+    if signal.is_free:
+        score += 0.05
+
+    # Recurring events build community
+    if signal.is_recurring:
+        score += 0.1
+
+    # Category adjustments
+    if signal.category in _HIGH_SOCIAL_CATEGORIES:
+        score += 0.05
+    elif signal.category in _MEDIUM_SOCIAL_CATEGORIES:
+        score += 0.0
+
+    # Clamp
+    score = round(max(0.0, min(1.0, score)), 2)
+
+    return (tags if tags else None, density, score)
 
 
 # ── Venue upsert ──────────────────────────────────────────────────────────────
@@ -203,6 +357,9 @@ def ingest_event(
         session = get_session(engine)
 
     try:
+        # ── Bronze layer — persist raw payload before any normalisation ─────
+        _save_bronze_payload(session, signal)
+
         # ── Geocode ───────────────────────────────────────────────────────────
         lat, lng = _geocode_if_needed(signal.lat, signal.lng, signal.venue_address)
 
@@ -256,8 +413,18 @@ def ingest_event(
             "is_active":       True,
             "scraped_at":      now,
             "expires_at":      expires_at,
+            "collector_run_id": signal.collector_run_id,
             "detail_json":     detail_json,
         }
+
+        # ── Social scoring ────────────────────────────────────────────────────
+        audience_tags, social_density, friend_making_score = _compute_social_scores(signal)
+        if audience_tags:
+            event_data["audience_tags"] = audience_tags
+        if social_density:
+            event_data["social_density"] = social_density
+        if friend_making_score is not None:
+            event_data["friend_making_score"] = friend_making_score
 
         stmt = (
             pg_insert(Event)
@@ -284,7 +451,11 @@ def ingest_event(
                     "is_recurring":   signal.is_recurring,
                     "source_url":     signal.source_url,
                     "ticket_url":     signal.ticket_url,
+                    "collector_run_id": signal.collector_run_id,
                     "detail_json":    detail_json,
+                    "audience_tags":  event_data.get("audience_tags"),
+                    "social_density": event_data.get("social_density"),
+                    "friend_making_score": event_data.get("friend_making_score"),
                     "is_active":      True,
                     "scraped_at":     now,
                     "expires_at":     expires_at,

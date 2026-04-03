@@ -216,7 +216,8 @@ def _parse_json_event(raw: dict[str, Any]) -> EventSignal | None:
         is_free=is_free,
         source_url=source_url,
         ticket_url=raw.get("ticket_url") or raw.get("ticketUrl"),
-        metadata={
+raw_payload=raw,
+    metadata={
             "image_url": image_url,
             "categories": categories,
         },
@@ -399,7 +400,8 @@ def _parse_jsonld_event(item: dict[str, Any]) -> EventSignal | None:
         is_free=is_free,
         source_url=item.get("url"),
         ticket_url=item.get("url"),
-        metadata={
+raw_payload=item,
+    metadata={
             "image_url": item.get("image"),
         },
     )

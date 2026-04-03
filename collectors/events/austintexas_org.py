@@ -224,7 +224,8 @@ def _parse_jsonld_event(item: dict[str, Any]) -> EventSignal | None:
         is_free=is_free,
         source_url=source_url,
         ticket_url=source_url,
-        metadata={
+raw_payload=item,
+    metadata={
             "image_url": image_url,
         },
     )

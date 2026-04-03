@@ -136,6 +136,9 @@ class Event(Base):
     scraped_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True, index=True)
 
+    # ── Lineage ───────────────────────────────────────────────────────────────
+    collector_run_id = Column(Integer, nullable=True, index=True)
+
     # ── Rich detail (JSONB) ───────────────────────────────────────────────────
     detail_json = Column(JSONB, nullable=True)
 
@@ -203,3 +206,42 @@ class EventInteraction(Base):
     value = Column(Float, nullable=True)               # for ratings
     session_id = Column(String, nullable=True)         # anonymized session (no PII yet)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class BronzeEventPayload(Base):
+    """Raw API/scrape payload stored before normalization.
+
+    Enables re-processing from original data if a parser has a bug,
+    without burning API quota re-scraping. One row per external event
+    per collector run.
+    """
+
+    __tablename__ = "bronze_event_payloads"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False, index=True)
+    external_id = Column(String, nullable=False)
+    collector_run_id = Column(Integer, nullable=True, index=True)
+    raw_payload = Column(JSONB, nullable=False)
+    scraped_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_bronze_source_external", "source", "external_id"),
+    )
+
+
+class CollectorHealthBaseline(Base):
+    """Expected output ranges per event collector for anomaly detection.
+
+    The scheduler compares actual run output against these baselines
+    and logs warnings when counts fall outside the expected range.
+    """
+
+    __tablename__ = "collector_health_baselines"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False, unique=True)
+    min_expected = Column(Integer, nullable=False, default=0)
+    max_expected = Column(Integer, nullable=False, default=1000)
+    alert_on_zero = Column(Boolean, nullable=False, default=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

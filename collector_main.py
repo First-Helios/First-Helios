@@ -94,7 +94,32 @@ def _get_job_registry() -> dict:
         # ── Maintenance ───────────────────────────────────────────────────────
         "posting_expiry":   _run_posting_expiry,
         "posting_purge":    _run_posting_purge,
+        # ── Event collectors (auto-discovered) ────────────────────────────────
+        **_get_event_jobs(),
     }
+
+
+def _get_event_jobs() -> dict:
+    """Build runner functions for all registered event collectors."""
+    import importlib
+    import pkgutil
+
+    import collectors.events as _ec_pkg
+    from collectors.events.registry import get_all
+    from core.scheduler import _make_event_runner
+
+    # Ensure all collector modules are imported to trigger @event_collector
+    for _, mod_name, _ in pkgutil.iter_modules(_ec_pkg.__path__):
+        if mod_name not in ("registry", "__init__"):
+            try:
+                importlib.import_module(f"collectors.events.{mod_name}")
+            except Exception:
+                pass
+
+    jobs: dict = {}
+    for name, cfg in get_all().items():
+        jobs[f"event_{name}"] = _make_event_runner(cfg["class"])
+    return jobs
 
 
 # ── Daily job IDs — the ones that make sense to fire on --run-now ─────────────
@@ -110,6 +135,13 @@ DAILY_JOB_IDS = [
     "juju",
     "reddit",
     "posting_expiry",
+    # Event collectors (populated dynamically on first access)
+    "event_ticketmaster",
+    "event_eventbrite",
+    "event_meetup",
+    "event_do512",
+    "event_austin_city_calendar",
+    "event_austintexas_org",
 ]
 
 

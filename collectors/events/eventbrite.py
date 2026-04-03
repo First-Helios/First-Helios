@@ -172,7 +172,8 @@ def _parse_event(raw: dict[str, Any]) -> EventSignal | None:
         is_free=is_free,
         source_url=source_url,
         ticket_url=source_url,
-        metadata={
+raw_payload=raw,
+    metadata={
             "image_url": image_url,
         },
     )

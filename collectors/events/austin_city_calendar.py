@@ -173,7 +173,8 @@ def _parse_socrata_event(raw: dict[str, Any], dataset_type: str) -> EventSignal 
         end_time=end_time,
         is_free=True,  # City events are generally free/public
         source_url=f"https://data.austintexas.gov/resource/{_DATASETS.get(dataset_type, '')}",
-        metadata={
+raw_payload=raw,
+    metadata={
             "dataset": dataset_type,
             "permit_type": raw.get("permit_type"),
             "attendance_estimate": raw.get("estimated_attendance"),

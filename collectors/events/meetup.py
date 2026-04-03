@@ -249,7 +249,8 @@ def _parse_event(node: dict[str, Any]) -> EventSignal | None:
         is_free=is_free,
         source_url=source_url,
         ticket_url=source_url,
-        metadata={
+raw_payload=node,
+    metadata={
             "image_url": image_url,
             "group_name": group.get("name"),
             "group_urlname": group.get("urlname"),

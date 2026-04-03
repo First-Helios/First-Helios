@@ -14,12 +14,23 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func as sqlfunc
 
-from core.database import get_session, init_db
-from events.models import Event, Venue
+from core.database import get_engine, get_session
+from events.models import Event, EventInteraction, Venue
 
 logger = logging.getLogger(__name__)
 
 events_bp = Blueprint("events", __name__, url_prefix="/api/events")
+
+# Module-level singleton — avoids re-creating engine + DDL on every request
+_engine = None
+
+
+def _get_db_session():
+    """Return a new Session using a lazily-initialised engine singleton."""
+    global _engine
+    if _engine is None:
+        _engine = get_engine()
+    return get_session(_engine)
 
 
 # ── H3 hex map ────────────────────────────────────────────────────────────────
@@ -40,8 +51,7 @@ def events_h3_map():
     resolution = max(7, min(8, resolution))
     h3_col = Event.h3_r7 if resolution == 7 else Event.h3_r8
 
-    engine  = init_db()
-    session = get_session(engine)
+    session = _get_db_session()
     try:
         q = session.query(
             h3_col.label("cell_id"),
@@ -117,8 +127,7 @@ def events_listings():
     resolution = max(7, min(8, resolution))
     h3_col = Event.h3_r7 if resolution == 7 else Event.h3_r8
 
-    engine  = init_db()
-    session = get_session(engine)
+    session = _get_db_session()
     try:
         q = session.query(Event).filter(
             Event.region == region,
@@ -164,8 +173,7 @@ def events_categories():
     """Distinct event categories with counts."""
     region = request.args.get("region", "austin_tx")
 
-    engine  = init_db()
-    session = get_session(engine)
+    session = _get_db_session()
     try:
         rows = (
             session.query(
@@ -207,8 +215,7 @@ def events_venues():
     region = request.args.get("region", "austin_tx")
     limit  = min(request.args.get("limit", 50, type=int), 200)
 
-    engine  = init_db()
-    session = get_session(engine)
+    session = _get_db_session()
     try:
         now = datetime.utcnow()
         rows = (
@@ -237,6 +244,71 @@ def events_venues():
 
     except Exception as e:
         logger.error("[events/venues] %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        session.close()
+
+
+# ── Interactions ──────────────────────────────────────────────────────────────
+
+_VALID_INTERACTION_TYPES = {"view", "save", "click_url", "rating"}
+
+
+@events_bp.route("/interactions", methods=["POST"])
+def create_interaction():
+    """Record a user interaction (view, save, click, rating).
+
+    JSON body:
+      event_id          (int, required)
+      interaction_type  (str, required) — view / save / click_url / rating
+      value             (float, optional) — for ratings
+      session_id        (str, optional) — anonymized session identifier
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"status": "error", "message": "JSON body required"}), 400
+
+    event_id = data.get("event_id")
+    itype = data.get("interaction_type")
+    value = data.get("value")
+    session_id = data.get("session_id")
+
+    if not event_id or not isinstance(event_id, int):
+        return jsonify({"status": "error", "message": "event_id (int) required"}), 400
+
+    if itype not in _VALID_INTERACTION_TYPES:
+        return jsonify({
+            "status": "error",
+            "message": f"interaction_type must be one of {sorted(_VALID_INTERACTION_TYPES)}",
+        }), 400
+
+    if value is not None and not isinstance(value, (int, float)):
+        return jsonify({"status": "error", "message": "value must be numeric"}), 400
+
+    session = _get_db_session()
+    try:
+        # Verify event exists
+        evt = session.get(Event, event_id)
+        if evt is None:
+            return jsonify({"status": "error", "message": "event not found"}), 404
+
+        interaction = EventInteraction(
+            event_id=event_id,
+            interaction_type=itype,
+            value=value,
+            session_id=session_id,
+        )
+        session.add(interaction)
+        session.commit()
+
+        return jsonify({
+            "status": "ok",
+            "interaction_id": interaction.id,
+        }), 201
+
+    except Exception as e:
+        session.rollback()
+        logger.error("[events/interactions] %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
     finally:
         session.close()

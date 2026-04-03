@@ -285,20 +285,68 @@ def _parse_cron_expr(expr: str) -> dict:
 
 
 def _make_event_runner(collector_cls):
-    """Return a zero-arg callable that instantiates and runs a collector."""
+    """Return a zero-arg callable that instantiates and runs a collector,
+    records a CollectorRun, and checks health baselines."""
     def runner():
+        source = getattr(collector_cls, "SOURCE", collector_cls.__name__)
+        from datetime import datetime
+
+        from core.database import CollectorRun, get_engine, get_session
+        from events.ingest import ingest_event
+        from events.models import CollectorHealthBaseline
+
+        engine = get_engine()
+        session = get_session(engine)
+        run = CollectorRun(source=source, fetched=0, new=0, updated=0, skipped=0, run_at=datetime.utcnow())
         try:
+            session.add(run)
+            session.flush()  # get run.id for lineage
+
             collector = collector_cls()
-            count = collector.run(region="austin_tx")
+            signals = collector.collect(region="austin_tx")
+            run.fetched = len(signals)
+
+            new_count = 0
+            for sig in signals:
+                sig.collector_run_id = run.id
+                _, is_new = ingest_event(sig, "austin_tx", session)
+                if is_new:
+                    new_count += 1
+
+            run.new = new_count
+            run.updated = run.fetched - new_count
+            session.commit()
+
             logger.info(
-                "[Scheduler] Event collector %s: ingested %d new events",
-                getattr(collector_cls, "SOURCE", collector_cls.__name__), count,
+                "[Scheduler] Event collector %s: %d fetched, %d new (run_id=%d)",
+                source, run.fetched, new_count, run.id,
             )
+
+            # ── Health baseline check ─────────────────────────────────────────
+            baseline = session.query(CollectorHealthBaseline).filter_by(source=source).first()
+            if baseline:
+                if baseline.alert_on_zero and run.fetched == 0:
+                    logger.warning(
+                        "[HealthCheck] %s returned 0 events — possible outage", source,
+                    )
+                if run.fetched < baseline.min_expected:
+                    logger.warning(
+                        "[HealthCheck] %s returned %d events (min expected: %d)",
+                        source, run.fetched, baseline.min_expected,
+                    )
+                if run.fetched > baseline.max_expected:
+                    logger.warning(
+                        "[HealthCheck] %s returned %d events (max expected: %d)",
+                        source, run.fetched, baseline.max_expected,
+                    )
+
         except Exception as e:
+            session.rollback()
             logger.error(
-                "[Scheduler] Event collector %s failed: %s",
-                getattr(collector_cls, "SOURCE", collector_cls.__name__), e,
+                "[Scheduler] Event collector %s failed: %s", source, e,
             )
+        finally:
+            session.close()
     return runner
 
 
