@@ -121,6 +121,8 @@ class JobPosting(Base):
         Index("ix_job_postings_fp_active",        "fingerprint", "is_active"),
         Index("ix_job_postings_h3r7_active",      "h3_r7", "is_active"),
         Index("ix_job_postings_h3r8_active",      "h3_r8", "is_active"),
+        Index("ix_job_postings_region_industry_active", "region", "industry", "is_active"),
+        Index("ix_job_posting_detail_gin", "detail_json", postgresql_using="gin"),
     )
 
     def to_dict(self) -> dict:

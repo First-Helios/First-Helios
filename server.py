@@ -10,6 +10,7 @@ Depends on: Flask, backend.*, config.loader
 """
 
 import argparse
+import functools
 import json
 import logging
 import sys
@@ -54,6 +55,70 @@ from core.targeting import compute_targeting
 
 logger = logging.getLogger(__name__)
 
+# ── H3 cell-to-latlng cache (stable geometric centers, never change) ─────────
+_h3_latlng_cache: dict[str, tuple[float, float]] = {}
+
+def _cached_cell_to_latlng(cell_id: str) -> tuple[float, float]:
+    """Return (lat, lng) for an H3 cell, caching results in-process."""
+    result = _h3_latlng_cache.get(cell_id)
+    if result is None:
+        import h3 as h3lib_cache
+        result = h3lib_cache.cell_to_latlng(cell_id)
+        _h3_latlng_cache[cell_id] = result
+    return result
+
+# ── Reference data caches (read-only tables, loaded once) ────────────────────
+
+@functools.lru_cache(maxsize=1)
+def _get_taxonomy_map() -> dict:
+    """Load IndustryTaxonomy into a dict once, keyed by industry_key."""
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        from core.models.reference import IndustryTaxonomy as IT
+        return {
+            t.industry_key: {"display_name": t.display_name, "worker_tier": t.worker_tier}
+            for t in session.query(IT).all()
+        }
+    finally:
+        session.close()
+
+@functools.lru_cache(maxsize=1)
+def _get_occupation_data() -> tuple[list, dict]:
+    """Load MobOccupation rows + OccupationAlias map once.
+
+    Returns (occupation_dicts, alias_map) where alias_map is soc_code → [alias, ...].
+    """
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        from core.models.reference import MobOccupation, MobTransition, OccupationAlias
+        occs = session.query(MobOccupation).order_by(MobOccupation.title).all()
+        origin_socs = {r[0] for r in session.query(MobTransition.origin_soc).distinct().all()}
+
+        alias_rows = session.query(OccupationAlias.soc_code, OccupationAlias.alias).all()
+        alias_map: dict[str, list[str]] = {}
+        for soc, alias in alias_rows:
+            if soc not in alias_map:
+                alias_map[soc] = []
+            if len(alias_map[soc]) < 15:
+                alias_map[soc].append(alias)
+
+        occ_dicts = []
+        for o in occs:
+            occ_dicts.append({
+                "soc_code": o.soc_code,
+                "title": o.title,
+                "median_hourly_wage": o.median_hourly_wage,
+                "annual_employment": o.annual_employment,
+                "industry_cluster": o.industry_cluster,
+                "has_transitions": o.soc_code in origin_socs,
+                "aliases": alias_map.get(o.soc_code, []),
+            })
+        return occ_dicts, alias_map
+    finally:
+        session.close()
+
 app = Flask(
     __name__,
     static_folder="frontend",
@@ -66,6 +131,14 @@ try:
     from postings.spiritpool_routes import spiritpool_bp
     app.register_blueprint(spiritpool_bp)
     logger.info("Spirit Pool blueprint registered at /api/spiritpool")
+except ImportError:
+    pass
+
+# ── Events Blueprint ──────────────────────────────────────────────────────────
+try:
+    from events.routes import events_bp
+    app.register_blueprint(events_bp)
+    logger.info("Events blueprint registered at /api/events")
 except ImportError:
     pass
 
@@ -601,7 +674,7 @@ def get_h3_map():
         cells = []
         for row in rows:
             cell_id = row.cell_id
-            lat, lng = h3lib.cell_to_latlng(cell_id)
+            lat, lng = _cached_cell_to_latlng(cell_id)
             cells.append({
                 "cell_id":     cell_id,
                 "count":       row.count,
@@ -782,10 +855,7 @@ def ref_summary():
             .group_by(LocalEmployer.industry)
             .all()
         )
-        taxonomy_map = {
-            t.industry_key: {"display_name": t.display_name, "worker_tier": t.worker_tier}
-            for t in session.query(IndustryTaxonomy).all()
-        }
+        taxonomy_map = _get_taxonomy_map()
         industry_list = sorted(
             [
                 {
@@ -1006,42 +1076,14 @@ def mobility_occupations():
     titles like 'barista' or 'personal trainer' without an extra API call.
     """
     try:
-        db = get_session(init_db())
-        occs = db.query(MobOccupation).order_by(MobOccupation.title).all()
-
-        origin_socs = {
-            r[0] for r in db.query(MobTransition.origin_soc).distinct().all()
-        }
-
-        # Build alias map: soc_code → [alias, alias, ...] (up to 15)
-        alias_rows = db.query(OccupationAlias.soc_code, OccupationAlias.alias).all()
-        alias_map: dict[str, list[str]] = {}
-        for soc, alias in alias_rows:
-            if soc not in alias_map:
-                alias_map[soc] = []
-            if len(alias_map[soc]) < 15:
-                alias_map[soc].append(alias)
-
+        occ_dicts, _ = _get_occupation_data()
         return jsonify({
             "status": "ok",
-            "occupations": [
-                {
-                    "soc_code":           o.soc_code,
-                    "title":              o.title,
-                    "median_hourly_wage": o.median_hourly_wage,
-                    "cluster_name":       o.cluster_name,
-                    "occ_family_name":    o.occ_family_name,
-                    "has_transitions":    o.soc_code in origin_socs,
-                    "aliases":            alias_map.get(o.soc_code, []),
-                }
-                for o in occs
-            ],
+            "occupations": occ_dicts,
         })
     except Exception as e:
         logger.error("[mobility/occupations] %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
-    finally:
-        db.close()
 
 
 @app.route("/api/mobility/search")
@@ -1459,11 +1501,11 @@ def jobs_h3_map():
                     parent = h3lib.cell_to_parent(row.cell_id, 6)
                     r6_counts[parent] += row.count
             for cell_id, count in r6_counts.items():
-                lat, lng = h3lib.cell_to_latlng(cell_id)
+                lat, lng = _cached_cell_to_latlng(cell_id)
                 cells.append({"cell_id": cell_id, "count": count, "lat": lat, "lng": lng})
         else:
             for row in rows:
-                lat, lng = h3lib.cell_to_latlng(row.cell_id)
+                lat, lng = _cached_cell_to_latlng(row.cell_id)
                 cells.append({"cell_id": row.cell_id, "count": row.count, "lat": lat, "lng": lng})
 
         return jsonify({"status": "ok", "resolution": resolution, "cell_count": len(cells), "cells": cells})

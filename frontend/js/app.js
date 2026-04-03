@@ -100,10 +100,17 @@
         if (window.jobfinder) window.jobfinder.refresh('austin_tx', category, _jfMode);
     }
 
+    // ── Event Finder refresh ────────────────────────────────────────
+    function refreshEventFinder() {
+        var category = document.getElementById('event-category-filter').value;
+        if (window.eventfinder) window.eventfinder.refresh('austin_tx', category);
+    }
+
     // ── Map zoom handler ────────────────────────────────────────────
     map.on('zoomend', function () {
         if (currentMode === 'targeting') refreshMap();
         if (currentMode === 'jobfinder' && window.jobfinder) window.jobfinder.onZoom();
+        if (currentMode === 'eventfinder' && window.eventfinder) window.eventfinder.onZoom();
     });
 
     // ── Sidebar: Top Targets ────────────────────────────────────────
@@ -219,34 +226,41 @@
     function switchMode(mode) {
         currentMode = mode;
 
-        var isTargeting  = mode === 'targeting';
-        var isPathfinder = mode === 'pathfinder';
-        var isJobFinder  = mode === 'jobfinder';
+        var isTargeting   = mode === 'targeting';
+        var isPathfinder  = mode === 'pathfinder';
+        var isJobFinder   = mode === 'jobfinder';
+        var isEventFinder = mode === 'eventfinder';
 
         // Controls
-        document.getElementById('targeting-controls').style.display  = isTargeting  ? 'flex' : 'none';
-        document.getElementById('pathfinder-controls').style.display = isPathfinder ? 'flex' : 'none';
-        document.getElementById('jobfinder-controls').style.display  = isJobFinder  ? 'flex' : 'none';
+        document.getElementById('targeting-controls').style.display    = isTargeting   ? 'flex' : 'none';
+        document.getElementById('pathfinder-controls').style.display   = isPathfinder  ? 'flex' : 'none';
+        document.getElementById('jobfinder-controls').style.display    = isJobFinder   ? 'flex' : 'none';
+        document.getElementById('eventfinder-controls').style.display  = isEventFinder ? 'flex' : 'none';
 
         // Sidebars
-        document.getElementById('targeting-sidebar').style.display   = isTargeting  ? 'block' : 'none';
-        document.getElementById('pathfinder-sidebar').style.display  = isPathfinder ? 'block' : 'none';
-        document.getElementById('jobfinder-sidebar').style.display   = isJobFinder  ? 'block' : 'none';
+        document.getElementById('targeting-sidebar').style.display     = isTargeting   ? 'block' : 'none';
+        document.getElementById('pathfinder-sidebar').style.display    = isPathfinder  ? 'block' : 'none';
+        document.getElementById('jobfinder-sidebar').style.display     = isJobFinder   ? 'block' : 'none';
+        document.getElementById('eventfinder-sidebar').style.display   = isEventFinder ? 'block' : 'none';
 
         // Map legends
-        var targLegend = document.getElementById('map-legend');
-        var jobLegend  = document.getElementById('map-legend-jobs');
-        if (targLegend) targLegend.style.display = isJobFinder  ? 'none' : 'flex';
-        if (jobLegend)  jobLegend.style.display  = isJobFinder  ? 'flex' : 'none';
+        var targLegend  = document.getElementById('map-legend');
+        var jobLegend   = document.getElementById('map-legend-jobs');
+        var eventLegend = document.getElementById('map-legend-events');
+        if (targLegend)  targLegend.style.display  = isTargeting ? 'flex' : 'none';
+        if (jobLegend)   jobLegend.style.display   = isJobFinder ? 'flex' : 'none';
+        if (eventLegend) eventLegend.style.display  = isEventFinder ? 'flex' : 'none';
 
         // Mode buttons
-        document.getElementById('mode-targeting').classList.toggle('active',  isTargeting);
-        document.getElementById('mode-pathfinder').classList.toggle('active', isPathfinder);
-        document.getElementById('mode-jobfinder').classList.toggle('active',  isJobFinder);
+        document.getElementById('mode-targeting').classList.toggle('active',    isTargeting);
+        document.getElementById('mode-pathfinder').classList.toggle('active',   isPathfinder);
+        document.getElementById('mode-jobfinder').classList.toggle('active',    isJobFinder);
+        document.getElementById('mode-eventfinder').classList.toggle('active',  isEventFinder);
 
         if (isTargeting) {
             if (window.pathfinderClearMarkers) window.pathfinderClearMarkers();
             if (window.jobfinder) window.jobfinder.clear();
+            if (window.eventfinder) window.eventfinder.clear();
             map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);
             showTopTargetsView();
             refreshMap();
@@ -255,12 +269,14 @@
         } else if (isPathfinder) {
             if (window.h3map) window.h3map.clear();
             if (window.jobfinder) window.jobfinder.clear();
+            if (window.eventfinder) window.eventfinder.clear();
             map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);
             if (window.pathfinderInit) window.pathfinderInit();
 
         } else if (isJobFinder) {
             if (window.h3map) window.h3map.clear();
             if (window.pathfinderClearMarkers) window.pathfinderClearMarkers();
+            if (window.eventfinder) window.eventfinder.clear();
             map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);
             _jfMode = 'remote'; // reset to default mode
             _syncLocationBtns('remote');
@@ -269,6 +285,13 @@
             if (window.jobfinder) window.jobfinder.setResolution('auto');
             if (window.jobfinder) window.jobfinder.resetFilters();
             refreshJobFinder();
+
+        } else if (isEventFinder) {
+            if (window.h3map) window.h3map.clear();
+            if (window.pathfinderClearMarkers) window.pathfinderClearMarkers();
+            if (window.jobfinder) window.jobfinder.clear();
+            map.setView(AUSTIN_CENTER, DEFAULT_ZOOM);
+            refreshEventFinder();
         }
     }
 
@@ -310,6 +333,7 @@
     document.getElementById('mode-targeting').addEventListener('click',  function () { switchMode('targeting'); });
     document.getElementById('mode-pathfinder').addEventListener('click', function () { switchMode('pathfinder'); });
     document.getElementById('mode-jobfinder').addEventListener('click',  function () { switchMode('jobfinder'); });
+    document.getElementById('mode-eventfinder').addEventListener('click', function () { switchMode('eventfinder'); });
 
     document.getElementById('refresh-btn').addEventListener('click', function () {
         showTopTargetsView();
@@ -331,6 +355,10 @@
 
     document.getElementById('job-category-filter').addEventListener('change', function () {
         refreshJobFinder();
+    });
+
+    document.getElementById('event-category-filter').addEventListener('change', function () {
+        refreshEventFinder();
     });
 
     document.getElementById('listings-back-btn').addEventListener('click', function () {

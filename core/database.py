@@ -71,6 +71,14 @@ def _import_listings_models() -> None:
         logger.debug("[Database] listings.models not found — skipping")
 
 
+def _import_events_models() -> None:
+    """Import events models so their tables register with Base.metadata."""
+    try:
+        import events.models  # noqa: F401
+    except ImportError:
+        logger.debug("[Database] events.models not found — skipping")
+
+
 class Base(DeclarativeBase):
     """Declarative base for all tracker models."""
     pass
@@ -160,6 +168,10 @@ class Signal(Base):
             "observed_at": self.observed_at.isoformat() if self.observed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+    __table_args__ = (
+        Index("ix_signals_store_source", "store_num", "source"),
+    )
 
 
 class Snapshot(Base):
@@ -661,6 +673,10 @@ class LocalEmployer(Base):
             "is_active": self.is_active,
         }
 
+    __table_args__ = (
+        UniqueConstraint("fingerprint", "region", name="uq_local_employer_fp_region"),
+    )
+
 
 class EmployerNameIndex(Base):
     """Canonical name registry for every unique employer name seen in local_employers.
@@ -1085,6 +1101,7 @@ def init_db(db_path: Path | None = None):
     _import_reference_models()
     _import_metadata_models()
     _import_listings_models()
+    _import_events_models()
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
     db_label = os.environ.get("DATABASE_URL") or str(db_path or DB_PATH)

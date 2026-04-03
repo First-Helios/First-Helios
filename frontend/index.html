@@ -17,6 +17,7 @@
             <button id="mode-targeting" class="mode-btn active">Job Fair Map</button>
             <button id="mode-pathfinder" class="mode-btn">Career Pathfinder</button>
             <button id="mode-jobfinder" class="mode-btn">Job Finder</button>
+            <button id="mode-eventfinder" class="mode-btn">Events</button>
         </div>
 
         <!-- Targeting mode controls -->
@@ -49,6 +50,22 @@
             </div>
             <button id="jf-city-btn" title="Jobs geocoded to Austin city center (no precise address)">📍 Area</button>
             <span id="job-count" title="Job count">—</span>
+        </div>
+
+        <!-- Event Finder mode controls -->
+        <div id="eventfinder-controls" class="controls-group" style="display:none">
+            <select id="event-category-filter" title="Filter by event category">
+                <option value="">All Categories</option>
+                <option value="music">Music</option>
+                <option value="food">Food &amp; Drink</option>
+                <option value="sports">Sports</option>
+                <option value="arts">Arts &amp; Theatre</option>
+                <option value="outdoor">Outdoor</option>
+                <option value="community">Community</option>
+                <option value="family">Family</option>
+                <option value="nightlife">Nightlife</option>
+            </select>
+            <span id="event-count" title="Event count">—</span>
         </div>
 
         <!-- Pathfinder mode controls -->
@@ -84,6 +101,10 @@
                 <span class="legend-dot" style="background:#6c5ce7"></span> Local-heavy
                 <span style="opacity:0.6;font-size:11px"> · click hex for listings</span>
             </div>
+            <div id="map-legend-events" class="legend-eventfinder" style="display:none">
+                <span class="legend-dot" style="background:#ff6b6b"></span> Event density
+                <span style="opacity:0.6;font-size:11px"> · click hex to view events</span>
+            </div>
             <div id="map-legend-jobs" class="legend-jobfinder" style="display:none">
                 <span class="legend-dot" style="background:#4ecca3"></span> Job density
                 <span style="opacity:0.6;font-size:11px"> · click hex to view listings</span>
@@ -112,6 +133,29 @@
                 <div id="pathfinder-origin"></div>
                 <h2>Where You Could Go</h2>
                 <div id="paths-list"></div>
+            </div>
+
+            <!-- Event Finder sidebar -->
+            <div id="eventfinder-sidebar" class="sidebar" style="display:none">
+                <div id="ef-default-panel">
+                    <h2>Upcoming Events</h2>
+                    <div id="ef-list-controls" style="margin-bottom:8px">
+                        <select id="ef-free-filter" title="Price filter">
+                            <option value="">Any price</option>
+                            <option value="true">Free only</option>
+                            <option value="false">Paid only</option>
+                        </select>
+                    </div>
+                    <div id="ef-list"></div>
+                    <button id="ef-load-more" style="display:none">Load more</button>
+                </div>
+                <div id="ef-cell-panel" style="display:none">
+                    <div class="listings-header">
+                        <button id="ef-back-btn" class="back-btn">← Back</button>
+                        <span id="ef-cell-title"></span>
+                    </div>
+                    <div id="ef-cell-list"></div>
+                </div>
             </div>
 
             <!-- Job Finder sidebar -->
@@ -162,6 +206,7 @@
     <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
     <script src="js/h3map.js"></script>
     <script src="js/jobfinder.js"></script>
+    <script src="js/eventfinder.js"></script>
     <script src="js/app.js"></script>
     <script src="js/pathfinder.js"></script>
 </body>
