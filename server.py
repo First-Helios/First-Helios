@@ -13,7 +13,7 @@ import argparse
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -1487,7 +1487,12 @@ def jobs_listings():
       category    (optional) — industry string filter
       page        (int, default 1)
       limit       (int, default 20, max 100)
+      wage_min_filter  (float, optional) — min hourly wage (yearly auto-converted)
+      wage_max_filter  (float, optional) — max hourly wage (yearly auto-converted)
+      posted_within    (int, optional) — only jobs posted within N days
+      time_type        (str, optional) — filter on detail_json->>'time_type'
     """
+    from sqlalchemy import case as sa_case
     from postings.models import JobPosting
 
     region     = request.args.get("region", "austin_tx")
@@ -1499,6 +1504,10 @@ def jobs_listings():
     limit      = min(100, request.args.get("limit", 20, type=int))
     sort       = request.args.get("sort", "date")   # "date" | "wage"
     keyword    = request.args.get("q", "").strip()
+    wage_min_filter = request.args.get("wage_min_filter", type=float)
+    wage_max_filter = request.args.get("wage_max_filter", type=float)
+    posted_within   = request.args.get("posted_within", type=int)
+    time_type       = request.args.get("time_type", "").strip()
 
     engine  = init_db()
     session = get_session(engine)
@@ -1531,6 +1540,41 @@ def jobs_listings():
             q = q.filter(
                 JobPosting.role_title.ilike(like) |
                 JobPosting.raw_employer_name.ilike(like)
+            )
+
+        # ── Wage range filter (normalise yearly→hourly via case()) ────────
+        if wage_min_filter is not None or wage_max_filter is not None:
+            hourly_min_expr = sa_case(
+                (JobPosting.wage_period == 'yearly', JobPosting.wage_min / 2080),
+                (JobPosting.wage_period == 'monthly', JobPosting.wage_min / (2080 / 12)),
+                (JobPosting.wage_period == 'weekly', JobPosting.wage_min / 40),
+                else_=JobPosting.wage_min,
+            )
+            hourly_max_expr = sa_case(
+                (JobPosting.wage_period == 'yearly', JobPosting.wage_max / 2080),
+                (JobPosting.wage_period == 'monthly', JobPosting.wage_max / (2080 / 12)),
+                (JobPosting.wage_period == 'weekly', JobPosting.wage_max / 40),
+                else_=JobPosting.wage_max,
+            )
+            if wage_min_filter is not None:
+                # Job's max hourly must be >= the filter minimum
+                q = q.filter(hourly_max_expr >= wage_min_filter)
+            if wage_max_filter is not None:
+                # Job's min hourly must be <= the filter maximum
+                q = q.filter(hourly_min_expr <= wage_max_filter)
+
+        # ── Posted-within filter ──────────────────────────────────────────
+        if posted_within:
+            cutoff_date = datetime.utcnow() - timedelta(days=posted_within)
+            q = q.filter(
+                (JobPosting.posted_date >= cutoff_date) |
+                (JobPosting.posted_date.is_(None))
+            )
+
+        # ── Time type filter (JSONB) ─────────────────────────────────────
+        if time_type:
+            q = q.filter(
+                JobPosting.detail_json["time_type"].astext.ilike(f"%{time_type}%")
             )
 
         total = q.count()
@@ -1629,6 +1673,8 @@ def jobs_listings():
                 "detail":      jp.detail_json,
                 "h3_r7":       jp.h3_r7,
                 "h3_r8":       jp.h3_r8,
+                "lat":         jp.lat,
+                "lng":         jp.lng,
             }
 
         jobs = [_build_job(jp) for jp in postings]

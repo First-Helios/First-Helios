@@ -224,3 +224,129 @@ def stats():
         return jsonify({"error": "internal error", "detail": str(exc)}), 500
     finally:
         session.close()
+
+
+# ── GET /api/spiritpool/insights ──────────────────────────────────────────────
+
+@spiritpool_bp.route("/insights", methods=["GET"])
+def insights():
+    """Return job-market insight stats for the Spirit Pool extension popup.
+
+    Query params:
+      region   (default: austin_tx)
+      industry (optional)
+
+    Response:
+        {
+            "new_jobs_7d":          N,
+            "new_jobs_prev_7d":     N,
+            "trend_pct":            float,
+            "top_hiring_employers": [ {"name": "...", "count": N}, ... ],
+            "salary_p50_hourly":    float|null,
+            "salary_p75_hourly":    float|null,
+            "with_salary_pct":      float,
+            "remote_pct":           float,
+            "job_board_url":        "..."
+        }
+    """
+    import statistics
+
+    region = request.args.get("region", "austin_tx")
+    industry = request.args.get("industry", "").strip() or None
+
+    engine = init_db()
+    session = get_session(engine)
+    try:
+        now = datetime.utcnow()
+        cutoff_7d = now - timedelta(days=7)
+        cutoff_14d = now - timedelta(days=14)
+
+        base_q = session.query(JobPosting).filter(
+            JobPosting.region == region,
+            JobPosting.is_active.is_(True),
+        )
+        if industry:
+            base_q = base_q.filter(JobPosting.industry == industry)
+
+        # ── New jobs counts ───────────────────────────────────────────────
+        new_7d = base_q.filter(JobPosting.scraped_at >= cutoff_7d).count()
+        new_prev_7d = base_q.filter(
+            JobPosting.scraped_at >= cutoff_14d,
+            JobPosting.scraped_at < cutoff_7d,
+        ).count()
+        trend_pct = (
+            round((new_7d - new_prev_7d) / new_prev_7d * 100, 1)
+            if new_prev_7d > 0
+            else 0.0
+        )
+
+        # ── Top hiring employers this week ────────────────────────────────
+        top_rows = (
+            base_q.filter(JobPosting.scraped_at >= cutoff_7d)
+            .with_entities(
+                JobPosting.raw_employer_name,
+                func.count(JobPosting.id).label("cnt"),
+            )
+            .group_by(JobPosting.raw_employer_name)
+            .order_by(text("cnt DESC"))
+            .limit(5)
+            .all()
+        )
+        top_hiring = [{"name": r[0], "count": r[1]} for r in top_rows]
+
+        # ── Salary percentiles (hourly) ───────────────────────────────────
+        wage_rows = (
+            base_q.filter(JobPosting.wage_min.isnot(None))
+            .with_entities(JobPosting.wage_min, JobPosting.wage_period)
+            .all()
+        )
+        total_active = base_q.count()
+
+        hourly_vals = []
+        for wmin, wperiod in wage_rows:
+            if wperiod == "yearly":
+                hourly_vals.append(wmin / 2080)
+            elif wperiod == "monthly":
+                hourly_vals.append(wmin * 12 / 2080)
+            elif wperiod == "weekly":
+                hourly_vals.append(wmin / 40)
+            else:
+                hourly_vals.append(wmin)
+
+        hourly_vals.sort()
+
+        salary_p50 = round(statistics.median(hourly_vals), 2) if hourly_vals else None
+        salary_p75 = None
+        if hourly_vals:
+            idx = int(len(hourly_vals) * 0.75)
+            salary_p75 = round(hourly_vals[min(idx, len(hourly_vals) - 1)], 2)
+
+        with_salary_pct = round(len(wage_rows) / total_active * 100, 1) if total_active else 0.0
+
+        # ── Remote percentage ─────────────────────────────────────────────
+        remote_count = base_q.filter(JobPosting.is_remote.is_(True)).count()
+        remote_pct = round(remote_count / total_active * 100, 1) if total_active else 0.0
+
+        # ── Job board URL ─────────────────────────────────────────────────
+        board_url = "http://localhost:8765/?mode=jobfinder"
+        if industry:
+            from urllib.parse import quote
+            board_url += "&category=" + quote(industry)
+
+        return jsonify({
+            "new_jobs_7d":          new_7d,
+            "new_jobs_prev_7d":     new_prev_7d,
+            "trend_pct":            trend_pct,
+            "top_hiring_employers": top_hiring,
+            "salary_p50_hourly":    salary_p50,
+            "salary_p75_hourly":    salary_p75,
+            "with_salary_pct":      with_salary_pct,
+            "remote_pct":           remote_pct,
+            "job_board_url":        board_url,
+        })
+
+    except Exception as exc:
+        logger.error("[SpiritPool] insights error: %s", exc)
+        return jsonify({"error": "internal error", "detail": str(exc)}), 500
+    finally:
+        session.close()

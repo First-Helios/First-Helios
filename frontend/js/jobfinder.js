@@ -22,12 +22,13 @@
     'use strict';
 
     // ── Internal state ────────────────────────────────────────────────────────
-    var _state = { region: 'austin_tx', category: '', mode: 'remote', sort: 'date', q: '' };
+    var _state = { region: 'austin_tx', category: '', mode: 'remote', sort: 'date', q: '', wageMin: '', wageMax: '', postedWithin: '', timeType: '' };
 
     // ── Hex layer ─────────────────────────────────────────────────────────────
     var _hexLayer    = null;
     var _cellPolys   = {};     // cell_id → L.polygon, for hover-to-glow
     var _renderGen   = 0;
+    var _selectedCell = null;  // currently selected cell_id for visual highlight
     var _resOverride = null;   // null = auto; 6, 7, or 8 = manual override
 
     var AUSTIN_LAT = 30.2672;
@@ -151,6 +152,13 @@
         'usajobs':              'USAJobs',
         'rapidapi_activejobs':  'ActiveJobs',
         'juju':                 'Juju',
+        'spiritpool_indeed':    'via SpiritPool (Indeed)',
+        'spiritpool_linkedin':  'via SpiritPool (LinkedIn)',
+        'spiritpool_glassdoor': 'via SpiritPool (Glassdoor)',
+        'spiritpool_google':    'via SpiritPool (Google Maps)',
+        'spiritpool_ziprecruiter': 'via SpiritPool (ZipRecruiter)',
+        'spiritpool_apply':     'via SpiritPool (Careers)',
+        'spiritpool_www':       'via SpiritPool (Google)',
     };
 
     function _esc(s) {
@@ -182,12 +190,24 @@
         if (job.h3_r7) card.dataset.h3r7 = job.h3_r7;
         if (job.h3_r8) card.dataset.h3r8 = job.h3_r8;
 
+        var d = job.detail || {};
+
+        // ── Employer header row ───────────────────────────────────────────
         var emp = '<div class="job-employer">' + _esc(job.employer || '—');
         if (job.is_remote) emp += '<span class="listing-badge remote">remote</span>';
-        var d = job.detail || {};
-        if (d.time_type) emp += '<span class="listing-badge time-type">' + _esc(d.time_type) + '</span>';
+        // time_type badge with job_type fallback
+        var typeLabel = d.time_type || d.job_type;
+        if (typeLabel) emp += '<span class="listing-badge time-type">' + _esc(typeLabel) + '</span>';
         var srcLabel = _SOURCE_LABELS[job.source] || job.source;
         if (srcLabel) emp += '<span class="listing-badge source">' + _esc(srcLabel) + '</span>';
+        // Date pinned to header row
+        var ago = _daysAgo(job.posted_date);
+        if (ago) emp += '<span class="listing-badge" style="margin-left:auto;opacity:0.7;font-size:11px">' + _esc(ago) + '</span>';
+        // Map pin link
+        if (job.lat && job.lng) {
+            emp += '<span class="listing-badge map-pin" data-lat="' + job.lat + '" data-lng="' + job.lng
+                 + '" title="Fly to location" style="cursor:pointer">📍</span>';
+        }
         emp += '</div>';
 
         var title = job.role_title
@@ -215,8 +235,6 @@
         if (d.days_and_hours) {
             meta.push('🕐 ' + (d.days_and_hours.length > 50 ? d.days_and_hours.slice(0, 50) + '…' : d.days_and_hours));
         }
-        var ago = _daysAgo(job.posted_date);
-        if (ago) meta.push(ago);
         var metaLine = meta.length
             ? '<div class="job-meta">' + _esc(meta.join(' · ')) + '</div>'
             : '';
@@ -236,6 +254,7 @@
         if (d.ksa)                    sections.push({ label: 'Knowledge, Skills & Abilities', text: d.ksa });
         if (d.preferred_qualifications) sections.push({ label: 'Preferred Qualifications', text: d.preferred_qualifications });
         if (d.licenses)               sections.push({ label: 'Licenses & Certifications', text: d.licenses });
+        if (d.notes_to_candidate)     sections.push({ label: 'Notes to Candidate', text: d.notes_to_candidate });
 
         if (sections.length) {
             detailHtml = '<div class="job-detail-toggle">Details ▾</div>'
@@ -270,6 +289,18 @@
             });
         }
 
+        // Wire map pin click
+        var pin = card.querySelector('.map-pin');
+        if (pin) {
+            pin.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var lat = parseFloat(this.dataset.lat);
+                var lng = parseFloat(this.dataset.lng);
+                var map = window.sharedMap;
+                if (map && !isNaN(lat) && !isNaN(lng)) map.flyTo([lat, lng], 15);
+            });
+        }
+
         // Hover-to-glow: highlight the hex this job is in
         if (job.h3_r7 || job.h3_r8) {
             card.addEventListener('mouseenter', function () {
@@ -300,6 +331,10 @@
                 + '&sort='  + encodeURIComponent(_state.sort);
         if (category)  url += '&category=' + encodeURIComponent(category);
         if (_state.q)  url += '&q='        + encodeURIComponent(_state.q);
+        if (_state.wageMin) url += '&wage_min_filter=' + encodeURIComponent(_state.wageMin);
+        if (_state.wageMax) url += '&wage_max_filter=' + encodeURIComponent(_state.wageMax);
+        if (_state.postedWithin) url += '&posted_within=' + encodeURIComponent(_state.postedWithin);
+        if (_state.timeType) url += '&time_type=' + encodeURIComponent(_state.timeType);
 
         if (!append) {
             container.innerHTML = '<div class="job-card"><div class="job-employer">Loading…</div></div>';
@@ -342,6 +377,10 @@
                 + '&sort='       + encodeURIComponent(_state.sort);
         if (category) url += '&category=' + encodeURIComponent(category);
         if (_state.q) url += '&q='        + encodeURIComponent(_state.q);
+        if (_state.wageMin) url += '&wage_min_filter=' + encodeURIComponent(_state.wageMin);
+        if (_state.wageMax) url += '&wage_max_filter=' + encodeURIComponent(_state.wageMax);
+        if (_state.postedWithin) url += '&posted_within=' + encodeURIComponent(_state.postedWithin);
+        if (_state.timeType) url += '&time_type=' + encodeURIComponent(_state.timeType);
 
         fetch(url)
             .then(function (r) { return r.json(); })
@@ -365,6 +404,13 @@
         if (defPanel)  defPanel.style.display  = 'block';
         if (cellPanel) cellPanel.style.display  = 'none';
 
+        // Restore previously selected hex to its original style
+        if (_selectedCell && _cellPolys[_selectedCell]) {
+            var prev = _cellPolys[_selectedCell];
+            if (prev._origStyle) prev.setStyle(prev._origStyle);
+        }
+        _selectedCell = null;
+
         var container = document.getElementById('jf-remote-list');
         if (!container) return;
 
@@ -375,6 +421,18 @@
     }
 
     function _showCellPanel(cellId, resolution, count, isCity) {
+        // Restore previous selection
+        if (_selectedCell && _cellPolys[_selectedCell]) {
+            var prev = _cellPolys[_selectedCell];
+            if (prev._origStyle) prev.setStyle(prev._origStyle);
+        }
+
+        // Apply selected style to clicked hex
+        _selectedCell = cellId;
+        var selPoly = _cellPolys[cellId];
+        if (selPoly) {
+            selPoly.setStyle({ color: '#00e5ff', weight: 3, opacity: 1.0, fillOpacity: 0.9 });
+        }
         var defPanel  = document.getElementById('jf-default-panel');
         var cellPanel = document.getElementById('jf-cell-panel');
         if (defPanel)  defPanel.style.display  = 'none';
@@ -443,6 +501,56 @@
                 }
             });
         }
+
+        // ── Wage range inputs (debounced) ─────────────────────────────────────
+        var wageMinInput = document.getElementById('jf-wage-min');
+        var wageMaxInput = document.getElementById('jf-wage-max');
+        function _onWageChange() {
+            var _wageTimer = null;
+            return function () {
+                clearTimeout(_wageTimer);
+                _wageTimer = setTimeout(function () {
+                    _state.wageMin = wageMinInput ? wageMinInput.value.trim() : '';
+                    _state.wageMax = wageMaxInput ? wageMaxInput.value.trim() : '';
+                    _listPage = 1;
+                    var container = document.getElementById('jf-remote-list');
+                    if (container) _loadList(container, _state.region, _state.category, _state.mode, 1, false);
+                }, 400);
+            };
+        }
+        var _wageHandler = _onWageChange();
+        if (wageMinInput) wageMinInput.addEventListener('input', _wageHandler);
+        if (wageMaxInput) wageMaxInput.addEventListener('input', _wageHandler);
+
+        // ── Posted-within select ──────────────────────────────────────────────
+        var postedWithinSelect = document.getElementById('jf-posted-within');
+        if (postedWithinSelect) {
+            postedWithinSelect.addEventListener('change', function () {
+                _state.postedWithin = this.value;
+                _listPage = 1;
+                var container = document.getElementById('jf-remote-list');
+                if (container) _loadList(container, _state.region, _state.category, _state.mode, 1, false);
+            });
+        }
+
+        // ── Job type chips (toggle) ──────────────────────────────────────────
+        var typeChips = document.querySelectorAll('.jf-type-chip');
+        typeChips.forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var val = this.dataset.type;
+                if (_state.timeType === val) {
+                    _state.timeType = '';
+                    this.classList.remove('active');
+                } else {
+                    typeChips.forEach(function (c) { c.classList.remove('active'); });
+                    _state.timeType = val;
+                    this.classList.add('active');
+                }
+                _listPage = 1;
+                var container = document.getElementById('jf-remote-list');
+                if (container) _loadList(container, _state.region, _state.category, _state.mode, 1, false);
+            });
+        });
     });
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -516,10 +624,21 @@
         resetFilters: function () {
             _state.q    = '';
             _state.sort = 'date';
+            _state.wageMin = '';
+            _state.wageMax = '';
+            _state.postedWithin = '';
+            _state.timeType = '';
             var searchEl = document.getElementById('jf-search');
             if (searchEl) searchEl.value = '';
             var sortEl = document.getElementById('jf-sort-select');
             if (sortEl) sortEl.value = 'date';
+            var wMinEl = document.getElementById('jf-wage-min');
+            if (wMinEl) wMinEl.value = '';
+            var wMaxEl = document.getElementById('jf-wage-max');
+            if (wMaxEl) wMaxEl.value = '';
+            var pwEl = document.getElementById('jf-posted-within');
+            if (pwEl) pwEl.value = '';
+            document.querySelectorAll('.jf-type-chip').forEach(function (c) { c.classList.remove('active'); });
         },
     };
 
