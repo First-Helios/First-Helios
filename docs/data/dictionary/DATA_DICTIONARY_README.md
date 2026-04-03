@@ -2,10 +2,12 @@
 
 **This is the master guide to understanding and documenting all data in ChainStaffingTracker.**
 
-Three documents work together:
+Five documents work together:
 1. **This file** — High-level orientation and FAQs
 2. **[DATA_DICTIONARY_TABLES.md](./DATA_DICTIONARY_TABLES.md)** — What each table *does* and where data comes from
 3. **[DATA_DICTIONARY_COLUMNS.md](./DATA_DICTIONARY_COLUMNS.md)** — What each column *means* and valid values
+4. **[DATA_DICTIONARY_COLLECTORS.md](./DATA_DICTIONARY_COLLECTORS.md)** — Field-level mapping for each external API (TheirStack, SerpAPI, RapidAPI, Jobicy, JobSpy, USAJobs) through to `ScraperSignal`
+5. **[DATA_DICTIONARY_SCHEDULER.md](./DATA_DICTIONARY_SCHEDULER.md)** — Scheduler job registry, trigger types, skip guards, rate manager integration, and troubleshooting
 
 ---
 
@@ -278,6 +280,7 @@ python -c "from backend.scheduler import init_scheduler; s = init_scheduler(); p
 | Version | Date | Changes |
 |---|---|---|
 | 1.0 | 2026-03-22 | Created comprehensive data dictionary suite (3 docs) |
+| 1.1 | 2026-04-02 | Added DATA_DICTIONARY_COLLECTORS.md and DATA_DICTIONARY_SCHEDULER.md |
 
 ---
 
