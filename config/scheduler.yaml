@@ -179,3 +179,42 @@ posting_purge:
     day_of_week: sun
     hour: 3
     minute: 30
+
+# ── Events Maintenance ────────────────────────────────────────────────────────
+
+event_expiry:
+  enabled: true
+  description: "Mark events inactive when expires_at has passed"
+  trigger: cron
+  cron:
+    hour: 3
+    minute: 30
+
+event_purge:
+  enabled: true
+  description: "Hard-delete inactive events older than 90 days"
+  trigger: cron
+  cron:
+    day_of_week: sun
+    hour: 4
+    minute: 0
+
+# ── Data Hygiene ──────────────────────────────────────────────────────────────
+
+log_purge:
+  enabled: true
+  description: "Purge api_request_log rows older than 30 days"
+  trigger: cron
+  cron:
+    day: 1
+    hour: 2
+    minute: 0
+
+snapshot_purge:
+  enabled: true
+  description: "Purge snapshot rows older than 90 days"
+  trigger: cron
+  cron:
+    day: 1
+    hour: 2
+    minute: 30

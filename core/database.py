@@ -171,6 +171,7 @@ class Signal(Base):
 
     __table_args__ = (
         Index("ix_signals_store_source", "store_num", "source"),
+        Index("ix_signals_observed_at", "observed_at"),
     )
 
 

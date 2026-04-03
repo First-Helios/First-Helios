@@ -222,9 +222,126 @@ def init_scheduler() -> BackgroundScheduler:
             hour=_c.get("hour", 3), minute=_c.get("minute", 30),
             id="posting_purge", name="Purge Ancient Job Postings", replace_existing=True)
 
+    # ── Events Maintenance ────────────────────────────────────────────
+
+    if _job_enabled(sched_cfg, "event_expiry"):
+        _c = sched_cfg.get("event_expiry", {}).get("cron", {})
+        scheduler.add_job(_run_event_expiry, "cron",
+            hour=_c.get("hour", 3), minute=_c.get("minute", 30),
+            id="event_expiry", name="Event Expiry Sweep", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "event_purge"):
+        _c = sched_cfg.get("event_purge", {}).get("cron", {})
+        scheduler.add_job(_run_event_purge, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 4), minute=_c.get("minute", 0),
+            id="event_purge", name="Purge Ancient Events", replace_existing=True)
+
+    # ── Data Hygiene ──────────────────────────────────────────────────
+
+    if _job_enabled(sched_cfg, "log_purge"):
+        _c = sched_cfg.get("log_purge", {}).get("cron", {})
+        scheduler.add_job(_run_log_purge, "cron",
+            day=_c.get("day", 1),
+            hour=_c.get("hour", 2), minute=_c.get("minute", 0),
+            id="log_purge", name="Purge Old API Request Logs", replace_existing=True)
+
+    if _job_enabled(sched_cfg, "snapshot_purge"):
+        _c = sched_cfg.get("snapshot_purge", {}).get("cron", {})
+        scheduler.add_job(_run_snapshot_purge, "cron",
+            day=_c.get("day", 1),
+            hour=_c.get("hour", 2), minute=_c.get("minute", 30),
+            id="snapshot_purge", name="Purge Old Snapshots", replace_existing=True)
+
+    # ── Event Collectors — auto-discover from registry ────────────────
+
+    _register_event_collectors(scheduler, sched_cfg)
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
+
+
+def _parse_cron_expr(expr: str) -> dict:
+    """Parse a 5-field cron expression into APScheduler kwargs.
+
+    Format: 'minute hour day_of_month month day_of_week'
+    Supports: exact values, '*/N' intervals, '*' wildcards.
+    """
+    parts = expr.strip().split()
+    if len(parts) != 5:
+        raise ValueError(f"Expected 5-field cron expression, got: {expr!r}")
+    minute, hour, dom, _month, dow = parts
+    kwargs: dict = {}
+    if minute != "*":
+        kwargs["minute"] = minute
+    if hour != "*":
+        kwargs["hour"] = hour
+    if dom != "*":
+        kwargs["day"] = dom
+    if dow != "*":
+        kwargs["day_of_week"] = dow
+    return kwargs
+
+
+def _make_event_runner(collector_cls):
+    """Return a zero-arg callable that instantiates and runs a collector."""
+    def runner():
+        try:
+            collector = collector_cls()
+            count = collector.run(region="austin_tx")
+            logger.info(
+                "[Scheduler] Event collector %s: ingested %d new events",
+                getattr(collector_cls, "SOURCE", collector_cls.__name__), count,
+            )
+        except Exception as e:
+            logger.error(
+                "[Scheduler] Event collector %s failed: %s",
+                getattr(collector_cls, "SOURCE", collector_cls.__name__), e,
+            )
+    return runner
+
+
+def _register_event_collectors(scheduler, sched_cfg: dict) -> None:
+    """Auto-discover and register all @event_collector-decorated classes."""
+    import importlib
+    import pkgutil
+
+    import collectors.events as _ec_pkg
+    from collectors.events import registry as event_registry
+
+    # Import all modules in collectors/events/ to trigger @event_collector
+    for _, mod_name, _ in pkgutil.iter_modules(_ec_pkg.__path__):
+        if mod_name not in ("registry", "__init__"):
+            try:
+                importlib.import_module(f"collectors.events.{mod_name}")
+            except Exception as exc:
+                logger.warning(
+                    "[Scheduler] Failed to import collectors.events.%s: %s",
+                    mod_name, exc,
+                )
+
+    for name, cfg in event_registry.get_all().items():
+        job_id = f"event_{name}"
+        if not _job_enabled(sched_cfg, job_id):
+            logger.debug("[Scheduler] Event collector %s disabled — skipping", name)
+            continue
+
+        try:
+            cron_kwargs = _parse_cron_expr(cfg["schedule"])
+        except ValueError:
+            logger.error("[Scheduler] Bad cron schedule for %s: %r", name, cfg["schedule"])
+            continue
+
+        scheduler.add_job(
+            _make_event_runner(cfg["class"]),
+            "cron",
+            **cron_kwargs,
+            id=job_id,
+            name=f"Event: {name}",
+            replace_existing=True,
+        )
+        logger.info("[Scheduler] Registered event collector: %s (schedule=%s)", name, cfg["schedule"])
 
 
 def get_scheduler_status() -> dict:
@@ -678,3 +795,105 @@ def _run_posting_purge() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] Posting purge failed: %s", e)
+
+
+def _run_event_expiry() -> None:
+    """Nightly sweep: mark events past expires_at as inactive."""
+    try:
+        from core.database import get_session, init_db
+        from events.ingest import expire_stale_events
+
+        engine = init_db()
+        session = get_session(engine)
+        try:
+            count = expire_stale_events("austin_tx", session)
+            logger.info("[Scheduler] Event expiry sweep: %d events deactivated", count)
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.error("[Scheduler] Event expiry sweep failed: %s", e)
+
+
+def _run_event_purge() -> None:
+    """Weekly purge: DELETE inactive events older than 90 days."""
+    try:
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import text
+
+        from core.database import get_engine
+
+        cutoff = datetime.utcnow() - timedelta(days=90)
+        with get_engine().connect() as conn:
+            result = conn.execute(
+                text(
+                    "DELETE FROM events "
+                    "WHERE is_active = FALSE AND expires_at < :cutoff"
+                ),
+                {"cutoff": cutoff},
+            )
+            conn.commit()
+            logger.info(
+                "[Scheduler] Event purge: deleted %d ancient events (expired before %s)",
+                result.rowcount, cutoff.date(),
+            )
+
+    except Exception as e:
+        logger.error("[Scheduler] Event purge failed: %s", e)
+
+
+def _run_log_purge() -> None:
+    """Monthly purge: DELETE api_request_log rows older than 30 days."""
+    try:
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import text
+
+        from core.database import get_engine
+
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        with get_engine().connect() as conn:
+            result = conn.execute(
+                text(
+                    "DELETE FROM api_request_log "
+                    "WHERE requested_at < :cutoff"
+                ),
+                {"cutoff": cutoff},
+            )
+            conn.commit()
+            logger.info(
+                "[Scheduler] Log purge: deleted %d old request logs (before %s)",
+                result.rowcount, cutoff.date(),
+            )
+
+    except Exception as e:
+        logger.error("[Scheduler] Log purge failed: %s", e)
+
+
+def _run_snapshot_purge() -> None:
+    """Monthly purge: DELETE snapshot rows older than 90 days."""
+    try:
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import text
+
+        from core.database import get_engine
+
+        cutoff = datetime.utcnow() - timedelta(days=90)
+        with get_engine().connect() as conn:
+            result = conn.execute(
+                text(
+                    "DELETE FROM snapshots "
+                    "WHERE scanned_at < :cutoff"
+                ),
+                {"cutoff": cutoff},
+            )
+            conn.commit()
+            logger.info(
+                "[Scheduler] Snapshot purge: deleted %d old snapshots (before %s)",
+                result.rowcount, cutoff.date(),
+            )
+
+    except Exception as e:
+        logger.error("[Scheduler] Snapshot purge failed: %s", e)

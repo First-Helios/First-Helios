@@ -39,6 +39,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from core.tracked_request import check_budget, log_external
 from collectors.cache import read_cache, write_cache
+from collectors.events.registry import event_collector
 from events.ingest import EventSignal, ingest_event
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,19 @@ def run_ticketmaster_collector(region: str = "austin_tx") -> int:
 
     logger.info("[ticketmaster] Ingested %d new events out of %d signals", new_count, len(signals))
     return new_count
+
+
+@event_collector("ticketmaster", schedule="0 */6 * * *")
+class TicketmasterCollector:
+    """Registry-compatible wrapper around the Ticketmaster adapter."""
+
+    SOURCE = "ticketmaster"
+
+    def collect(self, region: str = "austin_tx") -> list[EventSignal]:
+        return scrape_ticketmaster(region)
+
+    def run(self, region: str = "austin_tx") -> int:
+        return run_ticketmaster_collector(region)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

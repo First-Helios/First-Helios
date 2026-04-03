@@ -124,6 +124,7 @@ app = Flask(
     static_folder="frontend",
     static_url_path="",
 )
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB POST body cap
 CORS(app)
 
 # ── Spirit Pool Blueprint ─────────────────────────────────────────────────────

@@ -63,6 +63,7 @@ class Venue(Base):
 
     __table_args__ = (
         UniqueConstraint("fingerprint", "region", name="uq_venue_fp_region"),
+        Index("ix_venues_h3r7_region", "h3_r7", "region"),
     )
 
     def to_dict(self) -> dict:
@@ -145,6 +146,7 @@ class Event(Base):
         Index("ix_events_h3r8_active", "h3_r8", "is_active"),
         Index("ix_events_category_active_region", "category", "is_active", "region"),
         Index("ix_events_start_active", "start_time", "is_active"),
+        Index("ix_events_start_region_active", "start_time", "region", "is_active"),
     )
 
     def to_dict(self) -> dict:
