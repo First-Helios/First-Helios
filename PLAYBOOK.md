@@ -27,12 +27,15 @@ collectors/
   labor_data/                bls, qcew, cbp, nlrb, warn adapters
   employer_data/             overture, alltheplaces, osm adapters
   sentiment/                 reddit, reviews adapters
+  events/                    ticketmaster, eventbrite, meetup, do512,
+                             austin_city_calendar, austintexas_org
+                             + registry.py (decorator-based plugin system)
 core/
   database.py                SQLAlchemy models (26+ tables), init, get_engine, get_session
   ingest.py                  ScraperSignal → signals/scores tables
   ingest_layer.py            Employer write path (normalize → fingerprint → upsert)
   normalizer.py              Zero-DB normalization upstream of ingest_layer
-  scheduler.py               APScheduler job definitions (22 scheduled jobs)
+  scheduler.py               APScheduler job definitions (29 scheduled jobs)
   rate_manager.py            Centralized API rate tracking
   baseline.py                Labor market baseline computation
   targeting.py               Targeting score computation
@@ -43,9 +46,14 @@ postings/
   ingest.py                  Job posting write path (normalize → geocode → H3 → match → upsert)
   matcher.py                 Match posting to LocalEmployer by fingerprint + proximity
   config.py                  TTL, proximity threshold, match confidence settings
+events/
+  models.py                  Venue, Event, EventInteraction SQLAlchemy models
+  ingest.py                  Event write path
+  routes.py                  Events API endpoints
 config/
   loader.py                  Config loading utilities
   scheduler.yaml             Scheduled job intervals + enabled flags
+  event_sources.yaml         Event source catalog (6 live, 14 future)
   search_rotation.yaml       20 industry rotation entries for multi-query scrapers
 scripts/                     One-time data population scripts
 dev/                         opi5_setup.sh, update.sh, sync_from_opi.sh
@@ -57,9 +65,9 @@ frontend/
 
 ---
 
-## The Two Write Paths
+## The Three Write Paths
 
-These are the only sanctioned paths for writing employer and posting records. Never insert directly into the underlying tables.
+These are the only sanctioned paths for writing employer, posting, and event records. Never insert directly into the underlying tables.
 
 ### 1. Employer records
 
@@ -93,6 +101,18 @@ Required fields on the `ScraperSignal`:
 Dedup key: `(source, external_id)` — unique constraint enforced in DB.
 
 Unmatched postings have `local_employer_id=NULL`. Fully remote postings have `h3_r7=NULL`. Both are valid states.
+
+### 3. Events
+
+```
+events/ingest.py
+```
+
+Pipeline: normalize → resolve venue → compute H3 → upsert `venues` → upsert `events`
+
+Event collectors live in `collectors/events/` and are auto-discovered via the `@event_collector` decorator in `collectors/events/registry.py`. The scheduler imports all modules in that directory at startup and registers their cron schedules.
+
+Dedup key: `(source, external_id)` — unique constraint enforced in DB.
 
 ---
 
@@ -146,7 +166,7 @@ This advances the rotation slot and returns the next entry. State is file-persis
 
 Place at `collectors/<subcategory>/<source>_adapter.py`.
 
-Subcategories: `job_boards`, `labor_data`, `employer_data`, `sentiment`
+Subcategories: `job_boards`, `labor_data`, `employer_data`, `sentiment`, `events`
 
 ```python
 from collectors.base import BaseScraper, ScraperSignal
@@ -233,6 +253,48 @@ mysource:
     hour: 10
     minute: 0
 ```
+
+---
+
+## Adding a New Event Collector
+
+Event collectors use a decorator-based plugin system and are auto-discovered by the scheduler at startup.
+
+### 1. Create the collector file
+
+Place at `collectors/events/<source>.py`:
+
+```python
+from collectors.events.registry import event_collector
+import logging, requests
+
+logger = logging.getLogger(__name__)
+
+@event_collector("mysource", schedule="0 */6 * * *")
+class MySourceCollector:
+    """Collects events from MySource."""
+
+    def collect(self, region: str = "austin_tx") -> list[dict]:
+        # Fetch and return list of event dicts with keys:
+        # source, external_id, title, description, start_time, end_time,
+        # lat, lng, raw_venue_name, raw_address, category, region, ...
+        return events
+
+    def run(self, region: str = "austin_tx") -> int:
+        events = self.collect(region)
+        # Ingest via events/ingest.py
+        return len(events)
+```
+
+The `schedule` parameter is a 5-field cron string: `"minute hour dom month dow"`.
+
+### 2. Register in the event sources catalog
+
+Add an entry to `config/event_sources.yaml` under the appropriate tier.
+
+### 3. That's it
+
+No manual scheduler wiring needed. The `@event_collector` decorator registers the class automatically, and `core/scheduler.py` auto-discovers all modules in `collectors/events/` at startup and creates scheduler jobs from their declared schedules.
 
 ---
 

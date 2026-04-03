@@ -1,0 +1,133 @@
+# ── Event Source Catalog — Master List ─────────────────────────────
+# Each enabled source maps to a collector file in collectors/events/.
+# schedule: 5-field cron (m h dom mon dow) — overridable in scheduler.yaml
+
+tier_1_api:
+  ticketmaster:
+    type: api
+    coverage: "national + Austin metro"
+    collector: ticketmaster.py
+    schedule: "0 */6 * * *"
+    status: live
+
+  eventbrite:
+    type: api
+    coverage: "national + Austin metro"
+    collector: eventbrite.py
+    schedule: "0 */6 * * *"
+    status: live
+
+  meetup:
+    type: graphql_api
+    coverage: "Austin 30-mile radius"
+    collector: meetup.py
+    schedule: "0 */4 * * *"
+    status: live
+
+  austin_city:
+    type: api_socrata
+    coverage: "City of Austin official events"
+    collector: austin_city_calendar.py
+    schedule: "0 5 * * *"
+    status: live
+
+  facebook_events:
+    type: api
+    coverage: "Austin metro"
+    collector: facebook_events.py
+    status: future
+
+  partiful:
+    type: api
+    coverage: "Austin social events"
+    collector: partiful.py
+    status: future
+
+tier_2_scrape:
+  do512:
+    type: html_scrape
+    coverage: "Austin local + underground"
+    collector: do512.py
+    schedule: "0 */6 * * *"
+    status: live
+
+  austintexas_org:
+    type: html_scrape
+    coverage: "Visit Austin tourism calendar"
+    collector: austintexas_org.py
+    schedule: "0 6 * * *"
+    status: live
+
+  austin360:
+    type: html_scrape
+    coverage: "Austin American-Statesman events"
+    collector: austin360.py
+    status: future
+
+  capital_city_blackbook:
+    type: html_scrape
+    coverage: "Austin nightlife & social"
+    collector: capital_city_blackbook.py
+    status: future
+
+tier_3_niche:
+  anime_austin:
+    type: html_scrape
+    coverage: "Anime Austin / Ikkicon"
+    collector: anime_austin.py
+    status: future
+
+  austin_ren_fest:
+    type: html_scrape
+    coverage: "Texas Renaissance Festival"
+    collector: austin_ren_fest.py
+    status: future
+
+  austin_sports:
+    type: html_scrape
+    coverage: "Austin FC, UT Sports"
+    collector: austin_sports.py
+    status: future
+
+  acl_moody:
+    type: html_scrape
+    coverage: "ACL Live / Moody Center"
+    collector: acl_moody.py
+    status: future
+
+  austin_film_society:
+    type: html_scrape
+    coverage: "AFS Cinema screenings"
+    collector: austin_film_society.py
+    status: future
+
+  bumble_bff:
+    type: api
+    coverage: "Bumble BFF social events"
+    collector: bumble_bff.py
+    status: future
+
+  austin_parks_rec:
+    type: api_socrata
+    coverage: "Austin Parks & Rec programs"
+    collector: austin_parks_rec.py
+    status: future
+
+tier_4_future:
+  rss_local_blogs:
+    type: rss
+    coverage: "Austin culture blogs"
+    collector: rss_aggregator.py
+    status: future
+
+  city_permit_data:
+    type: api_socrata
+    coverage: "Infer events from permit filings"
+    collector: permit_inference.py
+    status: future
+
+  reddit_austin:
+    type: scrape
+    coverage: "r/Austin event mentions"
+    collector: reddit_austin.py
+    status: future

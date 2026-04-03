@@ -33,7 +33,11 @@ passed while the machine was off needs a manual run.
 | `osm_starbucks_austin` | Sunday 2:30 AM | — |
 | `overture_local_austin` | Sunday 3:00 AM | — |
 | `posting_purge` | Sunday 3:30 AM | — |
+| `event_expiry` | Daily 3:30 AM | — |
+| `event_purge` | Sunday 4:00 AM | — |
 | `baseline_recompute` | Sunday 4:00 AM | — |
+| `log_purge` | 1st of month 2:00 AM | — |
+| `snapshot_purge` | 1st of month 2:30 AM | — |
 | `qcew` | 1st of month 7:00 AM | **Jan/Apr/Jul/Oct only** |
 
 > **Skip-guarded jobs:** Even if you run them manually, they will no-op silently
@@ -85,6 +89,14 @@ from core.scheduler import _run_osm;            _run_osm()
 from core.scheduler import _run_overture_local; _run_overture_local()
 from core.scheduler import _run_posting_purge;  _run_posting_purge()
 from core.scheduler import _run_baseline_recompute; _run_baseline_recompute()
+
+# ── Events maintenance ────────────────────────────────────────────────────────
+from core.scheduler import _run_event_expiry;   _run_event_expiry()   # Daily
+from core.scheduler import _run_event_purge;    _run_event_purge()    # Sunday
+
+# ── Data hygiene ──────────────────────────────────────────────────────────────
+from core.scheduler import _run_log_purge;      _run_log_purge()      # 1st of month
+from core.scheduler import _run_snapshot_purge; _run_snapshot_purge() # 1st of month
 
 # ── Monthly / quarterly (skip-guarded — only effective in right month) ────────
 from core.scheduler import _run_qcew;           _run_qcew()   # Jan/Apr/Jul/Oct

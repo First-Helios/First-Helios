@@ -26,6 +26,13 @@ This document describes the **purpose, source, and refresh cadence** of every ta
 | [scores](#scores) | Composite & sub-scores per store | Scoring engine | After each signal ingest | growing |
 | [wage_index](#wage_index) | Job posting wages across all sources | Scrapers (JobSpy, aggregators) | Weekly | growing |
 
+### EVENTS HUB SCHEMA
+| Table | Purpose | Source | Refresh | Rows |
+|---|---|---|---|---|
+| [venues](#venues) | Event venue POIs with H3 geospatial cells | Event collectors (Ticketmaster, Eventbrite, Meetup, Do512, City of Austin, Visit Austin) | Per-collector schedule | growing |
+| [events](#events) | Multi-source event aggregation with category, pricing, social density scoring | Event collectors via `events/ingest.py` | Every 4–6 hours | growing |
+| [event_interactions](#event_interactions) | User interaction tracking stub (views, saves, shares) | Future frontend integration | — | 0 |
+
 ### GROUND-TRUTH SCHEMA (BLS / Census)
 | Table | Purpose | Source | Refresh | Rows |
 |---|---|---|---|---|
@@ -157,18 +164,21 @@ This document describes the **purpose, source, and refresh cadence** of every ta
 
 ## Schema Organization
 
-The database is logically organized into **5 distinct schemas** (though physically stored in one SQLite DB):
+The database is logically organized into **7 distinct schemas** (physically stored in one PostgreSQL DB):
 
 | Schema | Purpose | Tables | Refresh |
 |---|---|---|---|
 | **Operational** | Live scraper data and scoring | stores, signals, scores, wage_index | Daily/Real-time |
+| **Events Hub** | Multi-source event aggregation | venues, events, event_interactions | Every 4–6 hours |
 | **Ground-Truth (BLS/Census)** | Government labor statistics | qcew_data, jolts_data, laus_data, oews_data, cbp_data | Monthly–Annual |
 | **Derived / Baseline** | Computed from ground-truth | labor_market_baseline | Weekly |
 | **Reference / Master Data** | Lookup tables and configs | ref_brands, ref_industry, ref_regions, ref_category_map | Quarterly–Annual |
+| **Mobility Graph** | Career transition paths | mob_occupation, mob_transition | Static |
 | **Operational Metadata** | System health and telemetry | api_sources, api_endpoints, api_request_log, rate_budgets, source_freshness, snapshots, store_aliases | Real-time |
 
 **Why this organization?**
 - **Operational** tables are written by scrapers; change frequently
+- **Events Hub** tables are written by event collectors via `events/ingest.py`; auto-discovered plugin architecture
 - **Ground-Truth** tables are append-only from government sources; change on government schedule
 - **Derived** tables are computed from ground-truth; updated after ground-truth arrives
 - **Reference** tables are static master data; rarely change

@@ -128,7 +128,7 @@ sudo journalctl -u helios-collector -n 50
 
 ## Scheduler Jobs
 
-Jobs are defined in `core/scheduler.py` and configured in `config/scheduler.yaml`.
+Jobs are defined in `core/scheduler.py` and configured in `config/scheduler.yaml`.\nEvent collector jobs are auto-discovered from `collectors/events/`.
 
 To disable a job without removing it: set `enabled: false` in `config/scheduler.yaml`.
 
@@ -175,6 +175,24 @@ Check status via API: `GET /api/scheduler/status`
 | `google_maps` | Cron Monday 5:00 AM | Google Maps reviews; recomputes scores |
 | `posting_expiry` | Cron daily 3:00 AM | Marks `is_active=False` on expired postings |
 | `posting_purge` | Cron Sunday 3:30 AM | Hard-deletes inactive postings older than 90 days |
+| `event_expiry` | Cron daily 3:30 AM | Marks `is_active=False` on expired events |
+| `event_purge` | Cron Sunday 4:00 AM | Hard-deletes inactive events older than 90 days |
+| `log_purge` | Cron 1st of month 2:00 AM | Purges API request logs older than 90 days |
+| `snapshot_purge` | Cron 1st of month 2:30 AM | Purges snapshots older than 180 days |
+
+### Events Hub (auto-discovered)
+
+Event collectors are auto-discovered from `collectors/events/` via the `@event_collector` decorator.
+Schedules are declared in each collector file and registered at startup. See `config/event_sources.yaml` for the full catalog.
+
+| Collector | Schedule | Description |
+|-----------|----------|-------------|
+| `ticketmaster` | Every 6h | Ticketmaster Discovery API |
+| `eventbrite` | Every 6h | Eventbrite API |
+| `meetup` | Every 4h | Meetup GraphQL API |
+| `do512` | Every 6h | Do512.com local events scraper |
+| `austin_city` | Daily 5:00 AM | City of Austin Socrata data |
+| `austintexas_org` | Daily 6:00 AM | Visit Austin tourism calendar |
 
 ---
 

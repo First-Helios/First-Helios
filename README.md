@@ -1,10 +1,11 @@
 # First-Helios
 
-A public labor market intelligence platform for Austin, TX. Three tools in one:
+A public labor market intelligence platform for Austin, TX. Four tools in one:
 
 - **Job Fair Targeting** — helps organizers identify which employers to prioritize for outreach based on staffing stress, wage gaps, and worker isolation
 - **Career Pathfinder** — shows workers realistic lateral and upward moves with wage data and nearby employers
 - **Job Finder** — maps active job postings by H3 hex cell across Austin
+- **Events Hub** — aggregates local events from 6+ sources (Ticketmaster, Eventbrite, Meetup, Do512, City of Austin, Visit Austin) with venue mapping and social-density scoring
 
 > Austin first. One city done right before scaling.
 
@@ -21,12 +22,12 @@ Browser (plain HTML/CSS/JS)
         │
    Flask — server.py (:8765)
         │
-   ┌────┴────────────────────┐
-   │                         │
-core/                   postings/
-ingest_layer.py         ingest.py
-ingest.py               matcher.py
-normalizer.py           models.py
+   ┌────┴────────────────────────────────┐
+   │                │                    │
+core/           postings/           events/
+ingest_layer.py ingest.py           ingest.py
+ingest.py       matcher.py          models.py
+normalizer.py   models.py           routes.py
 scoring/
 rate_manager.py
         │
@@ -36,6 +37,7 @@ collectors/  ←  collector_main.py (APScheduler)
 job_boards/
 labor_data/
 employer_data/
+events/          ←  plugin registry (auto-discovered)
 sentiment/
 ```
 
@@ -44,6 +46,8 @@ Data flows:
 ```
 collectors/       →  ScraperSignal  →  core/ingest.py      →  signals / scores / wage_index
                                     →  postings/ingest.py  →  job_postings
+
+collectors/events/ →  @event_collector registry  →  events/ingest.py  →  venues / events
 
 Overture POI      →  core/ingest_layer.py  →  local_employers / brand_groups
 ```
@@ -82,14 +86,17 @@ First-Helios/
 │   │                            #   activejobs, juju, theirstack adapters
 │   ├── labor_data/              # bls, qcew, cbp, nlrb, warn adapters
 │   ├── employer_data/           # overture, alltheplaces, osm adapters
+│   ├── events/                  # ticketmaster, eventbrite, meetup, do512,
+│   │                            #   austin_city_calendar, austintexas_org
+│   │                            #   + registry.py (decorator-based plugin system)
 │   └── sentiment/               # reddit, reviews adapters
 │
 ├── core/                        # Core pipeline + scoring
-│   ├── database.py              # SQLAlchemy models (26+ tables) + init
+│   ├── database.py              # SQLAlchemy models (43 tables) + init
 │   ├── ingest.py                # ScraperSignal → signals / scores
 │   ├── ingest_layer.py          # Employer write path → local_employers / brand_groups
 │   ├── normalizer.py            # Zero-DB normalization (upstream of ingest_layer)
-│   ├── scheduler.py             # APScheduler job definitions (22 jobs)
+│   ├── scheduler.py             # APScheduler job definitions (29 jobs)
 │   ├── rate_manager.py          # API quota enforcement
 │   ├── baseline.py              # Labor market baseline computation
 │   ├── targeting.py             # Targeting score computation
@@ -101,9 +108,15 @@ First-Helios/
 │   ├── models.py                # JobPosting SQLAlchemy model
 │   └── config.py                # TTL, proximity threshold, match confidence
 │
+├── events/                      # Events hub silo
+│   ├── models.py                # Venue, Event, EventInteraction SQLAlchemy models
+│   ├── ingest.py                # Event write path
+│   └── routes.py                # Events API endpoints
+│
 ├── config/
 │   ├── loader.py                # Typed config access
-│   ├── scheduler.yaml           # Cron schedules + enabled flags for all 22 jobs
+│   ├── scheduler.yaml           # Cron schedules + enabled flags for all 29 jobs
+│   ├── event_sources.yaml       # Event source catalog (6 live, 14 future)
 │   └── search_rotation.yaml     # 20-entry industry rotation for SerpAPI + Jobicy
 │
 ├── frontend/                    # Static SPA — no build step
@@ -149,7 +162,7 @@ python server.py              # http://localhost:8765
 
 **Run or test the collector:**
 ```bash
-python collector_main.py --list-jobs          # see all 22 job IDs (* = included in --run-now)
+python collector_main.py --list-jobs          # see all job IDs (* = included in --run-now)
 python collector_main.py --job jobicy         # fire one job by ID
 python collector_main.py --run-now            # fire all daily jobs sequentially
 python collector_main.py                      # start persistent scheduler
@@ -158,6 +171,8 @@ python collector_main.py                      # start persistent scheduler
 ---
 
 ## Database
+
+43 tables across 7 logical schemas. Key tables:
 
 | Table | Rows | Description |
 |-------|------|-------------|
@@ -170,9 +185,12 @@ python collector_main.py                      # start persistent scheduler
 | `revelio_hiring` | 23,188 | Hiring signal data |
 | `ref_occupation_aliases` | 18,981 | Census job-title aliases (Pathfinder autocomplete) |
 | `scores` | 16,363 | Composite staffing stress scores |
+| `venues` | — | Event venue POIs with H3 cells (new) |
+| `events` | — | Multi-source event aggregation (new) |
+| `event_interactions` | — | User interaction tracking stub (new) |
 | **Total DB** | — | **249 MB** |
 
-> Row counts as of 2026-03-31. The collector adds new rows daily.
+> Row counts as of 2026-04-03. The collector adds new rows daily.
 
 ---
 
@@ -205,6 +223,13 @@ python collector_main.py                      # start persistent scheduler
 | `GET /api/mobility/occupations` | All 781 SOC occupations (autocomplete) |
 | `GET /api/mobility/paths?soc=35-3023&wage_filter=up&limit=15` | Career transition recommendations |
 | `GET /api/mobility/employers?soc=35-3023&lat=30.27&lng=-97.74&radius=30` | Nearby employers for dest SOC |
+
+### Events Hub
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/events?region=austin_tx` | Active events with filters |
+| `GET /api/events/categories?region=austin_tx` | Event categories with counts |
+| `GET /api/events/venues?region=austin_tx` | Venue directory |
 
 ### Operations
 | Endpoint | Description |
@@ -240,7 +265,9 @@ Destinations ranked by: `transition_order` → `wage_direction` → `avg_skill_g
 
 - **Never write directly to `local_employers` or `brand_groups`** — all employer data flows through `core/ingest_layer.py`
 - **Never write directly to `job_postings`** — all posting data flows through `postings/ingest.py`
+- **Never write directly to `events` or `venues`** — all event data flows through `events/ingest.py`
 - **Never call external APIs without rate manager** — always `rate_manager.can_request()` + `rate_manager.log_request()`
+- **New event collectors must use `@event_collector` decorator** — auto-discovered by the scheduler
 - **H3 cells are pre-computed at ingest** — never compute at query time
 - **No frontend build step** — plain HTML/CSS/JS only, no npm or bundler
 - **Public data only** — no logins, no paywalls, no proprietary sources

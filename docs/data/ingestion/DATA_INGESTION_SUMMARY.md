@@ -1,7 +1,7 @@
 # Data Ingestion Summary & Next Steps
 
-**Date:** 2026-03-22 | **Updated:** 2026-03-24
-**Status 2026-03-24:** OEWS Austin MSA ingested (638 occupations in `oews_data`). Mobility graph loaded (781 SOC nodes, 256,831 transition edges, 18,981 occupation aliases). Revelio tables remain unpopulated — still the key gap. See README.md for current data state.
+**Date:** 2026-03-22 | **Updated:** 2026-04-03
+**Status 2026-04-03:** Events Hub expansion complete — 6 event collectors live (Ticketmaster, Eventbrite, Meetup, Do512, City of Austin, Visit Austin), 3 new tables (venues, events, event_interactions), decorator-based plugin registry. OEWS Austin MSA ingested (638 occupations in `oews_data`). Mobility graph loaded (781 SOC nodes, 256,831 transition edges, 18,981 occupation aliases). Revelio tables remain unpopulated — still the key gap. See README.md for current data state.
 
 ---
 

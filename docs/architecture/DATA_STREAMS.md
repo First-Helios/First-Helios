@@ -347,6 +347,67 @@ Structure: `data/skimmed/{source}/{YYYY-MM-DD}/`
 
 ---
 
+## Events Hub — Multi-Source Event Streams
+
+Event collectors live in `collectors/events/` and are auto-discovered via the `@event_collector` decorator.
+See `config/event_sources.yaml` for the full catalog (6 live sources, 14 future).
+
+### Stream E1: Ticketmaster
+
+| Field | Detail |
+|-------|--------|
+| **Source** | Ticketmaster Discovery API |
+| **Collection** | `collectors/events/ticketmaster.py` (every 6 hours via scheduler) |
+| **DB tables** | `venues`, `events` |
+| **Coverage** | National + Austin metro |
+
+### Stream E2: Eventbrite
+
+| Field | Detail |
+|-------|--------|
+| **Source** | Eventbrite API |
+| **Collection** | `collectors/events/eventbrite.py` (every 6 hours) |
+| **DB tables** | `venues`, `events` |
+| **Coverage** | National + Austin metro |
+
+### Stream E3: Meetup
+
+| Field | Detail |
+|-------|--------|
+| **Source** | Meetup GraphQL API |
+| **Collection** | `collectors/events/meetup.py` (every 4 hours) |
+| **DB tables** | `venues`, `events` |
+| **Coverage** | Austin 30-mile radius |
+
+### Stream E4: City of Austin (Socrata)
+
+| Field | Detail |
+|-------|--------|
+| **Source** | City of Austin open data portal (Socrata SODA API) |
+| **Collection** | `collectors/events/austin_city_calendar.py` (daily 5:00 AM) |
+| **DB tables** | `venues`, `events` |
+| **Coverage** | City of Austin official events |
+
+### Stream E5: Do512
+
+| Field | Detail |
+|-------|--------|
+| **Source** | Do512.com (Austin events aggregator) |
+| **Collection** | `collectors/events/do512.py` (every 6 hours, HTML scrape + JSON-LD fallback) |
+| **DB tables** | `venues`, `events` |
+| **Coverage** | Austin local + underground events |
+
+### Stream E6: Visit Austin
+
+| Field | Detail |
+|-------|--------|
+| **Source** | austintexas.org tourism calendar |
+| **Collection** | `collectors/events/austintexas_org.py` (daily 6:00 AM, HTML scrape + JSON-LD) |
+| **DB tables** | `venues`, `events` |
+| **Coverage** | Austin tourism events |
+
+---
+
 ## PostgreSQL — Live Operational Data
 
 These tables are always computed or derived. They don't have a file representation; they're rebuilt from reference + skimmed inputs.
@@ -375,6 +436,9 @@ These tables are always computed or derived. They don't have a file representati
 | `mob_transition` | R10 populate_mobility_data.py | Career Pathfinder |
 | `ref_occupation_aliases` | R9 load_occupation_aliases.py | Pathfinder autocomplete |
 | `ref_brands`, `ref_industry`, etc. | populate_reference_data.py | Reference lookups |
+| `venues` | `events/ingest.py` ← event collectors | Events Hub venue layer |
+| `events` | `events/ingest.py` ← event collectors | Events Hub event layer |
+| `event_interactions` | Future frontend | User profiling stub |
 
 ---
 

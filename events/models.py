@@ -19,7 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 from core.database import Base
 
@@ -139,6 +139,11 @@ class Event(Base):
     # ── Rich detail (JSONB) ───────────────────────────────────────────────────
     detail_json = Column(JSONB, nullable=True)
 
+    # ── Audience / social context — for future personality profiling ───────────
+    audience_tags = Column(ARRAY(Text), nullable=True)   # ["beginner_friendly", "21+", "family", "lgbtq+", "nerds"]
+    social_density = Column(String, nullable=True)       # "intimate" / "medium" / "large" / "festival"
+    friend_making_score = Column(Float, nullable=True)   # 0-1, how conducive to meeting people
+
     __table_args__ = (
         UniqueConstraint("source", "external_id", name="uq_event_source_external"),
         Index("ix_events_active_region", "is_active", "region"),
@@ -177,4 +182,24 @@ class Event(Base):
             "is_active": self.is_active,
             "scraped_at": self.scraped_at.isoformat() if self.scraped_at else None,
             "detail": self.detail_json,
+            "audience_tags": self.audience_tags,
+            "social_density": self.social_density,
+            "friend_making_score": self.friend_making_score,
         }
+
+
+class EventInteraction(Base):
+    """Future: user clicks, saves, ratings. Not populated yet — stub for schema planning.
+
+    Defined now so it's part of Alembic from the start, avoiding a retrofit
+    migration later when user profiling is implemented.
+    """
+
+    __tablename__ = "event_interactions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False, index=True)
+    interaction_type = Column(String, nullable=False)  # "view" / "save" / "click_url" / "rating"
+    value = Column(Float, nullable=True)               # for ratings
+    session_id = Column(String, nullable=True)         # anonymized session (no PII yet)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)

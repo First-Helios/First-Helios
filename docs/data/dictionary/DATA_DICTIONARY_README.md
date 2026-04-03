@@ -1,6 +1,6 @@
 # Data Dictionary — Quick Start Guide
 
-**This is the master guide to understanding and documenting all data in ChainStaffingTracker.**
+**This is the master guide to understanding and documenting all data in First-Helios.**
 
 Five documents work together:
 1. **This file** — High-level orientation and FAQs
@@ -47,6 +47,11 @@ Five documents work together:
 - `signals` — Raw observations (job postings, sentiment, reviews)
 - `scores` — Computed staffing-stress index
 - `wage_index` — Posted wages from all sources
+
+**Events Hub (multi-source event aggregation):**
+- `venues` — Event venue POIs with H3 geospatial cells
+- `events` — Aggregated events from 6+ sources (Ticketmaster, Eventbrite, Meetup, Do512, City of Austin, Visit Austin)
+- `event_interactions` — User interaction tracking stub (views, saves, shares)
 
 **Ground-Truth (government data, official source of truth):**
 - `qcew_data` — County employment & establishments (BLS)
