@@ -144,6 +144,26 @@ except ImportError:
     pass
 
 
+# ── Security: suppress exception details from API responses ──────────────────
+
+def _err(e: Exception, status: int = 500):
+    """Log the full exception, return a generic JSON error with no internal details."""
+    logger.error("Request error [%s %s]: %s", request.method, request.path, e, exc_info=True)
+    return jsonify({"status": "error", "message": "An internal error occurred"}), status
+
+@app.errorhandler(Exception)
+def handle_unhandled(e: Exception):
+    return _err(e)
+
+# ── Security: add hardening headers to every response ────────────────────────
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
 # ── Frontend serving ─────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -178,7 +198,7 @@ def scan_status():
             })
         return jsonify({"status": "ok", "last_scan": None, "message": "No scans yet"})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -211,7 +231,7 @@ def trigger_scan():
         })
     except Exception as e:
         logger.error("[Server] Scan failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 # ── Scores endpoint ──────────────────────────────────────────────────────────
@@ -294,7 +314,7 @@ def get_scores():
 
     except Exception as e:
         logger.error("[Server] Scores query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -334,7 +354,7 @@ def get_targeting():
 
     except Exception as e:
         logger.error("[Server] Targeting query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 # ── Wage Index endpoint ──────────────────────────────────────────────────────
@@ -402,7 +422,7 @@ def get_wage_index():
 
     except Exception as e:
         logger.error("[Server] Wage index query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -460,7 +480,7 @@ def get_stores():
 
     except Exception as e:
         logger.error("[Server] Stores query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -487,7 +507,7 @@ def get_local_employers():
     """
     region   = request.args.get("region", "austin_tx")
     industry = request.args.get("industry")
-    sample   = request.args.get("sample", 3000, type=int)
+    sample   = min(max(1, request.args.get("sample", 3000, type=int)), 5000)
 
     engine = init_db()
     session = get_session(engine)
@@ -532,7 +552,7 @@ def get_local_employers():
 
     except Exception as e:
         logger.error("[Server] Local employers query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -559,7 +579,7 @@ def get_map_employers():
     region   = request.args.get("region", "austin_tx")
     chain    = request.args.get("chain")
     industry = request.args.get("industry")
-    sample   = request.args.get("sample", 3000, type=int)
+    sample   = min(max(1, request.args.get("sample", 3000, type=int)), 5000)
 
     engine = init_db()
     session = get_session(engine)
@@ -617,7 +637,7 @@ def get_map_employers():
 
     except Exception as e:
         logger.error("[Server] Map employers query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -694,7 +714,7 @@ def get_h3_map():
 
     except Exception as e:
         logger.error("[Server] H3 map query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -728,7 +748,7 @@ def ref_brands():
         })
     except Exception as e:
         logger.error("[Server] Ref brands query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -757,7 +777,7 @@ def ref_industries():
         })
     except Exception as e:
         logger.error("[Server] Ref industries query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -776,7 +796,7 @@ def ref_regions():
         })
     except Exception as e:
         logger.error("[Server] Ref regions query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -804,7 +824,7 @@ def ref_categories():
         })
     except Exception as e:
         logger.error("[Server] Ref categories query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -882,7 +902,7 @@ def ref_summary():
         })
     except Exception as e:
         logger.error("[Server] Ref summary query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -902,7 +922,7 @@ def scheduler_status():
         status["note"] = "scheduler runs as collector_main.py — start that process separately"
         return jsonify({"status": "ok", **status})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 # ── Rate Budget / Metrics endpoints ──────────────────────────────────────────
@@ -930,7 +950,7 @@ def rate_budget_status():
         })
     except Exception as e:
         logger.error("[Server] Rate budget query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 @app.route("/api/rate-budget/history")
@@ -958,7 +978,7 @@ def rate_budget_history():
         })
     except Exception as e:
         logger.error("[Server] Rate history query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 @app.route("/api/rate-budget/log")
@@ -987,7 +1007,7 @@ def rate_budget_log():
         })
     except Exception as e:
         logger.error("[Server] Rate log query failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 @app.route("/api/rate-budget/scalability")
@@ -1003,7 +1023,7 @@ def rate_budget_scalability():
         return jsonify({"status": "ok", **report})
     except Exception as e:
         logger.error("[Server] Scalability report failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 @app.route("/api/collector/runs")
@@ -1061,7 +1081,7 @@ def collector_runs():
         })
     except Exception as exc:
         logger.error("/api/collector/runs error: %s", exc)
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        return _err(exc)
     finally:
         session.close()
 
@@ -1084,7 +1104,7 @@ def mobility_occupations():
         })
     except Exception as e:
         logger.error("[mobility/occupations] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
 
 
 @app.route("/api/mobility/search")
@@ -1156,7 +1176,7 @@ def mobility_search():
         })
     except Exception as e:
         logger.error("[mobility/search] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         db.close()
 
@@ -1329,7 +1349,7 @@ def mobility_paths():
         })
     except Exception as e:
         logger.error("[mobility/paths] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         db.close()
 
@@ -1435,7 +1455,7 @@ def mobility_employers():
         })
     except Exception as e:
         logger.error("[mobility/employers] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         db.close()
 
@@ -1513,7 +1533,7 @@ def jobs_h3_map():
 
     except Exception as e:
         logger.error("[jobs/h3-map] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -1546,11 +1566,13 @@ def jobs_listings():
     page       = max(1, request.args.get("page", 1, type=int))
     limit      = min(100, request.args.get("limit", 20, type=int))
     sort       = request.args.get("sort", "date")   # "date" | "wage"
-    keyword    = request.args.get("q", "").strip()
+    keyword    = request.args.get("q", "").strip()[:100]
     wage_min_filter = request.args.get("wage_min_filter", type=float)
     wage_max_filter = request.args.get("wage_max_filter", type=float)
     posted_within   = request.args.get("posted_within", type=int)
-    time_type       = request.args.get("time_type", "").strip()
+    _VALID_TIME_TYPES = {"Full-time", "Part-time", "Contract", "Temporary", "Internship"}
+    time_type_raw    = request.args.get("time_type", "").strip()
+    time_type        = time_type_raw if time_type_raw in _VALID_TIME_TYPES else ""
 
     engine  = init_db()
     session = get_session(engine)
@@ -1732,7 +1754,7 @@ def jobs_listings():
 
     except Exception as e:
         logger.error("[jobs/listings] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -1778,7 +1800,7 @@ def jobs_categories():
 
     except Exception as e:
         logger.error("[jobs/categories] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 

@@ -19,6 +19,12 @@ from events.models import Event, EventInteraction, Venue
 
 logger = logging.getLogger(__name__)
 
+
+def _err(e: Exception, status: int = 500):
+    """Log exception server-side; return a generic message with no internal details."""
+    logger.error("[events] %s", e, exc_info=True)
+    return jsonify({"status": "error", "message": "An internal error occurred"}), status
+
 events_bp = Blueprint("events", __name__, url_prefix="/api/events")
 
 # Module-level singleton — avoids re-creating engine + DDL on every request
@@ -96,7 +102,7 @@ def events_h3_map():
 
     except Exception as e:
         logger.error("[events/h3-map] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -161,7 +167,7 @@ def events_listings():
 
     except Exception as e:
         logger.error("[events/listings] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -197,7 +203,7 @@ def events_categories():
 
     except Exception as e:
         logger.error("[events/categories] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -244,7 +250,7 @@ def events_venues():
 
     except Exception as e:
         logger.error("[events/venues] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()
 
@@ -309,6 +315,6 @@ def create_interaction():
     except Exception as e:
         session.rollback()
         logger.error("[events/interactions] %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return _err(e)
     finally:
         session.close()

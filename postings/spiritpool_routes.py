@@ -23,7 +23,41 @@ from collectors.base import ScraperSignal
 
 logger = logging.getLogger(__name__)
 
+
+def _err(exc: Exception, status: int = 500):
+    """Log exception server-side; never expose internal details in the response."""
+    logger.error("[SpiritPool] %s", exc, exc_info=True)
+    return jsonify({"error": "internal error"}), status
+
 spiritpool_bp = Blueprint("spiritpool", __name__, url_prefix="/api/spiritpool")
+
+# ── Input guards ──────────────────────────────────────────────────────────────
+
+MAX_SIGNALS_PER_BATCH = 50
+
+# Domains the extension is known to scrape. Unknown domains are rejected so
+# attackers cannot fabricate arbitrary source tags in the database.
+_ALLOWED_DOMAINS = {
+    "indeed.com", "linkedin.com", "glassdoor.com", "ziprecruiter.com",
+    "monster.com", "simplyhired.com", "careerbuilder.com", "dice.com",
+    "lever.co", "greenhouse.io", "workday.com", "myworkdayjobs.com",
+    "jobvite.com", "icims.com", "smartrecruiters.com", "taleo.net",
+}
+
+def _normalize_domain(raw: str) -> str | None:
+    """Return the allowlisted domain slug or None if not recognised."""
+    if not raw or not isinstance(raw, str):
+        return None
+    domain_lower = raw.strip().lower()
+    # Accept "indeed.com" or bare "indeed"
+    if domain_lower in _ALLOWED_DOMAINS:
+        return domain_lower.split(".")[0]
+    # Try matching by slug prefix
+    slug = domain_lower.split(".")[0]
+    for allowed in _ALLOWED_DOMAINS:
+        if allowed.startswith(slug + "."):
+            return slug
+    return None
 
 
 # ── Helper: map Spirit Pool signal dict → ScraperSignal ───────────────────────
@@ -55,7 +89,8 @@ def _map_signal(raw: dict, domain: str, contributor_id: str) -> ScraperSignal | 
             wage_period = None
 
     # Source tag: "spiritpool_indeed", "spiritpool_linkedin", etc.
-    domain_slug = domain.split(".")[0].lower()  # "indeed", "linkedin", ...
+    # domain is already validated and normalised by the time _map_signal is called.
+    domain_slug = domain  # caller passes the pre-validated slug
     source = f"spiritpool_{domain_slug}"
 
     # store_num is synthetic — Spirit Pool doesn't know the store number
@@ -114,13 +149,19 @@ def contribute():
     if not body:
         return jsonify({"error": "JSON body required"}), 400
 
-    domain = body.get("domain", "unknown")
+    domain_slug = _normalize_domain(body.get("domain", ""))
+    if domain_slug is None:
+        return jsonify({"error": "unrecognised domain"}), 400
+
     signals_raw = body.get("signals", [])
     contributor_id = body.get("contributorId", "anonymous")
     region = body.get("region") or "austin_tx"
 
     if not isinstance(signals_raw, list):
         return jsonify({"error": "signals must be a list"}), 400
+
+    if len(signals_raw) > MAX_SIGNALS_PER_BATCH:
+        return jsonify({"error": f"batch too large (max {MAX_SIGNALS_PER_BATCH})"}), 400
 
     engine = init_db()
     session = get_session(engine)
@@ -134,7 +175,7 @@ def contribute():
                 failed += 1
                 continue
 
-            signal = _map_signal(raw, domain, contributor_id)
+            signal = _map_signal(raw, domain_slug, contributor_id)
             if signal is None:
                 failed += 1
                 continue
@@ -154,8 +195,9 @@ def contribute():
                 failed += 1
 
         logger.info(
-            "[SpiritPool] %s: accepted=%d failed=%d contributor=%s region=%s",
-            domain, accepted, failed, contributor_id[:8], region,
+            "[SpiritPool] %s: accepted=%d failed=%d contributor=%s ip=%s region=%s",
+            domain_slug, accepted, failed, contributor_id,
+            request.remote_addr, region,
         )
         return jsonify({
             "accepted": accepted,
@@ -165,7 +207,7 @@ def contribute():
 
     except Exception as exc:
         logger.error("[SpiritPool] contribute error: %s", exc)
-        return jsonify({"error": "internal error", "detail": str(exc)}), 500
+        return _err(exc)
     finally:
         session.close()
 
@@ -221,7 +263,7 @@ def stats():
 
     except Exception as exc:
         logger.error("[SpiritPool] stats error: %s", exc)
-        return jsonify({"error": "internal error", "detail": str(exc)}), 500
+        return _err(exc)
     finally:
         session.close()
 
@@ -347,6 +389,6 @@ def insights():
 
     except Exception as exc:
         logger.error("[SpiritPool] insights error: %s", exc)
-        return jsonify({"error": "internal error", "detail": str(exc)}), 500
+        return _err(exc)
     finally:
         session.close()

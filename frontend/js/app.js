@@ -13,6 +13,14 @@
 (function () {
     'use strict';
 
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
     const API_BASE    = '';
     const AUSTIN_CENTER = [30.2672, -97.7431];
     const DEFAULT_ZOOM  = 11;
@@ -131,7 +139,7 @@
                 var card = document.createElement('div');
                 card.className = 'target-card';
                 card.innerHTML =
-                    '<div class="store-name">#' + (i + 1) + ' ' + (target.address || target.store_num) + '</div>' +
+                    '<div class="store-name">#' + (i + 1) + ' ' + _esc(target.address || target.store_num) + '</div>' +
                     '<div class="score tier-' + target.targeting_tier + '">' +
                     target.targeting_score.toFixed(1) + ' — ' + target.targeting_tier +
                     '</div>' +
@@ -200,11 +208,11 @@
                 var card = document.createElement('div');
                 card.className = 'listing-card';
                 card.innerHTML =
-                    '<div class="listing-name">' + emp.name +
+                    '<div class="listing-name">' + _esc(emp.name) +
                         (isBrand ? '<span class="listing-badge brand">brand</span>' : '<span class="listing-badge local">local</span>') +
                     '</div>' +
-                    (emp.address  ? '<div class="listing-addr">' + emp.address  + '</div>' : '') +
-                    (emp.industry ? '<div class="listing-meta">' + emp.industry + '</div>' : '');
+                    (emp.address  ? '<div class="listing-addr">' + _esc(emp.address)  + '</div>' : '') +
+                    (emp.industry ? '<div class="listing-meta">' + _esc(emp.industry) + '</div>' : '');
                 container.appendChild(card);
             });
         } catch (err) {

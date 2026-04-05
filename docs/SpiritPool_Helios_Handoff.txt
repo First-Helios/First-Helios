@@ -1,0 +1,652 @@
+SPIRITPOOL × HELIOS
+Encryption, Tokenization & Architecture Handoff
+From Browser Extension to Privacy-First Data Pipeline
+Development Architecture & Agent Mission Specifications
+
+This document bridges the SpiritPool browser extension security architecture with the Helios three-era development roadmap. It defines exactly what encryption and tokenization look like at each layer, how each component upgrades across eras, and provides agent.md-ready mission specifications for implementation.
+
+CONFIDENTIAL — DEVELOPMENT REFERENCE
+
+Table of Contents
+
+1. Layer-to-Leg Mapping
+The SpiritPool security document identifies three layers where data is at risk: local cache, in transit, and backend storage. These map directly to the Helios three-leg architecture. Understanding this mapping is the key to building SpiritPool so it upgrades cleanly into each Helios era.
+
+SpiritPool Layer
+Helios Leg
+Current State
+Target State (Third Helios)
+Layer 1: Local Cache
+Leg 1: User Device
+Plaintext signals in browser.storage.local. Any process with profile access can read them.
+AES-256-GCM encrypted cache. Key derived from user’s Helios private key. EDN client manages cache for hosted accounts with credential isolation.
+Layer 2: In Transit
+Leg 2: Consent & Routing
+http://localhost:8765 plaintext. No metadata stripping. Full tabUrl and collectedAt in payload.
+HTTPS only. Pre-transmission anonymization. Blind-signed certs authorize collection. Consent epochs govern what flows. Session tokens rotate per epoch.
+Layer 3: Backend Storage
+Leg 3: Data Platform
+Server sees everything. IP logged. contributorId is a rotating UUID. No PII stripping pipeline.
+Cert-gated writes only. Full depersonalization pipeline (regex + NER). No IP logging. Behavioral index with aggregation floor. Re-id game + synthetic replacement.
+
+The critical insight: every security control you add to SpiritPool today should be a simplified version of the control that exists in the target architecture. Don’t invent a local encryption scheme that you’ll throw away — build the simplified version of the scheme you’ll harden later.
+
+2. Encryption Architecture by Era
+2.1 Layer 1: Local Cache Encryption
+2.1.1 First Helios (Now)
+The current SpiritPool security plan calls for AES-256-GCM encryption of cached signals using a WebCrypto-generated key stored alongside the data. This is the right starting point. Here is the exact implementation path:
+
+Key generation (on extension install):
+const key = await crypto.subtle.generateKey(
+  { name: 'AES-GCM', length: 256 },
+  true,  // extractable for storage
+  ['encrypt', 'decrypt']
+);
+const jwk = await crypto.subtle.exportKey('jwk', key);
+await browser.storage.local.set({ encryptionKey: jwk });
+
+Encrypt-on-write (in signal cache):
+async function encryptSignal(signal, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(JSON.stringify(signal));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoded
+  );
+  return {
+    iv: Array.from(iv),
+    data: Array.from(new Uint8Array(ciphertext)),
+    v: 1  // schema version for forward compat
+  };
+}
+
+Decrypt-on-flush (in background worker):
+async function decryptSignal(encrypted, key) {
+  const iv = new Uint8Array(encrypted.iv);
+  const data = new Uint8Array(encrypted.data);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    data
+  );
+  return JSON.parse(new TextDecoder().decode(plaintext));
+}
+
+Schema version field (v: 1) is critical. When Second Helios replaces the random key with a key derived from the user’s Helios private key, encrypted cache entries with v: 1 can be flushed and re-encrypted under v: 2 during the migration. Without the version field, the migration has to guess which scheme was used.
+Threat model acknowledgment: the key and the encrypted data live in the same browser.storage.local. This stops casual readers (other extensions, storage inspectors, unprivileged OS processes) but not a targeted attacker with full profile access. Acceptable for First Helios: the data is public job listings, and the key protects behavioral metadata (which sites, when, how long).
+2.1.2 Second Helios Upgrade
+When the user generates their Helios private key on-device, the cache encryption key is derived from it rather than randomly generated:
+// Derive cache key from Helios root key
+const cacheKey = await crypto.subtle.deriveKey(
+  { name: 'HKDF', hash: 'SHA-256',
+    salt: new TextEncoder().encode('helios-cache-v2'),
+    info: new TextEncoder().encode('spiritpool-local-cache') },
+  heliosRootKey,
+  { name: 'AES-GCM', length: 256 },
+  false,  // NOT extractable - stays in memory only
+  ['encrypt', 'decrypt']
+);
+
+The critical change: extractable becomes false. The derived key exists only in WebCrypto’s internal memory and is never serialized to storage. It’s re-derived from the root key each time the extension activates (biometric/PIN unlock required). The encrypted data in storage is now protected even if the storage is fully copied — the attacker needs the root key, which requires biometric authentication.
+Cache entries written under v: 1 are decrypted with the old random key, re-encrypted under v: 2 with the derived key, and the old random key is deleted. This is a one-time migration during the Second Helios upgrade.
+2.1.3 Third Helios
+The EDN client introduces a second cache: content cached for managed accounts hosted on this device. This cache uses a separate derived key scoped to the EDN hosting epoch:
+// EDN cache key - separate derivation path
+const ednCacheKey = await crypto.subtle.deriveKey(
+  { name: 'HKDF', hash: 'SHA-256',
+    salt: new TextEncoder().encode('helios-edn-cache-v3'),
+    info: new TextEncoder().encode(ednEpochId) },
+  heliosRootKey,
+  { name: 'AES-GCM', length: 256 },
+  false,
+  ['encrypt', 'decrypt']
+);
+
+Two caches, two keys, both derived from the same root but through different HKDF paths. The user’s own behavioral cache and the EDN content cache are cryptographically separated even though they live on the same device.
+
+2.2 Layer 2: Transit Security & Tokenization
+2.2.1 First Helios (Now)
+The immediate priorities, in build order:
+
+Priority 1: Pre-transmission anonymization pipeline. This is the single most important security control to build right now. Every signal must pass through a sanitizeForTransmit() function before it leaves the extension:
+function sanitizeForTransmit(signal) {
+  const clean = { ...signal };
+
+  // STRIP: fields the server does not need
+  delete clean.tabUrl;
+  delete clean.collectedAt;
+
+  // FUZZ: numeric fields to reduce linkability
+  if (clean.salary) {
+    clean.salary = fuzzNumeric(clean.salary, 0.05); // ±5%
+  }
+  if (clean.applicantCount) {
+    clean.applicantCount = fuzzNumeric(
+      clean.applicantCount, 0.05
+    );
+  }
+
+  // FUZZ: temporal fields
+  if (clean.observedAt) {
+    clean.observedAt = fuzzTimestamp(
+      clean.observedAt, 15 * 60 * 1000 // ±15 min
+    );
+  }
+  if (clean.postingDate) {
+    clean.postingDate = fuzzToNearestDay(clean.postingDate);
+  }
+
+  // ATTACH: forward-compatible Helios fields
+  clean.session_token = getSessionToken();
+  clean.epoch_id = getConsentVersion();
+  clean.consent_state = getCurrentConsentState();
+
+  return clean;
+}
+
+Priority 2: HTTPS enforcement. Hard-block any non-HTTPS, non-localhost destination. The extension’s network layer should refuse to send data to any endpoint that doesn’t meet this requirement, regardless of configuration.
+
+Priority 3: Session token lifecycle. The current contributorId is a rotating UUID with a 30-day cycle. This becomes the session_token field. The rotation period is the proto-epoch — it will become a proper consent epoch in Second Helios. Key implementation detail:
+// First Helios session token: server-generated UUID
+// rotates every 30 days or on consent change
+function getSessionToken() {
+  const stored = localStorage.getItem('session_token');
+  const created = localStorage.getItem('session_token_created');
+  const age = Date.now() - parseInt(created || '0');
+
+  if (!stored || age > 30 * 24 * 60 * 60 * 1000) {
+    const token = crypto.randomUUID();
+    localStorage.setItem('session_token', token);
+    localStorage.setItem('session_token_created',
+      String(Date.now()));
+    incrementEpochId(); // bump consent version
+    return token;
+  }
+  return stored;
+}
+
+This is the forward-compatibility hook. The session_token field name, the epoch_id field name, and the consent_state object shape are all defined now. In Second Helios, the UUID gets replaced by a cryptographic hash_token derived from the user’s subkey. The field name doesn’t change. The data type doesn’t change. The downstream schema doesn’t change. Only the value gets cryptographically stronger.
+2.2.2 Second Helios Upgrade
+Transit security hardens in three ways:
+    • Session token becomes a cryptographic hash_token: derived from the user’s epoch subkey via HMAC-SHA256, not a random UUID. The token is deterministic for a given epoch and key pair, which means Leg 2 can verify it was generated by a valid key without needing to store a mapping.
+    • Certificate-gated transmission: before the extension sends any data, it requests a short-lived cert from Leg 2. The cert contains the hash_token, permissions, and expiry. Leg 3 rejects any event that arrives without a valid cert. No cert = no data leaves the device.
+    • Consent state becomes a signed object: the consent_state is signed with Key 1 before transmission. Leg 2 validates the signature, not just the content. A tampered consent state (e.g., malware on the device trying to expand collection scope) is rejected.
+2.2.3 Third Helios Upgrade
+Blind signatures complete the transit model: the extension blinds the hash_token before sending it to Leg 2 for signing. Leg 2 signs the blinded token (proving it verified Key 1 and consent state) but never sees the actual hash_token. The extension unblinds locally and presents the signed token to Leg 3. Leg 2 has proven authorization without learning the session pseudonym.
+
+2.3 Layer 3: Backend Data Handling
+2.3.1 First Helios (Now)
+The SpiritPool backend needs four immediate controls:
+
+    1. Never log IP addresses. Configure the HTTP server to strip client IP from all access logs, request logs, and error logs. If your framework logs IP by default, override it. This is not optional.
+    2. Never store tabUrl or collectedAt. Even if the extension accidentally sends them (bug, old version), the backend intake endpoint must strip these fields before any write. Defense in depth: the extension strips them, and the backend strips them again.
+    3. Regex PII rule engine as a pre-write gate. Emails, phone numbers, SSNs, credit card patterns. Events that match are quarantined, not silently dropped. This is Stage 1 of the pipeline that Second Helios extends with NER.
+    4. Forward-compatible schema. The events table uses session_token (string), epoch_id (integer), event_type (string), payload (jsonb), source_type (string), collected_at (timestamp, set by server not client). These field names and types will not change across any era.
+
+The backend schema for First Helios:
+CREATE TABLE events (
+  event_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_token TEXT NOT NULL,  -- UUID now, hash_token later
+  epoch_id     INTEGER NOT NULL, -- consent version counter
+  event_type   TEXT NOT NULL,    -- 'job_listing', 'salary_signal'
+  payload      JSONB NOT NULL,   -- structured extraction data
+  source_type  TEXT NOT NULL DEFAULT 'extension',
+  collected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  pipeline_version INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE quarantine (
+  quarantine_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  original_payload JSONB NOT NULL,  -- pre-strip payload
+  redaction_types TEXT[] NOT NULL,   -- what was caught
+  rule_version INTEGER NOT NULL,
+  quarantined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for the query API
+CREATE INDEX idx_events_session_epoch
+  ON events(session_token, epoch_id);
+CREATE INDEX idx_events_type_collected
+  ON events(event_type, collected_at);
+
+The pipeline_version column lets you track which version of the PII rule engine processed each event. When Second Helios upgrades the pipeline with NER, you can identify which events were cleaned by rules-only vs. rules+NER, and optionally re-process old events through the upgraded pipeline.
+2.3.2 Second Helios Upgrade
+    • NER integration (Microsoft Presidio) as Stage 2 of the pipeline.
+    • Cert-gated writes: Leg 3 validates the certificate from Leg 2 before accepting any event. No valid cert = 403, no error details.
+    • Behavioral index: pre-aggregated event counts by session_token, epoch, time window, and category. External orgs query the index, not raw events.
+    • Shadow-mode re-id game starts training against the accumulated First Helios data.
+    • Synthetic data generator (CTGAN) begins producing replacement profiles.
+2.3.3 Third Helios Upgrade
+    • Cache snapshot ingestion from EDN: full DOM, asset inventories, ad placements.
+    • Combinability analysis before segment delivery.
+    • Re-id game goes live with real-time purge + synthetic replacement.
+    • OpenRTB bid adapter for real-time advertising integration.
+
+3. Token & Identity Lifecycle
+This section defines every token, key, and identifier in the system, what it is, how it’s generated, when it rotates, and how it upgrades across eras. This is the reference for any agent working on tokenization.
+
+Token
+First Helios
+Second Helios
+Third Helios
+Rotates When
+session_token
+crypto.randomUUID(). Stored in localStorage. Server sees it.
+HMAC-SHA256(epoch_subkey, epoch_id). Derived on device. Server sees it.
+VOPRF-blinded token. Server 2 signs without seeing it. Server 3 sees unblinded version.
+Every 30 days (First), every consent change (Second+), every burn (all)
+epoch_id
+Integer counter. Increments on session_token rotation or consent change.
+Cryptographic epoch ID. Sealed when consent changes. Immutable after seal.
+Same as Second. Epochs govern both behavioral consent and EDN consent.
+Every consent change
+consent_state
+JSON object: sites_enabled, categories_excluded, collection_active. Unsigned.
+Same structure, signed with Key 1. Leg 2 validates signature.
+Extended with edn_hosting_consent, edn_account_consent, resource_limits.
+User-initiated change
+encryption_key (cache)
+Random AES-256-GCM key. Stored as JWK in browser.storage.local. v:1 schema.
+Derived from root key via HKDF. Non-extractable. v:2 schema.
+Two keys: user cache key + EDN cache key. Both HKDF-derived. v:3 schema.
+On key generation (First), on epoch change (Second+)
+root_key
+Does not exist. Auth is email/password.
+Ed25519 keypair. Generated on device. Private key biometric-gated. Never transmitted.
+Same. Shamir 3-of-5 recovery added.
+Never (unless burned and reissued)
+device_token
+Does not exist.
+Does not exist.
+VOPRF-generated pseudonym. Links device to EDN routing without revealing owner.
+On burn or EDN consent revocation
+
+3.1 The Upgrade Path for session_token
+This is the most important forward-compatibility decision in the system. The session_token field appears in every event, every query, every index, and every API response. Getting the upgrade path right means zero schema migrations across three eras.
+
+First Helios: session_token is a UUID v4 string. 36 characters. Example: 
+550e8400-e29b-41d4-a716-446655440000
+Second Helios: session_token is a hex-encoded HMAC-SHA256 hash. 64 characters. Example: 
+a3f2b8c1d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef
+Third Helios: session_token is a hex-encoded unblinded VOPRF output. 64 characters. Example: 
+b7e2c9d1f5a6b8901234567890abcdef1234567890abcdef1234567890abcdef
+
+All three are strings. All three fit in a TEXT column. The column name, data type, and index structure never change. The backend doesn’t need to know which era generated the token — it treats them all as opaque session identifiers. The only difference is how they’re generated and what cryptographic properties they carry.
+Implementation rule: never parse, validate, or make assumptions about the internal format of session_token anywhere in the backend. Treat it as an opaque string. If you need to know the generation method, check the pipeline_version or epoch_id. The token itself is a black box.
+
+4. Remote Selector Configuration Security
+The SpiritPool security document identifies remote selector expansion as the most critical risk at scale. A compromised config server could push selectors that scrape credentials instead of job listings. This section defines the signing architecture that prevents this.
+
+4.1 Signing Architecture
+Every remote config update must be signed with an Ed25519 private key held offline by the developer. The extension ships with the corresponding public key pinned in the manifest. This is non-negotiable from First Helios onward.
+
+Key generation (offline, one-time, developer machine):
+# Generate Ed25519 keypair for config signing
+# Private key stays OFFLINE - never on config server
+openssl genpkey -algorithm Ed25519 -out config_signing.pem
+openssl pkey -in config_signing.pem -pubout \
+  -out config_signing_pub.pem
+
+Config signing (in CI/CD pipeline, using offline key via hardware token or sealed secret):
+// Sign the config before publishing
+const configBytes = new TextEncoder().encode(
+  JSON.stringify(selectorsConfig)
+);
+const signature = await crypto.subtle.sign(
+  'Ed25519',
+  privateKey,
+  configBytes
+);
+// Publish: { config: selectorsConfig, sig: base64(signature) }
+
+Config verification (in extension, before applying any remote config):
+async function verifyAndApplyConfig(response) {
+  const configBytes = new TextEncoder().encode(
+    JSON.stringify(response.config)
+  );
+
+  const valid = await crypto.subtle.verify(
+    'Ed25519',
+    PINNED_PUBLIC_KEY,  // hardcoded in extension
+    base64ToBuffer(response.sig),
+    configBytes
+  );
+
+  if (!valid) {
+    console.error('Config signature invalid - rejecting');
+    return false;
+  }
+
+  // Schema validation AFTER signature check
+  if (!validateConfigSchema(response.config)) {
+    console.error('Config schema invalid - rejecting');
+    return false;
+  }
+
+  // Size check
+  if (configBytes.length > 100 * 1024) {
+    console.error('Config too large - rejecting');
+    return false;
+  }
+
+  applySelectors(response.config);
+  return true;
+}
+
+4.2 Schema Validation Rules
+The config schema validator enforces that selectors can only contain:
+    • CSS selectors (strings matching a strict CSS selector grammar — no JavaScript, no eval, no function calls).
+    • Text patterns (regex patterns for field extraction — validated as syntactically valid regex, max 500 characters, no backreferences or lookaheads that could cause ReDoS).
+    • Field names (alphanumeric + underscore only, max 64 characters).
+    • Domain patterns (valid hostname format only, no wildcards except for subdomains).
+Specifically rejected: anything that could be executed (script tags, event handlers, javascript: URIs, data: URIs), any reference to sensitive form fields (input[type=password], input[name*=card], input[name*=ssn]), and any selector targeting iframe contents.
+
+4.3 The Hybrid Approach for First Helios
+First Helios uses Option A (bundled selectors) as the primary path with Option B (signed remote config) as an opt-in fast-update channel:
+    • Core job board selectors (Indeed, LinkedIn, Glassdoor) ship bundled in the extension. These are the production-stable extractors that go through Chrome Web Store review.
+    • A signed remote config endpoint provides supplemental selectors for new sites. The extension fetches this on startup and every 24 hours. If signature verification fails, the extension falls back to bundled selectors only.
+    • Option C (user-controlled optional permissions) is implemented for any site not covered by bundled or remote selectors. The user can right-click “Add this site” and the extension requests the host permission dynamically.
+This gives you Chrome Web Store stability for core sites, fast iteration for new sites without waiting for review, and user-controlled expansion for edge cases. All three paths feed into the same extractor framework and the same sanitizeForTransmit() pipeline.
+
+5. Data Field Classification & Treatment
+Every field that flows through the system has a classification that determines how it is handled at each layer. This table is the authoritative reference for what the extension sends, what the backend stores, and what external orgs eventually see.
+
+Field
+Public?
+Extension Sends
+How
+Backend Stores
+Org Sees
+Era Available
+jobTitle
+Yes
+Yes
+As-is
+Yes
+Yes (indexed)
+First+
+company
+Yes
+Yes
+As-is
+Yes
+Yes (indexed)
+First+
+location
+Yes
+Yes
+As-is
+Yes
+Yes (indexed)
+First+
+salary
+Yes
+Yes
+Fuzzed ±5%
+Fuzzed value
+Aggregated
+First+
+postingDate
+Yes
+Yes
+Nearest day
+Day precision
+Yes
+First+
+applicantCount
+Yes
+Yes
+Fuzzed ±5%
+Fuzzed value
+Aggregated
+First+
+badges
+Yes
+Yes
+As-is
+Yes
+Yes
+First+
+observedAt
+No
+Yes
+Fuzzed ±15min
+Fuzzed value
+No
+First+
+session_token
+No
+Yes
+UUID/hash
+Yes (index key)
+No
+First+
+epoch_id
+No
+Yes
+Integer
+Yes (index key)
+No
+First+
+tabUrl
+No
+NO
+Stripped
+NO
+NO
+Never
+collectedAt
+No
+NO
+Stripped
+Server sets own timestamp
+NO
+Never
+IP address
+No
+Unavoidable
+HTTP
+NEVER LOGGED
+NO
+Never
+
+The red fields are absolute prohibitions. If tabUrl, collectedAt, or IP address are ever found in stored data, it is a bug and a security incident. Both the extension and the backend strip these fields independently — defense in depth.
+
+6. Agent Mission Specifications
+These are agent.md-ready mission definitions. Each mission is scoped to a single concern, with explicit inputs, outputs, boundaries, and test criteria. Agents receive only the context relevant to their mission — no cross-boundary information.
+
+Mission 3: Local Cache Encryption
+Field
+Specification
+Scope
+Encrypt all signal batches in browser.storage.local using AES-256-GCM. Decrypt on flush. Manage key lifecycle.
+Owns
+encryptSignal(), decryptSignal(), generateCacheKey(), migrateCacheKey(). The encryption module in the background service worker.
+Must NOT touch
+The flush logic, the sanitizeForTransmit() pipeline, the backend API, or any server-side code.
+Input contract
+Receives plaintext signal objects from the content script collector. Returns encrypted blobs with { iv, data, v } structure.
+Output contract
+Provides decryptSignal() that returns the original plaintext signal. Used by the flush function.
+Key lifecycle
+Generate on install. Store as JWK in browser.storage.local under 'encryptionKey'. Schema version v:1. Future: migration function for v:1 → v:2 when Second Helios derives key from root key.
+Test criteria
+(1) Encrypted cache entries are not readable as JSON. (2) Decrypt(encrypt(signal)) === signal for all signal types. (3) Different signals produce different ciphertexts (IV randomness). (4) Missing or corrupted key triggers re-generation, not crash. (5) v:1 field present on all encrypted entries.
+
+Mission 4: Pre-Transmission Anonymization
+Field
+Specification
+Scope
+Build sanitizeForTransmit(signal) that strips, fuzzes, and attaches Helios-compatible fields to every signal before it leaves the extension.
+Owns
+sanitizeForTransmit(), fuzzNumeric(), fuzzTimestamp(), fuzzToNearestDay(), getSessionToken(), getConsentVersion(), getCurrentConsentState().
+Must NOT touch
+The content script extractors, the cache encryption layer, or the backend intake endpoint.
+Strip fields
+tabUrl, collectedAt — delete before payload is built. These must never appear in any POST body.
+Fuzz fields
+salary: ±5% random. applicantCount: ±5% random. observedAt: ±15 minutes random. postingDate: nearest day.
+Attach fields
+session_token (UUID, 30-day rotation), epoch_id (integer, consent version counter), consent_state (JSON object with sites_enabled, categories_excluded, collection_active).
+Integration point
+Called inside flushDomain() after decryption and before POST. This is the last transformation before data leaves the extension.
+Test criteria
+(1) Output never contains tabUrl or collectedAt. (2) Fuzzed salary differs from input by ≤5%. (3) Fuzzed observedAt differs by ≤15 min. (4) session_token and epoch_id always present. (5) consent_state matches current user preferences. (6) Calling sanitize twice on same input produces different fuzz values (randomness).
+
+Mission 5: Remote Config Signing
+Field
+Specification
+Scope
+Implement Ed25519 signature verification for remote selector configs. Build schema validator. Integrate into DOMScanner.loadConfig().
+Owns
+verifyAndApplyConfig(), validateConfigSchema(), the pinned public key constant, the config fetch + verify flow.
+Must NOT touch
+The signing side (that’s developer tooling, not extension code), the content script injection logic, or the anonymization pipeline.
+Verification flow
+Fetch config from HTTPS endpoint → verify Ed25519 signature against pinned public key → validate schema (no executable content, no sensitive selectors, size <100KB) → apply selectors. Any failure at any step: reject entire config, fall back to bundled selectors.
+Schema rules
+Allowed: CSS selectors, regex text patterns (<500 chars, no backrefs), field names (alphanumeric+underscore, <64 chars), domain patterns (valid hostname). Rejected: script tags, event handlers, javascript:/data: URIs, input[type=password], input[name*=card], input[name*=ssn], iframe targeting.
+Test criteria
+(1) Valid config + valid signature: applied. (2) Valid config + invalid signature: rejected, fallback to bundled. (3) Invalid schema + valid signature: rejected. (4) Config >100KB + valid signature: rejected. (5) Config containing password selector: rejected. (6) Network failure: bundled selectors used, no crash.
+
+Mission 6: Backend Hardening
+Field
+Specification
+Scope
+Harden the SpiritPool backend intake to enforce field stripping, PII detection, IP suppression, and forward-compatible schema.
+Owns
+Event intake endpoint, PII regex rule engine, quarantine system, IP suppression middleware, database schema.
+Must NOT touch
+The extension code, the cache encryption, the config signing, or any user-facing UI.
+IP suppression
+Middleware that strips client IP from request context before any handler runs. Override framework logging. If the IP string appears anywhere in logs or database, it is a critical bug.
+Server-side stripping
+Even if the extension sends tabUrl or collectedAt (old version, bug), the intake endpoint deletes these fields before any processing. Defense in depth.
+PII rule engine
+Regex patterns for: email addresses, phone numbers (US + international), SSN patterns, credit card numbers (Luhn-valid). Events matching any pattern are moved to quarantine table, not silently dropped.
+Schema
+events table with: event_id (UUID PK), session_token (TEXT), epoch_id (INTEGER), event_type (TEXT), payload (JSONB), source_type (TEXT), collected_at (TIMESTAMPTZ, server-set), pipeline_version (INTEGER). Quarantine table parallel.
+Test criteria
+(1) POST with tabUrl in body: stored event does not contain tabUrl. (2) POST with email in payload: event quarantined. (3) Access logs do not contain any IP-like patterns. (4) session_token accepts both UUID and 64-char hex strings (forward compat). (5) Events without session_token or epoch_id: rejected 400.
+
+Mission 7: Session Token & Consent State Management
+Field
+Specification
+Scope
+Implement the session token lifecycle, consent version counter, and consent state object. These are the forward-compatible hooks that Second Helios will upgrade to cryptographic tokens and epochs.
+Owns
+getSessionToken(), rotateSessionToken(), getConsentVersion(), incrementEpochId(), getCurrentConsentState(), updateConsentState(). Storage keys: session_token, session_token_created, consent_version, consent_state.
+Must NOT touch
+Cache encryption, sanitizeForTransmit() (which calls these functions), backend code, or extractor logic.
+Token generation
+First Helios: crypto.randomUUID(). Store in localStorage with creation timestamp. Auto-rotate every 30 days. Force-rotate on any consent_state change.
+Consent state shape
+{ sites_enabled: string[], categories_excluded: string[], collection_active: boolean, consent_version: integer }. This exact shape persists through all eras. Second Helios adds a signature field. Third Helios adds edn_hosting_consent and edn_account_consent.
+Rotation behavior
+When session_token rotates: epoch_id increments, old token is discarded (not stored), new token is generated. The extension must not maintain a history of old tokens — that history becomes a deanonymization vector.
+Test criteria
+(1) Fresh install: new session_token generated. (2) 30 days later: auto-rotated, epoch_id incremented. (3) Consent change: force-rotated immediately. (4) Old token never appears in storage after rotation. (5) consent_state always reflects current user preferences. (6) consent_version always equals epoch_id.
+
+7. Integration Map — How the Missions Connect
+The missions are designed to be built by separate agents with no cross-boundary context. Here is how they connect at integration time:
+
+7.1 Data Flow Through the Missions
+The signal lifecycle flows through missions in this order:
+
+    5. User visits a job board page. Content script extractor (not a mission — existing code) produces a raw signal object.
+    6. Mission 3 (Cache Encryption) encrypts the signal and writes it to browser.storage.local.
+    7. On flush timer (every 10 minutes), the background worker calls Mission 3’s decryptSignal() to recover the plaintext.
+    8. Mission 4 (Anonymization) runs sanitizeForTransmit() on the plaintext: strips tabUrl/collectedAt, fuzzes numerics/timestamps, attaches session_token/epoch_id/consent_state from Mission 7.
+    9. The sanitized signal is POSTed over HTTPS to the backend intake endpoint.
+    10. Mission 6 (Backend Hardening) receives the POST: strips any residual tabUrl/collectedAt (defense in depth), runs PII regex, writes clean events to the forward-compatible schema or quarantines.
+
+7.2 Mission Dependency Graph
+Mission
+Depends On
+Depended On By
+Can Build In Parallel
+M3: Cache Encryption
+None
+Flush logic (existing code)
+Yes — fully independent
+M4: Anonymization
+M7 (calls getSessionToken, etc.)
+Flush logic (called in flushDomain)
+After M7 interface defined
+M5: Config Signing
+None
+DOMScanner.loadConfig()
+Yes — fully independent
+M6: Backend Hardening
+Schema definition from M7
+None (terminal)
+After schema defined
+M7: Token/Consent
+None
+M4 (provides token/consent functions)
+Yes — build first
+
+Recommended build order: M7 first (defines the interfaces everyone else uses), then M3 and M5 in parallel (fully independent), then M4 (depends on M7), then M6 (depends on schema from M7). Total critical path: M7 → M4 → integration. M3, M5, and M6 are off the critical path.
+
+7.3 Agent Boundary Rules
+These rules apply to every agent working on these missions:
+
+Rule 1: No agent receives another mission’s implementation details. M3 (Cache Encryption) does not know how M4 (Anonymization) works. M4 does not know how M3 works. They communicate through defined interfaces: M3 provides encryptSignal() and decryptSignal(). M4 provides sanitizeForTransmit(). Neither knows the other’s internals.
+
+Rule 2: No agent stores or processes data that crosses its boundary. The cache encryption agent never sees the backend schema. The backend hardening agent never sees the encryption key. The anonymization agent never sees raw cached data — it receives already-decrypted signals from the flush function.
+
+Rule 3: The session_token is an opaque string everywhere except Mission 7. No other mission parses it, validates its format, or makes assumptions about its length. Mission 4 attaches it. Mission 6 stores it. Neither inspects it.
+
+Rule 4: Any PR that creates a function allowing the backend to look up a user’s identity given their session_token is a critical security incident, regardless of the justification. This rule applies from First Helios onward — not just Third Helios. The backend must never have a reverse-lookup capability.
+
+8. Integration Test Suite
+These tests verify that the missions work together correctly. They are run by the Test Agent, which has access to interfaces only — no implementation details.
+
+8.1 End-to-End Signal Flow Test
+    • Input: raw signal with tabUrl, collectedAt, salary: 75000, observedAt: exact timestamp.
+    • Expected at cache layer: encrypted blob with v:1, not readable as JSON.
+    • Expected after decrypt: original signal restored exactly.
+    • Expected after sanitize: no tabUrl, no collectedAt, salary within ±5% of 75000, observedAt within ±15 min, session_token present (UUID format), epoch_id present (integer), consent_state present (valid object).
+    • Expected at backend after intake: event stored in events table. No tabUrl. No collectedAt (server sets own). No IP in any log. session_token and epoch_id match what extension sent. pipeline_version = 1.
+8.2 PII Defense-in-Depth Test
+    • Input: signal with payload containing an email address (test@example.com).
+    • Expected: extension’s sanitize does not catch it (not its job — it strips metadata, not payload PII).
+    • Expected: backend PII rule engine catches it. Event goes to quarantine, not events table.
+    • Verify: quarantine record includes redaction_types: ['email'].
+8.3 Config Signing Attack Test
+    • Fetch a config with valid selectors but invalid signature. Expected: rejected, bundled selectors used.
+    • Fetch a config with valid signature but a selector targeting input[type=password]. Expected: schema validation fails, config rejected.
+    • Fetch a config with valid everything but size >100KB. Expected: rejected.
+    • Config server returns 500. Expected: bundled selectors used, no crash, no data loss.
+8.4 Token Rotation Test
+    • Simulate 30 days passing. Expected: session_token auto-rotated, epoch_id incremented, old token absent from all storage.
+    • Change consent_state (disable a site). Expected: session_token force-rotated immediately, epoch_id incremented.
+    • Verify: no trace of old session_token anywhere in extension storage, logs, or pending cache entries.
+8.5 Forward-Compatibility Test
+    • Manually set session_token to a 64-character hex string (simulating Second Helios hash_token). Submit to backend. Expected: stored successfully, no validation error.
+    • Set epoch_id to a large integer (simulating many consent changes). Expected: stored successfully.
+    • Add unknown fields to consent_state (simulating Third Helios EDN fields). Expected: backend stores them in JSONB without error.
+These tests prove that the First Helios backend will accept Second and Third Helios data without modification. If any of them fail, the schema or validation logic has a forward-compatibility bug that must be fixed before it ships.
+
+9. Immediate Action List
+Concrete next steps, in priority order, to integrate these missions into the existing SpiritPool codebase and agent.md.
+
+Action 1: Add Missions 3–7 to agent.md. Copy the mission specifications from Section 6 into agent.md as Mission 3 through Mission 7. Each mission gets its own section with Scope, Owns, Must NOT Touch, and Test Criteria exactly as specified.
+
+Action 2: Build Mission 7 first. The session token and consent state management is the foundation everything else depends on. Implement getSessionToken(), getCurrentConsentState(), and the rotation logic. Test the 30-day rotation and consent-change rotation. This should take 1–2 days.
+
+Action 3: Build Mission 3 and Mission 5 in parallel. Cache encryption and config signing are fully independent of each other and of Mission 7. Two agents can work on them simultaneously. Each should take 2–3 days.
+
+Action 4: Build Mission 4. Once Mission 7’s interfaces exist, build sanitizeForTransmit(). Wire it into flushDomain() between decrypt and POST. This is the most security-critical mission — it’s the last checkpoint before data leaves the device. 2–3 days.
+
+Action 5: Build Mission 6. Backend hardening: IP suppression middleware, server-side field stripping, PII regex engine, forward-compatible schema. Test with the integration test suite from Section 8. 3–5 days.
+
+Action 6: Run integration test suite. Execute all tests from Section 8. Fix anything that fails. The forward-compatibility tests (8.5) are especially important — if they fail now, the Second Helios upgrade will require schema migrations.
+
+Action 7: Update SECURITY_PLAN.md. The existing SpiritPool security document identified these layers but didn’t define the implementation. This handoff document defines it. Update SECURITY_PLAN.md to reference this document and mark the identified risks as “mitigated by Missions 3–7.”
+
+Total estimated time: 2–3 weeks for all five missions plus integration testing. The critical path is M7 → M4 → integration (about 5–7 days). M3, M5, and M6 run off the critical path and can be built in parallel by separate agents.
+
+
+SpiritPool × Helios — Encryption & Tokenization Handoff — Confidential

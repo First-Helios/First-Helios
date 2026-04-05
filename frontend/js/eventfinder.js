@@ -24,6 +24,20 @@
 
     // ── Resolution ────────────────────────────────────────────────────────────
 
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function _safeUrl(url) {
+        if (!url) return '#';
+        var s = String(url).trim();
+        return /^https?:\/\//i.test(s) ? s : '#';
+    }
+
     function _evtRes(zoom) { return zoom >= 12 ? 8 : 7; }
 
     function _hexOpacity(count, maxCount) {
@@ -248,11 +262,11 @@
         }
 
         var catBadge = e.category
-            ? '<span class="listing-badge">' + e.category + '</span>'
+            ? '<span class="listing-badge">' + _esc(e.category) + '</span>'
             : '';
 
         var venueStr = e.raw_venue_name
-            ? '<div class="listing-addr">' + e.raw_venue_name + '</div>'
+            ? '<div class="listing-addr">' + _esc(e.raw_venue_name) + '</div>'
             : '';
 
         var mapPin = '';
@@ -262,20 +276,20 @@
 
         var links = '';
         if (e.source_url) {
-            links += '<a href="' + e.source_url + '" target="_blank" rel="noopener" class="listing-link">Details ↗</a>';
+            links += '<a href="' + _safeUrl(e.source_url) + '" target="_blank" rel="noopener" class="listing-link">Details ↗</a>';
         }
         if (e.ticket_url && e.ticket_url !== e.source_url) {
-            links += ' <a href="' + e.ticket_url + '" target="_blank" rel="noopener" class="listing-link">Tickets ↗</a>';
+            links += ' <a href="' + _safeUrl(e.ticket_url) + '" target="_blank" rel="noopener" class="listing-link">Tickets ↗</a>';
         }
 
         card.innerHTML =
             '<div class="listing-header" style="display:flex;justify-content:space-between;align-items:center">' +
-                '<div class="listing-name">' + e.title + mapPin + '</div>' +
+                '<div class="listing-name">' + _esc(e.title) + mapPin + '</div>' +
                 '<div>' + catBadge + ' ' + priceStr + '</div>' +
             '</div>' +
             (dateStr ? '<div class="listing-meta">' + dateStr + '</div>' : '') +
             venueStr +
-            (e.description ? '<div class="listing-meta" style="opacity:0.7;max-height:3em;overflow:hidden">' + e.description.substring(0, 200) + '</div>' : '') +
+            (e.description ? '<div class="listing-meta" style="opacity:0.7;max-height:3em;overflow:hidden">' + _esc(e.description.substring(0, 200)) + '</div>' : '') +
             (links ? '<div style="margin-top:4px">' + links + '</div>' : '');
 
         // Map pin click

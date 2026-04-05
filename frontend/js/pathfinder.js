@@ -23,6 +23,14 @@
     // ── Direction colors ──────────────────────────────────────────────
     const DIR_COLOR = { up: '#4ecca3', lateral: '#f0a500', down: '#e94560' };
 
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
     function dirLabel(d) { return d === 1 ? 'up' : d === 0 ? 'lateral' : d === -1 ? 'down' : 'unknown'; }
     function dirColor(d) { return DIR_COLOR[dirLabel(d)] || '#888'; }
     function fmtWage(v)  { return v == null ? '—' : '$' + v.toFixed(0) + '/hr'; }
@@ -144,8 +152,8 @@
                 : '<span class="ac-dot ac-dot-no"  title="Limited transition data"></span>';
             item.innerHTML =
                 dot +
-                '<span class="ac-title">' + occ.title + '</span>' +
-                (occ.cluster_name ? '<span class="ac-cluster">' + occ.cluster_name + '</span>' : '') +
+                '<span class="ac-title">' + _esc(occ.title) + '</span>' +
+                (occ.cluster_name ? '<span class="ac-cluster">' + _esc(occ.cluster_name) + '</span>' : '') +
                 (occ.median_hourly_wage ? '<span class="ac-wage">' + fmtWage(occ.median_hourly_wage) + '</span>' : '');
             item.addEventListener('mousedown', function(e) { e.preventDefault(); selectOccupation(occ); });
             acEl.appendChild(item);
@@ -235,10 +243,10 @@
     function renderOrigin(occ) {
         document.getElementById('pathfinder-origin').innerHTML =
             '<div class="origin-card">' +
-            '<div class="origin-title">Starting from: <strong>' + occ.title + '</strong></div>' +
-            '<div class="origin-meta">SOC ' + occ.soc_code +
+            '<div class="origin-title">Starting from: <strong>' + _esc(occ.title) + '</strong></div>' +
+            '<div class="origin-meta">SOC ' + _esc(occ.soc_code) +
             (occ.median_hourly_wage ? ' · ' + fmtWage(occ.median_hourly_wage) + ' median' : '') +
-            (occ.cluster_name ? ' · ' + occ.cluster_name : '') +
+            (occ.cluster_name ? ' · ' + _esc(occ.cluster_name) : '') +
             (occ.has_transitions === false ? ' · <span style="color:#f0a500">limited data</span>' : '') +
             '</div></div>';
     }
@@ -309,7 +317,7 @@
             var badge = '<span class="cluster-badge" style="color:' + pathColor + ';border-color:' + pathColor + '44;background:' + pathColor + '18">' + label + '</span>';
 
             card.innerHTML =
-                '<div class="path-title">' + (i+1) + '. ' + (p.dest_title || p.dest_soc) + badge + '</div>' +
+                '<div class="path-title">' + (i+1) + '. ' + _esc(p.dest_title || p.dest_soc) + badge + '</div>' +
                 '<div class="path-direction" style="color:' + wageColor + '">' +
                 dirLabel(p.wage_direction).toUpperCase() +
                 (p.wage_change_dollars != null ? ' · ' + (p.wage_change_dollars >= 0 ? '+' : '') + fmtWage(p.wage_change_dollars) : '') +
@@ -320,7 +328,7 @@
                 ' · Gap: ' + fmtGap(p.avg_skill_gap) +
                 (p.dest_traj_3yr != null ? ' · 3yr: +' + p.dest_traj_3yr.toFixed(0) + '%' : '') +
                 (p.requires_license ? ' · <span style="color:#f0a500">new license</span>' : '') +
-                (p.dest_cluster ? ' · ' + p.dest_cluster : '') +
+                (p.dest_cluster ? ' · ' + _esc(p.dest_cluster) : '') +
                 '</div>';
 
             card.addEventListener('click', function () {
