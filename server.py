@@ -128,6 +128,45 @@ app = Flask(
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB POST body cap
 CORS(app)
 
+# ── Privacy: IP Suppression Middleware (FH-1 §1 — Critical Priority 1) ────────
+# Strip client IP from request context before ANY handler runs.
+# Override Werkzeug / Flask logging to never emit IP addresses.
+
+class _IPSuppressedRequest(Flask.request_class):
+    """Custom request class that always returns a redacted remote address."""
+
+    @property  # type: ignore[override]
+    def remote_addr(self):  # type: ignore[override]
+        return "0.0.0.0"
+
+    @remote_addr.setter
+    def remote_addr(self, value):
+        pass  # discard — never store the real IP
+
+app.request_class = _IPSuppressedRequest
+
+class _IPFreeFormatter(logging.Formatter):
+    """Log formatter that strips any IPv4/IPv6-like patterns from messages."""
+
+    import re as _re
+    _IPV4_RE = _re.compile(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
+    _IPV6_RE = _re.compile(r'[0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){2,7}')
+
+    def format(self, record):
+        msg = super().format(record)
+        msg = self._IPV4_RE.sub('[REDACTED]', msg)
+        msg = self._IPV6_RE.sub('[REDACTED]', msg)
+        return msg
+
+# Apply IP-free formatter to werkzeug logger (Flask's default access log)
+_werkzeug_logger = logging.getLogger('werkzeug')
+for _handler in _werkzeug_logger.handlers[:]:
+    _handler.setFormatter(_IPFreeFormatter('%(message)s'))
+if not _werkzeug_logger.handlers:
+    _wh = logging.StreamHandler()
+    _wh.setFormatter(_IPFreeFormatter('%(message)s'))
+    _werkzeug_logger.addHandler(_wh)
+
 # ── Spirit Pool Blueprint ─────────────────────────────────────────────────────
 try:
     from postings.spiritpool_routes import spiritpool_bp
@@ -141,6 +180,14 @@ try:
     from events.routes import events_bp
     app.register_blueprint(events_bp)
     logger.info("Events blueprint registered at /api/events")
+except ImportError:
+    pass
+
+# ── Contributor Intake Blueprint (FH-0) ───────────────────────────────────────
+try:
+    from core.contribute_routes import contribute_bp
+    app.register_blueprint(contribute_bp)
+    logger.info("Contributor blueprint registered (/api/contribute, /api/burn)")
 except ImportError:
     pass
 

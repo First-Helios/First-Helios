@@ -83,6 +83,14 @@ def _import_events_models() -> None:
         logger.debug("[Database] events.models not found — skipping")
 
 
+def _import_spiritpool_models() -> None:
+    """Import SpiritPool models so their tables register with Base.metadata."""
+    try:
+        import core.models.spiritpool  # noqa: F401
+    except ImportError:
+        logger.debug("[Database] core.models.spiritpool not found — skipping")
+
+
 class Base(DeclarativeBase):
     """Declarative base for all tracker models."""
     pass
@@ -1107,6 +1115,7 @@ def init_db(db_path: Path | None = None):
     _import_metadata_models()
     _import_listings_models()
     _import_events_models()
+    _import_spiritpool_models()
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
     db_label = os.environ.get("DATABASE_URL") or str(db_path or DB_PATH)

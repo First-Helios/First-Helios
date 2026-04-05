@@ -253,6 +253,15 @@ def init_scheduler() -> BackgroundScheduler:
             hour=_c.get("hour", 2), minute=_c.get("minute", 30),
             id="snapshot_purge", name="Purge Old Snapshots", replace_existing=True)
 
+    # ── SpiritPool Maintenance ────────────────────────────────────────
+
+    if _job_enabled(sched_cfg, "burn_pool_cleanup"):
+        _c = sched_cfg.get("burn_pool_cleanup", {}).get("cron", {})
+        scheduler.add_job(_run_burn_pool_cleanup, "cron",
+            hour=_c.get("hour", 2), minute=_c.get("minute", 45),
+            id="burn_pool_cleanup", name="Burn Pool Expired Record Cleanup",
+            replace_existing=True)
+
     # ── Event Collectors — auto-discover from registry ────────────────
 
     _register_event_collectors(scheduler, sched_cfg)
@@ -945,3 +954,31 @@ def _run_snapshot_purge() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] Snapshot purge failed: %s", e)
+
+
+def _run_burn_pool_cleanup() -> None:
+    """Daily cleanup: DELETE burn_pool records where expires_at < NOW().
+
+    Burn pool records have a 1-year TTL (expires_at = burned_at + 1 year).
+    """
+    try:
+        from datetime import datetime
+
+        from sqlalchemy import text
+
+        from core.database import get_engine
+
+        now = datetime.utcnow()
+        with get_engine().connect() as conn:
+            result = conn.execute(
+                text("DELETE FROM burn_pool WHERE expires_at < :now"),
+                {"now": now},
+            )
+            conn.commit()
+            logger.info(
+                "[Scheduler] Burn pool cleanup: deleted %d expired records",
+                result.rowcount,
+            )
+
+    except Exception as e:
+        logger.error("[Scheduler] Burn pool cleanup failed: %s", e)

@@ -218,3 +218,13 @@ snapshot_purge:
     day: 1
     hour: 2
     minute: 30
+
+# ── SpiritPool Maintenance ────────────────────────────────────────────────────
+
+burn_pool_cleanup:
+  enabled: true
+  description: "Delete expired burn_pool records (expires_at < NOW). 1-year TTL."
+  trigger: cron
+  cron:
+    hour: 2
+    minute: 45

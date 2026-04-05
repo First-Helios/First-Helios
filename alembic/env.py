@@ -39,6 +39,12 @@ try:
 except ImportError:
     pass
 
+# Import SpiritPool models
+try:
+    import core.models.spiritpool  # noqa: F401
+except ImportError:
+    pass
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
