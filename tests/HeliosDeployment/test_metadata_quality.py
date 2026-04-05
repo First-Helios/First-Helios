@@ -22,87 +22,87 @@ _SPIRITPOOL_TABLES = {"sp_events", "quarantine", "session_epochs", "burn_pool", 
 class TestMetadataRegistration:
     """Dev Req §5.1 — Every SpiritPool table has metadata entries."""
 
-    def test_all_tables_in_meta_table_catalog(self, db):
+    def test_all_tables_in_meta_table_catalog(self, seeded_db):
         """All 5 tables registered in meta_table_catalog."""
         registered = {
             row.table_name
-            for row in db.query(MetaTableCatalog).filter(
+            for row in seeded_db.query(MetaTableCatalog).filter(
                 MetaTableCatalog.table_name.in_(_SPIRITPOOL_TABLES)
             ).all()
         }
         missing = _SPIRITPOOL_TABLES - registered
         assert not missing, f"Tables missing from meta_table_catalog: {missing}"
 
-    def test_all_tables_have_layer(self, db):
+    def test_all_tables_have_layer(self, seeded_db):
         """Every registered table has a non-empty layer assignment."""
-        for row in db.query(MetaTableCatalog).filter(
+        for row in seeded_db.query(MetaTableCatalog).filter(
             MetaTableCatalog.table_name.in_(_SPIRITPOOL_TABLES)
         ).all():
             assert row.layer, f"{row.table_name} has no layer"
 
-    def test_all_tables_have_purpose(self, db):
+    def test_all_tables_have_purpose(self, seeded_db):
         """Every registered table has a non-empty purpose."""
-        for row in db.query(MetaTableCatalog).filter(
+        for row in seeded_db.query(MetaTableCatalog).filter(
             MetaTableCatalog.table_name.in_(_SPIRITPOOL_TABLES)
         ).all():
             assert row.purpose, f"{row.table_name} has no purpose"
 
-    def test_sp_events_columns_documented(self, db):
+    def test_sp_events_columns_documented(self, seeded_db):
         """sp_events: all columns have meta_column_catalog entries."""
         from core.models.spiritpool import SpEvent
 
         orm_columns = {c.name for c in SpEvent.__table__.columns}
         documented = {
             row.column_name
-            for row in db.query(MetaColumnCatalog).filter_by(table_name="sp_events").all()
+            for row in seeded_db.query(MetaColumnCatalog).filter_by(table_name="sp_events").all()
         }
         missing = orm_columns - documented
         assert not missing, f"sp_events columns missing from catalog: {missing}"
 
-    def test_quarantine_columns_documented(self, db):
+    def test_quarantine_columns_documented(self, seeded_db):
         """quarantine: all columns have meta_column_catalog entries."""
         from core.models.spiritpool import Quarantine
 
         orm_columns = {c.name for c in Quarantine.__table__.columns}
         documented = {
             row.column_name
-            for row in db.query(MetaColumnCatalog).filter_by(table_name="quarantine").all()
+            for row in seeded_db.query(MetaColumnCatalog).filter_by(table_name="quarantine").all()
         }
         missing = orm_columns - documented
         assert not missing, f"quarantine columns missing from catalog: {missing}"
 
-    def test_session_epochs_columns_documented(self, db):
+    def test_session_epochs_columns_documented(self, seeded_db):
         """session_epochs: all columns have meta_column_catalog entries."""
         from core.models.spiritpool import SessionEpoch
 
         orm_columns = {c.name for c in SessionEpoch.__table__.columns}
         documented = {
             row.column_name
-            for row in db.query(MetaColumnCatalog).filter_by(table_name="session_epochs").all()
+            for row in seeded_db.query(MetaColumnCatalog).filter_by(table_name="session_epochs").all()
         }
         missing = orm_columns - documented
         assert not missing, f"session_epochs columns missing from catalog: {missing}"
 
-    def test_burn_pool_columns_documented(self, db):
+    def test_burn_pool_columns_documented(self, seeded_db):
         """burn_pool: all columns have meta_column_catalog entries."""
         from core.models.spiritpool import BurnPool
 
         orm_columns = {c.name for c in BurnPool.__table__.columns}
         documented = {
             row.column_name
-            for row in db.query(MetaColumnCatalog).filter_by(table_name="burn_pool").all()
+            for row in seeded_db.query(MetaColumnCatalog).filter_by(table_name="burn_pool").all()
         }
         missing = orm_columns - documented
         assert not missing, f"burn_pool columns missing from catalog: {missing}"
 
-    def test_contributors_columns_documented(self, db):
+    def test_contributors_columns_documented(self, seeded_db):
         """contributors: all columns have meta_column_catalog entries."""
         from core.models.spiritpool import Contributor
 
         orm_columns = {c.name for c in Contributor.__table__.columns}
         documented = {
             row.column_name
-            for row in db.query(MetaColumnCatalog).filter_by(table_name="contributors").all()
+            for row in seeded_db.query(MetaColumnCatalog).filter_by(table_name="contributors").all()
         }
         missing = orm_columns - documented
         assert not missing, f"contributors columns missing from catalog: {missing}"
@@ -120,18 +120,18 @@ class TestDataLineage:
         ("sp_events", "scores"),
     ]
 
-    def test_all_lineage_entries_exist(self, db):
+    def test_all_lineage_entries_exist(self, seeded_db):
         """All expected source→target lineage entries are registered."""
         for source, target in self._EXPECTED_FLOWS:
-            row = db.query(MetaDataLineage).filter_by(
+            row = seeded_db.query(MetaDataLineage).filter_by(
                 source_table=source, target_table=target
             ).filter(MetaDataLineage.deprecated_at.is_(None)).first()
             assert row is not None, f"Missing lineage: {source} → {target}"
 
-    def test_lineage_has_description(self, db):
+    def test_lineage_has_description(self, seeded_db):
         """All lineage entries have a non-empty description."""
         for source, target in self._EXPECTED_FLOWS:
-            row = db.query(MetaDataLineage).filter_by(
+            row = seeded_db.query(MetaDataLineage).filter_by(
                 source_table=source, target_table=target
             ).filter(MetaDataLineage.deprecated_at.is_(None)).first()
             if row:

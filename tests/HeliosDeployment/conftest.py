@@ -81,6 +81,31 @@ def db(engine):
 
 
 @pytest.fixture()
+def seeded_db(engine):
+    """Provide a database session pre-loaded with SpiritPool metadata entries.
+
+    Calls the populate_metadata.py functions so that metadata-quality
+    tests can verify completeness without touching the production DB.
+    """
+    session = Session(bind=engine)
+
+    from scripts.populate_metadata import (
+        populate_column_catalog,
+        populate_data_lineage,
+        populate_table_catalog,
+    )
+
+    populate_table_catalog(session)
+    populate_column_catalog(session)
+    populate_data_lineage(session)
+
+    yield session
+
+    session.rollback()
+    session.close()
+
+
+@pytest.fixture()
 def app(engine, monkeypatch):
     """Create a Flask test app with the contribute blueprint and IP suppression."""
     test_app = Flask(__name__)
