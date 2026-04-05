@@ -1,6 +1,6 @@
 # BLS Ground-Truth Schema — Complete Guide
 
-**This document focuses exclusively on the 5 BLS/Census tables that serve as the authoritative source of truth for labor market scoring.**
+**This document covers the 5 BLS/Census tables that serve as the authoritative source of truth for labor market baselines across all industries.** First Helios uses this data as the economic context layer behind job, wage, and staffing dashboards — not limited to any single industry or employer.
 
 ---
 
@@ -157,7 +157,7 @@ Unemployment rate: 3.3%
 - `employment` — How many in this job in the Austin area?
 
 **Used for:**
-- **wage_competitiveness** — "Starbucks pays $18.50/hr; median for baristas is $16.85. Gap = +$1.65 (above market!) = no stress"
+- **wage_competitiveness** — "Employer pays $18.50/hr; median for this occupation is $16.85. Gap = +$1.65 (above market)"
 
 **Example row:**
 ```
@@ -171,7 +171,7 @@ Wage 75th percentile: $19.50/hr
 Wage 90th percentile: $22.00/hr
 ```
 
-**Status:** ⚠️ **NOT YET IMPORTED** — Requires manual download from BLS website and import script
+**Status:** ✅ **IMPORTED** — 638 Austin MSA occupations across 23 industry groups now in `oews_data` table
 
 ---
 
@@ -184,7 +184,7 @@ Wage 90th percentile: $22.00/hr
 **Coverage:** 25 Austin-area ZIPs × 3 industry codes × 15+ years = 1,000+ records
 
 **Key columns:**
-- `establishments` — How many Starbucks-like locations in ZIP 78701?
+- `establishments` — How many locations of this industry type in ZIP 78701?
 - `employment` — Total people employed in those locations
 - `annual_payroll_k` — Total payroll in thousands
 

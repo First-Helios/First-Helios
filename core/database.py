@@ -1,11 +1,15 @@
 """
-SQLAlchemy models and database initialization for ChainStaffingTracker.
+SQLAlchemy models and database initialization for First-Helios.
+
+Multi-domain data platform: jobs, events, businesses, wages, economic
+indicators, career mobility. Data arrives from 50+ automated collectors
+and real-time SpiritPool contributor signals.
 
 DB file: data/tracker.db (auto-created on first run)
 NOTE: data/spiritpool.db is a separate extension DB — never write to it from here.
 
 Depends on: SQLAlchemy, pathlib
-Called by: backend/ingest.py, backend/scoring/, backend/targeting.py, server.py
+Called by: core/ingest.py, core/scoring/, core/targeting.py, server.py
 """
 
 import json

@@ -1,11 +1,14 @@
 # First-Helios
 
-A public labor market intelligence platform for Austin, TX. Four tools in one:
+A broad-scope data intelligence platform for Austin, TX — ingesting, documenting, and serving structured data across jobs, events, businesses, wages, economic indicators, and career mobility into dashboards people actually use.
 
 - **Job Fair Targeting** — helps organizers identify which employers to prioritize for outreach based on staffing stress, wage gaps, and worker isolation
 - **Career Pathfinder** — shows workers realistic lateral and upward moves with wage data and nearby employers
 - **Job Finder** — maps active job postings by H3 hex cell across Austin
 - **Events Hub** — aggregates local events from 6+ sources (Ticketmaster, Eventbrite, Meetup, Do512, City of Austin, Visit Austin) with venue mapping and social-density scoring
+- **Business Intelligence** — 45K+ employer locations with brand clustering, industry classification, and mobility scoring
+
+Data enters from two paths: **50+ automated API collectors** (BLS, job boards, event aggregators, Overture Maps) running on schedules, and the **SpiritPool browser extension** where real people contribute signals under explicit consent.
 
 > Austin first. One city done right before scaling.
 

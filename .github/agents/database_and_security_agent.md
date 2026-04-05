@@ -38,12 +38,12 @@ find collectors/ -name "*.py" | xargs grep -l "requests.get\|httpx"
 
 ## 1. Your Mission
 
-This is a **public labor market intelligence platform** that:
+This is a **broad-scope data intelligence platform** that:
 
-1. Ingests job data from third-party APIs (TheirStack, SerpAPI, Jobicy, Workday careers API, JobSpy)
-2. Accepts crowdsourced data from the **Spirit Pool browser extension** — arbitrary user-navigated web pages
-3. Normalizes and stores data in **PostgreSQL** (`helios` DB)
-4. Serves results to a **Leaflet/vanilla JS frontend** on port 8765
+1. Ingests structured data across multiple domains: jobs, events, businesses, wages, economic indicators, and career mobility — from 50+ API sources (TheirStack, SerpAPI, BLS, Eventbrite, Overture Maps, etc.)
+2. Accepts crowdsourced data from the **Spirit Pool browser extension** — arbitrary user-navigated web pages across job boards, business directories, and event sites
+3. Normalizes and stores data in **PostgreSQL** (`helios` DB) across 43+ tables
+4. Serves dashboards via a **Flask API** on port 8765 for community labor-market, events, and business intelligence
 
 Your job: find every place where untrusted data can cause unintended behavior, data corruption, data leakage, or system compromise. Document it. Propose fixes. Do not silently skip a finding because it seems "unlikely."
 

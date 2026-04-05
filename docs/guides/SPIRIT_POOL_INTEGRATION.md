@@ -1,8 +1,20 @@
 # Spirit Pool → First-Helios Integration Guide
 
 **For:** Claude agents continuing development on this codebase
-**Last updated:** 2026-03-25
-**Status:** Backend fully wired. Extension-side scope expansion is the outstanding work.
+**Last updated:** 2026-04-05
+**Status:** Backend fully wired. Extension-side security missions (M3–M7) and forward-compatible intake (`POST /api/contribute`) in progress per FH-0/FH-1.
+
+---
+
+## Platform Context
+
+First Helios is a **broad-scope data intelligence platform** that ingests, documents, and serves structured data across jobs, events, businesses, wages, economic indicators, and career mobility — into dashboards people actually use.
+
+Data enters from two paths:
+1. **Automated collectors** — 50+ API sources (BLS, job boards, event aggregators, Overture Maps, etc.) running on schedules
+2. **SpiritPool contributors** — real people running the browser extension who donate signals as they browse
+
+SpiritPool is **one of the platform's real-time data sources**, not the only one. It is especially valuable because it captures signals that APIs miss (salary data, applicant counts, listing freshness) and does so under explicit user consent.
 
 ---
 
@@ -11,23 +23,22 @@
 Spirit Pool is a **Manifest V3 browser extension** that lives in a separate repository:
 `/home/fortune/CodeProjects/ChainStaffingTracker/spiritpool/`
 
-It runs in the user's browser, passively collects job listing metadata from allowlisted job sites as the user browses, caches signals locally, and periodically flushes them to First-Helios via HTTP POST. The user explicitly consents via a first-run modal. They can pause collection, toggle sites on/off, or revoke consent at any time.
+It runs in the user's browser, collects structured metadata from allowlisted sites (job boards, business directories, event sites) as the user browses, encrypts and caches signals locally, and periodically flushes them to First-Helios via HTTPS POST. The user explicitly consents via a first-run modal. They can pause collection, toggle sites on/off, or revoke consent at any time.
 
-**It is the primary real-time data source for First-Helios's job-first map layer.**
+SpiritPool collects across three domains:
+- **Jobs** — Indeed, LinkedIn, Glassdoor, ZipRecruiter, Google Jobs
+- **Business** — Google Maps (business reviews, ratings)
+- **Events** — Eventbrite, Meetup, Do512 (planned Phase 3)
 
 ---
 
-## Scope Change: From Starbucks-Only to All Austin Employers
+## Legacy Constraints (Removed)
 
-The original Spirit Pool was purpose-built for Starbucks chain staffing research. Every content script had a company filter (`if company !== "starbucks" skip`). **That constraint must be removed.**
+> **Historical context only.** These constraints no longer apply. They are documented here to prevent agents from re-introducing them.
 
-First-Helios needs job postings for **all employers in Austin, TX** — any chain, any industry — so the job-first map layer can show hiring activity across the whole labor market, not just one chain.
+The original Spirit Pool was purpose-built for Starbucks chain staffing research. Content scripts had company filters (`if company !== "starbucks" skip`). That constraint has been removed. First-Helios collects data for **all employers, all industries, all event types** — any signal relevant to the regional labor market and community.
 
-**What this means for the extension:**
-- Remove the `targetCompanies` filter from all content scripts and `selectors.json`
-- Remove or widen the company-match guard in `content/indeed.js`, `content/linkedin.js`, `content/glassdoor.js`
-- LinkedIn's `content/linkedin.js` already captures all jobs (no filter) — it is the model to follow
-- The `background.js` flush destination must point to First-Helios (see Backend URL below)
+If you encounter `targetCompanies` filters, Starbucks-only guards, or company-match logic in content scripts, these are legacy artifacts to be removed.
 
 ---
 
@@ -45,18 +56,19 @@ User browses job site
   → First-Helios ingests into job_postings table
 ```
 
-**Key files in ChainStaffingTracker/spiritpool/:**
+**Key files in spiritpool/:**
 
 | File | Role |
 |------|------|
 | `background.js` | Service worker: consent gate, local cache, flush scheduler |
 | `shared/selectors.json` | Externalized CSS selectors for all supported sites |
 | `shared/scanner.js` | Generic DOM extraction engine (layout-agnostic) |
-| `content/indeed.js` | Indeed.com parser (has Starbucks filter — remove it) |
+| `content/indeed.js` | Indeed.com parser |
 | `content/linkedin.js` | LinkedIn parser (already captures all jobs) |
-| `content/glassdoor.js` | Glassdoor parser (has Starbucks filter — remove it) |
-| `content/google-jobs.js` | Google Jobs parser (may exist — verify) |
-| `content/starbucks-careers.js` | Starbucks-specific — low priority for expansion |
+| `content/glassdoor.js` | Glassdoor parser |
+| `content/google-jobs.js` | Google Jobs parser |
+| `content/google-maps.js` | Google Maps business scraper |
+| `content/ziprecruiter.js` | ZipRecruiter parser |
 | `popup/popup.js` | User-facing dashboard + flush controls |
 | `manifest.json` | Firefox MV3 source of truth |
 
@@ -123,16 +135,28 @@ For development, ensure First-Helios is running before flushing from the extensi
 
 ## First-Helios Backend: What Is Already Built
 
-### `listings/` module (complete)
+### Legacy Path: `postings/` module (complete, still operational)
+
+The original integration routes SpiritPool signals into the `job_postings` table. This path continues to work for backward compatibility with existing extension versions.
 
 | File | Status | Purpose |
 |------|--------|---------|
-| `listings/__init__.py` | Done | Package exports |
-| `listings/config.py` | Done | TTL (30 days), proximity threshold (150 m) |
-| `listings/models.py` | Done | `JobPosting` SQLAlchemy model — 24 columns, 4 indexes |
-| `listings/matcher.py` | Done | 2-stage Haversine + fingerprint matching to `local_employers` |
-| `listings/ingest.py` | Done | `ingest_job_posting(signal, region, session)` — 8-step pipeline |
-| `listings/spiritpool_routes.py` | Done | Flask Blueprint: `POST /api/spiritpool/contribute`, `GET /api/spiritpool/stats` |
+| `postings/__init__.py` | Done | Package exports |
+| `postings/config.py` | Done | TTL (30 days), proximity threshold (150 m) |
+| `postings/models.py` | Done | `JobPosting` SQLAlchemy model — 24 columns, 4 indexes |
+| `postings/matcher.py` | Done | 2-stage Haversine + fingerprint matching to `local_employers` |
+| `postings/ingest.py` | Done | `ingest_job_posting(signal, region, session)` — 8-step pipeline |
+| `postings/spiritpool_routes.py` | Done | Flask Blueprint: `POST /api/spiritpool/contribute`, `GET /api/spiritpool/stats` |
+
+### Forward-Compatible Path: `POST /api/contribute` (FH-0 / in progress)
+
+The new universal intake endpoint accepts signals across all domains (jobs, events, business) with forward-compatible schema:
+- `session_token` + `epoch_id` (replaces `contributorId`)
+- `payload` as JSONB (accepts unknown fields from future eras)
+- PII quarantine pipeline (FH-1)
+- IP suppression middleware (FH-1)
+
+See `agentMailbox/FH-0_intake_foundation.md` and `agentMailbox/FH-1_backend_hardening.md` for full spec.
 
 ### Registration (complete)
 
@@ -145,7 +169,7 @@ logger.info("Spirit Pool blueprint registered at /api/spiritpool")
 
 ### Database (complete)
 
-The `job_postings` table is created automatically by `backend/database.py` via `init_db()`.
+The `job_postings` table is created automatically by `core/database.py` via `init_db()`.
 It has 24 columns including `source`, `external_id`, `fingerprint`, `local_employer_id` (FK nullable),
 `match_confidence`, `match_method`, `expires_at`, `is_active`.
 

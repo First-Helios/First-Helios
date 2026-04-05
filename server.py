@@ -1,12 +1,13 @@
 """
-Flask application for ChainStaffingTracker.
+Flask application for First-Helios.
 
-Serves the Leaflet map frontend and provides API endpoints for
-scores, targeting, wage index, and scheduler status.
+Broad-scope data intelligence platform serving dashboards for jobs,
+events, businesses, wages, economic indicators, and career mobility
+across the Austin regional labor market.
 
 Port: 8765 (do not change)
 
-Depends on: Flask, backend.*, config.loader
+Depends on: Flask, core.*, postings.*, events.*, config.loader
 """
 
 import argparse

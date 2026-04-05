@@ -48,27 +48,31 @@
 
 ---
 
-## Key Insights: Why Food Service-Only Was a Flaw
+## Historical Design Constraint: Food Service-Only (Now Resolved)
 
-### 1. **Food Service is Lowest-Wage**
+> **Context:** The original platform only tracked food-service occupations (SOC 35-xxxx). This section documents why that was a flaw and confirms it has been fixed. All 638 Austin MSA occupations across 23 industry groups are now ingested. The platform operates as a **multi-industry, multi-domain** intelligence system.
+
+### Why the old constraint was harmful
+
+#### 1. **Food Service is Lowest-Wage**
 - $16.30 median wage is **2nd lowest** in Austin
 - Healthcare IT ($50.24), Management ($54.27) earn 3–3.3× more
 - Only Personal Care ($17.22) and Agriculture ($19.95) lower
 
-### 2. **Food Service has HIGH Turnover Risk**
+#### 2. **Food Service has HIGH Turnover Risk**
 - 14,218 people in food service (most of any sector except All Occupations)
 - But lowest wages = highest quit rates expected
 - JOLTS data shows food service has 2–3× turnover of other sectors
 
-### 3. **Food Service is NOT Representative**
+#### 3. **Food Service is NOT Representative**
 - Only 17 occupations out of 638 (2.7%)
-- Narrowly focused on one industry limits labor market insights
-- Can't compare stress across sectors (tech vs. retail vs. healthcare)
+- Narrowly focused on one industry limited labor market insights
+- Couldn't compare stress across sectors (tech vs. retail vs. healthcare)
 
-### 4. **Staffing Stress ≠ Food Service Stress**
-- If we see 3% above-average job postings in food service, that's noteworthy
-- But we don't know if that's normal for the season, the region, or the industry
-- Without comparison industries, we can't tell
+#### 4. **Staffing Stress ≠ Food Service Stress**
+- A 3% above-average posting rate in food service was noteworthy
+- But without comparison industries, there was no seasonal or regional baseline
+- This has been resolved — the platform now benchmarks across all industries
 
 ---
 
@@ -103,22 +107,24 @@ LIMIT 10;
 
 ---
 
-## Next Steps: Fixing the Food Service-Only Design
+## Completed: Multi-Industry Expansion
 
-### Immediate (1–2 weeks)
-- [ ] Update config/chains.yaml to expand target industries
-- [ ] Update scoring engine to compute per-industry scores
-- [ ] Add industry filter to API endpoints
+> **These items were the original plan to fix the food-service-only design. All are either complete or superseded by the platform-wide approach.**
 
-### Medium-term (1 month)
-- [ ] Modify web scraper to target non-food-service job boards
-- [ ] Expand store data to include retail, healthcare, tech, etc.
-- [ ] Build industry comparison view in frontend
+### Completed
+- [x] ~~Update config/chains.yaml to expand target industries~~ — platform ingests all industries
+- [x] ~~Update scoring engine to compute per-industry scores~~ — scoring now uses full OEWS baseline (638 occupations)
+- [x] ~~Add industry filter to API endpoints~~ — available via `/api/labor-data/` endpoints
 
-### Long-term (ongoing)
-- [ ] Multi-industry labor market analysis
-- [ ] Community economic development insights
-- [ ] Industry-specific job fair recommendations
+### Superseded by First-Helios Platform Architecture
+- [x] ~~Modify web scraper to target non-food-service job boards~~ — 8+ job board collectors now active
+- [x] ~~Expand store data to include retail, healthcare, tech, etc.~~ — 45K+ local employers across all industries via Overture Maps
+- [x] ~~Build industry comparison view in frontend~~ — dashboards serve all domains
+
+### Ongoing (Platform-Wide)
+- [ ] Multi-industry labor market analysis dashboards
+- [ ] Community economic development composite scoring
+- [ ] Industry-specific event and job fair recommendations
 
 ---
 

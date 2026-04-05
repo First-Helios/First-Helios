@@ -1,6 +1,6 @@
-# Geocoding Agent Guide — First Helios Job Adapters
+# Geocoding Agent Guide — First Helios Location Pipeline
 
-Every job API adapter must produce a geocodable location for each posting.
+Every data adapter that produces a physical location (jobs, events, venues, employers) must yield a geocodable address.
 This guide documents the complete geocoding pipeline, how to extract
 location data from API responses, and the priority rules every adapter
 must follow when constructing the `"address"` metadata key.

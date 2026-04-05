@@ -10,7 +10,7 @@
 
 This document describes the **purpose, source, and refresh cadence** of every table in the `helios` PostgreSQL database. Use this to understand the *intention* behind each table and decide where to fetch data for new features.
 
-**Key Principle:** Each table has a single **authoritative source** and a **purpose** within the staffing-stress scoring pipeline.
+**Key Principle:** Each table has a single **authoritative source** and a **purpose** within the multi-domain data platform — serving dashboards for jobs, events, businesses, wages, economic indicators, and career mobility.
 
 ---
 
