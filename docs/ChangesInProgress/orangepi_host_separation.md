@@ -1,7 +1,7 @@
 # OrangePi Host Configuration Separation
 
 **Date:** 2026-04-05
-**Status:** Phase 1 Complete — Ready for OPi Deployment
+**Status:** Deployed and Verified on OrangePi
 **Repo:** First-Helios_Orangepi_Host
 
 ---
@@ -67,20 +67,41 @@ The update script now manages 3 repos in priority order:
 
 Each repo is checked independently. Only services whose code actually changed are restarted. Silent exit when all repos are current (no log spam).
 
-## Deploy Key Requirement
+## Deploy Key Configuration
 
-The existing deploy key (`~/.ssh/github_deploy`) must be added to all 3 GitHub repos:
-- First-Helios (backend)
-- First-Helios_Frontend
-- First-Helios_Orangepi_Host
+GitHub requires unique deploy keys per repo. Three separate ed25519 keys were generated on the OPi, with SSH host aliases routing each repo to its key:
 
-## Remaining Work (Phase 2)
+| SSH Alias | Key File | GitHub Repo |
+|-----------|----------|-------------|
+| `github-backend` | `~/.ssh/github_deploy` | First-Helios |
+| `github-frontend` | `~/.ssh/github_deploy_frontend` | First-Helios_Frontend |
+| `github-host` | `~/.ssh/github_deploy_host` | First-Helios_Orangepi_Host |
 
-### On the OrangePi
-- [ ] Clone host repo and run `scripts/provision.sh` (or `scripts/install-services.sh` on existing setup)
-- [ ] Add deploy key to Frontend and Host repos on GitHub
-- [ ] Verify 3-repo auto-update cycle works end-to-end
+Git remotes use the alias hostnames (e.g. `git@github-backend:4Fortune8/First-Helios.git`).
+
+## OPi Deployment (2026-04-05) — Completed
+
+- [x] Cloned Host and Frontend repos on OrangePi
+- [x] Generated per-repo deploy keys with SSH host aliases
+- [x] Added deploy keys to all 3 GitHub repos
+- [x] Installed systemd units and nginx config
+- [x] Added sudoers NOPASSWD for update script service commands (`/etc/sudoers.d/helios-update`)
+- [x] Force-pulled backend to current main
+- [x] Verified all services running: helios, helios-frontend, helios-update.timer, nginx
+- [x] Verified frontend serves via nginx :80 (HTML + JS + CSS assets)
+- [x] Verified API routes via nginx /api/ (ref/summary, mobility/occupations, jobs/categories)
+- [x] Verified auto-update cycle completes successfully (status=0/SUCCESS)
+
+## Remaining Work
+
+### Frontend meta tag
 - [ ] Set frontend `<meta name="api-base">` to `""` (empty — nginx handles routing, same origin)
+
+### Backend Cleanup
+- [ ] Optionally remove `dev/opi5_setup.sh`, `dev/update.sh`, `dev/sync_from_opi.sh` from backend repo
+- [ ] Optionally remove `docs/orangepi/` from backend repo
+- [ ] Update RUNBOOK.md to reference host repo for infrastructure operations
+- [ ] Optionally remove `static_folder="frontend"` from server.py (no longer needed with nginx routing)
 
 ### Backend Cleanup
 - [ ] Optionally remove `dev/opi5_setup.sh`, `dev/update.sh`, `dev/sync_from_opi.sh` from backend repo
