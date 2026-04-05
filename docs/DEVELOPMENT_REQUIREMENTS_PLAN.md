@@ -172,7 +172,8 @@ The requirements are grouped into five pillars:
 - [ ] Multiple PII types → quarantine with all matching types
 - [ ] Clean payloads flow to events unaffected
 - [ ] Extension always receives 200
-
+- [ ] Meets PII collection guidelines mandate collecting only the minimum necessary data, obtaining explicit consent, and securing information throughout its lifecycle
+. Standards require notifying users about data usage, implementing strict access controls and eventually an analytics dashboard, and ensuring data accuracy and secure deletion. 
 ---
 
 ## 4. API Contract Requirements
