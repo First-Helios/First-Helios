@@ -11,11 +11,11 @@
 | ID | Severity | Title | File | Status |
 |----|----------|-------|------|--------|
 | CRIT-1 | Critical | Unauthenticated unlimited write to `job_postings` — no rate limit, no batch cap | `postings/spiritpool_routes.py:98` | Partially mitigated (batch cap + domain allowlist added) |
-| CRIT-2 | Critical | Stored XSS via `innerHTML` without escaping | `frontend/js/app.js:202`, `eventfinder.js:271` | Fixed |
+| CRIT-2 | Critical | Stored XSS via `innerHTML` without escaping | (frontend, now in separate repo) | Fixed |
 | HIGH-1 | High | Internal exception strings leaked in all 500 responses (36 sites) | `server.py`, `events/routes.py`, `spiritpool_routes.py` | Fixed |
 | HIGH-2 | High | Wildcard CORS — all origins accepted | `server.py:128` | Accepted risk — documented |
 | HIGH-3 | High | Unauthenticated `POST /api/scan` triggers outbound scraping | `server.py:186` | Open |
-| HIGH-4 | High | `source_url`/`ticket_url` rendered in `href` without protocol validation | `eventfinder.js:264` | Fixed |
+| HIGH-4 | High | `source_url`/`ticket_url` rendered in `href` without protocol validation | (frontend, now in separate repo) | Fixed |
 | HIGH-5 | High | Unauthenticated `POST /api/events/interactions` — unbounded storage | `events/routes.py:257` | Open |
 | MED-1 | Medium | Debug mode + `host=0.0.0.0` — `.env.example` defaults to `FLASK_DEBUG=1` | `.env.example:26` | Fixed |
 | MED-2 | Medium | Unbounded `sample=0` triggers full table scan | `server.py:490,562` | Fixed |

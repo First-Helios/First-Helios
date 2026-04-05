@@ -1,7 +1,7 @@
 # OrangePi Host Configuration Separation
 
 **Date:** 2026-04-05
-**Status:** Deployed and Verified on OrangePi
+**Status:** Complete — Host Infra Fully Migrated
 **Repo:** First-Helios_Orangepi_Host
 
 ---
@@ -92,27 +92,10 @@ Git remotes use the alias hostnames (e.g. `git@github-backend:4Fortune8/First-He
 - [x] Verified API routes via nginx /api/ (ref/summary, mobility/occupations, jobs/categories)
 - [x] Verified auto-update cycle completes successfully (status=0/SUCCESS)
 
-## Remaining Work
+## Status
 
-### Frontend meta tag
-- [ ] Set frontend `<meta name="api-base">` to `""` (empty — nginx handles routing, same origin)
-
-### Backend Cleanup
-- [ ] Optionally remove `dev/opi5_setup.sh`, `dev/update.sh`, `dev/sync_from_opi.sh` from backend repo
-- [ ] Optionally remove `docs/orangepi/` from backend repo
-- [ ] Update RUNBOOK.md to reference host repo for infrastructure operations
-- [ ] Optionally remove `static_folder="frontend"` from server.py (no longer needed with nginx routing)
-
-### Backend Cleanup
-- [ ] Optionally remove `dev/opi5_setup.sh`, `dev/update.sh`, `dev/sync_from_opi.sh` from backend repo
-- [ ] Optionally remove `docs/orangepi/` from backend repo
-- [ ] Update RUNBOOK.md to reference host repo for infrastructure operations
-- [ ] Optionally remove `static_folder="frontend"` from server.py (no longer needed with nginx routing)
-
-### Collector Service
-- [ ] Decide whether `helios-collector.service` unit file should also move to host repo
-- [ ] Currently left in backend scope since it's tightly coupled to collector_main.py
+All host infrastructure, systemd units, and nginx configuration have been fully migrated to the [First-Helios_Orangepi_Host](https://github.com/4Fortune8/First-Helios_Orangepi_Host) repository. The backend repo now contains only application code and API logic.
 
 ---
 
-*This document tracks the OrangePi host separation work. Update as phases complete.*
+*Host separation is complete. This document is now historical.*

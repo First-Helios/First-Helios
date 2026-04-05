@@ -34,12 +34,13 @@ How-to docs for contributors.
 
 ---
 
+
 ## Quick Navigation
 
 | I want to... | Go to |
 |---|---|
 | Understand the database schema | [Data Dictionary](data/dictionary/DATA_DICTIONARY_README.md) |
-| Set up the server from scratch | [RUNBOOK.md](../RUNBOOK.md) |
+| Set up the backend server | [RUNBOOK.md](../RUNBOOK.md) |
 | Add a new data collector | [PLAYBOOK.md](../PLAYBOOK.md) + [Data Streams](architecture/DATA_STREAMS.md) |
 | Add a new event collector | [PLAYBOOK.md](../PLAYBOOK.md) § "Adding a New Event Collector" + [Event Sources](../config/event_sources.yaml) |
 | Understand the scoring system | [README.md](../README.md) → Scoring Model |
@@ -48,3 +49,14 @@ How-to docs for contributors.
 | Debug NULL values | [Columns dictionary](data/dictionary/DATA_DICTIONARY_COLUMNS.md) |
 | Check data freshness | `python scripts/system_health_dashboard.py` |
 | Understand BLS data lag | [BLS Ground Truth Guide](data/BLS_GROUND_TRUTH_GUIDE.md) |
+
+---
+
+## Cross-Repo Architecture
+
+This documentation is for the **backend/API** only. For the full platform:
+
+- **Frontend:** [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend)
+- **Host/infra:** [First-Helios_Orangepi_Host](https://github.com/4Fortune8/First-Helios_Orangepi_Host)
+
+See those repos for UI, deployment, and systemd/nginx configuration.

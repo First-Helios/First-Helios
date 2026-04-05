@@ -2,68 +2,41 @@
 
 ## Overview
 
-First-Helios is a labor market intelligence platform for the Austin, TX MSA. It collects data from job boards, labor statistics APIs, employer databases, and sentiment sources, normalizes it, and surfaces it through a map-based frontend.
 
-The stack is:
-- **Backend:** Flask (`server.py`), served by Gunicorn on an OPi5
+First-Helios is now a **backend-only** data and API platform for labor market intelligence in Austin, TX. It collects, normalizes, and serves data via a documented API. The frontend and host management are now in separate repositories.
+
+**Stack:**
+- **Backend:** Flask (`server.py`), Gunicorn (any Linux host)
 - **Scheduler:** APScheduler via `collector_main.py` (runs separately from the web server)
 - **Database:** PostgreSQL (`helios` DB on localhost:5432, connection via `DATABASE_URL` in `.env`)
-- **Frontend:** Plain HTML/CSS/JS — no build step, no npm
+
+**Frontend:** See [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend)
+**Host/infra:** See [First-Helios_Orangepi_Host](https://github.com/4Fortune8/First-Helios_Orangepi_Host)
 
 ---
+
 
 ## Repository Layout
 
 ```
-server.py                    Flask app (port 8765)
+server.py                    Flask app (API server)
 collector_main.py            Standalone scheduler entry point
-collectors/
-  base.py                    BaseScraper, ScraperSignal dataclass
-  cache.py                   File cache utilities
-  geocoding.py               Nominatim + facility index overrides
-  rotation.py                Industry tag rotation for multi-query scrapers
-  job_boards/                jobspy, jobicy, serpapi, usajobs, workday_gov,
-                             activejobs, juju, theirstack adapters
-  labor_data/                bls, qcew, cbp, nlrb, warn adapters
-  employer_data/             overture, alltheplaces, osm adapters
-  sentiment/                 reddit, reviews adapters
-  events/                    ticketmaster, eventbrite, meetup, do512,
-                             austin_city_calendar, austintexas_org
-                             + registry.py (decorator-based plugin system)
-core/
-  database.py                SQLAlchemy models (26+ tables), init, get_engine, get_session
-  ingest.py                  ScraperSignal → signals/scores tables
-  ingest_layer.py            Employer write path (normalize → fingerprint → upsert)
-  normalizer.py              Zero-DB normalization upstream of ingest_layer
-  scheduler.py               APScheduler job definitions (29 scheduled jobs)
-  rate_manager.py            Centralized API rate tracking
-  baseline.py                Labor market baseline computation
-  targeting.py               Targeting score computation
-  scoring/                   engine.py, careers.py, sentiment.py, wage.py
-  models/                    Reference + mobility graph models
-postings/
-  models.py                  JobPosting SQLAlchemy model
-  ingest.py                  Job posting write path (normalize → geocode → H3 → match → upsert)
-  matcher.py                 Match posting to LocalEmployer by fingerprint + proximity
-  config.py                  TTL, proximity threshold, match confidence settings
-events/
-  models.py                  Venue, Event, EventInteraction SQLAlchemy models
-  ingest.py                  Event write path
-  routes.py                  Events API endpoints
-config/
-  loader.py                  Config loading utilities
-  scheduler.yaml             Scheduled job intervals + enabled flags
-  event_sources.yaml         Event source catalog (6 live, 14 future)
-  search_rotation.yaml       20 industry rotation entries for multi-query scrapers
+collectors/                  Data collection adapters
+core/                        Core pipeline, scoring, scheduler
+postings/                    Job posting models + ingest pipeline
+events/                      Events hub
+config/                      Config files (YAML)
 scripts/                     One-time data population scripts
-dev/                         opi5_setup.sh, update.sh, sync_from_opi.sh
-frontend/
-  index.html
-  css/style.css
-  js/                        app.js, jobfinder.js, and per-mode modules
+notebooks/                   Data exploration notebooks
+data/                        Data caches, reference, and state
 ```
 
+**Frontend and host management have moved to their own repositories:**
+- UI: [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend)
+- Host/infra: [First-Helios_Orangepi_Host](https://github.com/4Fortune8/First-Helios_Orangepi_Host)
+
 ---
+
 
 ## The Three Write Paths
 
@@ -362,30 +335,7 @@ Always return `{"status": "ok", ...}` on success and `{"status": "error", "messa
 
 ---
 
-## Frontend Conventions
 
-- **No build step** — plain HTML/CSS/JS, no npm, no bundler
-- **`var` not `let`/`const`** — codebase convention, stay consistent
-- **Function declarations**, not arrow functions
-- **`_privateName`** prefix for module-private functions/variables
-- **No `console.log`** in committed code
-- **Shared map:** `window.sharedMap` — created in `app.js`, accessed by all modules
-- **HTML escaping:** always use `_esc()` when inserting API data into `innerHTML`
-
-**H3 resolution by layer:**
-- `job_postings`: `h3_r7`, `h3_r8` only — clamp jobfinder resolution to `{7, 8}`
-- `local_employers`: `h3_r6` through `h3_r9`
-
-**Color palette:**
-
-| Use | Color |
-|---|---|
-| Brands / stress | `#f0a500` amber |
-| Local employers | `#6c5ce7` purple |
-| Job postings | `#4ecca3` teal |
-| Links | `#4a9eff` blue |
-
----
 
 ## Database Conventions
 
@@ -450,6 +400,7 @@ Use a real test DB or in-memory SQLite. Do not mock the database in integration 
 
 ---
 
+
 ## Key Invariants — Never Violate These
 
 1. All employer writes go through `core/ingest_layer.py:ingest_employer()`
@@ -459,3 +410,14 @@ Use a real test DB or in-memory SQLite. Do not mock the database in integration 
 5. Fingerprints come from `core.normalizer.make_fingerprint()` — never roll your own slug
 6. Scheduler jobs wrap their body in `try/except Exception` — uncaught exceptions silently kill the job
 7. Jobs that update scores must call `compute_all_scores(region)` at the end of the job function
+
+---
+
+## Cross-Repo Architecture
+
+This repository is now **backend-only**. For the full platform:
+
+- **Frontend:** [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend)
+- **Host/infra:** [First-Helios_Orangepi_Host](https://github.com/4Fortune8/First-Helios_Orangepi_Host)
+
+See those repos for UI, deployment, and systemd/nginx configuration.

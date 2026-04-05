@@ -119,17 +119,11 @@ First-Helios/
 │   ├── event_sources.yaml       # Event source catalog (6 live, 14 future)
 │   └── search_rotation.yaml     # 20-entry industry rotation for SerpAPI + Jobicy
 │
-├── frontend/                    # Static SPA — no build step
-│   ├── index.html
-│   ├── css/style.css
-│   └── js/                      # app.js, jobfinder.js, ...
+ 
 │
 ├── scripts/                     # One-time data population scripts
 ├── notebooks/                   # Exploration notebooks
-└── dev/
-    ├── opi5_setup.sh            # Orange Pi provisioning script
-    ├── update.sh                # Auto-deploy script (run by helios-update.timer)
-    └── sync_from_opi.sh         # Pull live DB snapshot from OPi → local
+ 
 ```
 
 ---
@@ -148,15 +142,16 @@ cp .env.example .env
 # Set DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios
 ```
 
-**Pull live data from OPi (requires LAN access to 192.168.0.104):**
-```bash
-bash dev/sync_from_opi.sh     # ~30s stream from OPi PostgreSQL → local
-bash dev/sync_from_opi.sh --dry-run   # compare row counts without syncing
-```
 
-**Or populate from scratch** — see RUNBOOK.md for script order.
-
+**To run locally:**
 ```bash
+git clone https://github.com/4Fortune8/First-Helios.git
+cd First-Helios
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+# Set DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios
 python server.py              # http://localhost:8765
 ```
 
@@ -269,11 +264,21 @@ Destinations ranked by: `transition_order` → `wage_direction` → `avg_skill_g
 - **Never call external APIs without rate manager** — always `rate_manager.can_request()` + `rate_manager.log_request()`
 - **New event collectors must use `@event_collector` decorator** — auto-discovered by the scheduler
 - **H3 cells are pre-computed at ingest** — never compute at query time
-- **No frontend build step** — plain HTML/CSS/JS only, no npm or bundler
+
 - **Public data only** — no logins, no paywalls, no proprietary sources
 
 ---
 
 ## Background
 
-Chain employers capture labor from local communities while wages and profits flow out. This platform gives organizers, workers, and job seekers better visibility into the Austin labor market using publicly accessible data.
+
+---
+
+## Cross-Repo Architecture
+
+This repository is now **backend-only**. For the full platform:
+
+- **Frontend:** [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend)
+- **Host/infra:** [First-Helios_Orangepi_Host](https://github.com/4Fortune8/First-Helios_Orangepi_Host)
+
+See those repos for UI, deployment, and systemd/nginx configuration.

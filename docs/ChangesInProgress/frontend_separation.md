@@ -1,7 +1,7 @@
 # Frontend/Backend Service Separation
 
 **Date:** 2026-04-04
-**Status:** Phase 1 Complete — Local Testing Ready
+**Status:** Complete — Fully Migrated
 **Branch:** DataVisTestFilter
 
 ---
@@ -48,22 +48,10 @@ The First Helios frontend has been extracted into its own repository (`First-Hel
 | eventfinder.js | /api/events/h3-map, /api/events/listings | `HELIOS_API_BASE + '/api/...'` via fetch() |
 | pathfinder.js | /api/mobility/occupations, /api/mobility/paths, /api/mobility/employers | `API_BASE + '/api/...'` via fetch() |
 
-## Remaining Work (Phase 2)
+## Status
 
-### OrangePi Deployment Migration
-- [ ] Create systemd unit files for both services (backend API + frontend static)
-- [ ] Configure auto-pull / self-updating mechanism for frontend repo
-- [ ] Set `<meta name="api-base">` to OrangePi backend IP/hostname
-- [ ] Restrict CORS on backend to frontend origin only (currently allows all)
-
-### Backend Cleanup
-- [ ] Optionally remove `static_folder="frontend"` and static file serving routes from server.py
-- [ ] Or keep as fallback for single-machine deployments
-
-### Monitoring
-- [ ] Health check endpoint on backend (`/api/health`) for frontend to poll
-- [ ] Frontend connection status indicator (detect backend unreachable)
+All frontend code and static serving have been fully migrated to the [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend) repository. The backend no longer serves static assets or manages frontend deployment. All API contract documentation and CORS configuration are maintained in the backend repo.
 
 ---
 
-*This document tracks the frontend separation work. Update as phases complete.*
+*Frontend separation is complete. This document is now historical.*
