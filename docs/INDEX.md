@@ -1,5 +1,16 @@
 # First-Helios Documentation
 
+## Helios Deployment (Start Here)
+Comprehensive project documentation — platform overview, data architecture, privacy, and progress tracking.
+
+- [Documentation Index](HeliosDeployment/README.md) — Entry point to all deployment docs
+- [Platform Overview](HeliosDeployment/01_PLATFORM_OVERVIEW.md) — What First Helios is, three-repo architecture, data domains
+- [Data Architecture](HeliosDeployment/02_DATA_ARCHITECTURE.md) — 6-layer model, 48 tables, write paths, metadata system
+- [SpiritPool Intake Pipeline](HeliosDeployment/03_SPIRITPOOL_INTAKE_PIPELINE.md) — FH-0/FH-1 contributor pipeline, endpoints, processing flow
+- [Privacy & Governance](HeliosDeployment/04_PRIVACY_AND_GOVERNANCE.md) — IP suppression, PII quarantine, 18 non-negotiable rules
+- [Deployment Progress](HeliosDeployment/05_DEPLOYMENT_PROGRESS.md) — Tier checklists, what's built, what's next
+- [Infrastructure & Operations](HeliosDeployment/06_INFRASTRUCTURE.md) — OrangePi host, systemd, scheduler, rate management
+
 ## Architecture
 How the system is designed and why.
 
