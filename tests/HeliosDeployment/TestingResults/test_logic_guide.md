@@ -10,16 +10,18 @@
 
 ```
 tests/HeliosDeployment/
-├── conftest.py                  # Shared fixtures (DB, Flask app, payloads)
-├── test_schema_storage.py       # §2 — ORM-level table schema validation
-├── test_privacy_security.py     # §3 — Privacy controls (unit tests)
-├── test_api_contract.py         # §4 — Endpoint behavior (integration tests)
-├── test_metadata_quality.py     # §5 — Metadata completeness (seeded DB)
-├── test_observability.py        # §6 — Audit trail + scheduled maintenance
+├── conftest.py                      # Shared fixtures (DB, Flask app, payloads)
+├── test_schema_storage.py           # §2 — ORM-level table schema validation
+├── test_privacy_security.py         # §3 — Privacy controls (unit tests)
+├── test_api_contract.py             # §4 — Endpoint behavior (integration tests)
+├── test_metadata_quality.py         # §5 — Metadata completeness (seeded DB)
+├── test_observability.py            # §6 — Audit trail + scheduled maintenance
+├── test_dashboard_spiritpool.py     # §6.1 — Dashboard monitoring functions (T3.2)
+├── test_legacy_compat.py            # §4.3 — Legacy SpiritPool route compat (T3.3)
 └── TestingResults/
-    ├── test_audit_log.md        # Per-test status log with cross-references
-    ├── test_logic_guide.md      # THIS FILE — rationale and patterns
-    └── error_code_tracking.md   # HTTP error code catalog + regression log
+    ├── test_audit_log.md            # Per-test status log with cross-references
+    ├── test_logic_guide.md          # THIS FILE — rationale and patterns
+    └── error_code_tracking.md       # HTTP error code catalog + regression log
 ```
 
 ### Design Principle: One Pillar Per File
@@ -223,6 +225,53 @@ O-05 and O-06 test the DELETE logic directly against the ORM, simulating
 what `_run_burn_pool_cleanup()` does. This validates the SQL without
 requiring the scheduler to actually run.
 
+### test_dashboard_spiritpool.py — "Can the dashboard monitor SpiritPool health?" (T3.2)
+
+**Intent:** Verify that each dashboard monitoring function produces correct
+output for the SpiritPool tables: sp_events freshness, quarantine health,
+session epoch tracking, burn pool trends, and contributor volume.
+
+**Testing approach:** Each function is called with an ORM session containing
+known data, and stdout is captured via pytest `capsys`. Tests assert on
+the text output (status labels, counts, percentages).
+
+**Alerting threshold tests (D-05, D-06, D-07):**
+These directly verify §6.2 thresholds:
+- 0% quarantine → HEALTHY
+- 10% quarantine → WARNING (>5%)
+- 20% quarantine → CRITICAL (>15%)
+
+**Empty state tests (D-01, D-04, D-08, D-10, D-13):**
+Dashboard functions must handle empty tables gracefully — no crashes,
+just informative messages. This is critical for first deployment when
+no SpiritPool data exists yet.
+
+### test_legacy_compat.py — "Does the old route still work safely?" (T3.3)
+
+**Intent:** Verify three aspects of the legacy SpiritPool route update:
+1. Field stripping applied to old-format payloads
+2. Privacy fix — no request.remote_addr in source code
+3. Dual-write to sp_events/quarantine during transition period
+
+**Source inspection tests (L-04, L-09):**
+L-04 uses `inspect.getsource()` to verify the contribute function source
+code no longer contains `ip=%s` or `remote_addr`. L-09 similarly verifies
+response format keys exist. These are structural tests — they verify code
+properties, not runtime behavior.
+
+**Dual-write isolation (L-05, L-06, L-07):**
+These test `_dual_write_to_sp_events()` directly with the `db` fixture,
+bypassing the full legacy endpoint. This is intentional: the legacy endpoint
+has external dependencies (ingest_job_posting, normalize_name, ScraperSignal)
+that are complex to mock. Testing the dual-write function in isolation verifies
+the core behavior without that coupling. Full end-to-end legacy route testing
+is deferred to T4.1.
+
+**Non-fatality test (L-07):**
+The dual-write must never break the primary legacy ingest path. L-07 patches
+`session.add` to raise an exception, verifying the dual-write catches it
+silently rather than propagating.
+
 ---
 
 ## 4. Fixture Dependency Graph
@@ -252,6 +301,8 @@ guaranteeing complete isolation.
 | test_api_contract.py | `core/contribute_routes.py` (contribute, burn), `core/privacy.py`, `core/models/spiritpool.py` |
 | test_metadata_quality.py | `scripts/populate_metadata.py` (populate_table_catalog, populate_column_catalog, populate_data_lineage) |
 | test_observability.py | `core/models/spiritpool.py`, `core/scheduler.py` (_run_burn_pool_cleanup), `config/scheduler.yaml` |
+| test_dashboard_spiritpool.py | `scripts/system_health_dashboard.py` (check_spiritpool_events_freshness, check_quarantine_health, check_session_epochs, check_burn_pool, check_contributor_volume) |
+| test_legacy_compat.py | `postings/spiritpool_routes.py` (contribute, _dual_write_to_sp_events), `core/privacy.py` (strip_forbidden_fields, scan_pii) |
 
 ---
 
@@ -286,7 +337,7 @@ guaranteeing complete isolation.
 When adding tests to this suite:
 
 1. **Assign an ID** following the prefix convention: S- (schema), P- (privacy),
-   A- (api), M- (metadata), O- (observability)
+   A- (api), M- (metadata), O- (observability), D- (dashboard), L- (legacy)
 2. **Write a docstring** on the test method — this becomes the Description in
    the audit log
 3. **Map to a Dev Req section** — every test must trace to a §X.Y reference

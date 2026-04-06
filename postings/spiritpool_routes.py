@@ -7,9 +7,12 @@ Endpoints:
 
 Signal → job_posting flow:
     Spirit Pool signal (JSON) → ScraperSignal → ingest_job_posting() → job_postings table
+    Dual-write: signal also goes to sp_events (after PII check) during transition period.
 """
 
+import json
 import logging
+import uuid
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
@@ -17,6 +20,7 @@ from sqlalchemy import func, text
 
 from core.database import get_session, init_db
 from core.normalizer import normalize_name
+from core.privacy import scan_pii, strip_forbidden_fields
 from postings.ingest import ingest_job_posting
 from postings.models import JobPosting
 from collectors.base import ScraperSignal
@@ -128,6 +132,55 @@ def _map_signal(raw: dict, domain: str, contributor_id: str) -> ScraperSignal | 
     )
 
 
+# ── Dual-write helper: legacy → sp_events during transition ───────────────────
+
+_LEGACY_PIPELINE_VERSION = 1
+
+def _dual_write_to_sp_events(session, raw: dict, contributor_id: str, domain_slug: str) -> None:
+    """Write a clean copy of a legacy signal to sp_events for the transition period.
+
+    Runs PII scan — if PII detected, routes to quarantine table instead.
+    Failures are logged but never break the legacy ingest path.
+    """
+    try:
+        from core.models.spiritpool import SpEvent, Quarantine
+
+        payload = dict(raw)  # shallow copy — raw was already field-stripped
+        payload["legacy_contributor_id"] = contributor_id
+        payload["legacy_domain"] = domain_slug
+
+        event_id = str(uuid.uuid4())
+        collected_at = datetime.utcnow()
+
+        pii_types = scan_pii(payload)
+
+        if pii_types:
+            q = Quarantine(
+                quarantine_id=str(uuid.uuid4()),
+                original_payload=payload,
+                redaction_types=json.dumps(pii_types),
+                rule_version=_LEGACY_PIPELINE_VERSION,
+                quarantined_at=collected_at,
+            )
+            session.add(q)
+        else:
+            ev = SpEvent(
+                event_id=event_id,
+                session_token=f"legacy_{contributor_id}",
+                epoch_id=1,
+                event_type="job_listing",
+                payload=payload,
+                source_type="extension_legacy",
+                collected_at=collected_at,
+                pipeline_version=_LEGACY_PIPELINE_VERSION,
+            )
+            session.add(ev)
+
+        session.flush()  # flush within outer transaction — committed by caller
+    except Exception as exc:
+        logger.warning("[SpiritPool] Dual-write to sp_events failed (non-fatal): %s", exc)
+
+
 # ── POST /api/spiritpool/contribute ───────────────────────────────────────────
 
 @spiritpool_bp.route("/contribute", methods=["POST"])
@@ -144,10 +197,15 @@ def contribute():
 
     Response:
         { "accepted": N, "new_jobs": N, "failed": K }
+
+    During the transition period, also dual-writes clean signals to sp_events.
     """
     body = request.get_json(silent=True)
     if not body:
         return jsonify({"error": "JSON body required"}), 400
+
+    # Defence-in-depth: strip forbidden fields from the entire body
+    strip_forbidden_fields(body)
 
     domain_slug = _normalize_domain(body.get("domain", ""))
     if domain_slug is None:
@@ -175,6 +233,9 @@ def contribute():
                 failed += 1
                 continue
 
+            # Strip forbidden fields from each signal payload
+            strip_forbidden_fields(raw)
+
             signal = _map_signal(raw, domain_slug, contributor_id)
             if signal is None:
                 failed += 1
@@ -184,20 +245,21 @@ def contribute():
                 result, _ = ingest_job_posting(signal, region=region, session=session)
                 if result is not None:
                     accepted += 1
+                    # Dual-write: also store in sp_events (new table) during transition
+                    _dual_write_to_sp_events(session, raw, contributor_id, domain_slug)
                 else:
                     failed += 1
             except Exception as exc:
                 logger.warning(
                     "[SpiritPool] ingest failed for %r from %s: %s",
-                    raw.get("jobTitle"), domain, exc,
+                    raw.get("jobTitle"), domain_slug, exc,
                 )
                 session.rollback()
                 failed += 1
 
         logger.info(
-            "[SpiritPool] %s: accepted=%d failed=%d contributor=%s ip=%s region=%s",
-            domain_slug, accepted, failed, contributor_id,
-            request.remote_addr, region,
+            "[SpiritPool] %s: accepted=%d failed=%d contributor=%s region=%s",
+            domain_slug, accepted, failed, contributor_id, region,
         )
         return jsonify({
             "accepted": accepted,

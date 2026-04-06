@@ -39,6 +39,20 @@ that triggers it, and the test(s) that verify it.
 | 400 | Non-JSON body | `request.get_json(silent=True)` returns None | A-32 | §4.2 |
 | 500 | Database operation failure | `try/except` around db operations | — (not tested) | §4.2 |
 
+### POST /api/spiritpool/contribute (Legacy — T3.3)
+
+| Code | Condition | Validation Rule | Test ID(s) | Dev Req |
+|------|-----------|----------------|-----------|---------|
+| 200 | Signals accepted + dual-written | Valid domain, signals list | — (HTTP not tested; unit L-05) | §4.3 |
+| 400 | No JSON body | `request.get_json(silent=True)` returns None | — (not tested) | §4.3 |
+| 400 | Unrecognised domain | `_normalize_domain()` returns None | — (not tested) | §4.3 |
+| 400 | Signals not a list | `not isinstance(signals_raw, list)` | — (not tested) | §4.3 |
+| 400 | Batch too large | `len(signals_raw) > MAX_SIGNALS_PER_BATCH` | — (not tested) | §4.3 |
+| 500 | General exception | `try/except` around batch processing | — (not tested) | §4.3 |
+
+**Note:** Legacy endpoint HTTP-level tests are deferred to T4.1. Current T3.3 tests
+cover the dual-write function and privacy fixes at the unit level (L-01 through L-09).
+
 ---
 
 ## 2. Allowed Value Enumerations
@@ -150,6 +164,8 @@ Track any test failures encountered during development or CI runs.
 | 2026-04-05 | ALL | ERROR | `UnsupportedCompilationError: JSONB` | SQLite cannot render PostgreSQL JSONB type | Added `@compiles(JSONB, "sqlite")` adapter in conftest.py |
 | 2026-04-05 | ALL | ERROR | `UnsupportedCompilationError: ARRAY` | SQLite cannot render PostgreSQL ARRAY type (from events/models.py) | Added `@compiles(ARRAY, "sqlite")` adapter in conftest.py |
 | 2026-04-05 | M-01,M-04–M-10 | FAIL | Empty result set from meta_table_catalog queries | Test DB had no metadata — `db` fixture creates empty tables | Created `seeded_db` fixture that runs `populate_metadata.py` functions to seed test DB |
+| 2026-04-05 | D-01–D-14 | PASS | — | T3.2 dashboard functions added (no regressions) | 14 new tests, all pass on first run |
+| 2026-04-05 | L-01–L-09 | PASS | — | T3.3 legacy compat tests added (no regressions) | 9 new tests, all pass on first run |
 
 ---
 
@@ -166,6 +182,12 @@ test suite. They are tracked here for future coverage (T4.1 integration tests).
 | CORS preflight | OPTIONS request | 200 (CORS headers) | Flask-CORS handles automatically | T4.2 |
 | Concurrent duplicate session_token | Race on session_epochs UNIQUE | 500 (or silent) | Requires concurrent test setup | T5.2 |
 | Malformed JSON with valid Content-Type | `get_json(silent=True)` → None | 400 | A-24 covers this partially | — |
+| Burn pool increment existing entry | `BurnPool` row already exists for month_key | 200 | Only "create new" branch tested (A-27) | T4.1 |
+| Burn endpoint invalid JSON body | Non-JSON to `/api/burn` | 400 | No test sends malformed body to burn | T4.1 |
+| Legacy endpoint full HTTP flow | POST `/api/spiritpool/contribute` | 200 | External deps (ingest_job_posting) hard to mock | T4.1 |
+| Legacy dual-write + commit failure | `_dual_write_to_sp_events` + DB error | 200 | Only tested via mock, not HTTP | T4.1 |
+| Dashboard STALE status | sp_events >7 days old | stdout | Would need old collected_at in test data | T4.1 |
+| Dashboard AGING status | sp_events 3–7 days old | stdout | Would need aged collected_at in test data | T4.1 |
 
 ---
 

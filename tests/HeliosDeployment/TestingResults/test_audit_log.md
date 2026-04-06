@@ -1,9 +1,11 @@
-# Test Audit Log — HeliosDeployment T1/T2 Test Suite
+# Test Audit Log — HeliosDeployment T1/T2/T3 Test Suite
 #
 # Generated: 2026-04-05
+# Updated: 2026-04-05 (T3 additions)
 # Suite: tests/HeliosDeployment/
-# Total tests: 101
+# Total tests: 124
 # Pillars: §2 Schema, §3 Privacy, §4 API Contract, §5 Data Quality, §6 Observability
+# T3 additions: §4.3 Legacy Compat, §6.1 Dashboard Monitoring
 #
 # Format:
 #   ID | File | Class | Test | Dev Req | Status | Description
@@ -28,7 +30,9 @@
 | §4 API Contract | test_api_contract.py | 33 | 33 | 0 | §4.1–§4.2, §5.3 |
 | §5 Data Quality | test_metadata_quality.py | 12 | 12 | 0 | §5.1–§5.2 |
 | §6 Observability | test_observability.py | 8 | 8 | 0 | §6.3, T2.5 |
-| **TOTAL** | | **101** | **101** | **0** | |
+| §6.1 Dashboard | test_dashboard_spiritpool.py | 14 | 14 | 0 | §6.1, §6.2 (T3.2) |
+| §4.3 Legacy Compat | test_legacy_compat.py | 9 | 9 | 0 | §4.3, §3.2 (T3.3) |
+| **TOTAL** | | **124** | **124** | **0** | |
 
 ---
 
@@ -272,14 +276,55 @@ Maps each DEVELOPMENT_REQUIREMENTS_PLAN.md acceptance criterion to the test(s) t
 
 ---
 
-## Coverage Gaps (Known — Deferred to T3+/T4)
+## Coverage Gaps (Known — Deferred to T4+)
 
 | Gap | Roadmap Task | Reason Deferred |
 |-----|-------------|-----------------|
-| §4.3 Backward compatibility (legacy spiritpool route) | T3.3 | Requires legacy endpoint refactor |
-| §5.4 Job run logging (MetaJobRun per batch) | T3.2 | Requires dashboard integration |
-| §6.1 System health dashboard integration | T3.2 | Dashboard update not in T1/T2 scope |
-| §6.2 Alerting thresholds | T3.2 | Depends on dashboard metrics |
-| §7 Integration tests §8.1–§8.5 (end-to-end) | T4.1 | Requires all T3 tasks complete |
-| §8.3 Config signing validation | T4.1 | Extension-side concern |
-| §8.4 Token rotation multi-epoch | T4.1 | End-to-end integration test |
+| §5.4 Job run logging (MetaJobRun per batch) | T4.1 | Contributes to observability but not yet implemented in endpoint code |
+| §7 Integration tests §8.1–§8.5 (end-to-end) | T4.1 | Requires full pipeline validation across all layers |
+| §8.3 Config signing validation | T4.1 | Extension-side concern — no backend surface yet |
+| §8.4 Token rotation multi-epoch | T4.1 | End-to-end integration test across multiple requests |
+| Contribute endpoint 500 error path | T4.1 | Requires forcing DB failure during endpoint execution |
+| Burn endpoint 500 error path | T4.1 | Requires forcing DB failure during burn execution |
+| Burn pool increment-existing branch | T4.1 | All current burn tests create new pool entries; none test second burn in same month |
+| Burn endpoint invalid JSON body | T4.1 | Missing test for non-JSON body on /api/burn (analogous to A-24) |
+| Dashboard STALE status branch | T4.1 | Would need events with old collected_at (>7 days) to trigger |
+| Dashboard AGING status branch | T4.1 | Would need events with 3-7 day old collected_at to trigger |
+| Legacy dual-write end-to-end via HTTP | T4.1 | Unit tests cover _dual_write_to_sp_events; full HTTP integration deferred |
+
+---
+
+## T3 Test Addition Details
+
+### test_dashboard_spiritpool.py — T3.2: Dashboard Monitoring (NEW)
+
+| ID | Class | Test | Dev Req | Status | Description |
+|----|-------|------|---------|--------|-------------|
+| D-01 | TestSpEventsFresnhness | test_no_events_shows_empty_message | §6.1 | PASS | Empty sp_events table shows "No events received yet" |
+| D-02 | TestSpEventsFresnhness | test_fresh_event_shows_fresh | §6.1 | PASS | Recent event shows FRESH status |
+| D-03 | TestSpEventsFresnhness | test_domain_coverage_breakdown | §6.1 | PASS | Domain coverage shows event_type distribution with percentages |
+| D-04 | TestQuarantineHealth | test_no_data_shows_empty | §6.1 | PASS | Empty tables show "No events processed yet" |
+| D-05 | TestQuarantineHealth | test_healthy_rate | §6.1/§6.2 | PASS | 0% quarantine rate → HEALTHY status |
+| D-06 | TestQuarantineHealth | test_warning_rate | §6.1/§6.2 | PASS | 10% quarantine rate → WARNING status (§6.2 threshold: >5%) |
+| D-07 | TestQuarantineHealth | test_critical_rate | §6.1/§6.2 | PASS | 20% quarantine rate → CRITICAL status (§6.2 threshold: >15%) |
+| D-08 | TestSessionEpochs | test_no_sessions_shows_empty | §6.1 | PASS | Empty session_epochs shows "No sessions recorded yet" |
+| D-09 | TestSessionEpochs | test_active_and_burned_counts | §6.1 | PASS | Sessions split by active/burned with burn rate percentage |
+| D-10 | TestBurnPool | test_no_data_shows_empty | §6.1 | PASS | Empty burn_pool shows "No burn pool data yet" |
+| D-11 | TestBurnPool | test_active_month_shown | §6.1 | PASS | Active month with signal count displayed with ACTIVE status |
+| D-12 | TestBurnPool | test_expired_month_flagged | §6.1 | PASS | Expired month (past expires_at) flagged as EXPIRED |
+| D-13 | TestContributorVolume | test_no_contributors_shows_empty | §6.1 | PASS | Empty contributors shows "No contributors registered yet" |
+| D-14 | TestContributorVolume | test_contributor_stats | §6.1 | PASS | Shows total contributors, total signals, avg signals/contributor |
+
+### test_legacy_compat.py — T3.3: Legacy Route Compatibility (NEW)
+
+| ID | Class | Test | Dev Req | Status | Description |
+|----|-------|------|---------|--------|-------------|
+| L-01 | TestLegacyFieldStripping | test_strip_tabUrl_from_signal | §3.2/§4.3 | PASS | tabUrl stripped from legacy signal payloads |
+| L-02 | TestLegacyFieldStripping | test_strip_collectedAt_from_signal | §3.2/§4.3 | PASS | collectedAt stripped from legacy signal payloads |
+| L-03 | TestLegacyFieldStripping | test_strip_nested_payload | §3.2/§4.3 | PASS | Nested payload fields stripped, non-forbidden fields preserved |
+| L-04 | TestLegacyPrivacyFix | test_no_ip_in_log_format_string | §3.1/§4.3 | PASS | Legacy contribute() source has no ip=%s or remote_addr references |
+| L-05 | TestLegacyDualWrite | test_clean_signal_goes_to_sp_events | §4.3 | PASS | Clean signal dual-writes to sp_events with source_type=extension_legacy |
+| L-06 | TestLegacyDualWrite | test_pii_signal_goes_to_quarantine | §4.3 | PASS | PII signal dual-writes to quarantine (not sp_events) |
+| L-07 | TestLegacyDualWrite | test_dual_write_failure_is_non_fatal | §4.3 | PASS | Dual-write failure is caught and logged — does not break legacy path |
+| L-08 | TestLegacyDualWrite | test_legacy_payload_fields_preserved | §4.3 | PASS | Original signal fields + legacy_contributor_id + legacy_domain preserved |
+| L-09 | TestLegacyResponseFormat | test_response_has_accepted_new_jobs_failed | §4.3 | PASS | Response includes accepted, new_jobs, failed keys for background.js compat |
