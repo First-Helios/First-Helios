@@ -126,7 +126,11 @@ app = Flask(
     static_url_path="",
 )
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB POST body cap
-CORS(app)
+CORS(app, origins=[
+    "moz-extension://*",       # Firefox extension
+    "chrome-extension://*",    # Chrome/Edge extension
+    "http://localhost:8765",   # Local frontend
+])
 
 # ── Privacy: IP Suppression Middleware (FH-1 §1 — Critical Priority 1) ────────
 # Strip client IP from request context before ANY handler runs.

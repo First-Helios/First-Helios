@@ -11,8 +11,8 @@
 |------|--------|------------|-------|
 | **Tier 1: Minimal Context** | **Complete** | 5/5 | Infrastructure in place |
 | **Tier 2: Low Context** | **Complete** | 5/5 | Privacy controls active |
-| **Tier 3: Medium Context** | Not started | 0/3 | Integration pending |
-| **Tier 4: High Context** | Not started | 0/2 | Validation pending |
+| **Tier 3: Medium Context** | **Complete** | 3/3 | Integration done |
+| **Tier 4: High Context** | **Complete** | 2/2 | Validation done |
 | **Tier 5: Full Budget** | Not started | 0/3 | Production readiness pending |
 
 ---
@@ -125,35 +125,70 @@ Privacy controls and supporting endpoints. Each task reads a small cluster of re
 
 ---
 
-## Tier 3: Medium Context (Not Started)
+## Tier 3: Medium Context (Complete)
 
 Cross-module integration tasks. Depend on Tier 1 + 2 infrastructure.
 
 ### T3.1 — POST /api/contribute Full Integration
-- **Status:** Implemented in T2.4 (combined with burn endpoint)
-- **Remaining:** Integration testing with real extension payloads, error edge cases
-- **Note:** The endpoint was built ahead of schedule as part of T2.4. The roadmap originally placed this in Tier 3 due to context complexity, but dependencies were met early.
+- **Status:** Done (implemented in T2.4)
+- **File:** `core/contribute_routes.py`
+- **What:** Full processing pipeline (strip → validate → server fields → PII scan → route → auto-create session_epochs). Built ahead of schedule as part of T2.4.
 
 ### T3.2 — Dashboard Updates for New Tables
-- **Status:** Not started
-- **File to update:** `scripts/system_health_dashboard.py`
-- **Deliverable:** Add monitoring for sp_events freshness, quarantine size/growth, session epoch counts, burn rates, PII detection hit rate.
+- **Status:** Done
+- **File:** `scripts/system_health_dashboard.py`
+- **What:** 6 SpiritPool monitoring functions added:
+  - `check_spiritpool_events_freshness()` — sp_events freshness + domain coverage breakdown
+  - `check_quarantine_health()` — quarantine size, PII detection hit rate, growth trends, alerting thresholds (§6.2)
+  - `check_session_epochs()` — session count, active/burned breakdown, burn rate, recent burn activity
+  - `check_burn_pool()` — monthly trends, expiry status
+  - `check_contributor_volume()` — contributor count, signal totals, daily event volume
 
 ### T3.3 — Legacy SpiritPool Route Compatibility
-- **Status:** Not started
-- **File to update:** `postings/spiritpool_routes.py`
-- **Deliverable:** Ensure old-format `POST /api/spiritpool/contribute` (with `contributorId`, `domain`, `signals[]`) continues working. Optionally dual-write to both `job_postings` and `sp_events`.
+- **Status:** Done
+- **File:** `postings/spiritpool_routes.py`
+- **What:** `POST /api/spiritpool/contribute` dual-writes to both `job_postings` (via `ingest_job_posting()`) and `sp_events` (via `_dual_write_to_sp_events()`). Privacy controls applied: field stripping on batch + per-signal, PII scan on dual-write path. Session token preserved from M7 sanitize when present.
 
 ---
 
-## Tier 4: High Context (Not Started)
+## Tier 3 Success Criteria
+
+- [x] POST /api/contribute accepts signals and returns 200
+- [x] PII-flagged events route to quarantine
+- [x] Clean events store in sp_events table
+- [x] Session epochs auto-created
+- [x] Dashboard shows new table health (6 monitoring functions)
+- [x] Legacy SpiritPool endpoint still works with dual-write
+- [x] All existing automated collector pipelines unaffected
+
+---
+
+## Tier 4: High Context (Complete)
 
 ### T4.1 — Integration Test Suite §8.1–8.5
-- **Deliverable:** 5 integration tests: end-to-end signal flow, PII defence-in-depth, config signing, token rotation, forward compatibility.
-- **Dependency:** All Tier 1–3 complete.
+- **Status:** Done
+- **File:** `tests/HeliosDeployment/test_integration_8x.py`
+- **What:** 47 integration tests across 5 test classes:
+  - `TestEndToEndSignalFlow` (14 tests) — full pipeline: strip, validate, store, IP suppression, server-set fields
+  - `TestPIIDefenceInDepth` (12 tests) — all 6 PII patterns, quarantine routing, recursive walk, multi-PII, clean pass-through
+  - `TestConfigSigningValidation` (6 tests) — backend resilience to extension fallback selector scenarios
+  - `TestTokenRotation` (7 tests) — multi-token, multi-epoch, session epoch auto-creation, no cross-contamination
+  - `TestForwardCompatibility` (8 tests) — 64-char hex tokens, large epoch_ids, unknown JSONB fields, Third Helios EDN fields
+- **Verification:** All 47 tests pass.
 
 ### T4.2 — Full Privacy Audit
-- **Deliverable:** Grep verification for zero IPs in logs/DB, zero tabUrl/collectedAt in stored data. Review all `request.remote_addr` references. Update `SECURITY_FINDINGS.md`.
+- **Status:** Done
+- **File:** `docs/SECURITY_FINDINGS.md`
+- **What:** Comprehensive audit of entire backend — all endpoint handlers, ORM models, logging configs, JSONB payload paths, database schemas. Audit techniques: grep verification, schema audit (48 tables), logging audit, endpoint audit, JSONB audit, log file check.
+- **Findings:**
+  1. **FINDING-01 (Medium, RESOLVED):** `consent_state` not stripped from incoming payloads. Fixed: added to `_FORBIDDEN_FIELDS` in `core/privacy.py`.
+  2. **FINDING-02 (Low, RESOLVED):** Root logger lacked `_IPFreeFormatter`. Fixed: `server.py` root logger now uses `_IPFreeFormatter`.
+- **Verification:** All 173 tests pass. Zero open violations.
+
+## Tier 4 Success Criteria
+
+- [x] All 5 integration tests (§8.1–8.5) pass — 47 tests total
+- [x] Privacy audit complete — zero violations (2 found, 2 fixed)
 
 ---
 
@@ -193,11 +228,13 @@ Cross-module integration tasks. Depend on Tier 1 + 2 infrastructure.
 
 ## Known Gaps
 
-| Gap | Priority | Tier |
-|-----|----------|------|
-| No integration tests for contributor pipeline | High | T4.1 |
-| Dashboard doesn't monitor new tables yet | Medium | T3.2 |
-| Legacy `/api/spiritpool/contribute` doesn't dual-write | Medium | T3.3 |
-| `SECURITY_FINDINGS.md` not updated with FH-1 controls | Medium | T4.2 |
+| Gap | Priority | Status |
+|-----|----------|--------|
+| ~~No integration tests for contributor pipeline~~ | ~~High~~ | **Resolved** (T4.1 — 47 tests) |
+| ~~Dashboard doesn't monitor new tables yet~~ | ~~Medium~~ | **Resolved** (T3.2 — 6 functions) |
+| ~~Legacy `/api/spiritpool/contribute` doesn't dual-write~~ | ~~Medium~~ | **Resolved** (T3.3 — dual-write active) |
+| ~~`SECURITY_FINDINGS.md` not updated with FH-1 controls~~ | ~~Medium~~ | **Resolved** (T4.2 — full audit) |
+| Extension burn URL points to wrong endpoint (`/api/spiritpool/burn` vs `/api/burn`) | High | SpiritPool repo — handoff documented |
+| CORS allows all origins (wildcard) | Medium | Fix in progress (Phase 1D) |
 | No contributor-facing transparency metrics | Low | T5.1 |
 | `meta_column_catalog` coverage may be < 70% for some legacy tables | Low | Ongoing |

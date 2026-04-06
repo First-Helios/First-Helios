@@ -149,6 +149,13 @@ def _dual_write_to_sp_events(session, raw: dict, contributor_id: str, domain_slu
         payload["legacy_contributor_id"] = contributor_id
         payload["legacy_domain"] = domain_slug
 
+        # Prefer real session_token/epoch_id from M7 sanitize.js if present;
+        # fall back to synthetic values for pre-M7 extension versions.
+        real_token = raw.get("session_token")
+        real_epoch = raw.get("epoch_id")
+        token = real_token if isinstance(real_token, str) and real_token else f"legacy_{contributor_id}"
+        epoch = int(real_epoch) if real_epoch is not None else 1
+
         event_id = str(uuid.uuid4())
         collected_at = datetime.utcnow()
 
@@ -166,8 +173,8 @@ def _dual_write_to_sp_events(session, raw: dict, contributor_id: str, domain_slu
         else:
             ev = SpEvent(
                 event_id=event_id,
-                session_token=f"legacy_{contributor_id}",
-                epoch_id=1,
+                session_token=token,
+                epoch_id=epoch,
                 event_type="job_listing",
                 payload=payload,
                 source_type="extension_legacy",
@@ -256,6 +263,9 @@ def contribute():
                 )
                 session.rollback()
                 failed += 1
+
+        # Commit any pending dual-write data (flush != commit)
+        session.commit()
 
         logger.info(
             "[SpiritPool] %s: accepted=%d failed=%d contributor=%s region=%s",

@@ -138,6 +138,19 @@ def app(engine, monkeypatch):
     from core.contribute_routes import contribute_bp
     test_app.register_blueprint(contribute_bp)
 
+    # Register legacy spiritpool blueprint for E2E legacy path tests
+    monkeypatch.setattr("postings.spiritpool_routes.init_db", _mock_init_db)
+    monkeypatch.setattr("postings.spiritpool_routes.get_session", _mock_get_session)
+    # Mock ingest_job_posting — legacy path writes to job_postings which we don't
+    # need for sp_events dual-write validation.  Return a fake JobPosting-like object.
+    monkeypatch.setattr(
+        "postings.spiritpool_routes.ingest_job_posting",
+        lambda signal, region=None, session=None: (type("FakePosting", (), {"id": 1})(), False),
+    )
+
+    from postings.spiritpool_routes import spiritpool_bp
+    test_app.register_blueprint(spiritpool_bp)
+
     return test_app
 
 
