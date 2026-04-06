@@ -20,7 +20,9 @@ from typing import Any
 # ── Field Stripping (FH-1 §2) ───────────────────────────────────────────────
 
 # Fields that must NEVER be stored, logged, or passed downstream.
-_FORBIDDEN_FIELDS = {"tabUrl", "collectedAt"}
+# tabUrl / collectedAt — FH-1 §2 (field stripping)
+# consent_state        — Non-negotiable rule #5: never transmitted or stored
+_FORBIDDEN_FIELDS = {"tabUrl", "collectedAt", "consent_state"}
 
 
 def strip_forbidden_fields(body: dict) -> dict:

@@ -1864,9 +1864,14 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
+    # Use _IPFreeFormatter for the root logger — defence-in-depth so that
+    # any IP that leaks into a log message from exceptions or third-party
+    # libraries is scrubbed before it reaches disk or stdout.
+    _root_handler = logging.StreamHandler()
+    _root_handler.setFormatter(_IPFreeFormatter("%(asctime)s %(levelname)s %(message)s"))
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[_root_handler],
     )
 
     parser = argparse.ArgumentParser(description="ChainStaffingTracker Server")

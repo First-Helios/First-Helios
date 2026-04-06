@@ -150,6 +150,29 @@ class TestFieldStripping:
         assert result["payload"]["company"] == "Acme"
         assert result["payload"]["salary"] == 50000
 
+    # ── consent_state stripping (Non-negotiable rule #5) ─────────────
+
+    def test_strip_top_level_consent_state(self):
+        """consent_state removed from top-level body (rule #5: never stored)."""
+        body = {
+            "session_token": "tok",
+            "consent_state": {"sites_enabled": ["indeed.com"], "collection_active": True},
+        }
+        result = strip_forbidden_fields(body)
+        assert "consent_state" not in result
+
+    def test_strip_nested_consent_state(self):
+        """consent_state removed from nested payload dict."""
+        body = {
+            "session_token": "tok",
+            "payload": {
+                "company": "Acme",
+                "consent_state": {"collection_active": True},
+            },
+        }
+        result = strip_forbidden_fields(body)
+        assert "consent_state" not in result["payload"]
+
 
 # ── §3.3 PII Quarantine Pipeline — Pattern Detection ─────────────────────────
 
