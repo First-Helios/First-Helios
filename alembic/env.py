@@ -45,6 +45,12 @@ try:
 except ImportError:
     pass
 
+# Import dev-capture models (dev_capture schema)
+try:
+    import core.models.dev_capture  # noqa: F401
+except ImportError:
+    pass
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

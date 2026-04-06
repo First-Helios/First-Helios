@@ -91,6 +91,14 @@ def _import_spiritpool_models() -> None:
         logger.debug("[Database] core.models.spiritpool not found — skipping")
 
 
+def _import_dev_capture_models() -> None:
+    """Import dev-capture models (dev_capture schema) for dev-mode raw signals."""
+    try:
+        import core.models.dev_capture  # noqa: F401
+    except ImportError:
+        logger.debug("[Database] core.models.dev_capture not found — skipping")
+
+
 class Base(DeclarativeBase):
     """Declarative base for all tracker models."""
     pass
@@ -1116,6 +1124,7 @@ def init_db(db_path: Path | None = None):
     _import_listings_models()
     _import_events_models()
     _import_spiritpool_models()
+    _import_dev_capture_models()
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
     db_label = os.environ.get("DATABASE_URL") or str(db_path or DB_PATH)

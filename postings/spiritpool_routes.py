@@ -132,6 +132,33 @@ def _map_signal(raw: dict, domain: str, contributor_id: str) -> ScraperSignal | 
     )
 
 
+# ── Dev-capture helper: store raw HTML + extracted + sanitized in dev schema ────
+
+def _store_dev_capture(session, dev_raw: dict, sanitized: dict, domain_slug: str) -> None:
+    """Store a dev-mode signal in the dev_capture schema for A/B comparison.
+
+    Captures the pre-sanitization extracted fields and raw HTML alongside the
+    post-sanitization signal.  Never touches production tables.
+    Failures are logged but never break the ingest path.
+    """
+    try:
+        from core.models.dev_capture import RawSignalCapture
+
+        capture = RawSignalCapture(
+            domain=domain_slug,
+            session_token=sanitized.get("session_token", "unknown"),
+            raw_html=dev_raw.get("_dev_html"),
+            extracted_fields=dev_raw,
+            sanitized_fields=sanitized,
+            extraction_source=dev_raw.get("source"),
+            pipeline_version=_LEGACY_PIPELINE_VERSION,
+        )
+        session.add(capture)
+        session.flush()
+    except Exception as exc:
+        logger.warning("[SpiritPool] Dev-capture storage failed (non-fatal): %s", exc)
+
+
 # ── Dual-write helper: legacy → sp_events during transition ───────────────────
 
 _LEGACY_PIPELINE_VERSION = 1
@@ -240,6 +267,10 @@ def contribute():
                 failed += 1
                 continue
 
+            # Extract dev-mode fields before stripping (dev_capture schema)
+            dev_raw = raw.pop("_dev_raw", None)
+            is_dev = raw.pop("_dev_mode", False)
+
             # Strip forbidden fields from each signal payload
             strip_forbidden_fields(raw)
 
@@ -254,6 +285,9 @@ def contribute():
                     accepted += 1
                     # Dual-write: also store in sp_events (new table) during transition
                     _dual_write_to_sp_events(session, raw, contributor_id, domain_slug)
+                    # Dev-capture: store raw + sanitized in dev_capture schema
+                    if is_dev and dev_raw:
+                        _store_dev_capture(session, dev_raw, dict(raw), domain_slug)
                 else:
                     failed += 1
             except Exception as exc:
