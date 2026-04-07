@@ -31,7 +31,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import text as _sa_text
+from sqlalchemy import literal_column as _sa_literal_column
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -387,7 +387,7 @@ def ingest_job_posting(
                     } if referral_url else {}),
                 },
             )
-            .returning(JobPosting.id, _sa_text("(xmax = 0)").label("is_new"))
+            .returning(JobPosting.id, _sa_literal_column("(xmax = 0)").label("is_new"))
         )
 
         result = session.execute(stmt)
@@ -402,7 +402,7 @@ def ingest_job_posting(
         return session.get(JobPosting, row_id), is_new
 
     except Exception as exc:
-        logger.error("[ListingsIngest] Failed to ingest posting for %r: %s", raw_employer, exc)
+        logger.error("[ListingsIngest] Failed to ingest posting for %r: %s: %s", raw_employer, type(exc).__name__, exc)
         session.rollback()
         return None, False
     finally:
