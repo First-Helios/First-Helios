@@ -177,24 +177,24 @@ try:
     from postings.spiritpool_routes import spiritpool_bp
     app.register_blueprint(spiritpool_bp)
     logger.info("Spirit Pool blueprint registered at /api/spiritpool")
-except ImportError:
-    pass
+except Exception as exc:
+    logger.warning("Spirit Pool blueprint NOT registered: %s: %s", type(exc).__name__, exc)
 
 # ── Events Blueprint ──────────────────────────────────────────────────────────
 try:
     from events.routes import events_bp
     app.register_blueprint(events_bp)
     logger.info("Events blueprint registered at /api/events")
-except ImportError:
-    pass
+except Exception as exc:
+    logger.warning("Events blueprint NOT registered: %s: %s", type(exc).__name__, exc)
 
 # ── Contributor Intake Blueprint (FH-0) ───────────────────────────────────────
 try:
     from core.contribute_routes import contribute_bp
     app.register_blueprint(contribute_bp)
     logger.info("Contributor blueprint registered (/api/contribute, /api/burn)")
-except ImportError:
-    pass
+except Exception as exc:
+    logger.warning("Contributor blueprint NOT registered: %s: %s", type(exc).__name__, exc)
 
 
 # ── Security: suppress exception details from API responses ──────────────────
