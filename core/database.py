@@ -31,6 +31,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -1126,6 +1127,10 @@ def init_db(db_path: Path | None = None):
     _import_spiritpool_models()
     _import_dev_capture_models()
     engine = get_engine(db_path)
+    if os.environ.get("DATABASE_URL"):
+        with engine.connect() as conn:
+            conn.execute(text("CREATE SCHEMA IF NOT EXISTS dev_capture"))
+            conn.commit()
     Base.metadata.create_all(engine)
     db_label = os.environ.get("DATABASE_URL") or str(db_path or DB_PATH)
     logger.info("[Database] Initialized at %s", db_label)

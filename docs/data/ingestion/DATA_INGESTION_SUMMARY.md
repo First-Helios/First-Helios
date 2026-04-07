@@ -341,6 +341,118 @@ sqlite3 data/tracker.db "SELECT * FROM revelio_labor_metrics LIMIT 5;"
 
 ---
 
+## Troubleshooting: Failed Ingestion & Reingestion
+
+### Bug: Empty Ingest Errors (fixed 2026-04-07)
+
+**Symptom:** Every posting fails with a blank error message:
+```
+ERROR postings.ingest — [ListingsIngest] Failed to ingest posting for 'DoorDash':
+```
+
+**Root cause:** `postings/ingest.py` used `sqlalchemy.text("(xmax = 0)").label("is_new")`
+in the RETURNING clause. Newer SQLAlchemy versions raise `NotImplementedError` (with no
+message) when `.label()` is called on a `TextClause`.
+
+**Fix:** Replaced `text()` with `literal_column()` which supports `.label()`.
+
+### How to Reingest After a Fix
+
+After deploying a code fix to the orangepi, previously failed postings can be
+reingested. The approach depends on the data source:
+
+#### 1. Quick rerun (cached sources replay automatically)
+
+Sources like **jobicy** and **activejobs** cache their API responses locally in
+`data/<source>_cache.json`. If the cache is still fresh (within the source's TTL),
+rerunning the collector will serve cached data and attempt ingestion again — no
+new API call needed.
+
+```bash
+# Reingest a single source from cache
+python collector_main.py --job jobicy
+python collector_main.py --job activejobs
+
+# Or rerun all daily jobs
+python collector_main.py --run-now
+```
+
+#### 2. Rate-gated sources (serpapi, theirstack)
+
+These sources enforce minimum intervals between API calls (e.g. SerpAPI: 180 min,
+TheirStack: 240 min). If the gate is active you'll see:
+
+```
+INFO — [SerpAPI] Interval gate active — last request < 180 min ago, skipping
+```
+
+**Options:**
+- **Wait** for the gate to expire, then rerun: `python collector_main.py --job serpapi_jobs`
+- **Invalidate the gate** by deleting the timestamp file (if one exists), or simply
+  wait until the next scheduled run picks it up automatically.
+
+#### 3. Live-fetch sources (austin_gov, usajobs)
+
+These sources make fresh API/HTTP requests every run — no local cache. If they
+failed due to a transient issue (DNS resolution, network timeout), simply rerun:
+
+```bash
+python collector_main.py --job austin_gov
+```
+
+If DNS resolution is failing on the orangepi (`Failed to resolve ... Name or service not known`),
+check network connectivity first:
+
+```bash
+# Test DNS from the orangepi
+nslookup austintexas.wd5.myworkdayjobs.com
+ping -c 1 google.com
+```
+
+#### 4. Full rerun of all daily jobs
+
+```bash
+python collector_main.py --run-now
+```
+
+This fires all 16 daily jobs sequentially. Cached sources will replay from cache;
+live sources will re-fetch. Rate-gated sources may skip if their interval hasn't
+elapsed.
+
+#### 5. Listing available jobs
+
+```bash
+python collector_main.py --list-jobs
+```
+
+Prints all registered job IDs. Jobs marked with `*` are included in `--run-now`.
+
+### Cache Mechanics
+
+| Source | Cache Key | TTL | Notes |
+|--------|-----------|-----|-------|
+| Jobicy | `jobicy` | 60 min | Replays from `data/jobicy_cache.json` |
+| ActiveJobs | `rapidapi_activejobs` | varies | Replays from `data/rapidapi_activejobs_cache.json` |
+| SerpAPI | `serpapi_google_jobs` | rate-gated | 180 min interval between API calls |
+| TheirStack | `theirstack` | rate-gated | 240 min interval between API calls |
+| Austin Gov | none | — | Always fetches live from Workday API |
+| USAJobs | none | — | Always fetches live from USAJOBS API |
+
+Cache files live in the `data/` directory. To force a fresh fetch, delete the cache file:
+
+```bash
+rm data/jobicy_cache.json  # next run will call the API
+```
+
+Or use the Python API:
+
+```python
+from collectors.cache import invalidate_cache
+invalidate_cache("jobicy")
+```
+
+---
+
 ## See Also
 
 - [MANUALLY_DOWNLOADED_DATA_ASSESSMENT.md](./MANUALLY_DOWNLOADED_DATA_ASSESSMENT.md) — Detailed data analysis
