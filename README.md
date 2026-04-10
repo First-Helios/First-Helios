@@ -63,7 +63,7 @@ Overture POI      →  core/ingest_layer.py  →  local_employers / brand_groups
 |-----------|--------|
 | Hardware | Orange Pi 5 Plus — ARM64/RK3588, 32GB RAM |
 | OS | Ubuntu Jammy (22.04), headless |
-| LAN address | 192.168.0.104 |
+| LAN address | 192.168.1.191 |
 | Web server | nginx → Gunicorn (9 workers, 2 threads) → Flask |
 | Database | PostgreSQL 14 |
 | Process mgmt | systemd (helios, helios-collector, nginx, postgresql, cpugov) |

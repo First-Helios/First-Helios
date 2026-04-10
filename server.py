@@ -130,7 +130,7 @@ CORS(app, origins=[
     "moz-extension://*",       # Firefox extension
     "chrome-extension://*",    # Chrome/Edge extension
     "http://localhost:8765",   # Local frontend
-    "http://192.168.0.104",    # Orange Pi LAN frontend
+    "http://192.168.1.191",    # Orange Pi LAN frontend
 ])
 
 # ── Privacy: IP Suppression Middleware (FH-1 §1 — Critical Priority 1) ────────

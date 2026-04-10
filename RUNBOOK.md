@@ -8,8 +8,8 @@ Operations reference for the First-Helios project. Covers the Orange Pi 5 Plus p
 
 | Component | Details |
 |-----------|---------|
-| Production host | Orange Pi 5 Plus at 192.168.0.104 (Ubuntu Jammy, ARM64 / RK3588) |
-| Public URL | http://192.168.0.104 |
+| Production host | Orange Pi 5 Plus at 192.168.1.191 (Ubuntu Jammy, ARM64 / RK3588) |
+| Public URL | http://192.168.1.191 |
 | Web stack | nginx (port 80) → Gunicorn (port 8765), 9 workers + 2 threads |
 | Flask entry point | `server.py` |
 | Database | PostgreSQL 14 — user: helios, db: helios, host: localhost:5432 |
@@ -91,7 +91,7 @@ python collector_main.py --list-jobs
 ### Manual test pull (SSH into OPi first)
 
 ```bash
-ssh orangepi@192.168.0.104
+ssh orangepi@192.168.1.191
 cd ~/First-Helios && source .venv/bin/activate
 
 # Test a single job board
@@ -285,8 +285,8 @@ bash dev/opi5_setup.sh
 
 # Restore database from a local dump
 PGPASSWORD=helios pg_dump -U helios -h localhost -d helios > helios_backup.sql
-scp helios_backup.sql orangepi@192.168.0.104:~/
-ssh orangepi@192.168.0.104 "PGPASSWORD=helios psql -U helios -h localhost -d helios < ~/helios_backup.sql"
+scp helios_backup.sql orangepi@192.168.1.191:~/
+ssh orangepi@192.168.1.191 "PGPASSWORD=helios psql -U helios -h localhost -d helios < ~/helios_backup.sql"
 ```
 
 ---

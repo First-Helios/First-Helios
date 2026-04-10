@@ -12,7 +12,7 @@
 |-----------|--------|
 | **Hardware** | Orange Pi 5 Plus — ARM64/RK3588, 32GB RAM |
 | **OS** | Ubuntu 22.04 (Jammy), headless (`multi-user.target`) |
-| **LAN address** | `192.168.0.104` |
+| **LAN address** | `192.168.1.191` |
 | **CPU governor** | `performance` (persisted via `cpugov` systemd service) |
 
 ---

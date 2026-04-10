@@ -143,7 +143,7 @@ Open `notebooks/SpiritPoolDataAnalysis/sp_signal_explorer.ipynb` and run Section
 | Flush interval | Hardcoded in background.js | 10 minutes |
 | Max queue size | Hardcoded in background.js | 500 signals |
 
-**For OrangePi deployment:** Set backend URL to `http://192.168.0.104/api/spiritpool`
+**For OrangePi deployment:** Set backend URL to `http://192.168.1.191/api/spiritpool`
 
 ### Server settings
 
