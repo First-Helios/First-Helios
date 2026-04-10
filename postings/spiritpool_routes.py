@@ -14,6 +14,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, text
@@ -62,6 +63,104 @@ def _normalize_domain(raw: str) -> str | None:
         if allowed.startswith(slug + "."):
             return slug
     return None
+
+
+# ── URL canonicalization ──────────────────────────────────────────────────────
+# Per-domain allowlist of query parameters that identify the specific job
+# posting.  Everything else in the query string — trackingId, refId, eBP, trk,
+# origin, utm_*, etc. — is stripped before storage.  These tokens are per-user
+# LinkedIn/Indeed analytics values that can deanonymize the contributor and
+# also happen to be the main source of PII-scanner false positives.
+_URL_PARAM_ALLOWLIST: dict[str, set[str]] = {
+    "linkedin.com":        {"currentJobId"},
+    "indeed.com":          {"jk", "advn", "vjk"},
+    "glassdoor.com":       {"jobListingId", "pos"},
+    "ziprecruiter.com":    set(),  # path-based
+    "monster.com":         set(),
+    "simplyhired.com":     set(),
+    "careerbuilder.com":   set(),
+    "dice.com":            set(),
+    "lever.co":            set(),
+    "greenhouse.io":       set(),
+    "workday.com":         set(),
+    "myworkdayjobs.com":   set(),
+    "jobvite.com":         set(),
+    "icims.com":           set(),
+    "smartrecruiters.com": set(),
+    "taleo.net":           set(),
+}
+
+
+def _canonicalize_url(url: object) -> object:
+    """Return a minimal job URL: scheme://host/path[?allowed_params].
+
+    - Query parameters not in _URL_PARAM_ALLOWLIST[host] are dropped.
+    - The fragment (#…) is always dropped.
+    - Non-string or unparseable inputs are returned unchanged so this is
+      safe to call on any signal field.
+    - Unknown domains pass through untouched (the domain allowlist on the
+      endpoint already guards against fabricated sources).
+    """
+    if not isinstance(url, str) or not url:
+        return url
+    try:
+        p = urlparse(url)
+    except Exception:
+        return url
+    if p.scheme not in ("http", "https") or not p.netloc:
+        return url
+
+    host = p.netloc.lower()
+    # Strip optional userinfo@ and :port
+    if "@" in host:
+        host = host.rsplit("@", 1)[1]
+    if ":" in host:
+        host = host.rsplit(":", 1)[0]
+
+    allowed: set[str] | None = None
+    for domain, params in _URL_PARAM_ALLOWLIST.items():
+        if host == domain or host.endswith("." + domain):
+            allowed = params
+            break
+    if allowed is None:
+        return url  # unknown domain — leave as-is
+
+    if allowed:
+        kept = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=False) if k in allowed]
+        new_query = urlencode(kept)
+    else:
+        new_query = ""
+
+    return urlunparse((p.scheme, p.netloc, p.path, "", new_query, ""))
+
+
+# ── SpiritPool-specific signal sanitizer ──────────────────────────────────────
+# Fields the extension sends but no code path reads.  Stripping them here
+# (a) keeps them out of sp_events / quarantine storage, and (b) prevents the
+# PII scanner from tripping on their content (jobId is a 10-digit string that
+# falsely matches the phone regex; _dev_html contains long numeric data-id
+# attributes that match the credit-card regex).
+_SP_DEAD_WEIGHT_FIELDS = (
+    "jobId",       # not consumed; triggers phone-regex false positive
+    "source",      # extension's domain claim; backend derives from body.domain
+    "storeNum",    # always null/synthetic; backend synthesizes SP-<chain>
+    "signalType",  # hardcoded "listing"; endpoint already assumes listing
+    "observedAt",  # client-side timestamp; backend uses datetime.utcnow()
+    "_dev_html",   # HTML blob; should only live in _dev_raw, not top-level
+)
+
+
+def _sanitize_signal_in_place(raw: dict) -> None:
+    """SpiritPool-specific cleanup: drop dead-weight fields and canonicalize URL.
+
+    Runs AFTER core.privacy.strip_forbidden_fields() and BEFORE _map_signal().
+    Mutates the dict in place so the same cleaned version is what both
+    _map_signal() sees and what dual-write stores in sp_events.
+    """
+    for k in _SP_DEAD_WEIGHT_FIELDS:
+        raw.pop(k, None)
+    if "url" in raw:
+        raw["url"] = _canonicalize_url(raw["url"])
 
 
 # ── Helper: map Spirit Pool signal dict → ScraperSignal ───────────────────────
@@ -273,6 +372,9 @@ def contribute():
 
             # Strip forbidden fields from each signal payload
             strip_forbidden_fields(raw)
+            # SpiritPool cleanup: drop dead-weight keys + strip URL tracking
+            # tokens BEFORE the PII scanner runs in _dual_write_to_sp_events.
+            _sanitize_signal_in_place(raw)
 
             signal = _map_signal(raw, domain_slug, contributor_id)
             if signal is None:
