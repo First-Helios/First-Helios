@@ -50,13 +50,13 @@ chain_deal_sources:
 
   pizza_hut:
     display_name: "Pizza Hut"
-    strategy: static_html
+    strategy: playwright_required
     url: "https://www.pizzahut.com/deals"
     notes: >
-      Server-rendered. Deal cards with names and "Starting at $X" pricing.
-      Content loads before cookie consent. Yum! Brands cookie consent.
+      Server-rendered but consistently times out with static fetch (3 attempts).
+      Reclassified to playwright_required. Yum! Brands cookie consent.
     selectors:
-      deal_cards: ".deal-card, [class*='deal']"  # verify actual CSS classes
+      deal_cards: ".deal-card, [class*='deal']"
       deal_name: "h2, h3, [class*='title']"
       price_pattern: '\\$\\d+\\.?\\d*'
     anti_scraping:
@@ -100,13 +100,13 @@ chain_deal_sources:
 
   jimmy_johns:
     display_name: "Jimmy John's"
-    strategy: static_html
+    strategy: playwright_required
     url: "https://www.jimmyjohns.com/menu"
-    url_notes: "No /deals path; hero banner has featured deal, rest is menu"
+    url_notes: "No /deals path; hero banner has featured deal, rest is menu. Static HTML returns 0 deals — needs JS rendering."
     notes: >
       Partial SSR — hero deal content (e.g. $8.99 Meal Deal) renders
       server-side. Deeper menu content may need JS. Cookie consent wall.
-      May need playwright_required if deeper parsing is needed.
+      Reclassified to playwright_required after static_html returned 0 deals.
     selectors:
       hero_deal: "h1, [class*='hero'], [class*='promo']"
       price_pattern: '\\$\\d+\\.\\d{2}'

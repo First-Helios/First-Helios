@@ -21,7 +21,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 import requests
 from sqlalchemy import func
@@ -58,7 +58,7 @@ def _get_api_key() -> str:
 
 
 def _normalize_url(raw: str) -> str | None:
-    """Clean and validate a URL."""
+    """Clean and validate a URL. Strips UTM/tracking query params."""
     if not raw or not raw.strip():
         return None
     url = raw.strip()
@@ -68,7 +68,16 @@ def _normalize_url(raw: str) -> str | None:
         parsed = urlparse(url)
         if not parsed.netloc or "." not in parsed.netloc:
             return None
-        return url
+        # Strip UTM and common tracking parameters for clean storage
+        if parsed.query:
+            clean_params = {
+                k: v for k, v in parse_qs(parsed.query).items()
+                if not k.lower().startswith(("utm_", "fbclid", "gclid", "mc_", "ref", "source"))
+            }
+            clean_query = urlencode(clean_params, doseq=True) if clean_params else ""
+            parsed = parsed._replace(query=clean_query)
+        parsed = parsed._replace(fragment="")
+        return urlunparse(parsed).rstrip("/") if parsed.path == "/" else urlunparse(parsed)
     except Exception:
         return None
 

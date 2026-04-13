@@ -161,7 +161,7 @@ For non-chain restaurants (~1,200 unique local `food_full_service` employers):
 
 ---
 
-## Phase 5 — Yelp Fusion Enrichment
+## Phase 5 — Yelp Fusion Enrichment ##SKIP NO FREE TRIAL. Must be done via SpiritPool. 
 
 Yelp Fusion API (free, 5,000 calls/day):
 - `GET /v3/businesses/search` by name + lat/lng to match our employers
@@ -298,7 +298,7 @@ Response:
 
 ---
 
-## Current Implementation Status (April 13, 2026)
+## Current Implementation Status (Updated April 13, 2026)
 
 ### Completed
 
@@ -307,21 +307,55 @@ Response:
 | **1** Schema | ✅ Done | `meal_deals` table + `restaurant_urls` table — migrations applied (`c412787993e6`, `c8edac5d7232`) |
 | **2** Registry | ✅ Done | `@deal_collector` decorator in `collectors/meal_deals/registry.py` — auto-discovered by scheduler |
 | **3** OSM URL extraction | ✅ Done | `osm_url_resolver.py` — 1,758 OSM POIs queried, 758 unique employer URLs stored (free) |
-| **4** Chain deal scraper | ✅ Done | `chain_deals.py` — 8 chains (static HTML), 151 deal signals in dry-run. Config: `config/meal_deal_sources.yaml` |
-| **5** Google Places resolver | ✅ Done | `google_places_resolver.py` — 50 API calls → 824 URLs stored (48 brands resolved). Mode: brands/locals/both |
-| **6** Website scraper (Phase 4) | ✅ Done | `website_scraper.py` — keyword-based crawl of `/menu`, `/specials`, `/deals`, `/happy-hour`, etc. Respects robots.txt |
+| **4** Chain deal scraper | ✅ Done | `chain_deals.py` — static + Playwright strategies. 54 signals → 961 deal rows ingested (fanned out across locations) |
+| **5** Google Places resolver | ✅ Done | `google_places_resolver.py` — 250 API calls → 1,344 URLs stored (217 brands resolved). Mode: brands/locals/both |
+| **6** Website scraper (Phase 4) | ✅ Done | `website_scraper.py` — keyword-based crawl. robots.txt blocked → SpiritPool flagging. Schedule: Mon/Wed/Fri. |
 | **7** Manual ingest CLI | ✅ Done | `manual_ingest.py` — CSV/JSON for SpiritPool contributions |
 | **8** API endpoints | ✅ Done | `GET /api/deals`, `/api/deals/stats`, `/api/deals/brands` — geo-filtered, paginated |
-| **9** Map layer integration | 🔲 Not started | Deal pins/overlay on Job Faire map |
-| **10** Yelp enrichment | 🔲 Not started | Yelp Fusion API validation layer |
+| **9** Map layer integration | 🔲 Spec ready | Mailbox doc created: `agentMailbox/FH-3_meal_deal_map_layer.md` |
+| **10** Yelp enrichment | ⏭ Skipped | No free trial. Manual via SpiritPool instead. |
+| **PW** Playwright integration | ✅ Done | `chain_deals.py` handles `playwright_required` strategy. 6 chains configured. |
+| **UTM** URL cleaning | ✅ Done | Both resolvers strip UTM/tracking params from URLs before storage |
+| **RL** Overpass rate limiting | ✅ Done | 60s cooldown between Overpass queries + 60s/120s exponential backoff on 429/504 |
+| **Filter** ThunderCloud fix | ✅ Done | `menu_only` strategy now filters with deal-signal keywords — reduced from 80 to 6 results |
+| **SP** SpiritPool handoff | ✅ Done | `agentMailbox/ToSpiritPool/07_MEAL_DEAL_BLOCKED_SITES.md` — blocked sites flagged automatically |
+| **Live** Chain ingest | ✅ Done | 961 active deal rows in `meal_deals` table across 3 chain brands |
 
 ### Data Coverage
 
 | Source | URLs Resolved | Notes |
 |--------|--------------|-------|
 | OSM Overpass | 758 unique employers | Free. 1,758 POIs fetched, matched by fingerprint + proximity |
-| Google Places | 824 unique employers | 50 API calls ($1.60 of $200 budget used). Brand batch mode. |
-| **Total** | **1,582 / 5,662** (27%) | Remaining 4,080 are mostly single-location locals |
+| Google Places | 1,344 unique employers | 250 API calls (~$8 of $200 budget). Brand batch mode. |
+| **Total** | **2,102 / 5,662** (37%) | Remaining 3,560 mostly single-location locals |
+
+| Metric | Value |
+|--------|-------|
+| Active meal deals | 961 rows |
+| Deal sources | chain_website |
+| Brands with deals | 3 (McDonald's, Taco Bell, Domino's + others via fingerprint match) |
+| Google API budget used | ~$8.00 / $200 = **$192 remaining** (~24 more weekly runs) |
+| Google trial window | 90 days from activation |
+
+### Chain Scraper Results by Strategy
+
+| Chain | Strategy | Deals Found | Notes |
+|-------|----------|-------------|-------|
+| McDonald's | static_html | 12 | ✅ |
+| Taco Bell | static_html | 20 | ✅ |
+| Domino's | static_html | 7 | ✅ |
+| Wendy's | static_html | 3 | ✅ |
+| Taco Cabana | static_html | 4 | ✅ |
+| P. Terry's | menu_only | 2 | ✅ Filtered — only actual deals, not full menu |
+| ThunderCloud | menu_only | 6 | ✅ Fixed — was 80 items before deal keyword filter |
+| Pizza Hut | playwright_required | — | Reclassified — static fetch always times out |
+| Jimmy John's | playwright_required | — | Reclassified — static returned 0 deals |
+| Subway | playwright_required | — | HTTP2 protocol error — aggressive bot protection |
+| Sonic | playwright_required | 0 | Page loads but deals live in dynamic JS components |
+| Jack in the Box | playwright_required | 0 | SPA with dynamic client routing |
+| Chipotle | playwright_required | — | Rewards-based promotions, not traditional deals |
+| Smoothie King | playwright_required | — | DoubleClick redirect chain |
+| Whataburger | app_only | skipped | Deals exclusive to MyWhataburger app |
 
 ### Scheduler Integration
 
@@ -331,8 +365,8 @@ All jobs registered in `config/scheduler.yaml` and `core/scheduler.py`:
 |--------|----------|-------------|
 | `osm_url_resolver` | Sunday 1:00 AM | Re-query OSM Overpass for new restaurant websites |
 | `google_places_resolver` | Tuesday 2:00 AM | Resolve remaining brand URLs (200 calls/run budget) |
-| `deal_chain_deals` | Monday 6:00 AM | Scrape chain restaurant deal pages |
-| `deal_website_scraper` | Wed + Sat 2:00 AM | Scrape local restaurant websites for deals |
+| `deal_chain_deals` | Monday 6:00 AM | Scrape chain restaurant deal pages (all strategies) |
+| `deal_website_scraper` | Mon + Wed + Fri 2:00 AM | Scrape local restaurant websites for deals |
 | `deal_stale_sweep` | Sunday 5:00 AM | Deactivate deals not verified in 14+ days |
 
 ### Files Created / Modified
@@ -343,33 +377,34 @@ All jobs registered in `config/scheduler.yaml` and `core/scheduler.py`:
 | `collectors/meal_deals/__init__.py` | Module init |
 | `collectors/meal_deals/models.py` | `DealSignal` dataclass |
 | `collectors/meal_deals/registry.py` | `@deal_collector` decorator + registry |
-| `collectors/meal_deals/chain_deals.py` | Chain website scraper (static HTML) |
-| `collectors/meal_deals/osm_url_resolver.py` | OSM Overpass → restaurant_urls |
-| `collectors/meal_deals/google_places_resolver.py` | Google Places API → restaurant_urls |
-| `collectors/meal_deals/website_scraper.py` | Local website keyword scanner |
+| `collectors/meal_deals/chain_deals.py` | Chain scraper — static + menu_only + Playwright strategies |
+| `collectors/meal_deals/osm_url_resolver.py` | OSM Overpass → restaurant_urls (with rate limiting + URL cleaning) |
+| `collectors/meal_deals/google_places_resolver.py` | Google Places API → restaurant_urls (with UTM stripping) |
+| `collectors/meal_deals/website_scraper.py` | Local website scanner — blocked sites → SpiritPool flagging |
 | `collectors/meal_deals/ingest.py` | DealSignal → meal_deals upsert pipeline |
 | `collectors/meal_deals/manual_ingest.py` | CSV/JSON CLI for SpiritPool |
 | `collectors/meal_deals/routes.py` | Flask Blueprint `/api/deals` |
-| `config/meal_deal_sources.yaml` | 15-chain URL + strategy config |
-| `config/scheduler.yaml` | Added 5 meal deal scheduler jobs |
-| `core/scheduler.py` | Added `_register_deal_collectors`, URL resolver runners |
+| `config/meal_deal_sources.yaml` | 15-chain config (static/menu/playwright/app strategies) |
+| `config/scheduler.yaml` | 5 meal deal scheduler jobs |
+| `core/scheduler.py` | `_register_deal_collectors`, URL resolver runners, stale sweep |
 | `server.py` | Registered `deals_bp` + `RestaurantURL` import |
+| `agentMailbox/FH-3_meal_deal_map_layer.md` | Frontend map integration spec |
+| `agentMailbox/ToSpiritPool/07_MEAL_DEAL_BLOCKED_SITES.md` | SpiritPool blocked-site manual collection spec |
 
 ### Remaining TODOs
 
-1. **Playwright flow for Tier 2 chains** — Subway, Sonic, Jack in the Box, Chipotle, Smoothie King need JS rendering. `collectors/playwright_fallback.py` exists but hasn't been integrated into `chain_deals.py` yet.
-2. **Google Places local resolution** — 4,080 individual employers still need URLs. Run `--mode locals --max-calls 200` weekly to fill gaps (~$6.40/week, 20 weeks to cover all).
-3. **ThunderCloud Subs noise** — Menu-only extraction picks up all items (80 in dry-run). Needs keyword filtering to only extract actual deals, not regular menu items.
-4. **Jimmy John's** — Returns 0 deals with static HTML strategy. Needs reclassification to `playwright_required`.
-5. **Pizza Hut** — Timed out in first dry-run. Increase timeout or add retry.
-6. **Map layer integration (Step 9)** — Deal pins on Job Faire map.
-7. **Yelp enrichment (Step 10)** — Validation cross-reference.
-8. **Live ingest** — Run `chain_deals.py` without `--dry-run` to populate `meal_deals` table with real data.
+1. **Playwright chain tuning** — Subway (HTTP2 error), Sonic/Jack in the Box (0 deals from JS SPA). Need deeper DOM inspection or API discovery for these chains. Consider monitoring their mobile app traffic.
+2. **Google Places local resolution** — 3,560 individual employers still need URLs. Scheduler runs `--mode both --max-calls 200` weekly. Budget: $192 remaining → ~24 weeks of runway within 90-day trial.
+3. **Map layer integration (Step 9)** — Spec in `agentMailbox/FH-3_meal_deal_map_layer.md`. Frontend team needs to implement deal pins, filter controls, and deal cards.
+4. **Deploy to OrangePi server** — Ingest + scheduler should run on the OrangePi (192.168.1.191), not local dev. Sync codebase and configure cron/systemd.
+5. **Website scraper first live run** — Now that 2,102 URLs exist, run `website_scraper.py` to discover local restaurant deals.
+6. **Fingerprint gaps** — 32 chain deal signals skipped due to missing brand_group fingerprint matches. Need to audit/add fingerprints for McDonald's, Wendy's, etc. in `meal_deal_sources.yaml`.
 
 ### Cautions
 
-- **Google Places API budget**: $200 free credits. At $32/1K calls, that's ~6,250 calls max. We've used 50 → $198.40 remaining. The scheduler runs 200 calls/week → budget lasts ~31 weeks.
-- **Overpass rate limits**: One query per 60s. The batch query is large (1,758 elements). If it 504s, the retry logic waits 30s/60s before retrying. Don't run multiple Overpass queries concurrently.
-- **robots.txt**: The website scraper checks robots.txt per-domain. Some restaurants block all bots. These will be flagged for SpiritPool manual entry.
-- **Stale deals**: Weekly chain refresh + 14-day deactivation window. For local restaurants, scrapes happen Wed+Sat so freshness depends on site update frequency.
-- **URL quality from Google Places**: Many URLs include UTM tracking parameters. Consider stripping query params for cleaner storage.
+- **Google Places API budget**: $200 free credits (90-day trial). ~$8 used → **$192 remaining**. At 200 calls/week × $0.032/call = $6.40/week → budget covers ~30 weeks but trial expires in ~77 days.
+- **Overpass rate limits**: Enforced with 60s cooldown file (`data/cache/.overpass_last_query`) + 60s/120s exponential backoff on 429/504. Never run concurrent Overpass queries.
+- **robots.txt → SpiritPool**: Sites that block all deal paths via robots.txt are auto-flagged to `data/cache/spiritpool_blocked_sites.json` and documented in `agentMailbox/ToSpiritPool/07_MEAL_DEAL_BLOCKED_SITES.md`.
+- **Stale deals**: 14-day expiry. Chain deals refresh weekly (Monday). Local deals refresh Mon/Wed/Fri. Stale sweep runs Sunday 5 AM.
+- **URL quality**: UTM/tracking params are now stripped from all URLs before storage. Both `_normalize_url()` functions filter `utm_*`, `fbclid`, `gclid`, `mc_*`, `ref`, `source` params.
+- **Playwright chains**: 6 chains require Playwright (Pizza Hut, Jimmy John's, Subway, Sonic, Jack in the Box, Chipotle, Smoothie King). Some have aggressive bot protection — may need SpiritPool fallback for persistent failures.

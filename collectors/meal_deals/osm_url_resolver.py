@@ -20,7 +20,8 @@ import logging
 import re
 import time
 from datetime import datetime
-from urllib.parse import urlparse
+from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import requests
 from sqlalchemy import func
@@ -54,7 +55,7 @@ def _fingerprint(name: str) -> str:
 
 
 def _normalize_url(raw: str) -> str | None:
-    """Clean and validate a URL. Returns None if invalid."""
+    """Clean and validate a URL. Strips UTM/tracking query params. Returns None if invalid."""
     if not raw or not raw.strip():
         return None
     url = raw.strip()
@@ -64,7 +65,17 @@ def _normalize_url(raw: str) -> str | None:
         parsed = urlparse(url)
         if not parsed.netloc or "." not in parsed.netloc:
             return None
-        return url
+        # Strip UTM and common tracking parameters for clean storage
+        if parsed.query:
+            clean_params = {
+                k: v for k, v in parse_qs(parsed.query).items()
+                if not k.lower().startswith(("utm_", "fbclid", "gclid", "mc_", "ref", "source"))
+            }
+            clean_query = urlencode(clean_params, doseq=True) if clean_params else ""
+            parsed = parsed._replace(query=clean_query)
+        # Strip trailing fragment
+        parsed = parsed._replace(fragment="")
+        return urlunparse(parsed).rstrip("/") if parsed.path == "/" else urlunparse(parsed)
     except Exception:
         return None
 
@@ -104,6 +115,21 @@ def fetch_osm_restaurant_websites(
 
     logger.info("[OSM-URL] Querying Overpass for restaurant websites in bbox %s", bbox)
 
+    # Overpass rate limit: respect 1 query per 60s.
+    # If we've queried recently, wait before firing again.
+    _last_query_file = Path(__file__).parent.parent.parent / "data" / "cache" / ".overpass_last_query"
+    _last_query_file.parent.mkdir(parents=True, exist_ok=True)
+    if _last_query_file.exists():
+        try:
+            last_ts = float(_last_query_file.read_text().strip())
+            elapsed = time.time() - last_ts
+            if elapsed < 60:
+                wait = 60 - elapsed
+                logger.info("[OSM-URL] Rate limit: waiting %.0fs before Overpass query", wait)
+                time.sleep(wait)
+        except (ValueError, OSError):
+            pass
+
     # Retry with back-off on 429/504
     for attempt in range(3):
         try:
@@ -113,12 +139,17 @@ def fetch_osm_restaurant_websites(
                 timeout=timeout + 60,
                 headers={"User-Agent": "FirstHelios/1.0 (community labor research)"},
             )
+            # Record successful query time for rate limiting
+            try:
+                _last_query_file.write_text(str(time.time()))
+            except OSError:
+                pass
             resp.raise_for_status()
             break
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response is not None else 0
             if status in (429, 504) and attempt < 2:
-                wait = 30 * (attempt + 1)
+                wait = 60 * (attempt + 1)  # 60s, 120s — respect rate limits
                 logger.warning("[OSM-URL] Got %d, retrying in %ds (attempt %d/3)", status, wait, attempt + 1)
                 time.sleep(wait)
                 continue

@@ -5,13 +5,18 @@ Reads config/meal_deal_sources.yaml for the URL + strategy mapping,
 fetches each chain's deal page, extracts DealSignal objects, and
 returns them for the ingest pipeline to fan out across all locations.
 
-Only handles `static_html` and `menu_only` strategies.
-Playwright-required chains are handled by a separate flow (future).
+Handles all strategies:
+  - static_html   → requests + BeautifulSoup
+  - menu_only     → requests + BeautifulSoup (filtered for actual deals, not full menus)
+  - playwright_required → async Playwright headless Chromium
+  - app_only      → skipped (no public web deals)
 
 Depends on: requests, beautifulsoup4, pyyaml, config/meal_deal_sources.yaml
+            playwright (optional — only for playwright_required chains)
 Called by: scheduler or CLI
 """
 
+import asyncio
 import logging
 import re
 from datetime import datetime
@@ -51,13 +56,23 @@ _DEAL_TYPE_KEYWORDS = {
     "cravings": "combo",
 }
 
+# Keywords that indicate an actual DEAL vs. a regular menu item
+# (used to filter menu_only strategy so we don't ingest entire menus)
+_DEAL_SIGNAL_KEYWORDS = {
+    "deal", "deals", "special", "specials", "combo", "value",
+    "bogo", "buy one", "free", "save", "offer", "promotion",
+    "limited time", "happy hour", "kids eat", "early bird",
+    "meal deal", "cravings", "discount",
+}
+
 # User-Agent rotation (subset — keep it simple for chain sites)
 _USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-_REQUEST_TIMEOUT = 15  # seconds
+_REQUEST_TIMEOUT = 20  # seconds (up from 15 — Pizza Hut needs more)
+_REQUEST_MAX_RETRIES = 2  # retry once on timeout/5xx
 
 
 def _load_chain_config() -> dict[str, dict[str, Any]]:
@@ -76,25 +91,57 @@ def _classify_deal_type(text: str) -> str:
     return "combo"  # default
 
 
+def _is_deal_text(text: str) -> bool:
+    """Check if text looks like an actual deal/special vs. a regular menu item.
+
+    Used by menu_only strategy to filter out plain menu items
+    (e.g. ThunderCloud's 80 menu items) and keep only real deals.
+    """
+    lower = text.lower()
+    return any(kw in lower for kw in _DEAL_SIGNAL_KEYWORDS)
+
+
 def _extract_prices(text: str) -> list[float]:
     """Extract all dollar amounts from text."""
     return [float(m) for m in _PRICE_RE.findall(text)]
 
 
 def _fetch_page(url: str) -> BeautifulSoup | None:
-    """Fetch a page and return parsed BeautifulSoup, or None on failure."""
-    try:
-        resp = requests.get(
-            url,
-            headers={"User-Agent": _USER_AGENT},
-            timeout=_REQUEST_TIMEOUT,
-            allow_redirects=True,
-        )
-        resp.raise_for_status()
-        return BeautifulSoup(resp.text, "html.parser")
-    except Exception as exc:
-        logger.warning("[ChainDeals] Failed to fetch %s: %s", url, exc)
-        return None
+    """Fetch a page and return parsed BeautifulSoup, or None on failure.
+
+    Retries once on timeout or 5xx errors.
+    """
+    for attempt in range(_REQUEST_MAX_RETRIES + 1):
+        try:
+            resp = requests.get(
+                url,
+                headers={"User-Agent": _USER_AGENT},
+                timeout=_REQUEST_TIMEOUT,
+                allow_redirects=True,
+            )
+            resp.raise_for_status()
+            return BeautifulSoup(resp.text, "html.parser")
+        except requests.exceptions.Timeout:
+            if attempt < _REQUEST_MAX_RETRIES:
+                logger.warning("[ChainDeals] Timeout for %s, retrying (%d/%d)", url, attempt + 1, _REQUEST_MAX_RETRIES)
+                import time
+                time.sleep(3)
+                continue
+            logger.warning("[ChainDeals] Timeout for %s after %d attempts", url, attempt + 1)
+            return None
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else 0
+            if status >= 500 and attempt < _REQUEST_MAX_RETRIES:
+                logger.warning("[ChainDeals] %d for %s, retrying (%d/%d)", status, url, attempt + 1, _REQUEST_MAX_RETRIES)
+                import time
+                time.sleep(3)
+                continue
+            logger.warning("[ChainDeals] Failed to fetch %s: %s", url, e)
+            return None
+        except Exception as exc:
+            logger.warning("[ChainDeals] Failed to fetch %s: %s", url, exc)
+            return None
+    return None
 
 
 def _extract_deals_generic(
@@ -106,7 +153,11 @@ def _extract_deals_generic(
 
     Returns raw dicts with keys: name, description, deal_type, price.
     Works across most chain sites by scanning headings + nearby text.
+
+    For menu_only strategy, applies stricter keyword filtering to avoid
+    ingesting regular menu items (e.g. ThunderCloud's 80 items).
     """
+    is_menu_only = chain_cfg.get("strategy") == "menu_only"
     deals: list[dict[str, Any]] = []
     seen_names: set[str] = set()
 
@@ -135,6 +186,11 @@ def _extract_deals_generic(
         if not prices and not has_deal_keyword:
             continue
 
+        # For menu_only strategy, require actual deal signal keywords
+        # (filters out regular menu items like "Turkey Sub $8.99")
+        if is_menu_only and not _is_deal_text(full_text):
+            continue
+
         name = heading_text[:120]
         if name in seen_names:
             continue
@@ -159,6 +215,10 @@ def _extract_deals_generic(
         if not prices and not has_deal_keyword:
             continue
 
+        # For menu_only, require deal signal keywords
+        if is_menu_only and not _is_deal_text(link_text):
+            continue
+
         seen_names.add(link_text[:120])
         deals.append({
             "name": link_text[:120],
@@ -169,6 +229,87 @@ def _extract_deals_generic(
         })
 
     return deals
+
+
+# ── Playwright deal page scraper ─────────────────────────────────────────────
+
+async def _fetch_page_playwright(url: str, wait_ms: int = 5000) -> BeautifulSoup | None:
+    """Fetch a JS-rendered page with Playwright and return parsed BeautifulSoup.
+
+    Used for chains with strategy=playwright_required (Subway, Sonic, etc.).
+    Launches headless Chromium, waits for content to render, returns HTML.
+    """
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        logger.error("[ChainDeals] playwright not installed — run: pip install playwright && playwright install chromium")
+        return None
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
+            context = await browser.new_context(
+                user_agent=_USER_AGENT,
+                viewport={"width": 1280, "height": 900},
+            )
+            page = await context.new_page()
+
+            try:
+                logger.info("[ChainDeals/PW] Loading: %s", url)
+                # Use domcontentloaded instead of networkidle — many chain sites
+                # have aggressive ad-tech that prevents networkidle from firing.
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_timeout(wait_ms)
+
+                # Try to dismiss cookie consent banners
+                for selector in [
+                    'button:has-text("Accept")',
+                    'button:has-text("Accept All")',
+                    'button[id*="cookie"]',
+                    'button[id*="consent"]',
+                    'button[class*="accept"]',
+                ]:
+                    try:
+                        btn = await page.query_selector(selector)
+                        if btn:
+                            await btn.click()
+                            await page.wait_for_timeout(500)
+                            break
+                    except Exception:
+                        continue
+
+                # Scroll to load lazy content
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+                await page.wait_for_timeout(1500)
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(1500)
+
+                content = await page.content()
+                return BeautifulSoup(content, "html.parser")
+
+            finally:
+                await browser.close()
+
+    except Exception as exc:
+        logger.warning("[ChainDeals/PW] Failed for %s: %s", url, exc)
+        return None
+
+
+def _fetch_page_pw_sync(url: str, wait_ms: int = 5000) -> BeautifulSoup | None:
+    """Sync wrapper for _fetch_page_playwright."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If we're in an async context, use a new thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, _fetch_page_playwright(url, wait_ms)).result()
+        return loop.run_until_complete(_fetch_page_playwright(url, wait_ms))
+    except RuntimeError:
+        return asyncio.run(_fetch_page_playwright(url, wait_ms))
 
 
 @deal_collector("chain_deals", schedule="0 6 * * 1")
@@ -185,15 +326,24 @@ class ChainDealCollector:
 
         Each DealSignal has brand_fingerprint set — the ingest pipeline
         fans these out to all locations of that brand in the region.
+
+        Supports strategies: static_html, menu_only, playwright_required.
+        Skips: app_only.
         """
         config = _load_chain_config()
         signals: list[DealSignal] = []
 
         for chain_key, chain_cfg in config.items():
             strategy = chain_cfg.get("strategy", "")
-            if strategy not in ("static_html", "menu_only"):
+            if strategy == "app_only":
                 logger.debug(
                     "[ChainDeals] Skipping %s (strategy=%s)", chain_key, strategy
+                )
+                continue
+
+            if strategy not in ("static_html", "menu_only", "playwright_required"):
+                logger.debug(
+                    "[ChainDeals] Skipping %s (unknown strategy=%s)", chain_key, strategy
                 )
                 continue
 
@@ -202,16 +352,20 @@ class ChainDealCollector:
                 continue
 
             display_name = chain_cfg.get("display_name", chain_key)
-            logger.info("[ChainDeals] Scraping %s → %s", display_name, url)
+            logger.info("[ChainDeals] Scraping %s → %s (strategy=%s)", display_name, url, strategy)
 
-            soup = _fetch_page(url)
-            if not soup:
-                # Try fallback URLs
-                for fb_url in chain_cfg.get("fallback_urls", []):
-                    soup = _fetch_page(fb_url)
-                    if soup:
-                        url = fb_url
-                        break
+            # Choose fetch method based on strategy
+            if strategy == "playwright_required":
+                soup = _fetch_page_pw_sync(url, wait_ms=5000)
+            else:
+                soup = _fetch_page(url)
+                if not soup:
+                    # Try fallback URLs
+                    for fb_url in chain_cfg.get("fallback_urls", []):
+                        soup = _fetch_page(fb_url)
+                        if soup:
+                            url = fb_url
+                            break
 
             if not soup:
                 logger.warning("[ChainDeals] No content for %s", display_name)

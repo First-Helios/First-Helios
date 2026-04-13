@@ -13,6 +13,7 @@ Depends on: requests, beautifulsoup4, collectors.rotation
 Called by: scheduler (Wednesday/Saturday 2:00 AM) or CLI
 """
 
+import json
 import logging
 import re
 import time
@@ -93,6 +94,35 @@ MAX_PAGE_SIZE = 500_000  # 500KB
 
 # Request timeout
 REQUEST_TIMEOUT = 15
+
+
+class _RobotsTxtBlocked(Exception):
+    """Raised when robots.txt disallows fetching ALL deal-related paths."""
+    pass
+
+
+_SPIRITPOOL_BLOCKED_PATH = Path(__file__).parent.parent.parent / "data" / "cache" / "spiritpool_blocked_sites.json"
+
+
+def _write_spiritpool_blocked(blocked: list[dict]) -> None:
+    """Append blocked sites to a JSON file for SpiritPool to pick up."""
+    existing = []
+    if _SPIRITPOOL_BLOCKED_PATH.exists():
+        try:
+            existing = json.loads(_SPIRITPOOL_BLOCKED_PATH.read_text())
+        except (json.JSONDecodeError, OSError):
+            existing = []
+
+    # Dedup by employer_id
+    seen_ids = {e["employer_id"] for e in existing}
+    for site in blocked:
+        if site["employer_id"] not in seen_ids:
+            site["flagged_at"] = datetime.utcnow().isoformat()
+            existing.append(site)
+            seen_ids.add(site["employer_id"])
+
+    _SPIRITPOOL_BLOCKED_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _SPIRITPOOL_BLOCKED_PATH.write_text(json.dumps(existing, indent=2))
 
 
 def _get_user_agent() -> str:
@@ -214,6 +244,7 @@ def scrape_restaurant_website(
 
     signals: list[DealSignal] = []
     seen_deals: set[str] = set()  # dedup by deal_name
+    robots_blocked_count = 0
 
     for path in DEAL_PATHS:
         full_url = urljoin(base_url, path)
@@ -221,6 +252,7 @@ def scrape_restaurant_website(
         # Respect robots.txt
         if not _can_fetch(base_url, path, user_agent):
             logger.debug("[WebScraper] Blocked by robots.txt: %s", full_url)
+            robots_blocked_count += 1
             continue
 
         html = _fetch_page(full_url, user_agent)
@@ -270,17 +302,23 @@ def scrape_restaurant_website(
         # Rate limit: 1 req/sec between pages
         time.sleep(1.0)
 
+    # If robots.txt blocked ALL paths, flag for SpiritPool
+    if robots_blocked_count >= len(DEAL_PATHS):
+        raise _RobotsTxtBlocked(f"{restaurant_name} ({base_url}) blocks all deal paths via robots.txt")
+
     return signals
 
 
-@deal_collector("website_scraper", schedule="0 2 * * 3,6")
+@deal_collector("website_scraper", schedule="0 2 * * 1,3,5")
 class WebsiteDealCollector:
     """Scheduled collector: scrapes restaurant websites for deals.
 
     Targets local_employers that have a URL in restaurant_urls but
     either have no meal_deals or stale ones.
 
-    Schedule: Wednesday and Saturday at 2:00 AM.
+    Schedule: Mon, Wed, Fri at 2:00 AM — scrape regularly for freshness.
+    Sites that block us are flagged for SpiritPool manual entry.
+    Deals expire after 14 days without re-verification.
     """
 
     SOURCE = "website_scraper"
@@ -304,6 +342,9 @@ class WebsiteDealCollector:
             # 1. Are active
             # 2. Haven't been checked recently (or never checked for deals)
             # 3. Are for food employers
+            # Priority: check sites we haven't visited recently first.
+            # Sites that block us (last_http_status >= 400 or robots.txt blocked)
+            # are deprioritized — they'll be flagged for SpiritPool.
             urls = session.query(
                 RestaurantURL, LocalEmployer
             ).join(
@@ -318,6 +359,8 @@ class WebsiteDealCollector:
             ).limit(max_sites).all()
 
             logger.info("[WebScraper] Scanning %d restaurant websites", len(urls))
+
+            blocked_sites: list[dict] = []  # Track sites that block scraping
 
             for rurl, emp in urls:
                 try:
@@ -340,14 +383,40 @@ class WebsiteDealCollector:
                     if not dry_run:
                         rurl.last_checked = datetime.utcnow()
                         rurl.has_deals_page = len(signals) > 0
+                        rurl.last_http_status = 200
+                        session.flush()
+
+                except _RobotsTxtBlocked as e:
+                    # Site blocks scraping via robots.txt — flag for SpiritPool
+                    logger.info("[WebScraper] %s blocked by robots.txt → flagging for SpiritPool", emp.name)
+                    blocked_sites.append({
+                        "name": emp.name,
+                        "url": rurl.url,
+                        "reason": "robots.txt",
+                        "employer_id": emp.id,
+                    })
+                    if not dry_run:
+                        rurl.last_checked = datetime.utcnow()
+                        rurl.last_http_status = 403
                         session.flush()
 
                 except Exception as e:
                     logger.warning("[WebScraper] Error scraping %s: %s", rurl.url, e)
+                    if not dry_run:
+                        rurl.last_checked = datetime.utcnow()
+                        # Try to extract HTTP status from exception
+                        status = getattr(getattr(e, 'response', None), 'status_code', 0)
+                        if status:
+                            rurl.last_http_status = status
+                        session.flush()
                     continue
 
             if not dry_run:
                 session.commit()
+
+            # Write blocked sites for SpiritPool pickup
+            if blocked_sites:
+                _write_spiritpool_blocked(blocked_sites)
 
         except Exception as exc:
             session.rollback()

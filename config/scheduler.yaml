@@ -267,4 +267,4 @@ deal_chain_deals:
 
 deal_website_scraper:
   enabled: true
-  description: "Scrape local restaurant websites for deals. Wednesday + Saturday 2 AM."
+  description: "Scrape local restaurant websites for deals. Mon/Wed/Fri 2 AM. Sites that block are flagged for SpiritPool."
