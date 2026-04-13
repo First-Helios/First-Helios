@@ -1099,6 +1099,94 @@ class CollectorRun(Base):
     run_at       = Column(DateTime, nullable=False, index=True)
 
 
+class MealDeal(Base):
+    """A meal deal / special offered by a restaurant in local_employers.
+
+    Populated by collectors/meal_deals/ scrapers. Each row represents one
+    deal at one location (chain-wide deals fan out to one row per location).
+
+    Layer: Consumer Intelligence (Layer 5)
+    """
+
+    __tablename__ = "meal_deals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # ── Restaurant link ───────────────────────────────────────────────────────
+    local_employer_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+
+    # ── Deal detail ───────────────────────────────────────────────────────────
+    deal_name = Column(String, nullable=False)
+    deal_description = Column(Text, nullable=True)
+    deal_type = Column(String, nullable=False, index=True)
+    # lunch_special | combo | bogo | happy_hour | kids_eat_free | daily_special
+
+    # ── Pricing ───────────────────────────────────────────────────────────────
+    price = Column(Float, nullable=True)
+    original_price = Column(Float, nullable=True)
+
+    # ── Validity window ───────────────────────────────────────────────────────
+    valid_days = Column(String, nullable=True)          # "Mon-Fri" or "Tuesday" or null=everyday
+    valid_start_time = Column(String, nullable=True)    # "11:00"
+    valid_end_time = Column(String, nullable=True)      # "14:00"
+    is_recurring = Column(Boolean, default=True)
+    start_date = Column(DateTime, nullable=True)        # seasonal deals
+    end_date = Column(DateTime, nullable=True)
+
+    # ── Source provenance ─────────────────────────────────────────────────────
+    source = Column(String, nullable=False)             # chain_website | google_places | yelp | manual | website_scrape
+    source_url = Column(String, nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+
+    # ── Status ────────────────────────────────────────────────────────────────
+    is_active = Column(Boolean, default=True, index=True)
+
+    # ── Timestamps ────────────────────────────────────────────────────────────
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # ── Denormalized location (from local_employer) ───────────────────────────
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    region = Column(String, nullable=False, default="austin_tx", index=True)
+
+    __table_args__ = (
+        UniqueConstraint("local_employer_id", "deal_name", "source", name="uq_meal_deal_employer_name_source"),
+        Index("ix_meal_deals_employer_active", "local_employer_id", "is_active"),
+        Index("ix_meal_deals_brand_active", "brand_group_id", "is_active"),
+        Index("ix_meal_deals_region_active", "region", "is_active"),
+        Index("ix_meal_deals_type_region", "deal_type", "region"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "local_employer_id": self.local_employer_id,
+            "brand_group_id": self.brand_group_id,
+            "deal_name": self.deal_name,
+            "deal_description": self.deal_description,
+            "deal_type": self.deal_type,
+            "price": self.price,
+            "original_price": self.original_price,
+            "valid_days": self.valid_days,
+            "valid_start_time": self.valid_start_time,
+            "valid_end_time": self.valid_end_time,
+            "is_recurring": self.is_recurring,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "source": self.source,
+            "source_url": self.source_url,
+            "verified_at": self.verified_at.isoformat() if self.verified_at else None,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "lat": self.lat,
+            "lng": self.lng,
+            "region": self.region,
+        }
+
+
 # ── Engine + Session factory ─────────────────────────────────────────────────
 
 def get_engine(db_path: Path | None = None):

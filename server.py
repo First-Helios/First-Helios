@@ -32,6 +32,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from core.database import (
     LocalEmployer,
+    MealDeal,
     Score,
     Signal,
     Snapshot,
@@ -195,6 +196,14 @@ try:
     logger.info("Contributor blueprint registered (/api/contribute, /api/burn)")
 except Exception as exc:
     logger.warning("Contributor blueprint NOT registered: %s: %s", type(exc).__name__, exc)
+
+# ── Meal Deals Blueprint ──────────────────────────────────────────────────────
+try:
+    from collectors.meal_deals.routes import deals_bp
+    app.register_blueprint(deals_bp)
+    logger.info("Meal Deals blueprint registered at /api/deals")
+except Exception as exc:
+    logger.warning("Meal Deals blueprint NOT registered: %s: %s", type(exc).__name__, exc)
 
 
 # ── Security: suppress exception details from API responses ──────────────────
