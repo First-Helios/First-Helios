@@ -16,6 +16,8 @@ How the system is designed and why.
 
 - [Database Design](architecture/DATABASE_DESIGN_BEST_PRACTICES.md) — 6-layer DB architecture, metadata contracts, audit trail patterns
 - [Data Streams](architecture/DATA_STREAMS.md) — Every data source, collection method, DB table, and downstream consumer
+- [PII Filter Guide](architecture/PII_FILTER_GUIDE.md) — How to view quarantined data, why fields are filtered, and how to add exemptions or dead-weight rules
+- [Dev Capture Mode ADR](architecture/ADR_DEV_MODE.md) — Decision record for raw signal A/B comparison in dev schema
 
 ## Events Hub
 Multi-source event aggregation for Austin.
