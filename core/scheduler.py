@@ -266,6 +266,36 @@ def init_scheduler() -> BackgroundScheduler:
 
     _register_event_collectors(scheduler, sched_cfg)
 
+    # ── Deal Collectors — auto-discover from meal_deals registry ──────
+
+    _register_deal_collectors(scheduler, sched_cfg)
+
+    # ── URL Resolution (meal deals infrastructure) ────────────────────
+
+    if _job_enabled(sched_cfg, "osm_url_resolver"):
+        _c = sched_cfg.get("osm_url_resolver", {}).get("cron", {})
+        scheduler.add_job(_run_osm_url_resolver, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 1), minute=_c.get("minute", 0),
+            id="osm_url_resolver", name="OSM Restaurant URL Resolver",
+            replace_existing=True)
+
+    if _job_enabled(sched_cfg, "google_places_resolver"):
+        _c = sched_cfg.get("google_places_resolver", {}).get("cron", {})
+        scheduler.add_job(_run_google_places_resolver, "cron",
+            day_of_week=_c.get("day_of_week", "tue"),
+            hour=_c.get("hour", 2), minute=_c.get("minute", 0),
+            id="google_places_resolver", name="Google Places URL Resolver",
+            replace_existing=True)
+
+    if _job_enabled(sched_cfg, "deal_stale_sweep"):
+        _c = sched_cfg.get("deal_stale_sweep", {}).get("cron", {})
+        scheduler.add_job(_run_deal_stale_sweep, "cron",
+            day_of_week=_c.get("day_of_week", "sun"),
+            hour=_c.get("hour", 5), minute=_c.get("minute", 0),
+            id="deal_stale_sweep", name="Deactivate Stale Meal Deals",
+            replace_existing=True)
+
     scheduler.start()
     logger.info("[Scheduler] Started with %d jobs", len(scheduler.get_jobs()))
     return scheduler
@@ -399,6 +429,85 @@ def _register_event_collectors(scheduler, sched_cfg: dict) -> None:
             replace_existing=True,
         )
         logger.info("[Scheduler] Registered event collector: %s (schedule=%s)", name, cfg["schedule"])
+
+
+def _make_deal_runner(collector_cls):
+    """Return a zero-arg callable that instantiates and runs a deal collector."""
+    def runner():
+        source = getattr(collector_cls, "SOURCE", collector_cls.__name__)
+        from datetime import datetime
+
+        from collectors.meal_deals.ingest import ingest_deal_signals
+        from core.database import CollectorRun, get_engine, get_session
+
+        engine = get_engine()
+        session = get_session(engine)
+        run = CollectorRun(source=source, fetched=0, new=0, updated=0, skipped=0, run_at=datetime.utcnow())
+        try:
+            session.add(run)
+            session.flush()
+
+            collector = collector_cls()
+            signals = collector.collect(region="austin_tx")
+            run.fetched = len(signals)
+
+            if signals:
+                stats = ingest_deal_signals(signals, region="austin_tx")
+                run.new = stats.get("total_rows", 0)
+                run.skipped = stats.get("skipped", 0)
+
+            session.commit()
+            logger.info(
+                "[Scheduler] Deal collector %s: %d signals, %d rows written (run_id=%d)",
+                source, run.fetched, run.new, run.id,
+            )
+        except Exception as e:
+            session.rollback()
+            logger.error("[Scheduler] Deal collector %s failed: %s", source, e)
+        finally:
+            session.close()
+    return runner
+
+
+def _register_deal_collectors(scheduler, sched_cfg: dict) -> None:
+    """Auto-discover and register all @deal_collector-decorated classes."""
+    import importlib
+    import pkgutil
+
+    import collectors.meal_deals as _dc_pkg
+    from collectors.meal_deals import registry as deal_registry
+
+    for _, mod_name, _ in pkgutil.iter_modules(_dc_pkg.__path__):
+        if mod_name not in ("registry", "__init__", "models"):
+            try:
+                importlib.import_module(f"collectors.meal_deals.{mod_name}")
+            except Exception as exc:
+                logger.warning(
+                    "[Scheduler] Failed to import collectors.meal_deals.%s: %s",
+                    mod_name, exc,
+                )
+
+    for name, cfg in deal_registry.get_all().items():
+        job_id = f"deal_{name}"
+        if not _job_enabled(sched_cfg, job_id):
+            logger.debug("[Scheduler] Deal collector %s disabled — skipping", name)
+            continue
+
+        try:
+            cron_kwargs = _parse_cron_expr(cfg["schedule"])
+        except ValueError:
+            logger.error("[Scheduler] Bad cron schedule for %s: %r", name, cfg["schedule"])
+            continue
+
+        scheduler.add_job(
+            _make_deal_runner(cfg["class"]),
+            "cron",
+            **cron_kwargs,
+            id=job_id,
+            name=f"Deal: {name}",
+            replace_existing=True,
+        )
+        logger.info("[Scheduler] Registered deal collector: %s (schedule=%s)", name, cfg["schedule"])
 
 
 def get_scheduler_status() -> dict:
@@ -982,3 +1091,46 @@ def _run_burn_pool_cleanup() -> None:
 
     except Exception as e:
         logger.error("[Scheduler] Burn pool cleanup failed: %s", e)
+
+
+# ── Meal Deal Infrastructure Jobs ────────────────────────────────────────────
+
+def _run_osm_url_resolver() -> None:
+    """Scheduled job: resolve restaurant website URLs from OSM Overpass."""
+    try:
+        from collectors.meal_deals.osm_url_resolver import run_osm_url_resolver
+
+        logger.info("[Scheduler] Running OSM URL resolver")
+        stats = run_osm_url_resolver(region="austin_tx")
+        logger.info("[Scheduler] OSM URL resolver: %s", stats)
+
+    except Exception as e:
+        logger.error("[Scheduler] OSM URL resolver failed: %s", e)
+
+
+def _run_google_places_resolver() -> None:
+    """Scheduled job: resolve remaining restaurant URLs via Google Places API."""
+    try:
+        from collectors.meal_deals.google_places_resolver import run_google_places_resolver
+
+        logger.info("[Scheduler] Running Google Places URL resolver (brands mode)")
+        stats = run_google_places_resolver(region="austin_tx", mode="brands", max_calls=200)
+        logger.info("[Scheduler] Google Places resolver: %s", stats)
+
+    except Exception as e:
+        logger.error("[Scheduler] Google Places resolver failed: %s", e)
+
+
+def _run_deal_stale_sweep() -> None:
+    """Scheduled job: deactivate meal deals that haven't been verified recently."""
+    try:
+        from collectors.meal_deals.ingest import deactivate_stale_deals
+
+        logger.info("[Scheduler] Running deal stale sweep")
+        for source in ("chain_website", "website_scrape", "manual"):
+            count = deactivate_stale_deals(source=source, max_age_days=14)
+            if count:
+                logger.info("[Scheduler] Deactivated %d stale %s deals", count, source)
+
+    except Exception as e:
+        logger.error("[Scheduler] Deal stale sweep failed: %s", e)

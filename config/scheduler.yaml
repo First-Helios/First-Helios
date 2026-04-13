@@ -228,3 +228,43 @@ burn_pool_cleanup:
   cron:
     hour: 2
     minute: 45
+
+# ── Meal Deal Infrastructure ─────────────────────────────────────────────────
+
+osm_url_resolver:
+  enabled: true
+  description: "Resolve restaurant website URLs from OSM Overpass (free, batch). Sunday 1 AM."
+  trigger: cron
+  cron:
+    day_of_week: sun
+    hour: 1
+    minute: 0
+
+google_places_resolver:
+  enabled: true
+  description: "Resolve remaining restaurant URLs via Google Places API (brands first, $200 budget). Tuesday 2 AM."
+  trigger: cron
+  cron:
+    day_of_week: tue
+    hour: 2
+    minute: 0
+
+deal_stale_sweep:
+  enabled: true
+  description: "Deactivate meal_deals not verified in 14+ days. Sunday 5 AM."
+  trigger: cron
+  cron:
+    day_of_week: sun
+    hour: 5
+    minute: 0
+
+# Deal collectors are auto-discovered from @deal_collector registry.
+# Override schedule or disable them here:
+
+deal_chain_deals:
+  enabled: true
+  description: "Scrape chain restaurant deal pages (static HTML). Monday 6 AM."
+
+deal_website_scraper:
+  enabled: true
+  description: "Scrape local restaurant websites for deals. Wednesday + Saturday 2 AM."

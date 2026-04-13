@@ -33,6 +33,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from core.database import (
     LocalEmployer,
     MealDeal,
+    RestaurantURL,
     Score,
     Signal,
     Snapshot,

@@ -1099,6 +1099,53 @@ class CollectorRun(Base):
     run_at       = Column(DateTime, nullable=False, index=True)
 
 
+class RestaurantURL(Base):
+    """Cached website URLs for local_employers — resolved from OSM, Google Places, or manual entry.
+
+    One row per employer. Multiple resolution sources write here; the highest-confidence
+    source wins via the `source` + `confidence` pattern.
+
+    URL data is reusable across all downstream scrapers (meal deals, job postings, events).
+
+    Layer: Reference Data (Layer 1)
+    """
+
+    __tablename__ = "restaurant_urls"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    local_employer_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+    url = Column(String, nullable=False)
+    source = Column(String, nullable=False)  # osm | google_places | manual | chain_config
+    confidence = Column(Float, nullable=True, default=1.0)
+    is_active = Column(Boolean, default=True)
+    last_checked = Column(DateTime, nullable=True)
+    last_http_status = Column(Integer, nullable=True)
+    has_deals_page = Column(Boolean, nullable=True)
+    deals_page_url = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "local_employer_id": self.local_employer_id,
+            "brand_group_id": self.brand_group_id,
+            "url": self.url,
+            "source": self.source,
+            "confidence": self.confidence,
+            "is_active": self.is_active,
+            "last_checked": self.last_checked.isoformat() if self.last_checked else None,
+            "last_http_status": self.last_http_status,
+            "has_deals_page": self.has_deals_page,
+            "deals_page_url": self.deals_page_url,
+        }
+
+    __table_args__ = (
+        UniqueConstraint("local_employer_id", "source", name="uq_restaurant_url_employer_source"),
+    )
+
+
 class MealDeal(Base):
     """A meal deal / special offered by a restaurant in local_employers.
 
