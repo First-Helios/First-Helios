@@ -44,14 +44,45 @@ DEAL_PATHS = [
     "/offers",
 ]
 
-# Keywords that suggest a deal (case-insensitive)
+# Keywords that suggest a deal (case-insensitive).
+# Day-of-week names alone are too broad (match hours-of-operation text);
+# they're only tested as supporting evidence inside _is_valid_deal_block().
 _DEAL_KEYWORDS = [
     "special", "specials", "deal", "deals", "combo", "bogo",
-    "buy one get one", "happy hour", "kids eat free", "early bird",
+    "buy one", "happy hour", "kids eat free", "early bird",
     "lunch special", "dinner special", "daily special",
     "meal deal", "value meal", "discount",
-    "monday", "tuesday", "wednesday", "thursday", "friday",
-    "saturday", "sunday",
+    "limited time", "save", "promotion", "offer",
+    "half off", "half price", "% off",
+    "for the price of", "2 for",
+]
+
+# Self-validating keywords — strong deal signals that don't need a price.
+_SELF_VALIDATING_KEYWORDS = {
+    "bogo", "buy one get one", "buy one, get one",
+    "buy one", "kids eat free", "kids meal free", "happy hour",
+    "early bird", "meal deal", "half off", "half price",
+    "for the price of", "% off",
+}
+
+# Phrases that mark navigational / boilerplate / ad content.
+_BOILERPLATE_PHRASES = [
+    "privacy", "terms of use", "site map", "cookie",
+    "toggle header", "toggle menu", "toggle nav",
+    "newsroom", "gift card", "careers", "about us",
+    "rewards", "sign in", "log in", "sign up",
+    "download the app", "mobile app",
+    "international sites", "franchise",
+    "copyright", "all rights reserved",
+]
+
+# Spam / ad content blocklist — gambling, pharma, unrelated marketing.
+_SPAM_PHRASES = [
+    "casino", "gambling", "gamstop", "slot machine",
+    "poker", "roulette", "blackjack", "betting",
+    "live dealer", "online casino", "sports betting",
+    "erectile", "viagra", "cbd gummies",
+    "crypto", "bitcoin", "nft",
 ]
 
 # Price pattern: "$5.99", "$10", "$12.50"
@@ -176,20 +207,85 @@ def _fetch_page(url: str, user_agent: str) -> str | None:
         return None
 
 
+# HTML tags / CSS classes / IDs that are reliably navigational / structural.
+_SKIP_TAG_NAMES = frozenset(["script", "style", "nav", "footer", "noscript", "header", "iframe"])
+_SKIP_CLASS_ID_TOKENS = frozenset([
+    "nav", "menu", "header", "footer", "breadcrumb",
+    "pagination", "sidebar", "toolbar", "cookie",
+    "consent", "banner", "popup", "modal",
+])
+
+
+def _should_skip_tag(tag: Tag) -> bool:
+    """Return True for tags that are navigation, footer, or structural boilerplate."""
+    if tag.name in _SKIP_TAG_NAMES:
+        return True
+    class_str = " ".join(tag.get("class", [])).lower()
+    id_str = (tag.get("id") or "").lower()
+    combined = f"{class_str} {id_str}"
+    return any(tok in combined for tok in _SKIP_CLASS_ID_TOKENS)
+
+
 def _extract_text_blocks(soup: BeautifulSoup) -> list[str]:
-    """Extract meaningful text blocks from a page (paragraphs, headings, list items, divs)."""
+    """Extract meaningful text blocks, skipping navigation/footer/ad elements."""
+    # Remove entire nav/footer/script subtrees first so nested tags don't leak.
+    for bad in soup.find_all(_SKIP_TAG_NAMES):
+        bad.decompose()
     blocks = []
-    for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "li", "td", "span", "div"]):
+    for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "li", "td"]):
+        if _should_skip_tag(tag):
+            continue
         text = tag.get_text(separator=" ", strip=True)
-        if text and len(text) > 10 and len(text) < 500:
+        if text and 15 < len(text) < 400:
             blocks.append(text)
     return blocks
+
+
+def _is_boilerplate(text: str) -> bool:
+    """Return True if the text is navigation, footer, or ad/spam content."""
+    lower = text.lower()
+    # Boilerplate nav/footer phrases
+    if any(bp in lower for bp in _BOILERPLATE_PHRASES):
+        return True
+    # Spam / ad injection (casino sites injecting into restaurant pages)
+    if any(sp in lower for sp in _SPAM_PHRASES):
+        return True
+    return False
 
 
 def _has_deal_keywords(text: str) -> bool:
     """Check if a text block contains deal-related keywords."""
     text_lower = text.lower()
     return any(kw in text_lower for kw in _DEAL_KEYWORDS)
+
+
+def _is_valid_deal_block(text: str) -> bool:
+    """A valid deal must have semantic structure, not just keywords.
+
+    Requirements (must pass ALL):
+      1. NOT boilerplate / spam
+      2. Contains at least one deal keyword
+      3. AND one of:
+         a. A price ($X.XX)
+         b. A time pattern + day pattern ("Mon-Fri 2-6pm")
+         c. A self-validating keyword ("BOGO", "kids eat free", etc.)
+    """
+    if _is_boilerplate(text):
+        return False
+    if not _has_deal_keywords(text):
+        return False
+    lower = text.lower()
+    # Self-validating phrases are strong enough alone
+    if any(kw in lower for kw in _SELF_VALIDATING_KEYWORDS):
+        return True
+    has_price = bool(_PRICE_RE.search(text))
+    if has_price:
+        return True
+    has_time = bool(_TIME_PATTERN.search(text))
+    has_day = bool(_DAY_PATTERN.search(text))
+    if has_time and has_day:
+        return True
+    return False
 
 
 def _classify_deal_type(text: str) -> str:
@@ -300,7 +396,7 @@ def scrape_restaurant_website(
         all_menu_prices.extend(_extract_all_prices(blocks))
 
         for block in blocks:
-            if not _has_deal_keywords(block):
+            if not _is_valid_deal_block(block):
                 continue
 
             # Extract a deal name (first sentence or first 80 chars)
