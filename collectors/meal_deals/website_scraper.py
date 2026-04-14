@@ -152,6 +152,7 @@ class _RobotsTxtBlocked(Exception):
 
 
 _SPIRITPOOL_BLOCKED_PATH = Path(__file__).parent.parent.parent / "data" / "cache" / "spiritpool_blocked_sites.json"
+_SCRAPE_AUDIT_PATH = Path(__file__).parent.parent.parent / "data" / "cache" / "website_scrape_audit.json"
 
 
 def _write_spiritpool_blocked(blocked: list[dict]) -> None:
@@ -173,6 +174,12 @@ def _write_spiritpool_blocked(blocked: list[dict]) -> None:
 
     _SPIRITPOOL_BLOCKED_PATH.parent.mkdir(parents=True, exist_ok=True)
     _SPIRITPOOL_BLOCKED_PATH.write_text(json.dumps(existing, indent=2))
+
+
+def _write_scrape_audit(entries: list[dict]) -> None:
+    """Write the scrape audit log (overwritten each run with full results)."""
+    _SCRAPE_AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _SCRAPE_AUDIT_PATH.write_text(json.dumps(entries, indent=2))
 
 
 def _get_user_agent() -> str:
@@ -546,8 +553,17 @@ class WebsiteDealCollector:
             logger.info("[WebScraper] Scanning %d restaurant websites", len(urls))
 
             blocked_sites: list[dict] = []  # Track sites that block scraping
+            audit_entries: list[dict] = []   # Track all scrape outcomes for manual review
 
             for rurl, emp in urls:
+                site_audit: dict[str, Any] = {
+                    "employer_id": emp.id,
+                    "name": emp.name,
+                    "url": rurl.url,
+                    "scraped_at": datetime.utcnow().isoformat(),
+                    "deals_found": 0,
+                    "outcome": "pending",
+                }
                 try:
                     signals = scrape_restaurant_website(
                         url=rurl.url,
@@ -563,6 +579,28 @@ class WebsiteDealCollector:
                             emp.name, len(signals), rurl.url,
                         )
                         all_signals.extend(signals)
+                        site_audit["deals_found"] = len(signals)
+                        site_audit["outcome"] = "deals_found"
+                        site_audit["deal_names"] = [s.deal_name[:80] for s in signals]
+                    else:
+                        site_audit["outcome"] = "no_deals"
+                        # Grab candidate text blocks for manual review
+                        try:
+                            html = _fetch_page(rurl.url, _get_user_agent())
+                            if html:
+                                soup = BeautifulSoup(html, "html.parser")
+                                blocks = _extract_text_blocks(soup)
+                                # Sample up to 10 blocks for manual review
+                                site_audit["sample_blocks"] = [b[:200] for b in blocks[:10]]
+                                site_audit["total_blocks"] = len(blocks)
+                                # Note if site has PDFs linked
+                                pdf_links = [a.get("href", "") for a in soup.find_all("a", href=True)
+                                             if a["href"].lower().endswith(".pdf")]
+                                if pdf_links:
+                                    site_audit["pdf_links"] = pdf_links[:5]
+                                    site_audit["needs_pdf_reader"] = True
+                        except Exception:
+                            pass  # audit is best-effort
 
                     # Update the restaurant_url record
                     if not dry_run:
@@ -580,6 +618,7 @@ class WebsiteDealCollector:
                         "reason": "robots.txt",
                         "employer_id": emp.id,
                     })
+                    site_audit["outcome"] = "robots_blocked"
                     if not dry_run:
                         rurl.last_checked = datetime.utcnow()
                         rurl.last_http_status = 403
@@ -587,6 +626,8 @@ class WebsiteDealCollector:
 
                 except Exception as e:
                     logger.warning("[WebScraper] Error scraping %s: %s", rurl.url, e)
+                    site_audit["outcome"] = "error"
+                    site_audit["error"] = str(e)[:200]
                     if not dry_run:
                         rurl.last_checked = datetime.utcnow()
                         # Try to extract HTTP status from exception
@@ -596,12 +637,26 @@ class WebsiteDealCollector:
                         session.flush()
                     continue
 
+                finally:
+                    audit_entries.append(site_audit)
+
             if not dry_run:
                 session.commit()
 
             # Write blocked sites for SpiritPool pickup
             if blocked_sites:
                 _write_spiritpool_blocked(blocked_sites)
+
+            # Write scrape audit log
+            if audit_entries:
+                _write_scrape_audit(audit_entries)
+                no_deals = sum(1 for e in audit_entries if e["outcome"] == "no_deals")
+                has_pdf = sum(1 for e in audit_entries if e.get("needs_pdf_reader"))
+                logger.info(
+                    "[WebScraper] Audit: %d sites scraped, %d no deals found, %d may need PDF reader",
+                    len(audit_entries), no_deals, has_pdf,
+                )
+                logger.info("[WebScraper] Audit log written to %s", _SCRAPE_AUDIT_PATH)
 
         except Exception as exc:
             session.rollback()
