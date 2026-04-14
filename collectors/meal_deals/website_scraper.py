@@ -379,6 +379,7 @@ class WebsiteDealCollector:
         region: str = "austin_tx",
         max_sites: int = 100,
         dry_run: bool = False,
+        skip_checked_days: int | None = None,
     ) -> list[DealSignal]:
         """Scrape websites and return DealSignals."""
         from core.database import LocalEmployer, MealDeal, RestaurantURL, get_engine, get_session, init_db
@@ -397,15 +398,30 @@ class WebsiteDealCollector:
             # Priority: check sites we haven't visited recently first.
             # Sites that block us (last_http_status >= 400 or robots.txt blocked)
             # are deprioritized — they'll be flagged for SpiritPool.
+            url_filters = [
+                RestaurantURL.is_active.is_(True),
+                LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
+                LocalEmployer.region == region,
+                LocalEmployer.is_active.is_(True),
+            ]
+            if skip_checked_days is not None:
+                from datetime import timedelta
+                cutoff = datetime.utcnow() - timedelta(days=skip_checked_days)
+                # Only scrape sites never checked, or checked before the cutoff
+                url_filters.append(
+                    (RestaurantURL.last_checked.is_(None)) |
+                    (RestaurantURL.last_checked < cutoff)
+                )
+                logger.info(
+                    "[WebScraper] Skipping sites checked within the last %d day(s)", skip_checked_days
+                )
+
             urls = session.query(
                 RestaurantURL, LocalEmployer
             ).join(
                 LocalEmployer, LocalEmployer.id == RestaurantURL.local_employer_id
             ).filter(
-                RestaurantURL.is_active.is_(True),
-                LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
-                LocalEmployer.region == region,
-                LocalEmployer.is_active.is_(True),
+                *url_filters
             ).order_by(
                 RestaurantURL.last_checked.asc().nullsfirst()
             ).limit(max_sites).all()
@@ -484,10 +500,14 @@ def run_website_scraper(
     region: str = "austin_tx",
     max_sites: int = 100,
     dry_run: bool = False,
+    skip_checked_days: int | None = None,
 ) -> dict:
     """Run the website scraper and ingest results."""
     collector = WebsiteDealCollector()
-    signals = collector.collect(region=region, max_sites=max_sites, dry_run=dry_run)
+    signals = collector.collect(
+        region=region, max_sites=max_sites, dry_run=dry_run,
+        skip_checked_days=skip_checked_days,
+    )
 
     if not dry_run and signals:
         from collectors.meal_deals.ingest import ingest_deal_signals
@@ -512,12 +532,17 @@ if __name__ == "__main__":
     parser.add_argument("--max-sites", type=int, default=100, help="Max sites to scrape")
     parser.add_argument("--dry-run", action="store_true", help="Don't write to DB")
     parser.add_argument("--region", default="austin_tx")
+    parser.add_argument(
+        "--skip-checked-days", type=int, default=None,
+        help="Skip sites already checked within N days (avoids re-scraping fresh data)",
+    )
     args = parser.parse_args()
 
     stats = run_website_scraper(
         region=args.region,
         max_sites=args.max_sites,
         dry_run=args.dry_run,
+        skip_checked_days=args.skip_checked_days,
     )
     print(f"\n--- Website Scraper Stats ---")
     for k, v in stats.items():

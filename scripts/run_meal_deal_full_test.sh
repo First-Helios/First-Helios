@@ -32,10 +32,13 @@ done
 
 if [[ "$FULL_MODE" == "1" ]]; then
   echo ">>> FULL MODE: no limits on Google API calls or site scraping <<<"
+  echo ">>> NOTE: This run can take several hours. Run inside tmux/screen to survive SSH disconnects. <<<"
+  echo ">>>   tmux new -s helios   (then reattach later with: tmux attach -t helios) <<<"
   DRY_GOOGLE_CALLS=0           # skip dry-run phase entirely
   LIVE_GOOGLE_CALLS=999999     # resolve every unresolved brand/employer
   DRY_MAX_SITES=0
   LIVE_MAX_SITES=999999        # scrape every restaurant with a URL
+  SCRAPER_SKIP_DAYS=1          # skip sites already checked today (resume-safe)
   RUN_STALE_SWEEP=1
 else
   DRY_GOOGLE_CALLS="${DRY_GOOGLE_CALLS:-50}"
