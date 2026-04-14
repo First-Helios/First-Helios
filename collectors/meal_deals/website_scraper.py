@@ -69,7 +69,6 @@ _SELF_VALIDATING_KEYWORDS = {
 # even if it contains a deal keyword. Compiled once at import time.
 _NEGATIVE_CONTEXT_PATTERNS = [
     re.compile(r"\bspecial\s+occasion", re.IGNORECASE),
-    re.compile(r"\bspecialt(?:y|ies)\b", re.IGNORECASE),
     re.compile(r"\bno\s+substitution", re.IGNORECASE),
     re.compile(r"\bpre-?order\b", re.IGNORECASE),
     re.compile(r"\bskip\s+to\s+(?:content|main)", re.IGNORECASE),

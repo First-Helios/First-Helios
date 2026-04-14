@@ -88,7 +88,6 @@ _DEAL_KEYWORD_RE = re.compile(
 # Negative-context patterns — override deal keyword matches
 _NEGATIVE_CONTEXT_PATTERNS = [
     re.compile(r"\bspecial\s+occasion", re.IGNORECASE),
-    re.compile(r"\bspecialt(?:y|ies)\b", re.IGNORECASE),
     re.compile(r"\bno\s+substitution", re.IGNORECASE),
     re.compile(r"\bpre-?order\b", re.IGNORECASE),
     re.compile(r"\bskip\s+to\s+(?:content|main)", re.IGNORECASE),
