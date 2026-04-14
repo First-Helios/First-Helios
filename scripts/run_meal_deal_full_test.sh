@@ -22,11 +22,28 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-DRY_GOOGLE_CALLS="${DRY_GOOGLE_CALLS:-50}"
-LIVE_GOOGLE_CALLS="${LIVE_GOOGLE_CALLS:-200}"
-DRY_MAX_SITES="${DRY_MAX_SITES:-100}"
-LIVE_MAX_SITES="${LIVE_MAX_SITES:-200}"
-RUN_STALE_SWEEP="${RUN_STALE_SWEEP:-1}"
+# ── Parse flags ──────────────────────────────────────────────────────────────
+FULL_MODE=0
+for arg in "$@"; do
+  case "$arg" in
+    --full|-full) FULL_MODE=1 ;;
+  esac
+done
+
+if [[ "$FULL_MODE" == "1" ]]; then
+  echo ">>> FULL MODE: no limits on Google API calls or site scraping <<<"
+  DRY_GOOGLE_CALLS=0           # skip dry-run phase entirely
+  LIVE_GOOGLE_CALLS=999999     # resolve every unresolved brand/employer
+  DRY_MAX_SITES=0
+  LIVE_MAX_SITES=999999        # scrape every restaurant with a URL
+  RUN_STALE_SWEEP=1
+else
+  DRY_GOOGLE_CALLS="${DRY_GOOGLE_CALLS:-50}"
+  LIVE_GOOGLE_CALLS="${LIVE_GOOGLE_CALLS:-200}"
+  DRY_MAX_SITES="${DRY_MAX_SITES:-100}"
+  LIVE_MAX_SITES="${LIVE_MAX_SITES:-200}"
+  RUN_STALE_SWEEP="${RUN_STALE_SWEEP:-1}"
+fi
 
 STAMP="$(date +%Y%m%d_%H%M%S)"
 REPORT_DIR="reports/meal_deal_test_${STAMP}"
@@ -120,7 +137,7 @@ write_snapshot() {
 import json
 import sys
 from sqlalchemy import func
-from core.database import RestaurantURL, LocalEmployer, MealDeal, init_db, get_session
+from core.database import RestaurantURL, LocalEmployer, MealDeal, init_db, get_session  # noqa: E501
 
 out_path = sys.argv[1]
 engine = init_db()
@@ -149,14 +166,27 @@ try:
         for source, cnt in s.query(MealDeal.source, func.count()).group_by(MealDeal.source).all()
     }
 
+    deals_with_price = s.query(func.count(MealDeal.id)).filter(
+        MealDeal.is_active.is_(True), MealDeal.price.isnot(None),
+    ).scalar() or 0
+    deals_with_calories = s.query(func.count(MealDeal.id)).filter(
+        MealDeal.is_active.is_(True), MealDeal.calories.isnot(None),
+    ).scalar() or 0
+    permanent_urls = s.query(func.count(RestaurantURL.id)).filter(
+        RestaurantURL.is_permanent.is_(True),
+    ).scalar() or 0
+
     payload = {
         "total_urls": int(total_urls),
+        "permanent_urls": int(permanent_urls),
         "urls_by_source": urls_by_source,
         "total_food_employers": int(total_food),
         "food_employers_with_url": int(has_url),
         "coverage_pct": round((has_url / total_food * 100.0), 2) if total_food else 0.0,
         "total_deals": int(total_deals),
         "active_deals": int(active_deals),
+        "deals_with_price": int(deals_with_price),
+        "deals_with_calories": int(deals_with_calories),
         "brands_with_active_deals": int(brands_with_deals),
         "deals_by_source": deals_by_source,
     }
@@ -196,6 +226,9 @@ print(
     f"Brands w/ active deals: {before['brands_with_active_deals']} -> "
     f"{after['brands_with_active_deals']} (delta {delta_int('brands_with_active_deals'):+d})"
 )
+print(f"Deals w/ price:    {after.get('deals_with_price', '?')}")
+print(f"Deals w/ calories: {after.get('deals_with_calories', '?')}")
+print(f"Permanent URLs:    {after.get('permanent_urls', '?')}")
 PY
 }
 
@@ -217,12 +250,17 @@ AFTER_JSON="$REPORT_DIR/after_snapshot.json"
 run_step write_snapshot "$BEFORE_JSON"
 run_step cat "$BEFORE_JSON"
 
-echo
-echo "---- Phase 1: Dry-run pipeline ----"
-run_step python collectors/meal_deals/osm_url_resolver.py --dry-run
-run_step python collectors/meal_deals/google_places_resolver.py --mode both --max-calls "$DRY_GOOGLE_CALLS" --dry-run
-run_step python collectors/meal_deals/chain_deals.py --dry-run
-run_step python collectors/meal_deals/website_scraper.py --max-sites "$DRY_MAX_SITES" --dry-run
+if [[ "$FULL_MODE" == "0" ]]; then
+  echo
+  echo "---- Phase 1: Dry-run pipeline ----"
+  run_step python collectors/meal_deals/osm_url_resolver.py --dry-run
+  run_step python collectors/meal_deals/google_places_resolver.py --mode both --max-calls "$DRY_GOOGLE_CALLS" --dry-run
+  run_step python collectors/meal_deals/chain_deals.py --dry-run
+  run_step python collectors/meal_deals/website_scraper.py --max-sites "$DRY_MAX_SITES" --dry-run
+else
+  echo
+  echo "---- Skipping dry-run (--full mode) ----"
+fi
 
 echo
 echo "---- Phase 2: Live pipeline ----"
@@ -232,7 +270,14 @@ run_step python collectors/meal_deals/chain_deals.py
 run_step python collectors/meal_deals/website_scraper.py --max-sites "$LIVE_MAX_SITES"
 
 if [[ "$RUN_STALE_SWEEP" == "1" ]]; then
-  run_step python collector_main.py --job deal_stale_sweep
+  run_step python - <<'PY'
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+from collectors.meal_deals.ingest import deactivate_stale_deals
+for src in ("website_scrape", "chain_website", "google_places"):
+    n = deactivate_stale_deals(source=src, region="austin_tx", max_age_days=14)
+    print(f"  Deactivated {n} stale {src} deals")
+PY
 fi
 
 run_step write_snapshot "$AFTER_JSON"

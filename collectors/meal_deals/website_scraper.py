@@ -57,6 +57,12 @@ _DEAL_KEYWORDS = [
 # Price pattern: "$5.99", "$10", "$12.50"
 _PRICE_RE = re.compile(r"\$(\d{1,3}\.?\d{0,2})")
 
+# Calorie patterns: "450 cal", "450 calories", "450 kcal", "450Cal"
+_CALORIE_RE = re.compile(
+    r"(\d{2,4})\s*(?:cal(?:ories?)?|kcal|Cal)\b",
+    re.IGNORECASE,
+)
+
 # Day-of-week pattern (for matching valid_days)
 _DAY_PATTERN = re.compile(
     r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday"
@@ -208,6 +214,33 @@ def _extract_price(text: str) -> float | None:
     return None
 
 
+def _extract_calories(text: str) -> int | None:
+    """Extract calorie count from text (e.g. '450 cal', '620 calories')."""
+    match = _CALORIE_RE.search(text)
+    if match:
+        try:
+            val = int(match.group(1))
+            if 50 <= val <= 5000:  # sanity range
+                return val
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_all_prices(blocks: list[str]) -> list[float]:
+    """Extract all dollar prices from text blocks for menu average calculation."""
+    prices = []
+    for block in blocks:
+        for m in _PRICE_RE.finditer(block):
+            try:
+                p = float(m.group(1))
+                if 1.0 <= p <= 200.0:  # filter noise (tax amounts, phone numbers, etc.)
+                    prices.append(p)
+            except ValueError:
+                pass
+    return prices
+
+
 def _extract_days(text: str) -> str | None:
     """Extract day-of-week mention from text."""
     match = _DAY_PATTERN.search(text)
@@ -245,6 +278,7 @@ def scrape_restaurant_website(
     signals: list[DealSignal] = []
     seen_deals: set[str] = set()  # dedup by deal_name
     robots_blocked_count = 0
+    all_menu_prices: list[float] = []  # collect all prices across pages for avg
 
     for path in DEAL_PATHS:
         full_url = urljoin(base_url, path)
@@ -261,6 +295,9 @@ def scrape_restaurant_website(
 
         soup = BeautifulSoup(html, "html.parser")
         blocks = _extract_text_blocks(soup)
+
+        # Collect all prices from this page for menu average
+        all_menu_prices.extend(_extract_all_prices(blocks))
 
         for block in blocks:
             if not _has_deal_keywords(block):
@@ -281,6 +318,12 @@ def scrape_restaurant_website(
             deal_type = _classify_deal_type(block)
             valid_days = _extract_days(block)
             start_time, end_time = _extract_times(block)
+            calories = _extract_calories(block)
+
+            # Compute calorie-per-dollar ratio
+            calorie_price_ratio = None
+            if calories and price and price > 0:
+                calorie_price_ratio = round(calories / price, 1)
 
             signals.append(DealSignal(
                 restaurant_name=restaurant_name,
@@ -290,6 +333,8 @@ def scrape_restaurant_website(
                 deal_description=block[:500],
                 deal_type=deal_type,
                 price=price,
+                calories=calories,
+                calorie_price_ratio=calorie_price_ratio,
                 valid_days=valid_days,
                 valid_start_time=start_time,
                 valid_end_time=end_time,
@@ -305,6 +350,12 @@ def scrape_restaurant_website(
     # If robots.txt blocked ALL paths, flag for SpiritPool
     if robots_blocked_count >= len(DEAL_PATHS):
         raise _RobotsTxtBlocked(f"{restaurant_name} ({base_url}) blocks all deal paths via robots.txt")
+
+    # Compute menu average price and attach to each signal
+    if all_menu_prices and len(all_menu_prices) >= 3:
+        menu_avg = round(sum(all_menu_prices) / len(all_menu_prices), 2)
+        for sig in signals:
+            sig.menu_avg_price = menu_avg
 
     return signals
 

@@ -277,6 +277,7 @@ def resolve_brand_urls(
                     "source": "google_places",
                     "confidence": 0.9,
                     "is_active": True,
+                    "is_permanent": True,
                     "last_checked": now,
                     "created_at": now,
                     "updated_at": now,
@@ -287,6 +288,7 @@ def resolve_brand_urls(
                     set_={
                         "url": stmt.excluded.url,
                         "confidence": stmt.excluded.confidence,
+                        "is_permanent": True,
                         "last_checked": stmt.excluded.last_checked,
                         "updated_at": now,
                     },
@@ -396,6 +398,7 @@ def resolve_local_urls(
                 "source": "google_places",
                 "confidence": 0.9,
                 "is_active": True,
+                "is_permanent": True,
                 "last_checked": now,
                 "created_at": now,
                 "updated_at": now,
@@ -406,6 +409,7 @@ def resolve_local_urls(
                 set_={
                     "url": stmt.excluded.url,
                     "confidence": stmt.excluded.confidence,
+                    "is_permanent": True,
                     "last_checked": stmt.excluded.last_checked,
                     "updated_at": now,
                 },

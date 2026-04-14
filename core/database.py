@@ -1119,6 +1119,7 @@ class RestaurantURL(Base):
     source = Column(String, nullable=False)  # osm | google_places | manual | chain_config
     confidence = Column(Float, nullable=True, default=1.0)
     is_active = Column(Boolean, default=True)
+    is_permanent = Column(Boolean, default=False)          # True = URL unlikely to change (e.g. Google Places)
     last_checked = Column(DateTime, nullable=True)
     last_http_status = Column(Integer, nullable=True)
     has_deals_page = Column(Boolean, nullable=True)
@@ -1135,6 +1136,7 @@ class RestaurantURL(Base):
             "source": self.source,
             "confidence": self.confidence,
             "is_active": self.is_active,
+            "is_permanent": self.is_permanent,
             "last_checked": self.last_checked.isoformat() if self.last_checked else None,
             "last_http_status": self.last_http_status,
             "has_deals_page": self.has_deals_page,
@@ -1172,6 +1174,11 @@ class MealDeal(Base):
     # ── Pricing ───────────────────────────────────────────────────────────────
     price = Column(Float, nullable=True)
     original_price = Column(Float, nullable=True)
+    menu_avg_price = Column(Float, nullable=True)          # avg entrée price on same menu
+
+    # ── Nutrition ─────────────────────────────────────────────────────────────
+    calories = Column(Integer, nullable=True)               # kcal for the deal item
+    calorie_price_ratio = Column(Float, nullable=True)      # kcal per dollar
 
     # ── Validity window ───────────────────────────────────────────────────────
     valid_days = Column(String, nullable=True)          # "Mon-Fri" or "Tuesday" or null=everyday
@@ -1216,6 +1223,9 @@ class MealDeal(Base):
             "deal_type": self.deal_type,
             "price": self.price,
             "original_price": self.original_price,
+            "menu_avg_price": self.menu_avg_price,
+            "calories": self.calories,
+            "calorie_price_ratio": self.calorie_price_ratio,
             "valid_days": self.valid_days,
             "valid_start_time": self.valid_start_time,
             "valid_end_time": self.valid_end_time,

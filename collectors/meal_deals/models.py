@@ -40,6 +40,11 @@ class DealSignal:
     # ── Pricing ───────────────────────────────────────────────────────────────
     price: float | None = None
     original_price: float | None = None
+    menu_avg_price: float | None = None           # avg entrée price on same menu
+
+    # ── Nutrition ─────────────────────────────────────────────────────────────
+    calories: int | None = None                   # kcal for the deal item
+    calorie_price_ratio: float | None = None      # kcal per dollar (calories/price)
 
     # ── Validity window ───────────────────────────────────────────────────────
     valid_days: str | None = None                 # "Mon-Fri" or "Tuesday"
