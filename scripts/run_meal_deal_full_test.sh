@@ -41,6 +41,59 @@ run_step() {
   "$@"
 }
 
+ensure_alembic_ready() {
+  local marker_file
+  marker_file="$REPORT_DIR/alembic_drift_check.json"
+
+  python - "$marker_file" <<'PY'
+import json
+import sys
+from sqlalchemy import inspect, text
+from core.database import init_db
+
+out_path = sys.argv[1]
+engine = init_db()
+
+with engine.connect() as conn:
+    insp = inspect(conn)
+    tables = set(insp.get_table_names())
+    has_alembic_version = "alembic_version" in tables
+    has_existing_schema = "venues" in tables or "local_employers" in tables
+    version_row_count = 0
+
+    if has_alembic_version:
+        version_row_count = conn.execute(text("SELECT COUNT(*) FROM alembic_version")).scalar() or 0
+
+payload = {
+    "has_alembic_version": has_alembic_version,
+    "has_existing_schema": has_existing_schema,
+    "version_row_count": int(version_row_count),
+}
+
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(payload, f, indent=2, sort_keys=True)
+PY
+
+  if python - "$marker_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    payload = json.load(f)
+
+needs_stamp = payload["has_existing_schema"] and (
+    (not payload["has_alembic_version"]) or payload["version_row_count"] == 0
+)
+raise SystemExit(0 if needs_stamp else 1)
+PY
+  then
+    echo "Detected pre-existing schema without Alembic version tracking; stamping current DB to head."
+    run_step alembic stamp head
+  fi
+
+  run_step alembic upgrade head
+}
+
 write_snapshot() {
   local out_file="$1"
   python - "$out_file" <<'PY'
@@ -136,7 +189,7 @@ engine = init_db()
 print(f"Database backend: {engine.url.render_as_string(hide_password=True)}")
 PY
 
-run_step alembic upgrade head
+ensure_alembic_ready
 
 BEFORE_JSON="$REPORT_DIR/before_snapshot.json"
 AFTER_JSON="$REPORT_DIR/after_snapshot.json"
