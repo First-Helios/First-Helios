@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from core.database import (
     BrandGroup,
     CollectorRun,
+    GooglePlacesFailure,
     LocalEmployer,
     RestaurantURL,
     get_engine,
@@ -80,6 +81,41 @@ def _normalize_url(raw: str) -> str | None:
         return urlunparse(parsed).rstrip("/") if parsed.path == "/" else urlunparse(parsed)
     except Exception:
         return None
+
+
+def _record_failure(
+    session,
+    entity_type: str,
+    entity_id: int,
+    canonical_name: str,
+    reason: str,
+) -> None:
+    """Upsert a failure record. Increments retry_count on repeat failures."""
+    stmt = pg_insert(GooglePlacesFailure).values(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        canonical_name=canonical_name,
+        failure_reason=reason,
+        failed_at=datetime.utcnow(),
+        retry_count=0,
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_gp_failure_entity",
+        set_={
+            "failure_reason": stmt.excluded.failure_reason,
+            "failed_at": stmt.excluded.failed_at,
+            "retry_count": GooglePlacesFailure.retry_count + 1,
+        },
+    )
+    session.execute(stmt)
+
+
+def _clear_failure(session, entity_type: str, entity_id: int) -> None:
+    """Remove a failure record when the entity is subsequently resolved."""
+    session.query(GooglePlacesFailure).filter(
+        GooglePlacesFailure.entity_type == entity_type,
+        GooglePlacesFailure.entity_id == entity_id,
+    ).delete(synchronize_session=False)
 
 
 def resolve_place_website(
@@ -155,6 +191,7 @@ def resolve_brand_urls(
     region: str = "austin_tx",
     max_calls: int = MAX_BATCH_CALLS,
     dry_run: bool = False,
+    retry_failed: bool = False,
 ) -> dict:
     """Resolve website URLs for brand_groups that don't have URLs yet.
 
@@ -172,6 +209,8 @@ def resolve_brand_urls(
         "api_calls": 0,
         "skipped_already_have": 0,
         "skipped_no_website": 0,
+        "failures_recorded": 0,
+        "failures_cleared": 0,
     }
 
     try:
@@ -192,15 +231,36 @@ def resolve_brand_urls(
             RestaurantURL.brand_group_id.isnot(None),
         ).distinct().subquery()
 
-        # Brand groups with food employers, not yet resolved by google or OSM
-        brands = session.query(BrandGroup).join(
-            LocalEmployer, LocalEmployer.brand_group_id == BrandGroup.id
+        # Previously-failed brands (skip unless --retry-failed)
+        previously_failed_brands = session.query(
+            GooglePlacesFailure.entity_id
         ).filter(
+            GooglePlacesFailure.entity_type == "brand_group",
+        )
+
+        if not retry_failed:
+            failure_count = previously_failed_brands.count()
+            if failure_count:
+                logger.info(
+                    "[GooglePlaces] Skipping %d previously-failed brands (use --retry-failed to include)",
+                    failure_count,
+                )
+
+        # Brand groups with food employers, not yet resolved by google or OSM
+        brand_filters = [
             LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
             LocalEmployer.region == region,
             LocalEmployer.is_active.is_(True),
             ~BrandGroup.id.in_(session.query(already_resolved)),
             ~BrandGroup.id.in_(session.query(osm_resolved)),
+        ]
+        if not retry_failed:
+            brand_filters.append(~BrandGroup.id.in_(previously_failed_brands))
+
+        brands = session.query(BrandGroup).join(
+            LocalEmployer, LocalEmployer.brand_group_id == BrandGroup.id
+        ).filter(
+            *brand_filters
         ).group_by(BrandGroup.id).order_by(
             BrandGroup.location_count.desc()  # high-location brands first
         ).limit(max_calls).all()
@@ -247,8 +307,26 @@ def resolve_brand_urls(
             stats["api_calls"] += 1
             time.sleep(0.1)  # gentle rate limiting
 
-            if not result or not result.get("website"):
+            if not result:
+                # API returned no matching place
+                reason = "no_result"
                 stats["skipped_no_website"] += 1
+                if not dry_run:
+                    _record_failure(session, "brand_group", brand.id, brand.canonical_name, reason)
+                    stats["failures_recorded"] += 1
+                else:
+                    logger.info("  [DRY] FAIL (no_result): %s", brand.canonical_name)
+                continue
+
+            if not result.get("website"):
+                # Place found but no website listed
+                reason = "no_website"
+                stats["skipped_no_website"] += 1
+                if not dry_run:
+                    _record_failure(session, "brand_group", brand.id, brand.canonical_name, reason)
+                    stats["failures_recorded"] += 1
+                else:
+                    logger.info("  [DRY] FAIL (no_website): %s", brand.canonical_name)
                 continue
 
             stats["brands_resolved"] += 1
@@ -261,6 +339,10 @@ def resolve_brand_urls(
                 )
                 stats["urls_stored"] += brand.location_count
                 continue
+
+            # Clear any prior failure record — this brand is now resolved
+            _clear_failure(session, "brand_group", brand.id)
+            stats["failures_cleared"] += 1
 
             # Fan out to all locations of this brand
             brand_emps = session.query(LocalEmployer).filter(
@@ -302,8 +384,10 @@ def resolve_brand_urls(
             session.commit()
 
         logger.info(
-            "[GooglePlaces] Done: %d brands resolved, %d URLs stored, %d API calls used",
+            "[GooglePlaces] Done: %d brands resolved, %d URLs stored, %d API calls used, "
+            "%d failures recorded, %d failures cleared",
             stats["brands_resolved"], stats["urls_stored"], stats["api_calls"],
+            stats["failures_recorded"], stats["failures_cleared"],
         )
 
     except Exception as exc:
@@ -320,6 +404,7 @@ def resolve_local_urls(
     region: str = "austin_tx",
     max_calls: int = MAX_BATCH_CALLS,
     dry_run: bool = False,
+    retry_failed: bool = False,
 ) -> dict:
     """Resolve URLs for individual local (non-chain) restaurants without any URL yet.
 
@@ -335,17 +420,40 @@ def resolve_local_urls(
         "resolved": 0,
         "api_calls": 0,
         "skipped_no_website": 0,
+        "failures_recorded": 0,
+        "failures_cleared": 0,
     }
 
     try:
         # Employers with no restaurant_url at all
         has_url = session.query(RestaurantURL.local_employer_id).distinct().subquery()
 
-        employers = session.query(LocalEmployer).filter(
+        # Previously-failed employers (skip unless --retry-failed)
+        previously_failed_emps = session.query(
+            GooglePlacesFailure.entity_id
+        ).filter(
+            GooglePlacesFailure.entity_type == "local_employer",
+        )
+
+        if not retry_failed:
+            failure_count = previously_failed_emps.count()
+            if failure_count:
+                logger.info(
+                    "[GooglePlaces-Local] Skipping %d previously-failed employers (use --retry-failed to include)",
+                    failure_count,
+                )
+
+        emp_filters = [
             LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
             LocalEmployer.region == region,
             LocalEmployer.is_active.is_(True),
             ~LocalEmployer.id.in_(session.query(has_url)),
+        ]
+        if not retry_failed:
+            emp_filters.append(~LocalEmployer.id.in_(previously_failed_emps))
+
+        employers = session.query(LocalEmployer).filter(
+            *emp_filters
         ).order_by(
             LocalEmployer.id  # deterministic order for resumability
         ).limit(max_calls).all()
@@ -381,8 +489,22 @@ def resolve_local_urls(
             stats["api_calls"] += 1
             time.sleep(0.1)
 
-            if not result or not result.get("website"):
+            if not result:
                 stats["skipped_no_website"] += 1
+                if not dry_run:
+                    _record_failure(session, "local_employer", emp.id, emp.name, "no_result")
+                    stats["failures_recorded"] += 1
+                else:
+                    logger.info("  [DRY] FAIL (no_result): %s", emp.name)
+                continue
+
+            if not result.get("website"):
+                stats["skipped_no_website"] += 1
+                if not dry_run:
+                    _record_failure(session, "local_employer", emp.id, emp.name, "no_website")
+                    stats["failures_recorded"] += 1
+                else:
+                    logger.info("  [DRY] FAIL (no_website): %s", emp.name)
                 continue
 
             stats["resolved"] += 1
@@ -390,6 +512,10 @@ def resolve_local_urls(
             if dry_run:
                 logger.info("  [DRY] %s → %s", emp.name, result["website"])
                 continue
+
+            # Clear any prior failure record — this employer is now resolved
+            _clear_failure(session, "local_employer", emp.id)
+            stats["failures_cleared"] += 1
 
             url_data = {
                 "local_employer_id": emp.id,
@@ -422,8 +548,10 @@ def resolve_local_urls(
             session.commit()
 
         logger.info(
-            "[GooglePlaces-Local] Done: %d resolved / %d checked, %d API calls",
+            "[GooglePlaces-Local] Done: %d resolved / %d checked, %d API calls, "
+            "%d failures recorded, %d failures cleared",
             stats["resolved"], stats["checked"], stats["api_calls"],
+            stats["failures_recorded"], stats["failures_cleared"],
         )
 
     except Exception as exc:
@@ -441,6 +569,7 @@ def run_google_places_resolver(
     mode: str = "brands",
     max_calls: int = MAX_BATCH_CALLS,
     dry_run: bool = False,
+    retry_failed: bool = False,
 ) -> dict:
     """Entry point: resolve URLs via Google Places.
 
@@ -448,17 +577,19 @@ def run_google_places_resolver(
       - "brands": Resolve brand_groups first (highest ROI)
       - "locals": Resolve individual local employers (expensive)
       - "both":   Brands first, then locals with remaining budget
+
+    retry_failed=True includes brands/employers that previously returned no
+    result or no website — useful after manual data corrections.
     """
     if mode == "brands":
-        return resolve_brand_urls(region=region, max_calls=max_calls, dry_run=dry_run)
+        return resolve_brand_urls(region=region, max_calls=max_calls, dry_run=dry_run, retry_failed=retry_failed)
     elif mode == "locals":
-        return resolve_local_urls(region=region, max_calls=max_calls, dry_run=dry_run)
+        return resolve_local_urls(region=region, max_calls=max_calls, dry_run=dry_run, retry_failed=retry_failed)
     elif mode == "both":
-        brand_stats = resolve_brand_urls(region=region, max_calls=max_calls, dry_run=dry_run)
+        brand_stats = resolve_brand_urls(region=region, max_calls=max_calls, dry_run=dry_run, retry_failed=retry_failed)
         remaining = max_calls - brand_stats["api_calls"]
         if remaining > 0:
-            local_stats = resolve_local_urls(region=region, max_calls=remaining, dry_run=dry_run)
-            # Merge stats
+            local_stats = resolve_local_urls(region=region, max_calls=remaining, dry_run=dry_run, retry_failed=retry_failed)
             return {
                 "brand_phase": brand_stats,
                 "local_phase": local_stats,
@@ -484,6 +615,10 @@ if __name__ == "__main__":
                         help=f"Max API calls per run (default: {MAX_BATCH_CALLS})")
     parser.add_argument("--dry-run", action="store_true", help="Don't write to DB")
     parser.add_argument("--region", default="austin_tx")
+    parser.add_argument(
+        "--retry-failed", action="store_true",
+        help="Include brands/employers that previously returned no result (re-spend API budget on them)",
+    )
     args = parser.parse_args()
 
     stats = run_google_places_resolver(
@@ -491,6 +626,7 @@ if __name__ == "__main__":
         mode=args.mode,
         max_calls=args.max_calls,
         dry_run=args.dry_run,
+        retry_failed=args.retry_failed,
     )
     print(f"\n--- Google Places URL Resolution Stats ---")
     if isinstance(stats.get("brand_phase"), dict):

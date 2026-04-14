@@ -1244,6 +1244,35 @@ class MealDeal(Base):
         }
 
 
+class GooglePlacesFailure(Base):
+    """Tracks brands/employers that returned no result from Google Places API.
+
+    Used to avoid wasting API budget re-resolving known failures.
+    Run the resolver with --retry-failed to attempt these again.
+
+    failure_reason values:
+      no_website  — API returned a place but no websiteUri
+      no_result   — API returned no matching place at all
+      api_error   — HTTP error (non-429)
+
+    retry_count increments each time a retry attempt is made and still fails,
+    so you can prioritise / deprioritise based on how many times we've tried.
+    """
+    __tablename__ = "google_places_failures"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    entity_type    = Column(String(20), nullable=False)   # 'brand_group' | 'local_employer'
+    entity_id      = Column(Integer, nullable=False)
+    canonical_name = Column(String(255), nullable=True)   # human-readable for manual lookup
+    failure_reason = Column(String(20), nullable=True)    # no_website | no_result | api_error
+    failed_at      = Column(DateTime, default=datetime.utcnow)
+    retry_count    = Column(Integer, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("entity_type", "entity_id", name="uq_gp_failure_entity"),
+    )
+
+
 # ── Engine + Session factory ─────────────────────────────────────────────────
 
 def get_engine(db_path: Path | None = None):
