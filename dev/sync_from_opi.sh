@@ -13,6 +13,8 @@
 #   public.burn_pool          — monthly burned-session aggregates
 #   public.contributors       — anonymous contributor volume
 #   dev_capture.raw_signals   — dev-mode raw HTML / extracted / sanitized captures
+#   public.restaurant_urls    — resolved URLs (OSM, Google Places, manual)
+#   public.meal_deals         — scraped deal data with price/calorie fields
 #
 # What it does NOT sync (rebuild those separately):
 #   ref_*, oews_*, mob_*, brand_groups, local_employers, scores, meta_*
@@ -70,6 +72,8 @@ TABLES=(
     "public.burn_pool"
     "public.contributors"
     "dev_capture.raw_signals"
+    "public.restaurant_urls"
+    "public.meal_deals"
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
