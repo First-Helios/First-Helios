@@ -45,6 +45,7 @@ else
   LIVE_GOOGLE_CALLS="${LIVE_GOOGLE_CALLS:-200}"
   DRY_MAX_SITES="${DRY_MAX_SITES:-100}"
   LIVE_MAX_SITES="${LIVE_MAX_SITES:-200}"
+  SCRAPER_SKIP_DAYS="${SCRAPER_SKIP_DAYS:-}"   # default: no skip filter in normal mode
   RUN_STALE_SWEEP="${RUN_STALE_SWEEP:-1}"
 fi
 
@@ -270,7 +271,11 @@ echo "---- Phase 2: Live pipeline ----"
 run_step python collectors/meal_deals/osm_url_resolver.py
 run_step python collectors/meal_deals/google_places_resolver.py --mode both --max-calls "$LIVE_GOOGLE_CALLS"
 run_step python collectors/meal_deals/chain_deals.py
-run_step python collectors/meal_deals/website_scraper.py --max-sites "$LIVE_MAX_SITES"
+if [[ -n "${SCRAPER_SKIP_DAYS:-}" ]]; then
+  run_step python collectors/meal_deals/website_scraper.py --max-sites "$LIVE_MAX_SITES" --skip-checked-days "$SCRAPER_SKIP_DAYS"
+else
+  run_step python collectors/meal_deals/website_scraper.py --max-sites "$LIVE_MAX_SITES"
+fi
 
 if [[ "$RUN_STALE_SWEEP" == "1" ]]; then
   run_step python - <<'PY'
