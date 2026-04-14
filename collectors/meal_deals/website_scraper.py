@@ -58,12 +58,23 @@ _DEAL_KEYWORDS = [
 ]
 
 # Self-validating keywords — strong deal signals that don't need a price.
+# Keep this set VERY tight: only phrases that are unambiguously a deal.
 _SELF_VALIDATING_KEYWORDS = {
     "bogo", "buy one get one", "buy one, get one",
-    "buy one", "kids eat free", "kids meal free", "happy hour",
-    "early bird", "meal deal", "half off", "half price",
-    "for the price of", "% off",
+    "kids eat free", "happy hour",
+    "half off", "half price", "% off",
 }
+
+# Negative-context patterns — when these appear, the block is NOT a deal
+# even if it contains a deal keyword. Compiled once at import time.
+_NEGATIVE_CONTEXT_PATTERNS = [
+    re.compile(r"\bspecial\s+occasion", re.IGNORECASE),
+    re.compile(r"\bspecialt(?:y|ies)\b", re.IGNORECASE),
+    re.compile(r"\bno\s+substitution", re.IGNORECASE),
+    re.compile(r"\bpre-?order\b", re.IGNORECASE),
+    re.compile(r"\bskip\s+to\s+(?:content|main)", re.IGNORECASE),
+    re.compile(r"open\s+menu.*close\s+menu", re.IGNORECASE),
+]
 
 # Phrases that mark navigational / boilerplate / ad content.
 _BOILERPLATE_PHRASES = [
@@ -74,6 +85,9 @@ _BOILERPLATE_PHRASES = [
     "download the app", "mobile app",
     "international sites", "franchise",
     "copyright", "all rights reserved",
+    "skip to content", "skip to main",
+    "open menu close menu",
+    "locations specials jobs",
 ]
 
 # Spam / ad content blocklist — gambling, pharma, unrelated marketing.
@@ -253,24 +267,38 @@ def _is_boilerplate(text: str) -> bool:
     return False
 
 
+# Pre-compiled word-boundary regex for deal keywords.
+# Using \b prevents 'special' from matching 'specialty'.
+_DEAL_KEYWORD_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(kw) for kw in _DEAL_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
 def _has_deal_keywords(text: str) -> bool:
-    """Check if a text block contains deal-related keywords."""
-    text_lower = text.lower()
-    return any(kw in text_lower for kw in _DEAL_KEYWORDS)
+    """Check if a text block contains deal-related keywords (word-boundary)."""
+    return bool(_DEAL_KEYWORD_RE.search(text))
+
+
+def _is_negative_context(text: str) -> bool:
+    """Return True if text has anti-deal context that overrides keywords."""
+    return any(pat.search(text) for pat in _NEGATIVE_CONTEXT_PATTERNS)
 
 
 def _is_valid_deal_block(text: str) -> bool:
-    """A valid deal must have semantic structure, not just keywords.
+    """A valid deal must contain a price OR a self-validating keyword.
 
     Requirements (must pass ALL):
       1. NOT boilerplate / spam
-      2. Contains at least one deal keyword
-      3. AND one of:
-         a. A price ($X.XX)
-         b. A time pattern + day pattern ("Mon-Fri 2-6pm")
-         c. A self-validating keyword ("BOGO", "kids eat free", etc.)
+      2. NOT negative context ("special occasion", "pre-order", etc.)
+      3. Contains at least one deal keyword (word-boundary matched)
+      4. AND one of:
+         a. A price ($X.XX) in the same text block
+         b. A self-validating keyword ("BOGO", "kids eat free", etc.)
     """
     if _is_boilerplate(text):
+        return False
+    if _is_negative_context(text):
         return False
     if not _has_deal_keywords(text):
         return False
@@ -278,14 +306,8 @@ def _is_valid_deal_block(text: str) -> bool:
     # Self-validating phrases are strong enough alone
     if any(kw in lower for kw in _SELF_VALIDATING_KEYWORDS):
         return True
-    has_price = bool(_PRICE_RE.search(text))
-    if has_price:
-        return True
-    has_time = bool(_TIME_PATTERN.search(text))
-    has_day = bool(_DAY_PATTERN.search(text))
-    if has_time and has_day:
-        return True
-    return False
+    # Otherwise, a price MUST be present in this text block
+    return bool(_PRICE_RE.search(text))
 
 
 def _classify_deal_type(text: str) -> str:

@@ -46,6 +46,9 @@ _BOILERPLATE_PHRASES = [
     "download the app", "mobile app",
     "international sites", "franchise",
     "copyright", "all rights reserved",
+    "skip to content", "skip to main",
+    "open menu close menu",
+    "locations specials jobs",
 ]
 
 # Price pattern
@@ -62,9 +65,8 @@ _DAY_RE = re.compile(
 
 _SELF_VALIDATING = {
     "bogo", "buy one get one", "buy one, get one",
-    "buy one", "kids eat free", "kids meal free", "happy hour",
-    "early bird", "meal deal", "half off", "half price",
-    "for the price of", "% off",
+    "kids eat free", "happy hour",
+    "half off", "half price", "% off",
 }
 
 _DEAL_KEYWORDS = [
@@ -75,6 +77,22 @@ _DEAL_KEYWORDS = [
     "limited time", "save", "promotion", "offer",
     "half off", "half price", "% off",
     "for the price of", "2 for",
+]
+
+# Word-boundary regex for keywords (prevents 'special' matching 'specialty')
+_DEAL_KEYWORD_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(kw) for kw in _DEAL_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+# Negative-context patterns — override deal keyword matches
+_NEGATIVE_CONTEXT_PATTERNS = [
+    re.compile(r"\bspecial\s+occasion", re.IGNORECASE),
+    re.compile(r"\bspecialt(?:y|ies)\b", re.IGNORECASE),
+    re.compile(r"\bno\s+substitution", re.IGNORECASE),
+    re.compile(r"\bpre-?order\b", re.IGNORECASE),
+    re.compile(r"\bskip\s+to\s+(?:content|main)", re.IGNORECASE),
+    re.compile(r"open\s+menu.*close\s+menu", re.IGNORECASE),
 ]
 
 
@@ -98,29 +116,24 @@ def _is_junk(deal_name: str, deal_description: str | None, source: str = "") -> 
     if source == "chain_website":
         return False, ""
 
-    # 3. No deal keyword at all (website_scrape only)
-    has_keyword = any(kw in lower for kw in _DEAL_KEYWORDS)
+    # 3. Negative context (overrides keywords)
+    if any(pat.search(text) for pat in _NEGATIVE_CONTEXT_PATTERNS):
+        return True, "negative_context"
+
+    # 4. No deal keyword at all (word-boundary matched)
+    has_keyword = bool(_DEAL_KEYWORD_RE.search(text))
     if not has_keyword:
         return True, "no_deal_keyword"
 
-    # 4. Has keyword but no semantic structure (no price, no time+day, no self-validating)
+    # 5. Has keyword but no price and no self-validating phrase → junk
     if any(kw in lower for kw in _SELF_VALIDATING):
         return False, ""
     has_price = bool(_PRICE_RE.search(text))
     if has_price:
         return False, ""
-    has_time = bool(_TIME_RE.search(text))
-    has_day = bool(_DAY_RE.search(text))
-    if has_time and has_day:
-        return False, ""
 
-    # Keyword only, no substance (e.g. "Offers & Deals", "Daily Deals", "Menu Deals PAPA REWARDS")
-    # Be lenient if the deal_name is long enough to plausibly contain real info
-    name_lower = deal_name.lower().strip()
-    if len(name_lower) < 40:
-        return True, "keyword_only_no_substance"
-
-    return False, ""
+    # Keyword only, no price → junk
+    return True, "keyword_only_no_price"
 
 
 def main() -> None:
