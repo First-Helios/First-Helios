@@ -330,12 +330,13 @@ class WebsiteDealCollector:
         dry_run: bool = False,
     ) -> list[DealSignal]:
         """Scrape websites and return DealSignals."""
-        from core.database import MealDeal, RestaurantURL, get_engine, get_session, init_db
+        from core.database import LocalEmployer, MealDeal, RestaurantURL, get_engine, get_session, init_db
 
         engine = init_db()
         session = get_session(engine)
 
         all_signals: list[DealSignal] = []
+        urls: list = []
 
         try:
             # Find restaurant_urls that:
