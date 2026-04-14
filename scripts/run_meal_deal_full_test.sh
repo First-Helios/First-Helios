@@ -91,7 +91,27 @@ PY
     run_step alembic stamp head
   fi
 
-  run_step alembic upgrade head
+  echo
+  echo "==== alembic upgrade head ===="
+  local upgrade_log
+  upgrade_log="$REPORT_DIR/alembic_upgrade.log"
+
+  if alembic upgrade head >"$upgrade_log" 2>&1; then
+    cat "$upgrade_log"
+    return 0
+  fi
+
+  cat "$upgrade_log"
+
+  if grep -Eqi "DuplicateTable|already exists" "$upgrade_log"; then
+    echo "Detected DuplicateTable during upgrade; stamping head and retrying once."
+    run_step alembic stamp head
+    run_step alembic upgrade head
+    return 0
+  fi
+
+  echo "Alembic upgrade failed for a non-recoverable reason."
+  return 1
 }
 
 write_snapshot() {
