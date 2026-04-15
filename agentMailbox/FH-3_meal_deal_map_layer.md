@@ -1,4 +1,4 @@
-# FH-3: Meal Deal Map Layer Integration
+1# FH-3: Meal Deal Map Layer Integration
 
 > **Date:** 2026-04-13
 > **Status:** Backend ready — frontend integration pending
