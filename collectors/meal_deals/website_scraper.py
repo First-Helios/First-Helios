@@ -196,9 +196,20 @@ REQUEST_TIMEOUT = 15
 _SCRAPE_AUDIT_PATH = Path(__file__).parent.parent.parent / "data" / "cache" / "website_scrape_audit.json"
 
 
-def _write_scrape_audit(entries: list[dict]) -> None:
-    """Write the scrape audit log (overwritten each run with full results)."""
+def _write_scrape_audit(entries: list[dict], append: bool = False) -> None:
+    """Write the scrape audit log.
+
+    When append=True, merges new entries into the existing file (used by
+    chunked processing so earlier chunks aren't lost).
+    """
     _SCRAPE_AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if append and _SCRAPE_AUDIT_PATH.exists():
+        try:
+            existing = json.loads(_SCRAPE_AUDIT_PATH.read_text())
+            if isinstance(existing, list):
+                entries = existing + entries
+        except (json.JSONDecodeError, OSError):
+            pass  # overwrite if corrupt
     _SCRAPE_AUDIT_PATH.write_text(json.dumps(entries, indent=2))
 
 
@@ -1094,6 +1105,8 @@ class WebsiteDealCollector:
 
     SOURCE = "website_scraper"
 
+    CHUNK_SIZE = 100  # Scrape/ingest in batches to avoid data loss and RAM buildup
+
     def collect(
         self,
         region: str = "austin_tx",
@@ -1101,21 +1114,24 @@ class WebsiteDealCollector:
         dry_run: bool = False,
         skip_checked_days: int | None = 3,
     ) -> list[DealSignal]:
-        """Scrape websites and return DealSignals."""
+        """Scrape websites and return DealSignals.
+
+        Processes in chunks of CHUNK_SIZE unique URLs.  After each chunk the
+        DB is committed (last_checked updates), signals are ingested, and the
+        audit log is flushed to disk.  This means a crash at site #350 still
+        keeps the first 300 sites' data.
+        """
+        from collections import defaultdict
         from core.database import LocalEmployer, MealDeal, RestaurantURL, get_engine, get_session, init_db
 
         engine = init_db()
         session = get_session(engine)
 
         all_signals: list[DealSignal] = []
-        urls: list = []
+        url_groups: dict[str, list[tuple]] = {}
 
         try:
-            # Find restaurant_urls that:
-            # 1. Are active
-            # 2. Haven't been checked recently (or never checked for deals)
-            # 3. Are for food employers
-            # Priority: check sites we haven't visited recently first.
+            # ── Build URL list ──────────────────────────────────────────
             url_filters = [
                 RestaurantURL.is_active.is_(True),
                 LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
@@ -1144,133 +1160,159 @@ class WebsiteDealCollector:
             ).limit(max_sites).all()
 
             # ── Deduplicate by URL ──────────────────────────────────────
-            # Multiple locations (e.g. 3 Taco Cabana stores) share the same
-            # website URL.  Group them so we scrape each unique URL once and
-            # fan out the resulting signals to every location.
-            from collections import defaultdict
-            url_groups: dict[str, list[tuple]] = defaultdict(list)
+            url_groups_raw: dict[str, list[tuple]] = defaultdict(list)
             for rurl, emp in urls:
                 normalized = rurl.url.rstrip("/").lower()
-                url_groups[normalized].append((rurl, emp))
+                url_groups_raw[normalized].append((rurl, emp))
+            # Convert to regular dict so we can slice it
+            url_groups = dict(url_groups_raw)
 
+            total_unique = len(url_groups)
             logger.info(
                 "[WebScraper] Scanning %d unique websites (%d restaurant_url rows)",
-                len(url_groups), len(urls),
+                total_unique, len(urls),
             )
 
-            audit_entries: list[dict] = []   # Track all scrape outcomes for manual review
+            # ── Process in chunks ───────────────────────────────────────
+            # Clear audit log at the start of a fresh run
+            if _SCRAPE_AUDIT_PATH.exists():
+                _SCRAPE_AUDIT_PATH.unlink()
 
-            for _norm_url, group in url_groups.items():
-                # Use the first entry as the representative for scraping
-                rurl_rep, emp_rep = group[0]
+            group_items = list(url_groups.items())
+            total_ingested = 0
+            is_first_chunk = True
 
-                site_audit: dict[str, Any] = {
-                    "employer_id": emp_rep.id,
-                    "name": emp_rep.name,
-                    "url": rurl_rep.url,
-                    "locations_sharing_url": len(group),
-                    "scraped_at": datetime.now(timezone.utc).isoformat(),
-                    "deals_found": 0,
-                    "outcome": "pending",
-                }
-                try:
-                    signals = scrape_restaurant_website(
-                        url=rurl_rep.url,
-                        restaurant_name=emp_rep.name,
-                        local_employer_id=emp_rep.id,
-                        brand_group_id=emp_rep.brand_group_id,
-                        region=region,
+            for chunk_start in range(0, len(group_items), self.CHUNK_SIZE):
+                chunk = group_items[chunk_start : chunk_start + self.CHUNK_SIZE]
+                chunk_num = chunk_start // self.CHUNK_SIZE + 1
+                chunk_end = min(chunk_start + self.CHUNK_SIZE, len(group_items))
+                logger.info(
+                    "[WebScraper] ── Chunk %d: sites %d–%d of %d ──",
+                    chunk_num, chunk_start + 1, chunk_end, total_unique,
+                )
+
+                chunk_signals: list[DealSignal] = []
+                chunk_audit: list[dict] = []
+
+                for _norm_url, group in chunk:
+                    rurl_rep, emp_rep = group[0]
+
+                    site_audit: dict[str, Any] = {
+                        "employer_id": emp_rep.id,
+                        "name": emp_rep.name,
+                        "url": rurl_rep.url,
+                        "locations_sharing_url": len(group),
+                        "scraped_at": datetime.now(timezone.utc).isoformat(),
+                        "deals_found": 0,
+                        "outcome": "pending",
+                    }
+                    try:
+                        signals = scrape_restaurant_website(
+                            url=rurl_rep.url,
+                            restaurant_name=emp_rep.name,
+                            local_employer_id=emp_rep.id,
+                            brand_group_id=emp_rep.brand_group_id,
+                            region=region,
+                        )
+
+                        if signals:
+                            logger.info(
+                                "[WebScraper] %s: %d deals found at %s (%d locations)",
+                                emp_rep.name, len(signals), rurl_rep.url, len(group),
+                            )
+                            # Fan out signals to every location sharing this URL.
+                            # Set local_employer_id per location so ingest doesn't
+                            # double-fan-out via brand_fingerprint.
+                            for rurl_loc, emp_loc in group:
+                                for sig in signals:
+                                    loc_sig = DealSignal(
+                                        restaurant_name=emp_loc.name,
+                                        brand_fingerprint=None,
+                                        local_employer_id=emp_loc.id,
+                                        brand_group_id=emp_loc.brand_group_id,
+                                        deal_name=sig.deal_name,
+                                        deal_description=sig.deal_description,
+                                        deal_type=sig.deal_type,
+                                        price=sig.price,
+                                        source=sig.source,
+                                        source_url=sig.source_url,
+                                        region=region,
+                                        observed_at=sig.observed_at,
+                                    )
+                                    chunk_signals.append(loc_sig)
+                            site_audit["deals_found"] = len(signals)
+                            site_audit["outcome"] = "deals_found"
+                            site_audit["deal_names"] = [s.deal_name[:80] for s in signals]
+                        else:
+                            site_audit["outcome"] = "no_deals"
+                            try:
+                                html = _fetch_page(rurl_rep.url, _get_user_agent())
+                                if html:
+                                    soup = BeautifulSoup(html, "html.parser")
+                                    blocks = _extract_text_blocks(soup)
+                                    site_audit["sample_blocks"] = [b[:200] for b in blocks[:10]]
+                                    site_audit["total_blocks"] = len(blocks)
+                                    pdf_links = _discover_pdf_links(soup, rurl_rep.url)
+                                    if pdf_links:
+                                        site_audit["pdf_links"] = pdf_links[:5]
+                                        site_audit["needs_pdf_reader"] = not _HAS_PDFPLUMBER
+                                    disc = _discover_deal_pages(soup, rurl_rep.url)
+                                    if disc:
+                                        site_audit["discovered_pages"] = disc
+                            except Exception:
+                                pass  # audit is best-effort
+
+                        # Update ALL restaurant_url records sharing this URL
+                        if not dry_run:
+                            for rurl_loc, _emp_loc in group:
+                                rurl_loc.last_checked = datetime.now(timezone.utc)
+                                rurl_loc.has_deals_page = len(signals) > 0
+                                rurl_loc.last_http_status = 200
+                            session.flush()
+
+                    except Exception as e:
+                        logger.warning("[WebScraper] Error scraping %s: %s", rurl_rep.url, e)
+                        site_audit["outcome"] = "error"
+                        site_audit["error"] = str(e)[:200]
+                        if not dry_run:
+                            status = getattr(getattr(e, 'response', None), 'status_code', 0)
+                            for rurl_loc, _emp_loc in group:
+                                rurl_loc.last_checked = datetime.now(timezone.utc)
+                                if status:
+                                    rurl_loc.last_http_status = status
+                            session.flush()
+
+                    finally:
+                        chunk_audit.append(site_audit)
+
+                # ── End of chunk: commit, ingest, flush audit ───────────
+                if not dry_run:
+                    session.commit()
+
+                # Ingest this chunk's signals immediately
+                if not dry_run and chunk_signals:
+                    from collectors.meal_deals.ingest import ingest_deal_signals
+                    stats = ingest_deal_signals(chunk_signals, region=region)
+                    total_ingested += stats.get("total_rows", 0)
+                    logger.info(
+                        "[WebScraper] Chunk %d ingested: %d rows (%d total so far)",
+                        chunk_num, stats.get("total_rows", 0), total_ingested,
                     )
 
-                    if signals:
-                        logger.info(
-                            "[WebScraper] %s: %d deals found at %s (%d locations)",
-                            emp_rep.name, len(signals), rurl_rep.url, len(group),
-                        )
-                        # Fan out signals to every location sharing this URL.
-                        # Set local_employer_id per location so ingest doesn't
-                        # double-fan-out via brand_fingerprint.
-                        for rurl_loc, emp_loc in group:
-                            for sig in signals:
-                                loc_sig = DealSignal(
-                                    restaurant_name=emp_loc.name,
-                                    brand_fingerprint=None,
-                                    local_employer_id=emp_loc.id,
-                                    brand_group_id=emp_loc.brand_group_id,
-                                    deal_name=sig.deal_name,
-                                    deal_description=sig.deal_description,
-                                    deal_type=sig.deal_type,
-                                    price=sig.price,
-                                    source=sig.source,
-                                    source_url=sig.source_url,
-                                    region=region,
-                                    observed_at=sig.observed_at,
-                                )
-                                all_signals.append(loc_sig)
-                        site_audit["deals_found"] = len(signals)
-                        site_audit["outcome"] = "deals_found"
-                        site_audit["deal_names"] = [s.deal_name[:80] for s in signals]
-                    else:
-                        site_audit["outcome"] = "no_deals"
-                        # Grab candidate text blocks for manual review
-                        try:
-                            html = _fetch_page(rurl_rep.url, _get_user_agent())
-                            if html:
-                                soup = BeautifulSoup(html, "html.parser")
-                                blocks = _extract_text_blocks(soup)
-                                # Sample up to 10 blocks for manual review
-                                site_audit["sample_blocks"] = [b[:200] for b in blocks[:10]]
-                                site_audit["total_blocks"] = len(blocks)
-                                # Note if site has PDFs that failed to parse
-                                pdf_links = _discover_pdf_links(soup, rurl_rep.url)
-                                if pdf_links:
-                                    site_audit["pdf_links"] = pdf_links[:5]
-                                    site_audit["needs_pdf_reader"] = not _HAS_PDFPLUMBER
-                                # Note discovered subpages
-                                disc = _discover_deal_pages(soup, rurl_rep.url)
-                                if disc:
-                                    site_audit["discovered_pages"] = disc
-                        except Exception:
-                            pass  # audit is best-effort
+                all_signals.extend(chunk_signals)
 
-                    # Update ALL restaurant_url records sharing this URL
-                    if not dry_run:
-                        for rurl_loc, _emp_loc in group:
-                            rurl_loc.last_checked = datetime.now(timezone.utc)
-                            rurl_loc.has_deals_page = len(signals) > 0
-                            rurl_loc.last_http_status = 200
-                        session.flush()
+                # Append audit entries (first chunk overwrites, rest append)
+                if chunk_audit:
+                    _write_scrape_audit(chunk_audit, append=not is_first_chunk)
+                    is_first_chunk = False
+                    deals_found = sum(1 for e in chunk_audit if e["outcome"] == "deals_found")
+                    logger.info(
+                        "[WebScraper] Chunk %d audit: %d scraped, %d with deals",
+                        chunk_num, len(chunk_audit), deals_found,
+                    )
 
-                except Exception as e:
-                    logger.warning("[WebScraper] Error scraping %s: %s", rurl_rep.url, e)
-                    site_audit["outcome"] = "error"
-                    site_audit["error"] = str(e)[:200]
-                    if not dry_run:
-                        status = getattr(getattr(e, 'response', None), 'status_code', 0)
-                        for rurl_loc, _emp_loc in group:
-                            rurl_loc.last_checked = datetime.now(timezone.utc)
-                            if status:
-                                rurl_loc.last_http_status = status
-                        session.flush()
-                    continue
-
-                finally:
-                    audit_entries.append(site_audit)
-
-            if not dry_run:
-                session.commit()
-
-            # Write scrape audit log
-            if audit_entries:
-                _write_scrape_audit(audit_entries)
-                no_deals = sum(1 for e in audit_entries if e["outcome"] == "no_deals")
-                has_pdf = sum(1 for e in audit_entries if e.get("pdf_links"))
-                has_disc = sum(1 for e in audit_entries if e.get("discovered_pages"))
-                logger.info(
-                    "[WebScraper] Audit: %d sites scraped, %d no deals, %d have PDFs, %d had discovered pages",
-                    len(audit_entries), no_deals, has_pdf, has_disc,
-                )
-                logger.info("[WebScraper] Audit log written to %s", _SCRAPE_AUDIT_PATH)
+                # Free memory between chunks
+                del chunk_signals, chunk_audit
 
         except Exception as exc:
             session.rollback()
@@ -1278,7 +1320,10 @@ class WebsiteDealCollector:
         finally:
             session.close()
 
-        logger.info("[WebScraper] Total: %d deal signals from %d unique sites", len(all_signals), len(url_groups))
+        logger.info(
+            "[WebScraper] Done: %d deal signals from %d unique sites (%d ingested to DB)",
+            len(all_signals), len(url_groups), total_ingested,
+        )
         return all_signals
 
 
@@ -1288,20 +1333,15 @@ def run_website_scraper(
     dry_run: bool = False,
     skip_checked_days: int | None = 3,
 ) -> dict:
-    """Run the website scraper and ingest results."""
+    """Run the website scraper.
+
+    Ingestion happens per-chunk inside collect() — no bulk ingest at the end.
+    """
     collector = WebsiteDealCollector()
     signals = collector.collect(
         region=region, max_sites=max_sites, dry_run=dry_run,
         skip_checked_days=skip_checked_days,
     )
-
-    if not dry_run and signals:
-        from collectors.meal_deals.ingest import ingest_deal_signals
-        stats = ingest_deal_signals(signals, region=region)
-        return {
-            "signals_found": len(signals),
-            "ingest": stats,
-        }
 
     return {
         "signals_found": len(signals),
