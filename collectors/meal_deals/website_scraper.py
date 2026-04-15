@@ -18,6 +18,7 @@ import logging
 import re
 import time
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -29,6 +30,12 @@ from bs4 import BeautifulSoup, Tag
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
 from collectors.rotation import _load as _load_rotation
+
+try:
+    import pdfplumber
+    _HAS_PDFPLUMBER = True
+except ImportError:
+    _HAS_PDFPLUMBER = False
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +145,44 @@ _DEAL_TYPE_MAP = {
     "value": "combo",
     "early bird": "daily_special",
 }
+
+# JSON-LD extraction regex — same pattern proven in collectors/events/austintexas_org.py
+_JSONLD_RE = re.compile(
+    r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
+    re.DOTALL,
+)
+
+# Schema.org types that may contain deals or menu items with prices
+_DEAL_SCHEMA_TYPES = frozenset([
+    "Offer", "AggregateOffer", "MenuItem", "MenuSection",
+    "Menu", "Restaurant", "FoodEstablishment",
+])
+
+# URL path fragments that suggest a deal-related page (for link discovery)
+_DEAL_URL_KEYWORDS = frozenset([
+    "special", "specials", "deal", "deals", "offer", "offers",
+    "promo", "promotion", "promotions", "happy-hour", "happyhour",
+    "lunch", "dinner", "menu", "price", "coupon", "coupons",
+    "combo", "value", "discount", "weekly", "daily", "today",
+])
+
+# URL paths that are definitely NOT deal pages — exclude from discovery
+_NON_DEAL_URL_KEYWORDS = frozenset([
+    "career", "careers", "jobs", "about", "contact", "privacy",
+    "terms", "login", "signin", "sign-up", "signup", "account",
+    "order", "delivery", "catering", "franchise", "blog", "news",
+    "press", "media", "faq", "help", "support", "donate",
+    "gift", "rewards", "loyalty", "app", "download",
+    "reservation", "reservations", "book", "booking",
+    "events", "gallery", "photos", "team", "staff",
+    "sitemap", "feed", "rss", "xml",
+])
+
+# Maximum page budget per site (hardcoded + discovered)
+MAX_PAGES_PER_SITE = 12
+
+# Maximum PDFs to parse per site
+MAX_PDFS_PER_SITE = 3
 
 # Maximum page size to process (avoid huge pages)
 MAX_PAGE_SIZE = 500_000  # 500KB
@@ -251,13 +296,36 @@ def _extract_text_blocks(soup: BeautifulSoup) -> list[str]:
     # Remove entire nav/footer/script subtrees first so nested tags don't leak.
     for bad in soup.find_all(_SKIP_TAG_NAMES):
         bad.decompose()
+
+    # Original tags with established length thresholds
+    _CORE_TAGS = frozenset(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td"])
+    # Structural tags — often wrap large text, so use tighter length bounds
+    _STRUCTURAL_TAGS = frozenset(["div", "span", "article", "section"])
+
     blocks = []
-    for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "li", "td"]):
+    seen_text: set[str] = set()  # avoid duplicate blocks from nested tags
+
+    for tag in soup.find_all(list(_CORE_TAGS | _STRUCTURAL_TAGS)):
         if _should_skip_tag(tag):
             continue
         text = tag.get_text(separator=" ", strip=True)
-        if text and 15 < len(text) < 400:
-            blocks.append(text)
+        if not text:
+            continue
+
+        # Apply tag-appropriate length bounds
+        if tag.name in _STRUCTURAL_TAGS:
+            if not (25 < len(text) < 300):
+                continue
+        else:
+            if not (15 < len(text) < 400):
+                continue
+
+        # Dedup: skip if this exact text was already captured by a parent/child
+        if text in seen_text:
+            continue
+        seen_text.add(text)
+        blocks.append(text)
+
     return blocks
 
 
@@ -383,6 +451,469 @@ def _extract_times(text: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _extract_jsonld_deals(
+    html: str,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    source_url: str,
+    region: str,
+    seen_deals: set[str],
+) -> list[DealSignal]:
+    """Extract deal signals from JSON-LD structured data on the page.
+
+    Looks for schema.org Offer, MenuItem, Menu, MenuSection, Restaurant,
+    and FoodEstablishment types. Applies the same deal-validation logic
+    as text-block extraction to avoid ingesting regular menu items.
+
+    Pattern adapted from collectors/events/austintexas_org.py:266-299.
+    """
+    signals: list[DealSignal] = []
+
+    for match in _JSONLD_RE.finditer(html):
+        try:
+            ld_data = json.loads(match.group(1))
+            items = ld_data if isinstance(ld_data, list) else [ld_data]
+
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                # Handle @graph arrays (common in WordPress sites)
+                if item.get("@graph"):
+                    graph = item["@graph"]
+                    if isinstance(graph, list):
+                        items.extend(graph)
+                    continue
+
+                item_type = item.get("@type", "")
+                # Normalize list types like ["Restaurant", "FoodEstablishment"]
+                if isinstance(item_type, list):
+                    item_type = item_type[0] if item_type else ""
+
+                if item_type not in _DEAL_SCHEMA_TYPES:
+                    continue
+
+                # Route by type
+                if item_type in ("Offer", "AggregateOffer"):
+                    _jsonld_offer_to_signal(
+                        item, restaurant_name, local_employer_id,
+                        brand_group_id, source_url, region,
+                        seen_deals, signals,
+                    )
+                elif item_type == "MenuItem":
+                    _jsonld_menuitem_to_signal(
+                        item, restaurant_name, local_employer_id,
+                        brand_group_id, source_url, region,
+                        seen_deals, signals,
+                    )
+                elif item_type == "MenuSection":
+                    # MenuSection contains a list of MenuItems
+                    for menu_item in item.get("hasMenuItem", []):
+                        if isinstance(menu_item, dict):
+                            _jsonld_menuitem_to_signal(
+                                menu_item, restaurant_name, local_employer_id,
+                                brand_group_id, source_url, region,
+                                seen_deals, signals,
+                            )
+                elif item_type == "Menu":
+                    # Menu → hasMenuSection → hasMenuItem
+                    for section in item.get("hasMenuSection", []):
+                        if isinstance(section, dict):
+                            for menu_item in section.get("hasMenuItem", []):
+                                if isinstance(menu_item, dict):
+                                    _jsonld_menuitem_to_signal(
+                                        menu_item, restaurant_name, local_employer_id,
+                                        brand_group_id, source_url, region,
+                                        seen_deals, signals,
+                                    )
+                elif item_type in ("Restaurant", "FoodEstablishment"):
+                    # Check for nested offers
+                    offers = item.get("makesOffer") or item.get("offers") or []
+                    if isinstance(offers, dict):
+                        offers = [offers]
+                    for offer in offers:
+                        if isinstance(offer, dict):
+                            _jsonld_offer_to_signal(
+                                offer, restaurant_name, local_employer_id,
+                                brand_group_id, source_url, region,
+                                seen_deals, signals,
+                            )
+                    # Check for nested menu
+                    menu = item.get("hasMenu")
+                    if isinstance(menu, dict) and menu.get("@type") == "Menu":
+                        for section in menu.get("hasMenuSection", []):
+                            if isinstance(section, dict):
+                                for mi in section.get("hasMenuItem", []):
+                                    if isinstance(mi, dict):
+                                        _jsonld_menuitem_to_signal(
+                                            mi, restaurant_name, local_employer_id,
+                                            brand_group_id, source_url, region,
+                                            seen_deals, signals,
+                                        )
+
+        except (json.JSONDecodeError, KeyError, TypeError):
+            continue
+
+    return signals
+
+
+def _jsonld_offer_to_signal(
+    offer: dict,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    source_url: str,
+    region: str,
+    seen_deals: set[str],
+    signals: list[DealSignal],
+) -> None:
+    """Convert a schema.org Offer to a DealSignal if it passes deal validation."""
+    name = offer.get("name") or offer.get("description", "")
+    if not name:
+        return
+
+    # Build text for deal validation
+    desc = offer.get("description", "")
+    text = f"{name} {desc}".strip()
+
+    # Must pass the same validation as text-block deals
+    if not _is_valid_deal_block(text):
+        return
+
+    name_key = name[:80].lower()
+    if name_key in seen_deals:
+        return
+    seen_deals.add(name_key)
+
+    price = None
+    raw_price = offer.get("price")
+    if raw_price is not None:
+        try:
+            price = float(raw_price)
+        except (ValueError, TypeError):
+            price = _extract_price(str(raw_price))
+
+    deal_type = _classify_deal_type(text)
+    valid_days = _extract_days(text)
+    start_time, end_time = _extract_times(text)
+
+    signals.append(DealSignal(
+        restaurant_name=restaurant_name,
+        local_employer_id=local_employer_id,
+        brand_group_id=brand_group_id,
+        deal_name=name[:80],
+        deal_description=text[:500],
+        deal_type=deal_type,
+        price=price,
+        valid_days=valid_days,
+        valid_start_time=start_time,
+        valid_end_time=end_time,
+        source="website_scrape",
+        source_url=source_url,
+        region=region,
+        observed_at=datetime.utcnow(),
+    ))
+
+
+def _jsonld_menuitem_to_signal(
+    item: dict,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    source_url: str,
+    region: str,
+    seen_deals: set[str],
+    signals: list[DealSignal],
+) -> None:
+    """Convert a schema.org MenuItem to a DealSignal if it looks like a deal."""
+    name = item.get("name", "")
+    desc = item.get("description", "")
+    text = f"{name} {desc}".strip()
+    if not text:
+        return
+
+    # Must pass deal validation — prevents ingesting plain menu items
+    if not _is_valid_deal_block(text):
+        return
+
+    name_key = name[:80].lower()
+    if name_key in seen_deals:
+        return
+    seen_deals.add(name_key)
+
+    # Extract price from nested offers
+    price = None
+    offers = item.get("offers")
+    if isinstance(offers, dict):
+        try:
+            price = float(offers.get("price", 0))
+        except (ValueError, TypeError):
+            pass
+    elif isinstance(offers, list) and offers:
+        try:
+            price = float(offers[0].get("price", 0))
+        except (ValueError, TypeError):
+            pass
+    if not price:
+        price = _extract_price(text)
+
+    # Extract calories from nutrition
+    calories = None
+    nutrition = item.get("nutrition")
+    if isinstance(nutrition, dict):
+        cal_val = nutrition.get("calories")
+        if cal_val is not None:
+            try:
+                cal_int = int(str(cal_val).replace(" calories", "").replace(" cal", ""))
+                if 50 <= cal_int <= 5000:
+                    calories = cal_int
+            except (ValueError, TypeError):
+                pass
+    if not calories:
+        calories = _extract_calories(text)
+
+    calorie_price_ratio = None
+    if calories and price and price > 0:
+        calorie_price_ratio = round(calories / price, 1)
+
+    deal_type = _classify_deal_type(text)
+    valid_days = _extract_days(text)
+    start_time, end_time = _extract_times(text)
+
+    signals.append(DealSignal(
+        restaurant_name=restaurant_name,
+        local_employer_id=local_employer_id,
+        brand_group_id=brand_group_id,
+        deal_name=name[:80],
+        deal_description=text[:500],
+        deal_type=deal_type,
+        price=price,
+        calories=calories,
+        calorie_price_ratio=calorie_price_ratio,
+        valid_days=valid_days,
+        valid_start_time=start_time,
+        valid_end_time=end_time,
+        source="website_scrape",
+        source_url=source_url,
+        region=region,
+        observed_at=datetime.utcnow(),
+    ))
+
+
+def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
+    """Discover deal-related subpages by scanning homepage links.
+
+    Scores each link by URL path keywords and anchor text keywords.
+    Returns up to 5 discovered URLs, excluding those already in DEAL_PATHS.
+    """
+    parsed_base = urlparse(base_url)
+    base_domain = parsed_base.netloc.lower()
+
+    # Normalize hardcoded paths for dedup
+    existing_paths = {p.rstrip("/").lower() for p in DEAL_PATHS}
+
+    scored: list[tuple[int, str]] = []
+
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        full_url = urljoin(base_url, href)
+        parsed = urlparse(full_url)
+
+        # Same-domain only
+        if parsed.netloc.lower() != base_domain:
+            continue
+
+        # Skip non-HTTP schemes (mailto:, tel:, javascript:)
+        if parsed.scheme not in ("http", "https"):
+            continue
+
+        path = parsed.path.rstrip("/").lower()
+
+        # Skip if it's already in our hardcoded paths
+        if path in existing_paths or path == "":
+            continue
+
+        # Skip file downloads (except PDFs which are handled separately)
+        if any(path.endswith(ext) for ext in (".jpg", ".png", ".gif", ".svg", ".zip", ".css", ".js")):
+            continue
+
+        # Exclude known non-deal paths
+        path_parts = path.strip("/").split("/")
+        if any(part in _NON_DEAL_URL_KEYWORDS for part in path_parts):
+            continue
+
+        # Score by URL keywords
+        score = 0
+        for keyword in _DEAL_URL_KEYWORDS:
+            if keyword in path:
+                score += 2
+
+        # Score by anchor text keywords
+        anchor_text = a_tag.get_text(strip=True).lower()
+        for keyword in _DEAL_KEYWORDS:
+            if keyword in anchor_text:
+                score += 1
+
+        if score > 0:
+            scored.append((score, full_url))
+
+    # Dedup by URL, keep highest score
+    seen_urls: set[str] = set()
+    deduped: list[tuple[int, str]] = []
+    for score, url in sorted(scored, key=lambda x: -x[0]):
+        if url not in seen_urls:
+            seen_urls.add(url)
+            deduped.append((score, url))
+
+    # Return top 5 discovered pages
+    return [url for _, url in deduped[:5]]
+
+
+def _discover_pdf_links(soup: BeautifulSoup, base_url: str) -> list[str]:
+    """Find PDF links on a page, prioritizing those with deal-related context.
+
+    Returns deduplicated list of absolute PDF URLs, capped at 5 per site.
+    """
+    pdf_links: list[tuple[int, str]] = []  # (priority_score, url)
+    seen: set[str] = set()
+
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        if not href.lower().endswith(".pdf"):
+            continue
+
+        full_url = urljoin(base_url, href)
+        if full_url in seen:
+            continue
+        seen.add(full_url)
+
+        # Score by anchor text relevance
+        anchor_text = a_tag.get_text(strip=True).lower()
+        score = 0
+        for kw in ("special", "deal", "happy hour", "lunch", "dinner",
+                    "menu", "coupon", "offer", "promo", "weekly", "daily"):
+            if kw in anchor_text:
+                score += 1
+        # Also check surrounding heading/paragraph text
+        parent = a_tag.find_parent(["h1", "h2", "h3", "h4", "p", "div"])
+        if parent:
+            parent_text = parent.get_text(strip=True).lower()
+            for kw in ("special", "deal", "happy hour"):
+                if kw in parent_text:
+                    score += 1
+
+        pdf_links.append((score, full_url))
+
+    # Sort by relevance score, take top 5
+    pdf_links.sort(key=lambda x: -x[0])
+    return [url for _, url in pdf_links[:5]]
+
+
+def _parse_pdf_for_deals(
+    pdf_url: str,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    region: str,
+    seen_deals: set[str],
+) -> list[DealSignal]:
+    """Download and parse a PDF file for deal signals.
+
+    Uses pdfplumber to extract text, then applies the same deal-validation
+    pipeline as text-block extraction. Returns DealSignal objects.
+    """
+    if not _HAS_PDFPLUMBER:
+        logger.debug("[WebScraper] pdfplumber not installed — skipping PDF: %s", pdf_url)
+        return []
+
+    signals: list[DealSignal] = []
+    try:
+        resp = requests.get(
+            pdf_url,
+            headers={"User-Agent": _get_user_agent()},
+            timeout=20,
+            allow_redirects=True,
+        )
+        if resp.status_code != 200:
+            return []
+
+        # Size guard: skip PDFs larger than 5MB
+        if len(resp.content) > 5_000_000:
+            logger.debug("[WebScraper] PDF too large (%.1f MB): %s", len(resp.content) / 1e6, pdf_url)
+            return []
+
+        with pdfplumber.open(BytesIO(resp.content)) as pdf:
+            # Page guard: skip PDFs with more than 20 pages
+            if len(pdf.pages) > 20:
+                logger.debug("[WebScraper] PDF too many pages (%d): %s", len(pdf.pages), pdf_url)
+                return []
+
+            full_text = ""
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    full_text += page_text + "\n"
+
+        if not full_text.strip():
+            return []
+
+        # Split into blocks by double-newline or significant whitespace
+        raw_blocks = re.split(r"\n{2,}|\r\n{2,}", full_text)
+        blocks: list[str] = []
+        for raw in raw_blocks:
+            # Clean up single newlines within a block
+            cleaned = re.sub(r"\s+", " ", raw).strip()
+            if cleaned and 15 < len(cleaned) < 500:
+                blocks.append(cleaned)
+
+        for block in blocks:
+            if not _is_valid_deal_block(block):
+                continue
+
+            deal_name = block.split(".")[0].strip()[:80]
+            if not deal_name or len(deal_name) < 5:
+                continue
+
+            name_key = deal_name.lower()
+            if name_key in seen_deals:
+                continue
+            seen_deals.add(name_key)
+
+            price = _extract_price(block)
+            deal_type = _classify_deal_type(block)
+            valid_days = _extract_days(block)
+            start_time, end_time = _extract_times(block)
+            calories = _extract_calories(block)
+
+            calorie_price_ratio = None
+            if calories and price and price > 0:
+                calorie_price_ratio = round(calories / price, 1)
+
+            signals.append(DealSignal(
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                deal_name=deal_name,
+                deal_description=block[:500],
+                deal_type=deal_type,
+                price=price,
+                calories=calories,
+                calorie_price_ratio=calorie_price_ratio,
+                valid_days=valid_days,
+                valid_start_time=start_time,
+                valid_end_time=end_time,
+                source="website_scrape",
+                source_url=pdf_url,
+                region=region,
+                observed_at=datetime.utcnow(),
+            ))
+
+    except Exception as e:
+        logger.debug("[WebScraper] Failed to parse PDF %s: %s", pdf_url, e)
+
+    return signals
+
+
 def scrape_restaurant_website(
     url: str,
     restaurant_name: str,
@@ -392,7 +923,12 @@ def scrape_restaurant_website(
 ) -> list[DealSignal]:
     """Scrape a single restaurant's website for deals.
 
-    Probes homepage + common deal sub-paths, extracts deal signals.
+    Enhanced pipeline:
+      1. Probe homepage + hardcoded deal paths (8 paths)
+      2. Discover additional deal pages from homepage links (up to 4 more)
+      3. For each page: extract text blocks + JSON-LD structured data
+      4. Collect and parse PDF links found across all pages (up to 3 PDFs)
+
     Returns list of DealSignals found.
     """
     user_agent = _get_user_agent()
@@ -403,8 +939,17 @@ def scrape_restaurant_website(
     seen_deals: set[str] = set()  # dedup by deal_name
     robots_blocked_count = 0
     all_menu_prices: list[float] = []  # collect all prices across pages for avg
+    all_pdf_links: list[str] = []  # collect PDF links across all pages
+    discovered_pages: list[str] = []  # track link-discovered pages
+    pages_fetched = 0
+
+    # --- Phase 1: Hardcoded paths ---
+    homepage_soup = None
 
     for path in DEAL_PATHS:
+        if pages_fetched >= MAX_PAGES_PER_SITE:
+            break
+
         full_url = urljoin(base_url, path)
 
         # Respect robots.txt
@@ -417,22 +962,25 @@ def scrape_restaurant_website(
         if not html:
             continue
 
+        pages_fetched += 1
         soup = BeautifulSoup(html, "html.parser")
-        blocks = _extract_text_blocks(soup)
 
-        # Collect all prices from this page for menu average
+        # Save homepage soup for link discovery
+        if path == "/":
+            homepage_soup = soup
+
+        # --- Text block extraction ---
+        blocks = _extract_text_blocks(soup)
         all_menu_prices.extend(_extract_all_prices(blocks))
 
         for block in blocks:
             if not _is_valid_deal_block(block):
                 continue
 
-            # Extract a deal name (first sentence or first 80 chars)
             deal_name = block.split(".")[0].strip()[:80]
             if not deal_name or len(deal_name) < 5:
                 continue
 
-            # Dedup
             name_key = deal_name.lower()
             if name_key in seen_deals:
                 continue
@@ -444,7 +992,6 @@ def scrape_restaurant_website(
             start_time, end_time = _extract_times(block)
             calories = _extract_calories(block)
 
-            # Compute calorie-per-dollar ratio
             calorie_price_ratio = None
             if calories and price and price > 0:
                 calorie_price_ratio = round(calories / price, 1)
@@ -468,10 +1015,112 @@ def scrape_restaurant_website(
                 observed_at=datetime.utcnow(),
             ))
 
+        # --- JSON-LD extraction ---
+        jsonld_signals = _extract_jsonld_deals(
+            html, restaurant_name, local_employer_id,
+            brand_group_id, full_url, region, seen_deals,
+        )
+        signals.extend(jsonld_signals)
+
+        # --- PDF link discovery ---
+        all_pdf_links.extend(_discover_pdf_links(soup, base_url))
+
         # Rate limit: 1 req/sec between pages
         time.sleep(1.0)
 
-    # If robots.txt blocked ALL paths, flag for SpiritPool
+    # --- Phase 2: Discover additional deal pages from homepage links ---
+    if homepage_soup and pages_fetched < MAX_PAGES_PER_SITE:
+        discovered_pages = _discover_deal_pages(homepage_soup, base_url)
+
+        for disc_url in discovered_pages:
+            if pages_fetched >= MAX_PAGES_PER_SITE:
+                break
+
+            disc_parsed = urlparse(disc_url)
+            if not _can_fetch(base_url, disc_parsed.path, user_agent):
+                continue
+
+            html = _fetch_page(disc_url, user_agent)
+            if not html:
+                continue
+
+            pages_fetched += 1
+            soup = BeautifulSoup(html, "html.parser")
+            blocks = _extract_text_blocks(soup)
+            all_menu_prices.extend(_extract_all_prices(blocks))
+
+            for block in blocks:
+                if not _is_valid_deal_block(block):
+                    continue
+
+                deal_name = block.split(".")[0].strip()[:80]
+                if not deal_name or len(deal_name) < 5:
+                    continue
+
+                name_key = deal_name.lower()
+                if name_key in seen_deals:
+                    continue
+                seen_deals.add(name_key)
+
+                price = _extract_price(block)
+                deal_type = _classify_deal_type(block)
+                valid_days = _extract_days(block)
+                start_time, end_time = _extract_times(block)
+                calories = _extract_calories(block)
+
+                calorie_price_ratio = None
+                if calories and price and price > 0:
+                    calorie_price_ratio = round(calories / price, 1)
+
+                signals.append(DealSignal(
+                    restaurant_name=restaurant_name,
+                    local_employer_id=local_employer_id,
+                    brand_group_id=brand_group_id,
+                    deal_name=deal_name,
+                    deal_description=block[:500],
+                    deal_type=deal_type,
+                    price=price,
+                    calories=calories,
+                    calorie_price_ratio=calorie_price_ratio,
+                    valid_days=valid_days,
+                    valid_start_time=start_time,
+                    valid_end_time=end_time,
+                    source="website_scrape",
+                    source_url=disc_url,
+                    region=region,
+                    observed_at=datetime.utcnow(),
+                ))
+
+            # JSON-LD on discovered pages too
+            jsonld_signals = _extract_jsonld_deals(
+                html, restaurant_name, local_employer_id,
+                brand_group_id, disc_url, region, seen_deals,
+            )
+            signals.extend(jsonld_signals)
+
+            # PDF links on discovered pages
+            all_pdf_links.extend(_discover_pdf_links(soup, base_url))
+
+            time.sleep(1.0)
+
+    # --- Phase 3: Parse PDF links ---
+    # Dedup PDFs and limit to MAX_PDFS_PER_SITE
+    unique_pdfs: list[str] = []
+    pdf_seen: set[str] = set()
+    for pdf_url in all_pdf_links:
+        if pdf_url not in pdf_seen:
+            pdf_seen.add(pdf_url)
+            unique_pdfs.append(pdf_url)
+
+    for pdf_url in unique_pdfs[:MAX_PDFS_PER_SITE]:
+        pdf_signals = _parse_pdf_for_deals(
+            pdf_url, restaurant_name, local_employer_id,
+            brand_group_id, region, seen_deals,
+        )
+        signals.extend(pdf_signals)
+        time.sleep(1.0)
+
+    # If robots.txt blocked ALL hardcoded paths, flag for SpiritPool
     if robots_blocked_count >= len(DEAL_PATHS):
         raise _RobotsTxtBlocked(f"{restaurant_name} ({base_url}) blocks all deal paths via robots.txt")
 
@@ -593,12 +1242,15 @@ class WebsiteDealCollector:
                                 # Sample up to 10 blocks for manual review
                                 site_audit["sample_blocks"] = [b[:200] for b in blocks[:10]]
                                 site_audit["total_blocks"] = len(blocks)
-                                # Note if site has PDFs linked
-                                pdf_links = [a.get("href", "") for a in soup.find_all("a", href=True)
-                                             if a["href"].lower().endswith(".pdf")]
+                                # Note if site has PDFs that failed to parse
+                                pdf_links = _discover_pdf_links(soup, rurl.url)
                                 if pdf_links:
                                     site_audit["pdf_links"] = pdf_links[:5]
-                                    site_audit["needs_pdf_reader"] = True
+                                    site_audit["needs_pdf_reader"] = not _HAS_PDFPLUMBER
+                                # Note discovered subpages
+                                disc = _discover_deal_pages(soup, rurl.url)
+                                if disc:
+                                    site_audit["discovered_pages"] = disc
                         except Exception:
                             pass  # audit is best-effort
 
@@ -651,10 +1303,11 @@ class WebsiteDealCollector:
             if audit_entries:
                 _write_scrape_audit(audit_entries)
                 no_deals = sum(1 for e in audit_entries if e["outcome"] == "no_deals")
-                has_pdf = sum(1 for e in audit_entries if e.get("needs_pdf_reader"))
+                has_pdf = sum(1 for e in audit_entries if e.get("pdf_links"))
+                has_disc = sum(1 for e in audit_entries if e.get("discovered_pages"))
                 logger.info(
-                    "[WebScraper] Audit: %d sites scraped, %d no deals found, %d may need PDF reader",
-                    len(audit_entries), no_deals, has_pdf,
+                    "[WebScraper] Audit: %d sites scraped, %d no deals, %d have PDFs, %d had discovered pages",
+                    len(audit_entries), no_deals, has_pdf, has_disc,
                 )
                 logger.info("[WebScraper] Audit log written to %s", _SCRAPE_AUDIT_PATH)
 
