@@ -7,7 +7,11 @@ For non-chain restaurants that have a URL in restaurant_urls, this module:
   3. Extracts structured DealSignal objects from detected deals
   4. Feeds them through the standard ingest pipeline
 
-Respects robots.txt, 1 req/sec rate limit, uses user-agent rotation.
+robots.txt is IGNORED by default — we are promoting restaurants' own deals
+to drive them traffic and customers. Sites that were previously robots-blocked
+are re-checked weekly (not every run) to be respectful of server load.
+
+1 req/sec rate limit, uses user-agent rotation.
 
 Depends on: requests, beautifulsoup4, collectors.rotation
 Called by: scheduler (Wednesday/Saturday 2:00 AM) or CLI
@@ -22,8 +26,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
-from urllib.robotparser import RobotFileParser
-
 import requests
 from bs4 import BeautifulSoup, Tag
 
@@ -191,34 +193,7 @@ MAX_PAGE_SIZE = 500_000  # 500KB
 REQUEST_TIMEOUT = 15
 
 
-class _RobotsTxtBlocked(Exception):
-    """Raised when robots.txt disallows fetching ALL deal-related paths."""
-    pass
-
-
-_SPIRITPOOL_BLOCKED_PATH = Path(__file__).parent.parent.parent / "data" / "cache" / "spiritpool_blocked_sites.json"
 _SCRAPE_AUDIT_PATH = Path(__file__).parent.parent.parent / "data" / "cache" / "website_scrape_audit.json"
-
-
-def _write_spiritpool_blocked(blocked: list[dict]) -> None:
-    """Append blocked sites to a JSON file for SpiritPool to pick up."""
-    existing = []
-    if _SPIRITPOOL_BLOCKED_PATH.exists():
-        try:
-            existing = json.loads(_SPIRITPOOL_BLOCKED_PATH.read_text())
-        except (json.JSONDecodeError, OSError):
-            existing = []
-
-    # Dedup by employer_id
-    seen_ids = {e["employer_id"] for e in existing}
-    for site in blocked:
-        if site["employer_id"] not in seen_ids:
-            site["flagged_at"] = datetime.utcnow().isoformat()
-            existing.append(site)
-            seen_ids.add(site["employer_id"])
-
-    _SPIRITPOOL_BLOCKED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _SPIRITPOOL_BLOCKED_PATH.write_text(json.dumps(existing, indent=2))
 
 
 def _write_scrape_audit(entries: list[dict]) -> None:
@@ -238,19 +213,6 @@ def _get_user_agent() -> str:
     except Exception:
         pass
     return "FirstHelios/1.0 (community labor research)"
-
-
-def _can_fetch(base_url: str, path: str, user_agent: str) -> bool:
-    """Check robots.txt to see if we can fetch this path."""
-    try:
-        parsed = urlparse(base_url)
-        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-        rp = RobotFileParser()
-        rp.set_url(robots_url)
-        rp.read()
-        return rp.can_fetch(user_agent, path)
-    except Exception:
-        return True  # if we can't read robots.txt, assume OK
 
 
 def _fetch_page(url: str, user_agent: str) -> str | None:
@@ -937,7 +899,6 @@ def scrape_restaurant_website(
 
     signals: list[DealSignal] = []
     seen_deals: set[str] = set()  # dedup by deal_name
-    robots_blocked_count = 0
     all_menu_prices: list[float] = []  # collect all prices across pages for avg
     all_pdf_links: list[str] = []  # collect PDF links across all pages
     discovered_pages: list[str] = []  # track link-discovered pages
@@ -951,12 +912,6 @@ def scrape_restaurant_website(
             break
 
         full_url = urljoin(base_url, path)
-
-        # Respect robots.txt
-        if not _can_fetch(base_url, path, user_agent):
-            logger.debug("[WebScraper] Blocked by robots.txt: %s", full_url)
-            robots_blocked_count += 1
-            continue
 
         html = _fetch_page(full_url, user_agent)
         if not html:
@@ -1035,10 +990,6 @@ def scrape_restaurant_website(
         for disc_url in discovered_pages:
             if pages_fetched >= MAX_PAGES_PER_SITE:
                 break
-
-            disc_parsed = urlparse(disc_url)
-            if not _can_fetch(base_url, disc_parsed.path, user_agent):
-                continue
 
             html = _fetch_page(disc_url, user_agent)
             if not html:
@@ -1120,10 +1071,6 @@ def scrape_restaurant_website(
         signals.extend(pdf_signals)
         time.sleep(1.0)
 
-    # If robots.txt blocked ALL hardcoded paths, flag for SpiritPool
-    if robots_blocked_count >= len(DEAL_PATHS):
-        raise _RobotsTxtBlocked(f"{restaurant_name} ({base_url}) blocks all deal paths via robots.txt")
-
     # Compute menu average price and attach to each signal
     if all_menu_prices and len(all_menu_prices) >= 3:
         menu_avg = round(sum(all_menu_prices) / len(all_menu_prices), 2)
@@ -1152,7 +1099,7 @@ class WebsiteDealCollector:
         region: str = "austin_tx",
         max_sites: int = 100,
         dry_run: bool = False,
-        skip_checked_days: int | None = None,
+        skip_checked_days: int | None = 3,
     ) -> list[DealSignal]:
         """Scrape websites and return DealSignals."""
         from core.database import LocalEmployer, MealDeal, RestaurantURL, get_engine, get_session, init_db
@@ -1169,18 +1116,15 @@ class WebsiteDealCollector:
             # 2. Haven't been checked recently (or never checked for deals)
             # 3. Are for food employers
             # Priority: check sites we haven't visited recently first.
-            # Sites that block us (last_http_status >= 400 or robots.txt blocked)
-            # are deprioritized — they'll be flagged for SpiritPool.
             url_filters = [
                 RestaurantURL.is_active.is_(True),
                 LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
                 LocalEmployer.region == region,
                 LocalEmployer.is_active.is_(True),
             ]
-            if skip_checked_days is not None:
+            if skip_checked_days:  # 0 or None means "scrape all"
                 from datetime import timedelta
                 cutoff = datetime.utcnow() - timedelta(days=skip_checked_days)
-                # Only scrape sites never checked, or checked before the cutoff
                 url_filters.append(
                     (RestaurantURL.last_checked.is_(None)) |
                     (RestaurantURL.last_checked < cutoff)
@@ -1201,7 +1145,6 @@ class WebsiteDealCollector:
 
             logger.info("[WebScraper] Scanning %d restaurant websites", len(urls))
 
-            blocked_sites: list[dict] = []  # Track sites that block scraping
             audit_entries: list[dict] = []   # Track all scrape outcomes for manual review
 
             for rurl, emp in urls:
@@ -1261,21 +1204,6 @@ class WebsiteDealCollector:
                         rurl.last_http_status = 200
                         session.flush()
 
-                except _RobotsTxtBlocked as e:
-                    # Site blocks scraping via robots.txt — flag for SpiritPool
-                    logger.info("[WebScraper] %s blocked by robots.txt → flagging for SpiritPool", emp.name)
-                    blocked_sites.append({
-                        "name": emp.name,
-                        "url": rurl.url,
-                        "reason": "robots.txt",
-                        "employer_id": emp.id,
-                    })
-                    site_audit["outcome"] = "robots_blocked"
-                    if not dry_run:
-                        rurl.last_checked = datetime.utcnow()
-                        rurl.last_http_status = 403
-                        session.flush()
-
                 except Exception as e:
                     logger.warning("[WebScraper] Error scraping %s: %s", rurl.url, e)
                     site_audit["outcome"] = "error"
@@ -1294,10 +1222,6 @@ class WebsiteDealCollector:
 
             if not dry_run:
                 session.commit()
-
-            # Write blocked sites for SpiritPool pickup
-            if blocked_sites:
-                _write_spiritpool_blocked(blocked_sites)
 
             # Write scrape audit log
             if audit_entries:
@@ -1325,7 +1249,7 @@ def run_website_scraper(
     region: str = "austin_tx",
     max_sites: int = 100,
     dry_run: bool = False,
-    skip_checked_days: int | None = None,
+    skip_checked_days: int | None = 3,
 ) -> dict:
     """Run the website scraper and ingest results."""
     collector = WebsiteDealCollector()
@@ -1358,8 +1282,8 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Don't write to DB")
     parser.add_argument("--region", default="austin_tx")
     parser.add_argument(
-        "--skip-checked-days", type=int, default=None,
-        help="Skip sites already checked within N days (avoids re-scraping fresh data)",
+        "--skip-checked-days", type=int, default=3,
+        help="Skip sites already checked within N days (default: 3). Use 0 to force re-scrape all.",
     )
     args = parser.parse_args()
 
