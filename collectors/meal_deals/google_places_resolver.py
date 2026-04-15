@@ -96,7 +96,7 @@ def _record_failure(
         entity_id=entity_id,
         canonical_name=canonical_name,
         failure_reason=reason,
-        failed_at=datetime.utcnow(),
+        failed_at=datetime.now(datetime.UTC),
         retry_count=0,
     )
     stmt = stmt.on_conflict_do_update(
@@ -267,7 +267,7 @@ def resolve_brand_urls(
 
         logger.info("[GooglePlaces] %d brands to resolve (budget: %d calls)", len(brands), max_calls)
 
-        now = datetime.utcnow()
+        now = datetime.now(datetime.UTC)
 
         # CollectorRun for audit
         run = CollectorRun(
@@ -460,7 +460,7 @@ def resolve_local_urls(
 
         logger.info("[GooglePlaces-Local] %d local employers to resolve", len(employers))
 
-        now = datetime.utcnow()
+        now = datetime.now(datetime.UTC)
 
         run = CollectorRun(
             source="google_places_local_resolver",

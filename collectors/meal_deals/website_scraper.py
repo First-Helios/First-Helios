@@ -573,7 +573,7 @@ def _jsonld_offer_to_signal(
         source="website_scrape",
         source_url=source_url,
         region=region,
-        observed_at=datetime.utcnow(),
+        observed_at=datetime.now(datetime.UTC),
     ))
 
 
@@ -658,7 +658,7 @@ def _jsonld_menuitem_to_signal(
         source="website_scrape",
         source_url=source_url,
         region=region,
-        observed_at=datetime.utcnow(),
+        observed_at=datetime.now(datetime.UTC),
     ))
 
 
@@ -867,7 +867,7 @@ def _parse_pdf_for_deals(
                 source="website_scrape",
                 source_url=pdf_url,
                 region=region,
-                observed_at=datetime.utcnow(),
+                observed_at=datetime.now(datetime.UTC),
             ))
 
     except Exception as e:
@@ -967,7 +967,7 @@ def scrape_restaurant_website(
                 source="website_scrape",
                 source_url=full_url,
                 region=region,
-                observed_at=datetime.utcnow(),
+                observed_at=datetime.now(datetime.UTC),
             ))
 
         # --- JSON-LD extraction ---
@@ -1039,7 +1039,7 @@ def scrape_restaurant_website(
                     source="website_scrape",
                     source_url=disc_url,
                     region=region,
-                    observed_at=datetime.utcnow(),
+                    observed_at=datetime.now(datetime.UTC),
                 ))
 
             # JSON-LD on discovered pages too
@@ -1124,7 +1124,7 @@ class WebsiteDealCollector:
             ]
             if skip_checked_days:  # 0 or None means "scrape all"
                 from datetime import timedelta
-                cutoff = datetime.utcnow() - timedelta(days=skip_checked_days)
+                cutoff = datetime.now(datetime.UTC) - timedelta(days=skip_checked_days)
                 url_filters.append(
                     (RestaurantURL.last_checked.is_(None)) |
                     (RestaurantURL.last_checked < cutoff)
@@ -1169,7 +1169,7 @@ class WebsiteDealCollector:
                     "name": emp_rep.name,
                     "url": rurl_rep.url,
                     "locations_sharing_url": len(group),
-                    "scraped_at": datetime.utcnow().isoformat(),
+                    "scraped_at": datetime.now(datetime.UTC).isoformat(),
                     "deals_found": 0,
                     "outcome": "pending",
                 }
@@ -1236,7 +1236,7 @@ class WebsiteDealCollector:
                     # Update ALL restaurant_url records sharing this URL
                     if not dry_run:
                         for rurl_loc, _emp_loc in group:
-                            rurl_loc.last_checked = datetime.utcnow()
+                            rurl_loc.last_checked = datetime.now(datetime.UTC)
                             rurl_loc.has_deals_page = len(signals) > 0
                             rurl_loc.last_http_status = 200
                         session.flush()
@@ -1248,7 +1248,7 @@ class WebsiteDealCollector:
                     if not dry_run:
                         status = getattr(getattr(e, 'response', None), 'status_code', 0)
                         for rurl_loc, _emp_loc in group:
-                            rurl_loc.last_checked = datetime.utcnow()
+                            rurl_loc.last_checked = datetime.now(datetime.UTC)
                             if status:
                                 rurl_loc.last_http_status = status
                         session.flush()

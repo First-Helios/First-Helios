@@ -233,7 +233,7 @@ def match_and_store_urls(
         if emp.fingerprint:
             fp_to_employers.setdefault(emp.fingerprint, []).append(emp)
 
-    now = datetime.utcnow()
+    now = datetime.now(datetime.UTC)
 
     # CollectorRun for audit trail
     run = CollectorRun(

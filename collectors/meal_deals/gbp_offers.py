@@ -225,7 +225,7 @@ def _extract_offers_from_result(
             source="gbp_offer",
             source_url=source_url,
             region=region,
-            observed_at=datetime.utcnow(),
+            observed_at=datetime.now(datetime.UTC),
         ))
 
     return signals
