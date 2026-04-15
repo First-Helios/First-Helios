@@ -392,14 +392,17 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     parser = argparse.ArgumentParser(description="Google Business Profile offer collector")
-    parser.add_argument("--max-calls", type=int, default=MAX_DAILY_CALLS, help="Max SerpApi calls")
+    parser.add_argument("--max-calls", type=int, default=MAX_DAILY_CALLS, help="Max SerpApi calls (default: 100)")
+    parser.add_argument("--all", action="store_true", help="Query ALL restaurants (overrides --max-calls)")
     parser.add_argument("--dry-run", action="store_true", help="Don't write to DB")
     parser.add_argument("--region", default="austin_tx")
     args = parser.parse_args()
 
+    max_calls = MAX_BATCH_CALLS if args.all else args.max_calls
+
     stats = run_gbp_offers(
         region=args.region,
-        max_calls=args.max_calls,
+        max_calls=max_calls,
         dry_run=args.dry_run,
     )
     print(f"\n--- GBP Offer Collector Stats ---")

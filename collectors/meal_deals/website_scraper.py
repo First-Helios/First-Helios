@@ -1278,7 +1278,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     parser = argparse.ArgumentParser(description="Scrape restaurant websites for meal deals")
-    parser.add_argument("--max-sites", type=int, default=100, help="Max sites to scrape")
+    parser.add_argument("--max-sites", type=int, default=100, help="Max sites to scrape (default: 100)")
+    parser.add_argument("--all", action="store_true", help="Scan ALL sites (overrides --max-sites)")
     parser.add_argument("--dry-run", action="store_true", help="Don't write to DB")
     parser.add_argument("--region", default="austin_tx")
     parser.add_argument(
@@ -1287,9 +1288,11 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    max_sites = 999999 if args.all else args.max_sites
+
     stats = run_website_scraper(
         region=args.region,
-        max_sites=args.max_sites,
+        max_sites=max_sites,
         dry_run=args.dry_run,
         skip_checked_days=args.skip_checked_days,
     )

@@ -11,6 +11,7 @@
 - [Running Individual Scrapers](#running-individual-scrapers)
   - [Website Scraper (local restaurants)](#website-scraper-local-restaurants)
   - [Chain Deals Scraper (franchises)](#chain-deals-scraper-franchises)
+  - [GBP Offers (Google Business Profile)](#gbp-offers-google-business-profile)
 - [URL Resolution (prerequisite)](#url-resolution-prerequisite)
 - [Full Pipeline Test Script](#full-pipeline-test-script)
 - [Data Quality & Purge](#data-quality--purge)
@@ -26,12 +27,13 @@
 
 ## Architecture Overview
 
-The meal deal system has two independent scrapers feeding into a shared ingest pipeline:
+The meal deal system has three independent scrapers feeding into a shared ingest pipeline:
 
 | Component | Targets | Schedule | Source Tag |
 |---|---|---|---|
 | **website_scraper** | Individual restaurant websites (non-chain) | Mon/Wed/Fri 2 AM | `website_scrape` |
 | **chain_deals** | National chain deal pages (McDonald's, etc.) | Monday 6 AM | `chain_website` |
+| **gbp_offers** | Google Business Profile offer posts via SerpApi | Tue/Fri 3 AM | `gbp_offer` |
 
 Each scraper produces `DealSignal` objects that flow through `ingest_deal_signals()` into the `meal_deals` database table.
 
@@ -53,27 +55,27 @@ Supporting services:
            │  restaurant_urls table   │
            └──────────┬──────────────┘
                       ▼
-  ┌───────────────────┐     ┌──────────────────┐
-  │  website_scraper   │     │  chain_deals      │
-  │  (M/W/F 2 AM)     │     │  (Monday 6 AM)    │
-  └────────┬──────────┘     └────────┬─────────┘
-           │  list[DealSignal]       │
-           └──────────┬──────────────┘
-                      ▼
-           ┌──────────────────┐
-           │ ingest_deal_signals()  │
-           │ dedup + brand fan-out  │
-           └────────┬─────────┘
+  ┌───────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ website_scraper│  │ chain_deals   │  │ gbp_offers    │
+  │ (M/W/F 2 AM)  │  │ (Monday 6 AM) │  │ (Tue/Fri 3AM) │
+  └──────┬────────┘  └──────┬───────┘  └──────┬───────┘
+         │  list[DealSignal] │                 │
+         └──────────┬────────┴─────────────────┘
                     ▼
-           ┌──────────────────┐
-           │   meal_deals      │
-           │   (PostgreSQL)    │
-           └────────┬─────────┘
-                    ▼
-           ┌──────────────────┐
-           │ deactivate_stale  │
-           │ _deals() (Sun 5AM)│
-           └──────────────────┘
+         ┌──────────────────┐
+         │ ingest_deal_signals()  │
+         │ dedup + brand fan-out  │
+         └────────┬─────────┘
+                  ▼
+         ┌──────────────────┐
+         │   meal_deals      │
+         │   (PostgreSQL)    │
+         └────────┬─────────┘
+                  ▼
+         ┌──────────────────┐
+         │ deactivate_stale  │
+         │ _deals() (Sun 5AM)│
+         └──────────────────┘
 ```
 
 ---
@@ -82,7 +84,9 @@ Supporting services:
 
 ### Website Scraper (local restaurants)
 
-Scrapes non-chain restaurant websites by probing common deal paths: `/`, `/menu`, `/specials`, `/deals`, `/lunch`, `/happy-hour`, `/promotions`, `/offers`.
+Scrapes non-chain restaurant websites by probing common deal paths: `/`, `/menu`, `/specials`, `/deals`, `/lunch`, `/happy-hour`, `/promotions`, `/offers`, plus dynamically discovered subpages.
+
+> **Note:** robots.txt is intentionally ignored — we are promoting restaurants' own deals to drive them traffic and customers. Rate limiting (1 req/sec) and the `skip-checked-days` default (3 days) keep server load minimal.
 
 ```bash
 # Activate environment
@@ -93,14 +97,20 @@ set -a && source .env && set +a
 # Dry run — see what would be found, no DB writes
 PYTHONPATH=. python collectors/meal_deals/website_scraper.py --dry-run
 
-# Live run — scrape and ingest into DB
+# Live run — scrape and ingest into DB (default: 100 sites, skip recently checked)
 PYTHONPATH=. python collectors/meal_deals/website_scraper.py
 
 # Limit to 20 sites (useful for testing)
 PYTHONPATH=. python collectors/meal_deals/website_scraper.py --max-sites 20
 
-# Skip sites already checked in the last 3 days
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --skip-checked-days 3
+# SCAN EVERYTHING — all sites, ignore skip window, no DB writes
+PYTHONPATH=. python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --dry-run
+
+# SCAN EVERYTHING — all sites, ignore skip window, write to DB
+PYTHONPATH=. python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0
+
+# Force re-scrape all but still cap at 100 sites
+PYTHONPATH=. python collectors/meal_deals/website_scraper.py --skip-checked-days 0
 
 # Target a specific region
 PYTHONPATH=. python collectors/meal_deals/website_scraper.py --region austin_tx
@@ -111,19 +121,22 @@ PYTHONPATH=. python collectors/meal_deals/website_scraper.py --region austin_tx
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--max-sites` | int | 100 | Maximum number of restaurant websites to scrape |
-| `--dry-run` | bool | false | Preview mode — extract deals but don't write to DB |
+| `--all` | flag | false | Scan ALL sites (overrides `--max-sites`) |
+| `--dry-run` | flag | false | Preview mode — extract deals but don't write to DB |
 | `--region` | str | `austin_tx` | Geographic region scope |
-| `--skip-checked-days` | int | _(none)_ | Skip sites checked within N days (avoids re-scraping) |
+| `--skip-checked-days` | int | 3 | Skip sites checked within N days. Use `0` to force re-scrape all |
 
 #### What it does per site
 
-1. Checks `robots.txt` — skips blocked paths
-2. Fetches each path in `DEAL_PATHS` (8 URLs per site, 1 req/sec)
+1. Fetches each path in `DEAL_PATHS` (8 URLs, 1 req/sec)
+2. Discovers additional deal subpages from homepage links (up to 4 more, 12 pages max per site)
 3. Strips nav/footer/script/style HTML subtrees
-4. Extracts text blocks from `<p>`, `<h1>`–`<h4>`, `<li>`, `<td>` tags
-5. Filters through quality gates (keyword match, price required, no boilerplate)
-6. Produces `DealSignal` objects → `ingest_deal_signals()` → DB
-7. Writes audit log to `data/cache/website_scrape_audit.json`
+4. Extracts text blocks from `<p>`, `<h1>`-`<h6>`, `<li>`, `<td>`, `<div>`, `<span>`, `<article>`, `<section>` tags
+5. Parses JSON-LD structured data (`<script type="application/ld+json">`) for schema.org Offer/MenuItem types
+6. Downloads and parses PDF menus/flyers found on pages (up to 3 per site, requires `pdfplumber`)
+7. Filters through quality gates (keyword match, price required, no boilerplate)
+8. Produces `DealSignal` objects → `ingest_deal_signals()` → DB
+9. Writes audit log to `data/cache/website_scrape_audit.json`
 
 #### Output
 
@@ -169,6 +182,58 @@ Each chain in `config/meal_deal_sources.yaml` declares a scraping strategy:
 | `app_only` | Skipped entirely | Deals only available in app (no public web page) |
 
 The chain scraper fans out deals to all matching `local_employer` locations in the region via `brand_group_id`.
+
+---
+
+### GBP Offers (Google Business Profile)
+
+Scrapes "offer" posts from restaurant Google Business Profiles via SerpApi's Google Maps engine. Many restaurants post weekly specials on their GBP even when their website is sparse.
+
+Requires `SERPAPI_KEY` in `.env` (same key used by `serpapi_adapter.py` for job search).
+
+```bash
+# Activate environment
+cd ~/First-Helios
+source .venv/bin/activate
+set -a && source .env && set +a
+
+# Dry run — see what would be found, no DB writes (5 API calls)
+PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --max-calls 5 --dry-run
+
+# Live run — default 100 API calls, writes to DB
+PYTHONPATH=. python -m collectors.meal_deals.gbp_offers
+
+# Query ALL restaurants (up to 200 API calls)
+PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --all
+
+# Query ALL, dry run
+PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --all --dry-run
+
+# Custom call budget
+PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --max-calls 50
+```
+
+#### CLI Flags
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--max-calls` | int | 100 | Maximum SerpApi API calls per run |
+| `--all` | flag | false | Query ALL restaurants (up to 200 calls) |
+| `--dry-run` | flag | false | Preview mode — don't write to DB |
+| `--region` | str | `austin_tx` | Geographic region scope |
+
+#### How it works
+
+1. **Phase 1 (brands):** Queries brand groups by `location_count DESC` — one API call per brand, fan-out to all locations via `brand_fingerprint` in ingest
+2. **Phase 2 (locals):** If budget remains, queries individual local restaurants with Google Places URLs
+3. Extracts posts/updates/offers from SerpApi Google Maps results
+4. Filters for deal keywords (same set as website scraper)
+5. Produces `DealSignal` objects with `source="gbp_offer"` → `ingest_deal_signals()` → DB
+6. Rate limit: 0.5 sec between API calls
+
+#### Cost
+
+Each SerpApi call costs ~$0.01. Default budget of 100 calls/run = ~$1.00 per run, $2/week at the Tue/Fri schedule.
 
 ---
 
@@ -317,7 +382,7 @@ data/cache/website_scrape_audit.json
 | `url` | Always | Website URL scraped |
 | `scraped_at` | Always | ISO timestamp |
 | `deals_found` | Always | Number of deals extracted (0 if none) |
-| `outcome` | Always | `deals_found`, `no_deals`, `robots_blocked`, or `error` |
+| `outcome` | Always | `deals_found`, `no_deals`, or `error` |
 | `deal_names` | `deals_found` | List of extracted deal names |
 | `sample_blocks` | `no_deals` | Up to 10 text block samples from the page (for manual review) |
 | `total_blocks` | `no_deals` | Total text blocks extracted from the page |
@@ -367,18 +432,6 @@ for e in json.load(sys.stdin):
 "
 ```
 
-**4. Find sites blocked by robots.txt:**
-```bash
-cat data/cache/website_scrape_audit.json | python3 -c "
-import json, sys
-for e in json.load(sys.stdin):
-    if e['outcome'] == 'robots_blocked':
-        print(f\"{e['name']:40s} {e['url']}\")
-"
-```
-
-These sites are also written to `data/cache/spiritpool_blocked_sites.json` for SpiritPool manual entry.
-
 ### Manual assessment workflow
 
 1. Run the scraper: `PYTHONPATH=. python collectors/meal_deals/website_scraper.py --max-sites 200`
@@ -388,8 +441,8 @@ These sites are also written to `data/cache/spiritpool_blocked_sites.json` for S
    - **Blocks look like deals but were filtered** → loosen quality filters
    - **Blocks are all menu items** → site doesn't advertise deals on the web
    - **No text blocks extracted at all** → page is JS-rendered, may need Playwright
-   - **PDF links present** → deals are in PDF menus, needs PDF reader support
-   - **robots.txt blocked** → enter deals manually via SpiritPool
+   - **PDF links present but `needs_pdf_reader: true`** → install `pdfplumber` (`pip install pdfplumber`)
+   - **HTTP 403/503 errors** → site blocks scraping at HTTP level, enter deals manually via SpiritPool
 5. Track improvement opportunities in `MEAL_DEAL_ROADMAP.md`
 
 ---
@@ -425,6 +478,7 @@ All meal deal jobs are defined in `config/scheduler.yaml`:
 | `google_places_resolver` | Tuesday 2:00 AM | Discover URLs via Google Places API (paid) |
 | `deal_chain_deals` | Monday 6:00 AM | Scrape chain franchise deal pages |
 | `deal_website_scraper` | Mon/Wed/Fri 2:00 AM | Scrape local restaurant websites |
+| `deal_gbp_offers` | Tue/Fri 3:00 AM | Scrape GBP offer posts via SerpApi |
 | `deal_stale_sweep` | Sunday 5:00 AM | Deactivate deals not seen in 14+ days |
 
 The scheduler runs as the `helios-collector` systemd service on the Orange Pi.
@@ -480,7 +534,7 @@ Keywords are matched with `\b` (word boundary) regex, so "specialty pizza" does 
 | `valid_start_time` | String | Nullable; "11:00 AM" |
 | `valid_end_time` | String | Nullable; "2:00 PM" |
 | `is_recurring` | Boolean | Default `true` |
-| `source` | String | `chain_website`, `website_scrape`, `google_places`, `manual` |
+| `source` | String | `chain_website`, `website_scrape`, `gbp_offer`, `google_places`, `manual` |
 | `source_url` | String | Nullable |
 | `is_active` | Boolean | Default `true`; stale sweep sets to `false` |
 | `verified_at` | DateTime | Nullable; last time deal was confirmed |
@@ -552,7 +606,7 @@ alembic stamp head && alembic upgrade head
 2. If `sample_blocks` shows deal-like text → the quality filter is too strict
 3. If `total_blocks: 0` → page is JS-rendered, may need Playwright
 4. If `needs_pdf_reader: true` → deals are in PDF menu files
-5. If `outcome: robots_blocked` → enter manually via SpiritPool
+5. If the site returns HTTP 403/503 → may need Playwright or manual entry via SpiritPool
 
 ### Chain scraper returns empty for a specific chain
 
