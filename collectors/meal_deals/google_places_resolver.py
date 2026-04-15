@@ -20,7 +20,7 @@ Called by: CLI or scheduler (Tuesday 2:00 AM — weekly)
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 import requests
@@ -96,7 +96,7 @@ def _record_failure(
         entity_id=entity_id,
         canonical_name=canonical_name,
         failure_reason=reason,
-        failed_at=datetime.now(datetime.UTC),
+        failed_at=datetime.now(timezone.utc),
         retry_count=0,
     )
     stmt = stmt.on_conflict_do_update(
@@ -267,7 +267,7 @@ def resolve_brand_urls(
 
         logger.info("[GooglePlaces] %d brands to resolve (budget: %d calls)", len(brands), max_calls)
 
-        now = datetime.now(datetime.UTC)
+        now = datetime.now(timezone.utc)
 
         # CollectorRun for audit
         run = CollectorRun(
@@ -460,7 +460,7 @@ def resolve_local_urls(
 
         logger.info("[GooglePlaces-Local] %d local employers to resolve", len(employers))
 
-        now = datetime.now(datetime.UTC)
+        now = datetime.now(timezone.utc)
 
         run = CollectorRun(
             source="google_places_local_resolver",

@@ -14,7 +14,7 @@ Called by: collectors/meal_deals/chain_deals.py, future collectors
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text as _sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -136,7 +136,7 @@ def _upsert_deal_pg(session: Session, deal_data: dict) -> None:
             "source_url": stmt.excluded.source_url,
             "verified_at": stmt.excluded.verified_at,
             "is_active": True,
-            "updated_at": datetime.now(datetime.UTC),
+            "updated_at": datetime.now(timezone.utc),
         },
     )
     session.execute(stmt)
@@ -154,7 +154,7 @@ def _upsert_deal_sqlite(session: Session, deal_data: dict) -> None:
         for key, val in deal_data.items():
             if key not in ("id", "created_at"):
                 setattr(existing, key, val)
-        existing.updated_at = datetime.now(datetime.UTC)
+        existing.updated_at = datetime.now(timezone.utc)
         existing.is_active = True
     else:
         session.add(MealDeal(**deal_data))
@@ -176,7 +176,7 @@ def ingest_deal_signals(
     is_pg = _is_postgres(session)
 
     stats = {"inserted": 0, "updated": 0, "skipped": 0, "total_rows": 0}
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(timezone.utc)
 
     try:
         for signal in signals:
@@ -275,7 +275,7 @@ def deactivate_stale_deals(
     """
     engine = init_db()
     session = get_session(engine)
-    cutoff = datetime.now(datetime.UTC) - timedelta(days=max_age_days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
 
     try:
         count = session.query(MealDeal).filter(
@@ -283,7 +283,7 @@ def deactivate_stale_deals(
             MealDeal.region == region,
             MealDeal.is_active.is_(True),
             MealDeal.verified_at < cutoff,
-        ).update({"is_active": False, "updated_at": datetime.now(datetime.UTC)})
+        ).update({"is_active": False, "updated_at": datetime.now(timezone.utc)})
 
         session.commit()
         logger.info("[DealIngest] Deactivated %d stale %s deals in %s", count, source, region)

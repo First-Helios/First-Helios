@@ -19,7 +19,7 @@ Called by: CLI or scheduler (weekly, Sunday 1:00 AM)
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -233,7 +233,7 @@ def match_and_store_urls(
         if emp.fingerprint:
             fp_to_employers.setdefault(emp.fingerprint, []).append(emp)
 
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(timezone.utc)
 
     # CollectorRun for audit trail
     run = CollectorRun(

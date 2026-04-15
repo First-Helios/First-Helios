@@ -28,7 +28,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -225,7 +225,7 @@ def _extract_offers_from_result(
             source="gbp_offer",
             source_url=source_url,
             region=region,
-            observed_at=datetime.now(datetime.UTC),
+            observed_at=datetime.now(timezone.utc),
         ))
 
     return signals
