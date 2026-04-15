@@ -1143,34 +1143,70 @@ class WebsiteDealCollector:
                 RestaurantURL.last_checked.asc().nullsfirst()
             ).limit(max_sites).all()
 
-            logger.info("[WebScraper] Scanning %d restaurant websites", len(urls))
+            # ── Deduplicate by URL ──────────────────────────────────────
+            # Multiple locations (e.g. 3 Taco Cabana stores) share the same
+            # website URL.  Group them so we scrape each unique URL once and
+            # fan out the resulting signals to every location.
+            from collections import defaultdict
+            url_groups: dict[str, list[tuple]] = defaultdict(list)
+            for rurl, emp in urls:
+                normalized = rurl.url.rstrip("/").lower()
+                url_groups[normalized].append((rurl, emp))
+
+            logger.info(
+                "[WebScraper] Scanning %d unique websites (%d restaurant_url rows)",
+                len(url_groups), len(urls),
+            )
 
             audit_entries: list[dict] = []   # Track all scrape outcomes for manual review
 
-            for rurl, emp in urls:
+            for _norm_url, group in url_groups.items():
+                # Use the first entry as the representative for scraping
+                rurl_rep, emp_rep = group[0]
+
                 site_audit: dict[str, Any] = {
-                    "employer_id": emp.id,
-                    "name": emp.name,
-                    "url": rurl.url,
+                    "employer_id": emp_rep.id,
+                    "name": emp_rep.name,
+                    "url": rurl_rep.url,
+                    "locations_sharing_url": len(group),
                     "scraped_at": datetime.utcnow().isoformat(),
                     "deals_found": 0,
                     "outcome": "pending",
                 }
                 try:
                     signals = scrape_restaurant_website(
-                        url=rurl.url,
-                        restaurant_name=emp.name,
-                        local_employer_id=emp.id,
-                        brand_group_id=emp.brand_group_id,
+                        url=rurl_rep.url,
+                        restaurant_name=emp_rep.name,
+                        local_employer_id=emp_rep.id,
+                        brand_group_id=emp_rep.brand_group_id,
                         region=region,
                     )
 
                     if signals:
                         logger.info(
-                            "[WebScraper] %s: %d deals found at %s",
-                            emp.name, len(signals), rurl.url,
+                            "[WebScraper] %s: %d deals found at %s (%d locations)",
+                            emp_rep.name, len(signals), rurl_rep.url, len(group),
                         )
-                        all_signals.extend(signals)
+                        # Fan out signals to every location sharing this URL.
+                        # Set local_employer_id per location so ingest doesn't
+                        # double-fan-out via brand_fingerprint.
+                        for rurl_loc, emp_loc in group:
+                            for sig in signals:
+                                loc_sig = DealSignal(
+                                    restaurant_name=emp_loc.name,
+                                    brand_fingerprint=None,
+                                    local_employer_id=emp_loc.id,
+                                    brand_group_id=emp_loc.brand_group_id,
+                                    deal_name=sig.deal_name,
+                                    deal_description=sig.deal_description,
+                                    deal_type=sig.deal_type,
+                                    price=sig.price,
+                                    source=sig.source,
+                                    source_url=sig.source_url,
+                                    region=region,
+                                    observed_at=sig.observed_at,
+                                )
+                                all_signals.append(loc_sig)
                         site_audit["deals_found"] = len(signals)
                         site_audit["outcome"] = "deals_found"
                         site_audit["deal_names"] = [s.deal_name[:80] for s in signals]
@@ -1178,7 +1214,7 @@ class WebsiteDealCollector:
                         site_audit["outcome"] = "no_deals"
                         # Grab candidate text blocks for manual review
                         try:
-                            html = _fetch_page(rurl.url, _get_user_agent())
+                            html = _fetch_page(rurl_rep.url, _get_user_agent())
                             if html:
                                 soup = BeautifulSoup(html, "html.parser")
                                 blocks = _extract_text_blocks(soup)
@@ -1186,34 +1222,35 @@ class WebsiteDealCollector:
                                 site_audit["sample_blocks"] = [b[:200] for b in blocks[:10]]
                                 site_audit["total_blocks"] = len(blocks)
                                 # Note if site has PDFs that failed to parse
-                                pdf_links = _discover_pdf_links(soup, rurl.url)
+                                pdf_links = _discover_pdf_links(soup, rurl_rep.url)
                                 if pdf_links:
                                     site_audit["pdf_links"] = pdf_links[:5]
                                     site_audit["needs_pdf_reader"] = not _HAS_PDFPLUMBER
                                 # Note discovered subpages
-                                disc = _discover_deal_pages(soup, rurl.url)
+                                disc = _discover_deal_pages(soup, rurl_rep.url)
                                 if disc:
                                     site_audit["discovered_pages"] = disc
                         except Exception:
                             pass  # audit is best-effort
 
-                    # Update the restaurant_url record
+                    # Update ALL restaurant_url records sharing this URL
                     if not dry_run:
-                        rurl.last_checked = datetime.utcnow()
-                        rurl.has_deals_page = len(signals) > 0
-                        rurl.last_http_status = 200
+                        for rurl_loc, _emp_loc in group:
+                            rurl_loc.last_checked = datetime.utcnow()
+                            rurl_loc.has_deals_page = len(signals) > 0
+                            rurl_loc.last_http_status = 200
                         session.flush()
 
                 except Exception as e:
-                    logger.warning("[WebScraper] Error scraping %s: %s", rurl.url, e)
+                    logger.warning("[WebScraper] Error scraping %s: %s", rurl_rep.url, e)
                     site_audit["outcome"] = "error"
                     site_audit["error"] = str(e)[:200]
                     if not dry_run:
-                        rurl.last_checked = datetime.utcnow()
-                        # Try to extract HTTP status from exception
                         status = getattr(getattr(e, 'response', None), 'status_code', 0)
-                        if status:
-                            rurl.last_http_status = status
+                        for rurl_loc, _emp_loc in group:
+                            rurl_loc.last_checked = datetime.utcnow()
+                            if status:
+                                rurl_loc.last_http_status = status
                         session.flush()
                     continue
 
@@ -1241,7 +1278,7 @@ class WebsiteDealCollector:
         finally:
             session.close()
 
-        logger.info("[WebScraper] Total: %d deal signals from %d sites", len(all_signals), len(urls))
+        logger.info("[WebScraper] Total: %d deal signals from %d unique sites", len(all_signals), len(url_groups))
         return all_signals
 
 
