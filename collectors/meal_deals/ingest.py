@@ -32,6 +32,31 @@ from core.database import (
 
 logger = logging.getLogger(__name__)
 
+# Deal names that are clearly not deals (navigation elements, slogans, etc.)
+_JUNK_DEAL_NAMES = {
+    "main navigation", "navigation", "values", "what we value",
+    "values in action", "menu", "our menu", "view menu",
+    "order now", "order online", "sign in", "sign up",
+    "download the app", "careers", "about us", "contact us",
+    "gift cards", "gift card", "franchise", "locations",
+}
+
+# Substrings that indicate a non-deal name
+_JUNK_SUBSTRINGS = [
+    "skip to content", "skip to main", "toggle menu",
+    "toggle nav", "cookie", "privacy policy",
+]
+
+
+def _is_junk_deal_name(name: str) -> bool:
+    """Return True if the deal name is clearly not a real deal."""
+    if not name or len(name.strip()) < 5:
+        return True
+    lower = name.strip().lower()
+    if lower in _JUNK_DEAL_NAMES:
+        return True
+    return any(sub in lower for sub in _JUNK_SUBSTRINGS)
+
 
 def _is_postgres(session: Session) -> bool:
     return session.bind.dialect.name == "postgresql"  # type: ignore[union-attr]
@@ -155,6 +180,12 @@ def ingest_deal_signals(
 
     try:
         for signal in signals:
+            # Skip junk deal names (nav elements, slogans, etc.)
+            if _is_junk_deal_name(signal.deal_name):
+                logger.debug("[DealIngest] Skipping junk deal name: %r", signal.deal_name)
+                stats["skipped"] += 1
+                continue
+
             # Resolve target locations
             if signal.brand_fingerprint:
                 locations = _resolve_brand_locations(
