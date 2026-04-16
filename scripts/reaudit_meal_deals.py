@@ -149,6 +149,7 @@ def _audit_deal(deal: MealDeal, employer: LocalEmployer | None) -> AuditRow:
         deal_description=deal.deal_description,
         price=deal.price,
         price_type=deal.price_type,
+        discount_percentage=deal.discount_percentage,
         valid_days=deal.valid_days,
         valid_start_time=deal.valid_start_time,
         valid_end_time=deal.valid_end_time,

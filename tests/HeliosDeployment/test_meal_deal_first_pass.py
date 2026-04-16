@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from collectors.meal_deals.ingest import ingest_deal_signals
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.website_scraper import _copy_signal_for_location
-from core.database import BrandGroup, CanonicalVenue, CanonicalVenueAlias, LocalEmployer, MealDeal
+from core.database import BrandGroup, CanonicalVenue, CanonicalVenueAlias, LocalEmployer, MealDeal, SiteAssignment, SiteIdentity
 from core.normalizer import make_fingerprint
 from core.venue_identity import normalize_address_for_identity
 from scripts.backfill_deal_observation_history import backfill_deal_observation_history
@@ -302,3 +302,105 @@ def test_stats_and_brands_use_deduped_deal_semantics(client, engine):
             "deal_count": 1,
         }
     ]
+
+
+def test_review_queue_lists_contested_sites_and_medium_confidence_aliases(client, engine):
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_employer(
+                    5001,
+                    name="Satellite Bistro",
+                    address="100 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2601,
+                    lng=-97.7420,
+                ),
+                _build_employer(
+                    5002,
+                    name="Satellite Bar",
+                    address="102 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2602,
+                    lng=-97.7421,
+                ),
+                _build_canonical_venue(
+                    9001,
+                    name="Satellite Bistro",
+                    address="100 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2601,
+                    lng=-97.7420,
+                ),
+                _build_canonical_venue(
+                    9002,
+                    name="Satellite Bar",
+                    address="102 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2602,
+                    lng=-97.7421,
+                ),
+                SiteIdentity(
+                    id=3001,
+                    normalized_url="satelliteatx.com",
+                    canonical_url="https://satelliteatx.com",
+                    host="satelliteatx.com",
+                    path="/",
+                    ownership_scope="mixed",
+                    conflict_state="needs_review",
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                SiteAssignment(
+                    site_identity_id=3001,
+                    canonical_venue_id=9001,
+                    assignment_scope="contested",
+                    match_method="restaurant_url_backfill",
+                    match_confidence=0.5,
+                    is_primary=False,
+                ),
+                SiteAssignment(
+                    site_identity_id=3001,
+                    canonical_venue_id=9002,
+                    assignment_scope="contested",
+                    match_method="restaurant_url_backfill",
+                    match_confidence=0.5,
+                    is_primary=False,
+                ),
+                CanonicalVenueAlias(
+                    canonical_venue_id=9001,
+                    local_employer_id=5001,
+                    alias_role="primary",
+                    match_method="heuristic",
+                    match_confidence=0.92,
+                ),
+                CanonicalVenueAlias(
+                    canonical_venue_id=9002,
+                    local_employer_id=5002,
+                    alias_role="primary",
+                    match_method="manual",
+                    match_confidence=1.0,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/deals/review-queue?region=austin_tx")
+    assert response.status_code == 200
+
+    payload = response.get_json()
+
+    assert payload["summary"] == {
+        "contested_sites": 1,
+        "ambiguous_venue_aliases": 1,
+    }
+    assert payload["count"] == 2
+    assert payload["items"][0]["queue_type"] == "site"
+    assert payload["items"][0]["candidate_count"] == 2
+    assert payload["items"][0]["normalized_url"] == "satelliteatx.com"
+    assert payload["items"][1]["queue_type"] == "venue_alias"
+    assert payload["items"][1]["match_confidence"] == 0.92
+    assert payload["items"][1]["canonical_name"] == "Satellite Bistro"

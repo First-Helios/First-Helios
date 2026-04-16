@@ -13,7 +13,18 @@ from collections import Counter, defaultdict
 
 from flask import Blueprint, jsonify, request
 
-from core.database import BrandGroup, DealMaterialization, LocalEmployer, MealDeal, get_engine, get_session
+from core.database import (
+    BrandGroup,
+    CanonicalVenue,
+    CanonicalVenueAlias,
+    DealMaterialization,
+    LocalEmployer,
+    MealDeal,
+    SiteAssignment,
+    SiteIdentity,
+    get_engine,
+    get_session,
+)
 from core.venue_identity import cluster_likely_same_venues, normalize_url_for_identity, pick_canonical_item
 
 logger = logging.getLogger(__name__)
@@ -192,6 +203,137 @@ def _load_materialized_deals(
     ).all()
 
 
+def _load_site_review_queue(
+    session,
+    *,
+    region: str,
+) -> list[dict]:
+    rows = session.query(SiteIdentity, SiteAssignment, CanonicalVenue).join(
+        SiteAssignment,
+        SiteAssignment.site_identity_id == SiteIdentity.id,
+    ).join(
+        CanonicalVenue,
+        SiteAssignment.canonical_venue_id == CanonicalVenue.id,
+    ).filter(
+        SiteAssignment.assignment_scope == "contested",
+        CanonicalVenue.region == region,
+    ).order_by(
+        SiteIdentity.id.asc(),
+        SiteAssignment.match_confidence.asc(),
+        CanonicalVenue.canonical_name.asc(),
+    ).all()
+
+    grouped: dict[int, dict] = {}
+    for site, assignment, venue in rows:
+        entry = grouped.setdefault(
+            site.id,
+            {
+                "queue_type": "site",
+                "site_identity_id": site.id,
+                "canonical_url": site.canonical_url,
+                "normalized_url": site.normalized_url,
+                "ownership_scope": site.ownership_scope,
+                "conflict_state": site.conflict_state,
+                "candidates": [],
+            },
+        )
+        entry["candidates"].append(
+            {
+                "canonical_venue_id": venue.id,
+                "restaurant_name": venue.canonical_name,
+                "address": venue.address,
+                "match_confidence": assignment.match_confidence,
+                "match_method": assignment.match_method,
+                "is_primary": assignment.is_primary,
+            }
+        )
+
+    items = list(grouped.values())
+    for item in items:
+        item["candidate_count"] = len(item["candidates"])
+
+    items.sort(
+        key=lambda item: (
+            -item["candidate_count"],
+            item["normalized_url"],
+        )
+    )
+    return items
+
+
+def _load_venue_alias_review_queue(
+    session,
+    *,
+    region: str,
+    min_confidence: float,
+    max_confidence: float,
+) -> list[dict]:
+    rows = session.query(CanonicalVenueAlias, CanonicalVenue, LocalEmployer).join(
+        CanonicalVenue,
+        CanonicalVenueAlias.canonical_venue_id == CanonicalVenue.id,
+    ).join(
+        LocalEmployer,
+        CanonicalVenueAlias.local_employer_id == LocalEmployer.id,
+    ).filter(
+        CanonicalVenue.region == region,
+        CanonicalVenueAlias.match_confidence.isnot(None),
+        CanonicalVenueAlias.match_confidence >= min_confidence,
+        CanonicalVenueAlias.match_confidence < max_confidence,
+    ).order_by(
+        CanonicalVenueAlias.match_confidence.asc(),
+        CanonicalVenue.canonical_name.asc(),
+        LocalEmployer.name.asc(),
+    ).all()
+
+    return [
+        {
+            "queue_type": "venue_alias",
+            "canonical_venue_id": venue.id,
+            "canonical_name": venue.canonical_name,
+            "local_employer_id": employer.id,
+            "restaurant_name": employer.name,
+            "address": employer.address,
+            "alias_role": alias.alias_role,
+            "match_method": alias.match_method,
+            "match_confidence": alias.match_confidence,
+            "notes": alias.notes,
+        }
+        for alias, venue, employer in rows
+    ]
+
+
+def _load_review_queue(
+    session,
+    *,
+    region: str,
+    kind: str,
+    min_alias_confidence: float,
+    max_alias_confidence: float,
+) -> dict:
+    site_items = _load_site_review_queue(session, region=region) if kind in {"all", "site"} else []
+    venue_items = _load_venue_alias_review_queue(
+        session,
+        region=region,
+        min_confidence=min_alias_confidence,
+        max_confidence=max_alias_confidence,
+    ) if kind in {"all", "venue"} else []
+
+    combined = []
+    for item in site_items:
+        combined.append(((0, -item["candidate_count"], item["normalized_url"]), item))
+    for item in venue_items:
+        combined.append(((1, item["match_confidence"], item["canonical_name"].casefold()), item))
+
+    combined.sort(key=lambda item: item[0])
+    return {
+        "summary": {
+            "contested_sites": len(site_items),
+            "ambiguous_venue_aliases": len(venue_items),
+        },
+        "items": [item[1] for item in combined],
+    }
+
+
 # ── Deal listings ─────────────────────────────────────────────────────────────
 
 @deals_bp.route("")
@@ -366,6 +508,47 @@ def deal_brands():
         ]
 
         return jsonify({"brands": brands, "count": len(brands), "region": region})
+    except Exception as exc:
+        return _err(exc)
+    finally:
+        session.close()
+
+
+@deals_bp.route("/review-queue")
+def deal_review_queue():
+    """Lightweight review queue for contested sites and ambiguous venue mappings."""
+    region = request.args.get("region", "austin_tx")
+    kind = request.args.get("kind", "all").strip().lower() or "all"
+    limit = min(request.args.get("limit", 50, type=int), 200)
+    offset = request.args.get("offset", 0, type=int)
+    min_alias_confidence = request.args.get("min_alias_confidence", 0.8, type=float)
+    max_alias_confidence = request.args.get("max_alias_confidence", 0.95, type=float)
+
+    if kind not in {"all", "site", "venue"}:
+        return jsonify({"status": "error", "message": "kind must be one of: all, site, venue"}), 400
+
+    session = _get_db_session()
+    try:
+        queue = _load_review_queue(
+            session,
+            region=region,
+            kind=kind,
+            min_alias_confidence=min_alias_confidence,
+            max_alias_confidence=max_alias_confidence,
+        )
+        items = queue["items"]
+        paged_items = items[offset: offset + limit]
+        return jsonify(
+            {
+                "items": paged_items,
+                "count": len(items),
+                "limit": limit,
+                "offset": offset,
+                "kind": kind,
+                "region": region,
+                "summary": queue["summary"],
+            }
+        )
     except Exception as exc:
         return _err(exc)
     finally:

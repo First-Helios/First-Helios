@@ -66,6 +66,71 @@ _SENTENCE_FRAGMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_MENU_NAV_RE = re.compile(
+    r"\b("
+    r"main\s+content\s+starts\s+here"
+    r"|tab\s+to\s+start\s+navigating"
+    r"|open\s+menu\s+close\s+menu"
+    r"|sample\s+menus?"
+    r"|order\s+online"
+    r"|happy\s+hour\s+locations"
+    r"|locations\s+happy\s+hour"
+    r"|food\s*(?:&|and)\s*drinks"
+    r"|drink\s+menu"
+    r"|bar\s+menu"
+    r"|dinner\s+menu"
+    r"|brunch\s+menu"
+    r"|desserts?"
+    r"|cocktails?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_REVIEWISH_RE = re.compile(
+    r"\b("
+    r"this\s+is\s+by\s+far"
+    r"|favorite\s+place\s+to\s+eat"
+    r"|my\s+boyfriend\s+and\s+i"
+    r"|don['\u2019]?t\s+miss\s+any\s+sporting\s+action"
+    r"|check\s+out\s+our\s+new"
+    r"|stay\s+a\s+while"
+    r"|yes!\s*we\s+do\s+have"
+    r"|we\s+have\s+the\s+games"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_STRONG_OFFER_RE = re.compile(
+    r"\b("
+    r"bogo"
+    r"|buy\s+one\s+get\s+one"
+    r"|buy\s+1\s+get\s+1"
+    r"|kids\s+eat\s+free"
+    r"|half\s+(?:off|price)"
+    r"|½\s*(?:off|price)"
+    r"|\d{1,2}\s*%\s*off"
+    r"|two\s+for\s+one"
+    r"|2\s+for\s+1"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_MENUISH_TOKENS = (
+    "menu",
+    "menus",
+    "dinner",
+    "drinks",
+    "drink",
+    "bar",
+    "brunch",
+    "dessert",
+    "desserts",
+    "cocktails",
+    "food",
+    "happy hour",
+    "order online",
+)
+
 
 @dataclass
 class QualityScore:
@@ -84,6 +149,29 @@ class QualityScore:
     def __post_init__(self) -> None:
         if self.reasons is None:
             self.reasons = []
+
+
+def _looks_like_menu_or_navigation(text: str | None) -> bool:
+    if not text:
+        return False
+
+    normalized = " ".join(text.strip().split()).lower()
+    if _MENU_NAV_RE.search(normalized):
+        return True
+
+    token_hits = sum(1 for token in _MENUISH_TOKENS if token in normalized)
+    if token_hits >= 3 and ("menu" in normalized or "happy hour" in normalized):
+        return True
+
+    return normalized.count("happy hour") >= 3
+
+
+def _looks_like_review_or_marketing(text: str | None) -> bool:
+    if not text:
+        return False
+
+    normalized = " ".join(text.strip().split())
+    return bool(_REVIEWISH_RE.search(normalized))
 
 
 def _score_price(price: float | None, price_type: str | None) -> tuple[float, str | None]:
@@ -123,6 +211,10 @@ def _score_description(description: str | None) -> tuple[float, str | None]:
     if not description:
         return 0.0, "no description"
     text = description.strip()
+    if _looks_like_menu_or_navigation(text):
+        return 0.0, "description is menu/navigation text"
+    if _looks_like_review_or_marketing(text):
+        return 0.0, "description is marketing/review text"
     if len(text) < 10:
         return 0.0, "description too short"
     if _BOILERPLATE_RE.search(text):
@@ -137,6 +229,10 @@ def _score_name(name: str | None) -> tuple[float, str | None]:
     if not name:
         return 0.0, "no name"
     text = name.strip()
+    if _looks_like_menu_or_navigation(text):
+        return 0.0, "name is menu/navigation text"
+    if _looks_like_review_or_marketing(text):
+        return 0.0, "name is marketing/review text"
     if len(text) < 5:
         return 0.0, "name too short"
     if len(text) > 80:
@@ -211,6 +307,7 @@ def compute_signal_quality(
     deal_description: str | None = None,
     price: float | None = None,
     price_type: str | None = None,
+    discount_percentage: float | None = None,
     valid_days: str | None = None,
     valid_start_time: str | None = None,
     valid_end_time: str | None = None,
@@ -266,6 +363,20 @@ def compute_signal_quality(
     if score.not_addon == 0.0 and not (price_type == "absolute" and (price or 0) >= 2.0):
         raw_total = min(raw_total, 0.25)
         score.reasons.append("addon: score capped (no absolute price)")
+
+    combined_text = " ".join(
+        part for part in (deal_name, deal_description, raw_scraped_text) if part
+    )
+    has_temporal_evidence = bool(valid_days or valid_start_time or valid_end_time)
+    has_offer_evidence = bool(
+        price is not None
+        or discount_percentage is not None
+        or price_type in ("absolute", "discount_amount", "percentage_off")
+        or _STRONG_OFFER_RE.search(combined_text)
+    )
+    if not has_temporal_evidence and not has_offer_evidence:
+        raw_total = min(raw_total, 0.35)
+        score.reasons.append("evidence: missing price/discount and temporal info")
 
     score.total = round(raw_total, 3)
     return score

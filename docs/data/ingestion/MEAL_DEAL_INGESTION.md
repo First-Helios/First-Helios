@@ -1,224 +1,666 @@
-# Meal Deal Data Ingestion Process
+# Meal Deal Ingestion
 
-**Date:** 2026-04-13
-**Status:** Phase 1–4 implemented and operational. Scheduler integrated.
+Updated: 2026-04-16
+Status: canonical identity, observation/applicability, and semantic read-layer are implemented and deployed
 
----
+## Purpose
 
-## Overview
+This document describes how the meal-deal ingestion system works today, end to end.
 
-The meal deal ingestion pipeline discovers restaurant deals/specials for
-employers in the `local_employers` table and stores them in `meal_deals`.
-It uses a three-stage approach to minimize API costs:
+It is the operational and architectural reference for:
 
-1. **URL Resolution** — Find restaurant website URLs (free OSM first, then Google Places for gaps)
-2. **Deal Extraction** — Scrape websites for deal content (chain pages + local keyword scan)
-3. **Ingest & Dedup** — Normalize to `DealSignal`, fan out to locations, upsert into `meal_deals`
+- humans debugging meal-deal collection or API output
+- future agents extending the pipeline
+- operators running migrations, backfills, or production deploys
 
----
+It reflects the live system after the canonical meal-deal rollout that introduced:
 
-## Database Tables
+- canonical venue identity
+- canonical site identity
+- canonical deal observations
+- resolved deal applicability
+- consumer-facing deal materializations
 
-### `restaurant_urls` (Reference Data — Layer 1)
+## Executive Summary
 
-Cached website URLs for local employers. One row per employer per source.
+The meal-deal system no longer treats raw `meal_deals` rows as the authoritative read model.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER PK | Auto-increment |
-| `local_employer_id` | FK → local_employers | Which restaurant |
-| `brand_group_id` | FK → brand_groups | Nullable, for chain URLs |
-| `url` | VARCHAR | Resolved website URL |
-| `source` | VARCHAR | `osm`, `google_places`, `manual`, `chain_config` |
-| `confidence` | FLOAT | 0.0–1.0 (OSM=0.8, Google=0.9) |
-| `is_active` | BOOLEAN | URL still valid |
-| `last_checked` | TIMESTAMP | When last verified |
-| `last_http_status` | INTEGER | Last HTTP response code |
-| `has_deals_page` | BOOLEAN | Whether deals content was found |
-| `deals_page_url` | VARCHAR | Specific deals sub-page URL if found |
+The current pipeline is:
 
-**Unique constraint:** `(local_employer_id, source)` — one URL per source per employer.
+1. collector emits `DealSignal`
+2. ingest scores and normalizes the signal
+3. ingest upserts one `deal_observations` row per underlying source artifact
+4. ingest resolves venue or brand targeting into `deal_applicability`
+5. ingest refreshes `deal_materializations`, the shared semantic read layer
+6. `/api/deals`, `/api/deals/stats`, and `/api/deals/brands` read from `deal_materializations`
 
-### `meal_deals` (Consumer Intelligence — Layer 5)
+`meal_deals` still exists and is still written as a compatibility layer, but it is no longer the primary semantic source for the API.
 
-Individual deal records, one per deal per restaurant location.
+## Why The Architecture Changed
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER PK | Auto-increment |
-| `local_employer_id` | FK → local_employers | Which location |
-| `brand_group_id` | FK → brand_groups | Chain link (nullable) |
-| `deal_name` | VARCHAR | e.g. "$5.99 Lunch Combo" |
-| `deal_description` | TEXT | Full deal text |
-| `deal_type` | VARCHAR | `lunch_special`, `combo`, `bogo`, `happy_hour`, `kids_eat_free`, `daily_special` |
-| `price` / `original_price` | FLOAT | Deal price and regular price |
-| `valid_days` / `valid_start_time` / `valid_end_time` | VARCHAR/TIME | When the deal is valid |
-| `source` | VARCHAR | `chain_website`, `website_scrape`, `manual`, `google_places`, `yelp` |
-| `source_url` | VARCHAR | Where the deal was found |
-| `verified_at` | TIMESTAMP | Last time the deal was confirmed active |
-| `is_active` | BOOLEAN | Deactivated after 14 days without re-verification |
+The original meal-deal design mixed three different concepts in one table and one read path:
 
-**Unique constraint:** `(local_employer_id, deal_name, source)` — prevents duplicates, enables upsert.
+- physical venue identity
+- observed deal artifact
+- consumer-facing venue/deal row
 
----
+That created duplicate rows when multiple `local_employers` represented one venue, and it pushed dedupe logic into route code.
 
-## Pipeline Stages
+The canonical rollout split those concerns into explicit storage layers so the system can say:
 
-### Stage 1: URL Resolution
+- which `local_employers` rows are aliases of one physical venue
+- which URLs belong to which venue or brand
+- which observed deal artifact came from which source page
+- where that observed deal actually applies
+- which consumer-facing rows should be shown in the API
 
-```
-local_employers (5,662 food/drink locations)
-        │
-        ├─→ OSM Overpass (FREE, runs Sunday 1 AM)
-        │     Query: amenity=restaurant|cafe|fast_food|bar|pub with website tag
-        │     Match: fingerprint + proximity (0.3 mi), brand fan-out
-        │     Result: 758 unique employer URLs from 1,758 OSM POIs
-        │
-        ├─→ Google Places API ($32/1K calls, runs Tuesday 2 AM)
-        │     Mode 1: "brands" — one call per brand_group, fan out to all locations
-        │     Mode 2: "locals" — one call per individual employer
-        │     Budget: $200 free credits → ~6,250 calls max
-        │     Result: 824 unique employer URLs from 50 API calls (brands mode)
-        │
-        └─→ restaurant_urls table (1,582 / 5,662 = 27% coverage)
-```
+## Current Storage Model
 
-**Cost so far:** $1.60 of $200 Google credits used. OSM is free.
+### Identity tables
 
-### Stage 2: Deal Extraction
+#### `canonical_venues`
 
-```
-restaurant_urls
-        │
-        ├─→ Chain Deal Scraper (runs Monday 6 AM)
-        │     Config: config/meal_deal_sources.yaml (15 chains)
-        │     Method: requests + BeautifulSoup (static HTML)
-        │     Strategy: heading scan + link card scan + price regex
-        │     Output: DealSignal per deal, with brand_fingerprint for fan-out
-        │
-        ├─→ Website Scraper (runs Wed + Sat 2 AM)
-        │     Targets: employers with URLs in restaurant_urls
-        │     Method: probe homepage + /menu, /specials, /deals, /lunch, /happy-hour
-        │     Keyword scan: "special", "deal", "combo", "BOGO", "$X.99", etc.
-        │     Rate limit: 1 req/sec, respects robots.txt
-        │     Output: DealSignal per detected deal
-        │
-        └─→ Manual Ingest (CLI, on-demand)
-              Input: CSV or JSON file
-              Source: SpiritPool human contributions
-              Tool: python collectors/meal_deals/manual_ingest.py --file deals.csv
-```
+One row per physical venue used by the meal-deal system.
 
-### Stage 3: Ingest & Storage
+Key purpose:
 
-```
-list[DealSignal]
-        │
-        ├─→ Brand Fan-Out
-        │     If signal.brand_fingerprint set:
-        │       Find all local_employers for that brand in the region
-        │       Create one meal_deals row per location
-        │     If signal.local_employer_id set:
-        │       Single-location write
-        │
-        ├─→ Dedup Upsert
-        │     PostgreSQL: INSERT ... ON CONFLICT (local_employer_id, deal_name, source) DO UPDATE
-        │     SQLite fallback: query-then-update pattern
-        │     Updates: description, type, price, valid_days/times, source_url, verified_at
-        │
-        └─→ meal_deals table
-              Stale sweep: deals not verified in 14 days → is_active = false (Sunday 5 AM)
-```
+- canonical venue identity for dedupe and targeting
+- stable address/name/geo layer above raw `local_employers`
 
----
+#### `canonical_venue_aliases`
 
-## CLI Commands
+Maps `local_employers` rows to canonical venues.
+
+Key purpose:
+
+- collapse alias employers into one venue identity
+- preserve provenance via `alias_role`, `match_method`, and confidence
+
+#### `site_identities`
+
+One row per normalized website identity.
+
+Key purpose:
+
+- canonicalize URLs before scraping or observation linking
+- separate site ownership from per-employer URL cache rows
+
+#### `site_assignments`
+
+Maps canonical sites to venue or brand scope.
+
+Key purpose:
+
+- declare whether a site belongs to one venue, one brand, or is contested
+- support later manual review when site ownership is ambiguous
+
+### Canonical deal tables
+
+#### `deal_observations`
+
+One row per observed meal-deal artifact.
+
+This is the canonical evidence table.
+
+Important fields:
+
+- `source`
+- `collector_run_id`
+- `site_identity_id`
+- `source_url`
+- `source_observation_key`
+- `deal_name`, `deal_description`, `deal_type`
+- pricing and temporal fields
+- `raw_scraped_text`
+- `extraction_payload`
+- `signal_quality`
+- `deal_value_score`
+- `review_state`
+
+Important rule:
+
+- no per-location duplication belongs here
+
+#### `deal_applicability`
+
+Declares where a canonical observation applies.
+
+Important fields:
+
+- `observation_id`
+- `applicability_scope`
+- `canonical_venue_id`
+- `brand_group_id`
+- `confidence`
+- `resolver_method`
+- `resolver_notes`
+- `is_active`
+
+Important rule:
+
+- brand-wide applicability is expressed once here, not by duplicating observations
+
+#### `deal_materializations`
+
+Consumer-facing semantic row set used by the API.
+
+This is a write-through compatibility table derived from:
+
+- `deal_observations`
+- `deal_applicability`
+- `canonical_venues`
+- `canonical_venue_aliases`
+
+It stores one row per consumer-visible venue/deal combination.
+
+Important rule:
+
+- this is the layer all `/api/deals*` endpoints should use
+
+### Compatibility table
+
+#### `meal_deals`
+
+Still written for compatibility and historical continuity.
+
+It contains two legacy semantics:
+
+- location rows for non-chain deals
+- chain template rows with `is_chain_template=True`
+
+Important caution:
+
+- do not treat `meal_deals` as the authoritative API read model going forward
+
+## Core Runtime Flow
+
+### Stage 1: URL and site discovery
+
+Relevant sources:
+
+- `osm_url_resolver.py`
+- `google_places_resolver.py`
+- manual URL rows in `restaurant_urls`
+
+Primary output:
+
+- `restaurant_urls`
+
+Role in the canonical system:
+
+- `restaurant_urls` is now best thought of as an input cache and compatibility table
+- canonical website ownership lives in `site_identities` and `site_assignments`
+
+### Stage 2: Collection
+
+Main collectors:
+
+- `chain_deals.py`
+- `website_scraper.py`
+- `gbp_offers.py`
+- `manual_ingest.py`
+
+Common output contract:
+
+- every collector emits `DealSignal`
+
+### Stage 3: Signal ingest
+
+Main write entrypoint:
+
+- `collectors/meal_deals/ingest.py`
+- function: `ingest_deal_signals(signals, region)`
+
+This is the canonical write path.
+
+For each signal, ingest performs the following steps:
+
+1. Skip obvious junk deal names.
+2. Derive `sub_deals` from text if the collector did not already populate them.
+3. Compute `signal_quality`.
+4. Compute `deal_value_score`.
+5. Convert quality score into one of `accepted`, `review`, or `rejected`.
+6. Resolve either `brand_group_id` from `brand_fingerprint` or `local_employer_id` from venue matching logic.
+7. Build a stable `source_observation_key`.
+8. Upsert one canonical observation row.
+9. Build desired applicability rows for venue or brand scope.
+10. Continue writing `meal_deals` compatibility rows for accepted or reviewable signals.
+11. Synchronize applicability rows.
+12. Refresh `deal_materializations` for the affected observations.
+
+### Stage 4: API reads
+
+Read entrypoints:
+
+- `/api/deals`
+- `/api/deals/stats`
+- `/api/deals/brands`
+
+All three now read from `deal_materializations`.
+
+That means:
+
+- route-level alias collapse is no longer the primary dedupe mechanism
+- list, stats, and brands share one semantic base
+- counts and cards should agree because they are reading the same row set
+
+## `DealSignal` Contract
+
+`collectors/meal_deals/models.py` defines the shared collector payload.
+
+Important fields:
+
+- venue hints:
+        - `restaurant_name`
+        - `address`
+        - `lat`
+        - `lng`
+- brand hints:
+        - `brand_fingerprint`
+        - `brand_group_id`
+        - `local_employer_id`
+- canonical offer fields:
+        - `deal_name`
+        - `deal_description`
+        - `deal_type`
+        - `price`
+        - `price_type`
+        - `discount_percentage`
+        - `original_price`
+        - `menu_avg_price`
+        - `calories`
+        - `calorie_price_ratio`
+        - `valid_days`
+        - `valid_start_time`
+        - `valid_end_time`
+- provenance:
+        - `source`
+        - `source_url`
+        - `region`
+        - `collector_run_id`
+        - `observed_at`
+- evidence/refinement:
+        - `raw_scraped_text`
+        - `signal_quality`
+        - `deal_value_score`
+        - `sub_deals`
+        - `metadata`
+
+## Canonical Identity Flow
+
+### Venue identity
+
+The authoritative venue mapping for meal deals is:
+
+`local_employers` -> `canonical_venue_aliases` -> `canonical_venues`
+
+This is what suppresses alias-venue duplication.
+
+### Site identity
+
+The authoritative site mapping for meal deals is:
+
+normalized URL -> `site_identities` -> `site_assignments`
+
+This is what makes site ownership explicit instead of inferred from repeated `restaurant_urls` rows.
+
+### Observation identity
+
+Observations are deduped by:
+
+- source
+- normalized URL when available
+- otherwise normalized venue identity fallback
+- deal core fields such as deal name, type, valid window, and price hints
+
+This is encoded in `source_observation_key`.
+
+Effect:
+
+- the same shared-site scrape can fan out to multiple applicability targets without creating multiple observations
+
+## Applicability Semantics
+
+### Venue scope
+
+Used when ingest can resolve a specific venue.
+
+Typical resolver method:
+
+- `local_employer_alias`
+
+Path:
+
+- `DealSignal.local_employer_id`
+- `canonical_venue_aliases`
+- `canonical_venue_id`
+
+### Brand scope
+
+Used when the collector is observing a brand-level offer.
+
+Typical resolver method:
+
+- `brand_fingerprint`
+
+Path:
+
+- `DealSignal.brand_fingerprint`
+- `brand_groups`
+- `deal_applicability.brand_group_id`
+- `deal_materializations` expands this across canonical venues for that brand
+
+## Quality and Gating
+
+Shared quality logic lives in:
+
+- `collectors/meal_deals/quality.py`
+
+Important thresholds:
+
+- score < 0.20 -> reject
+- 0.20 <= score < 0.40 -> review
+- score >= 0.40 -> accepted
+
+Current ingest behavior:
+
+- rejected signals are skipped for `meal_deals`, but still written to `deal_observations` with `review_state="rejected"`
+- review signals are written with inactive compatibility rows and retained canonical evidence
+- accepted signals continue through the normal path
+
+Important implication:
+
+- canonical evidence can exist even when no consumer-facing row should be shown
+
+## Semantic Layer Refresh
+
+Shared semantic refresh logic lives in:
+
+- `collectors/meal_deals/semantic_layer.py`
+
+Main function:
+
+- `refresh_deal_materializations(session, observation_ids=None, region=None)`
+
+Behavior:
+
+- deletes prior materializations for the affected observations or region
+- loads observations, applicability rows, venues, aliases, and primary employer rows
+- expands venue applicability directly
+- expands brand applicability across canonical venues in the region
+- writes exactly one materialized row per `(observation_id, canonical_venue_id)`
+
+Important design note:
+
+- this is a table refresh, not a PostgreSQL materialized view refresh
+- the goal is cross-dialect compatibility and explicit control from ingest/backfill code
+
+## Historical Backfill
+
+Script:
+
+- `scripts/backfill_deal_observation_history.py`
+
+Purpose:
+
+- convert historical `meal_deals` rows into `deal_observations`, `deal_applicability`, and `deal_materializations`
+
+Behavior:
+
+- idempotent by `(source, source_observation_key)`
+- reuses existing observations when already present
+- rebuilds semantic materializations for the region
+- uses historical `MealDeal.is_active` to map old rows into `accepted` vs `review`
+
+Important caution:
+
+- this backfill preserves historical activity state, not recomputed quality truth
+- noisy active historical rows can therefore appear as accepted until they are re-audited
+
+## Canonical Identity Rebuild
+
+Script:
+
+- `scripts/backfill_meal_deal_identity.py`
+
+Purpose:
+
+- rebuild canonical venues, aliases, canonical sites, and site assignments from current `local_employers` plus `restaurant_urls`
+
+Important behavior:
+
+- rebuild-oriented: clears canonical identity tables and repopulates them
+- uses the shared venue identity helper in `core/venue_identity.py`
+- should generally be run before the historical deal backfill if canonical identity is missing or stale
+
+## Runtime And Scheduler Details
+
+Scheduler code:
+
+- `core/scheduler.py`
+
+Important change:
+
+- meal-deal signals now receive `collector_run_id = run.id` before ingest
+
+Effect:
+
+- canonical observations can retain collector lineage in `deal_observations.collector_run_id`
+
+Important quirk:
+
+- `website_scraper.collect()` already has an internal ingest path for its chunked scraping flow
+- scheduler-level ingest can therefore process related outputs again
+- observation upserts and applicability synchronization must remain idempotent because of this
+
+## Website Debug Cache
+
+Website scraper debug bundle path:
+
+- `data/cache/website_scrape_debug`
+
+Purpose:
+
+- local replayable capture of page content and extraction artifacts
+- supports debugging scraper behavior without repeated network requests
+
+Important behavior:
+
+- rerunning the same normalized URL overwrites the previous debug bundle
+- replay mode avoids live fetching and uses the cached bundle instead
+
+## API Semantics
+
+### `/api/deals`
+
+Returns paginated materialized rows.
+
+Each row is already:
+
+- venue-scoped
+- alias-collapsed
+- expanded from brand applicability when needed
+
+### `/api/deals/stats`
+
+Counts materialized rows, grouped by type and source.
+
+Important interpretation:
+
+- `restaurant_count` is now effectively canonical venue count, not raw `local_employer_id` count
+
+### `/api/deals/brands`
+
+Counts brands from materialized rows.
+
+Important effect:
+
+- brand counts and deal counts now share the same semantic row set as `/api/deals`
+
+### `/api/deals/review-queue`
+
+Returns a lightweight operator queue built from canonical conflict data.
+
+Current queue contents:
+
+- contested sites from `site_identities` plus `site_assignments`
+- medium-confidence venue aliases from `canonical_venue_aliases`
+
+Important note:
+
+- this is a read-only review surface for triage
+- final adjudication is still manual; there is not yet a write-back UI for resolving queue items in place
+
+## Operations
+
+### Local validation workflow
+
+Recommended order:
+
+1. Sync production-like data with `bash dev/sync_from_opi.sh`
+2. Run migrations
+3. Rebuild canonical identity
+4. Dry-run or run historical backfill
+5. Run focused tests
+
+Useful commands:
 
 ```bash
-# ── URL Resolution ──────────────────────────────────────────────────
-# OSM Overpass (free)
-PYTHONPATH=. python collectors/meal_deals/osm_url_resolver.py [--dry-run]
+cd /home/fortune/CodeProjects/First-Helios
 
-# Google Places — brands first (highest ROI)
-PYTHONPATH=. python collectors/meal_deals/google_places_resolver.py --mode brands --max-calls 50 [--dry-run]
-
-# Google Places — individual locals
-PYTHONPATH=. python collectors/meal_deals/google_places_resolver.py --mode locals --max-calls 200 [--dry-run]
-
-# Google Places — both (brands then locals with remaining budget)
-PYTHONPATH=. python collectors/meal_deals/google_places_resolver.py --mode both --max-calls 250 [--dry-run]
-
-# ── Deal Extraction ─────────────────────────────────────────────────
-# Chain deals
-PYTHONPATH=. python collectors/meal_deals/chain_deals.py [--dry-run]
-
-# Website scraper
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --max-sites 100 [--dry-run]
-
-# Manual ingest (CSV/JSON)
-PYTHONPATH=. python collectors/meal_deals/manual_ingest.py --file deals.csv --region austin_tx [--dry-run]
+/home/fortune/CodeProjects/First-Helios/.venv/bin/alembic upgrade head
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/backfill_meal_deal_identity.py --region austin_tx
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/backfill_deal_observation_history.py --region austin_tx --dry-run
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/reaudit_deal_observations.py --source website_scrape --backfill-source meal_deals --region austin_tx
+/home/fortune/CodeProjects/First-Helios/.venv/bin/python -m pytest tests/HeliosDeployment/test_meal_deal_observations.py tests/HeliosDeployment/test_meal_deal_first_pass.py tests/HeliosDeployment/test_meal_deal_alias_dedupe.py tests/HeliosDeployment/test_website_scrape_debug_cache.py tests/HeliosDeployment/test_meal_deal_identity_backfill.py
 ```
 
----
+### Orange Pi deploy workflow
 
-## Scheduler Jobs
+Required high-level steps:
 
-All configured in `config/scheduler.yaml`:
+1. Copy or pull updated runtime files and migrations to the host
+2. Run Alembic upgrade
+3. Rebuild canonical identity
+4. Run historical backfill
+5. Restart both `helios` and `helios-collector`
+6. Verify `/api/deals`, `/api/deals/stats`, and `/api/deals/brands`
 
-| Job | Schedule | What It Does |
-|-----|----------|--------------|
-| `osm_url_resolver` | Sun 1:00 AM | Re-query OSM Overpass for new restaurant websites |
-| `google_places_resolver` | Tue 2:00 AM | Resolve remaining brand URLs (200 calls/run max) |
-| `deal_chain_deals` | Mon 6:00 AM | Scrape chain restaurant deal pages |
-| `deal_website_scraper` | Wed + Sat 2:00 AM | Scrape local restaurant websites for deals |
-| `deal_stale_sweep` | Sun 5:00 AM | Deactivate deals not verified in 14+ days |
+Important deployment caveats:
 
-**Recommended overnight window:** URL resolution (Sun/Tue nights) → deal extraction (Mon/Wed/Sat mornings) → stale cleanup (Sun morning).
+- both `helios` and `helios-collector` must be restarted
+- direct script runs need `PYTHONPATH=.` from repo root
+- because `init_db()` still calls `Base.metadata.create_all(engine)`, new Alembic migrations must be safe against tables that may already exist on partially-upgraded environments
 
----
+## Migrations
 
-## API Endpoints
+Relevant meal-deal migration chain:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/deals` | GET | List deals with geo-filter (`lat`, `lng`, `radius_mi`), `deal_type`, `brand`, pagination |
-| `/api/deals/stats` | GET | Aggregate counts by type, source, restaurant, brand |
-| `/api/deals/brands` | GET | List brands with active deal counts |
+- `d4c7e2a91f31_add_canonical_meal_deal_identity_tables.py`
+- `e82fa4b1c3d9_add_deal_observations_and_applicability.py`
+- `9ac3d7b5f112_add_deal_materializations_table.py`
+- `c6f1e2a7b934_merge_meal_deal_heads.py`
 
----
+Important note:
 
-## Data Quality Notes
+- the canonical meal-deal migrations were made idempotent because tables may already exist from `create_all()` on some environments before Alembic stamping catches up
 
-- **OSM coverage**: 13% of food employers (758/5,662). Strong in central Austin, thinner in suburbs.
-- **Google Places coverage**: 14% additional (824/5,662) from just 50 API calls on high-location brands.
-- **Chain deal extraction**: 151 signals from 8 chains in dry-run. ThunderCloud Subs over-extracts (80 items — most are menu items, not deals). Pizza Hut timed out. Jimmy John's returns 0 (JS-heavy).
-- **Fingerprint matching**: Uses lowercase, punctuation-stripped, space-collapsed names. Possessive stripping (`'s` → `s`). 0.3-mile proximity threshold for location matching.
-- **Brand fan-out**: One Subway deal × 82 Subway locations = 82 `meal_deals` rows. All share the same `brand_group_id`.
+## Validation Status
 
----
+Focused test coverage currently includes:
 
-## Cost Tracking
+- observation and applicability dual-write
+- shared-site fan-out collapsing into one observation
+- chain-brand applicability expansion
+- rejected observations retained as evidence
+- API stats and brands using the shared semantic layer
+- website debug-cache replay
+- canonical identity backfill behavior
 
-| Resource | Used | Remaining | Projected Depletion |
-|----------|------|-----------|---------------------|
-| Google Places API | $1.60 (50 calls) | $198.40 | ~31 weeks at 200 calls/week |
-| OSM Overpass | Free | Unlimited | — |
-| SerpAPI (if used) | N/A | N/A | — |
+Live production deployment on the Orange Pi completed successfully with:
 
----
+- canonical identity rebuild:
+        - `canonical_venues`: 5,369
+        - `venue_aliases`: 5,662
+        - `site_identities`: 2,313
+        - `site_assignments`: 2,811
+- historical backfill:
+        - `meal_deals_scanned`: 3,392
+        - `observations_inserted`: 1,325
+        - `applicability_targets`: 3,116
+        - `materializations_inserted`: 3,684
+- live stats response after deploy:
+        - `total_deals`: 2,230
+        - `restaurant_count`: 548
+        - `brand_count`: 368
+
+## Known Caveats
+
+1. `meal_deals` is still written and still contains mixed legacy semantics.
+2. Historical accepted rows can still be noisy because the backfill preserves old activity state rather than re-auditing every row.
+3. A lightweight review queue now exists via `/api/deals/review-queue`, but resolution is still manual and there is no write-back workflow yet.
+4. Some legacy dedupe helpers still exist in route code for transition and test coverage, even though the live read path now uses `deal_materializations`.
+5. The next quality audit should focus on accepted `website_scrape` observations with sentence-like or review-like deal names.
+
+## Current Recommendation On `meal_deals`
+
+`meal_deals` should remain dual-written for now, but only as a temporary compatibility layer.
+
+Recommended path:
+
+1. Keep dual-write through the current audit and repair cycle while canonical re-audit and operator review workflows stabilize.
+2. Make canonical tables plus `deal_materializations` the only semantic source of truth.
+3. Once deploys show stable parity, convert `meal_deals` into a fully derived compatibility table or retire it from live writes entirely.
+
+Reasoning:
+
+- the API no longer depends on `meal_deals`
+- historical repair now belongs in `deal_observations` and `deal_materializations`
+- continuing to treat `meal_deals` as a first-class write target long term keeps the old mixed semantics alive
 
 ## Module Map
 
-```
+```text
 collectors/meal_deals/
-├── __init__.py                  # Module docstring
-├── models.py                    # DealSignal dataclass
-├── registry.py                  # @deal_collector decorator + get_all()
-├── chain_deals.py               # Chain website scraper (static HTML)
-├── osm_url_resolver.py          # OSM Overpass → restaurant_urls
-├── google_places_resolver.py    # Google Places API → restaurant_urls
-├── website_scraper.py           # Local website keyword scanner
-├── ingest.py                    # DealSignal → meal_deals upsert pipeline
-├── manual_ingest.py             # CSV/JSON CLI for SpiritPool
-└── routes.py                    # Flask Blueprint /api/deals
+├── models.py                         # DealSignal dataclass
+├── ingest.py                         # canonical write path + compatibility write
+├── semantic_layer.py                 # refresh_deal_materializations()
+├── quality.py                        # signal quality + value scoring
+├── sub_deals.py                      # multi-offer decomposition
+├── temporal.py                       # temporal parsing/refinement helpers
+├── chain_deals.py                    # chain-site collector
+├── website_scraper.py                # site scraping + debug cache + replay
+├── gbp_offers.py                     # GBP offers collector
+├── manual_ingest.py                  # CSV/JSON human input path
+└── routes.py                         # /api/deals read layer
+
+scripts/
+├── backfill_meal_deal_identity.py    # rebuild canonical venue/site identity
+└── backfill_deal_observation_history.py
+
+core/
+├── database.py                       # ORM models, init_db, sessions
+├── scheduler.py                      # collector runs + meal-deal lineage hookup
+└── venue_identity.py                 # shared identity heuristics
+
+alembic/versions/
+├── d4c7e2a91f31_add_canonical_meal_deal_identity_tables.py
+├── e82fa4b1c3d9_add_deal_observations_and_applicability.py
+├── 9ac3d7b5f112_add_deal_materializations_table.py
+└── c6f1e2a7b934_merge_meal_deal_heads.py
 ```
+
+## Bottom Line
+
+The meal-deal ingestion system now has one coherent runtime story:
+
+- collectors emit `DealSignal`
+- ingest writes canonical observations and applicability
+- semantic rows are materialized explicitly
+- API endpoints read one shared deal layer
+
+The major remaining work is no longer schema shape. It is data quality and operator workflow:
+
+- re-auditing noisy accepted observations
+- adding review tooling for disputed site or venue mappings
+- deciding how far to collapse `meal_deals` once the canonical stack has proven stable

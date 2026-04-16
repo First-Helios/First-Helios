@@ -588,6 +588,7 @@ def ingest_deal_signals(
                 deal_description=signal.deal_description,
                 price=signal.price,
                 price_type=signal.price_type,
+                discount_percentage=signal.discount_percentage,
                 valid_days=signal.valid_days,
                 valid_start_time=signal.valid_start_time,
                 valid_end_time=signal.valid_end_time,
