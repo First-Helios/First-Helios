@@ -31,6 +31,7 @@ from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
 from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation  # noqa: for user-agent
+from core.normalizer import make_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -394,7 +395,7 @@ class ChainDealCollector:
                 signals.append(
                     DealSignal(
                         restaurant_name=display_name,
-                        brand_fingerprint=chain_cfg.get("fingerprint", chain_key),
+                        brand_fingerprint=chain_cfg.get("fingerprint") or make_fingerprint(display_name),
                         deal_name=deal["name"],
                         deal_description=deal.get("description"),
                         deal_type=deal.get("deal_type", "combo"),

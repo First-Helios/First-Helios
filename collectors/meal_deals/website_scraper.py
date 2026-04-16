@@ -1494,10 +1494,21 @@ class WebsiteDealCollector:
                                 "[WebScraper] %s: %d deals found at %s (%d locations)",
                                 emp_rep.name, len(signals), rurl_rep.url, len(group),
                             )
-                            # Fan out signals to every location sharing this URL.
-                            # Set local_employer_id per location so ingest doesn't
-                            # double-fan-out via brand_fingerprint.
+                            # Fan out signals to every location sharing this URL,
+                            # but ONLY if the location belongs to the same brand.
+                            # If employers with different brand groups share a URL
+                            # (data quality issue), skip the mismatched ones to
+                            # prevent wrong deals from leaking across businesses.
+                            rep_bg = emp_rep.brand_group_id
                             for rurl_loc, emp_loc in group:
+                                if len(group) > 1 and emp_loc.brand_group_id != rep_bg:
+                                    logger.warning(
+                                        "[WebScraper] Skipping fan-out of %s deals to %s "
+                                        "(brand_group %s ≠ %s) — URL shared across brands",
+                                        emp_rep.name, emp_loc.name,
+                                        emp_loc.brand_group_id, rep_bg,
+                                    )
+                                    continue
                                 for sig in signals:
                                     loc_sig = DealSignal(
                                         restaurant_name=emp_loc.name,

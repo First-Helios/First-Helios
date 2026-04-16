@@ -37,6 +37,7 @@ from core.database import (
     get_session,
     init_db,
 )
+from core.normalizer import make_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,44 @@ def _normalize_url(raw: str) -> str | None:
         return urlunparse(parsed).rstrip("/") if parsed.path == "/" else urlunparse(parsed)
     except Exception:
         return None
+
+
+# ── Name validation ──────────────────────────────────────────────────────────
+
+# Tokens that are too generic to use for name comparison
+_NAME_STOPWORDS = frozenset({
+    "restaurant", "restaurants", "bar", "grill", "cafe", "coffee",
+    "the", "and", "of", "at", "n", "sports", "pub", "lounge",
+    "kitchen", "house", "place", "shop", "food", "foods",
+    "diner", "eatery", "bistro", "tavern", "inn",
+})
+
+
+def _name_tokens(name: str) -> set[str]:
+    """Return significant tokens from a name for comparison."""
+    fp = make_fingerprint(name)
+    return {t for t in fp.split() if t not in _NAME_STOPWORDS and len(t) > 1}
+
+
+def validate_place_name(query_name: str, result_name: str) -> bool:
+    """Check that a Google Places result plausibly matches the queried name.
+
+    Uses containment ratio: |intersection| / min(|query_tokens|, |result_tokens|)
+    must exceed 0.5.  For 2-token names this requires BOTH tokens to match;
+    for single-token names the one token must match.  This catches obvious
+    mismatches like 'Wings N More' vs 'Wings-N-Things' (overlap='wings'
+    = 1/2 = 0.5, not > 0.5) while allowing 'P. Terry's' vs 'P. Terry's
+    Burger Stand' (overlap='terrys' = 1/1 = 1.0).
+    """
+    if not query_name or not result_name:
+        return False
+    query_tok = _name_tokens(query_name)
+    result_tok = _name_tokens(result_name)
+    if not query_tok or not result_tok:
+        return True  # can't validate — accept rather than wrongly reject
+    overlap = query_tok & result_tok
+    min_size = min(len(query_tok), len(result_tok))
+    return len(overlap) / min_size > 0.5
 
 
 def _record_failure(
@@ -329,6 +368,20 @@ def resolve_brand_urls(
                     logger.info("  [DRY] FAIL (no_website): %s", brand.canonical_name)
                 continue
 
+            # Validate that Google returned the right business
+            gp_name = result.get("display_name", "")
+            if gp_name and not validate_place_name(brand.canonical_name, gp_name):
+                reason = f"name_mismatch:{gp_name}"
+                logger.warning(
+                    "[GooglePlaces] Name mismatch for %r: Google returned %r — skipping",
+                    brand.canonical_name, gp_name,
+                )
+                stats["skipped_no_website"] += 1
+                if not dry_run:
+                    _record_failure(session, "brand_group", brand.id, brand.canonical_name, reason)
+                    stats["failures_recorded"] += 1
+                continue
+
             stats["brands_resolved"] += 1
             website = result["website"]
 
@@ -505,6 +558,20 @@ def resolve_local_urls(
                     stats["failures_recorded"] += 1
                 else:
                     logger.info("  [DRY] FAIL (no_website): %s", emp.name)
+                continue
+
+            # Validate that Google returned the right business
+            gp_name = result.get("display_name", "")
+            if gp_name and not validate_place_name(emp.name, gp_name):
+                reason = f"name_mismatch:{gp_name}"
+                logger.warning(
+                    "[GooglePlaces-Local] Name mismatch for %r: Google returned %r — skipping",
+                    emp.name, gp_name,
+                )
+                stats["skipped_no_website"] += 1
+                if not dry_run:
+                    _record_failure(session, "local_employer", emp.id, emp.name, reason)
+                    stats["failures_recorded"] += 1
                 continue
 
             stats["resolved"] += 1

@@ -36,6 +36,7 @@ from core.database import (
     get_session,
     init_db,
 )
+from core.normalizer import make_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,9 @@ AUSTIN_BBOX = (30.05, -98.15, 30.75, -97.40)  # south, west, north, east
 
 
 def _fingerprint(name: str) -> str:
-    """Minimal fingerprint for fuzzy matching — lowercase, strip punctuation, collapse spaces."""
-    s = name.lower().strip()
-    s = re.sub(r"[''`]s\b", "s", s)         # possessives
-    s = re.sub(r"[^a-z0-9 ]", " ", s)       # strip punctuation
-    s = re.sub(r"\s+", " ", s).strip()       # collapse whitespace
-    return s
+    """Canonical fingerprint — delegates to core.normalizer.make_fingerprint
+    so OSM matching uses the same algorithm as the DB."""
+    return make_fingerprint(name)
 
 
 def _normalize_url(raw: str) -> str | None:

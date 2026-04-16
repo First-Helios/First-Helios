@@ -1227,6 +1227,14 @@ class MealDeal(Base):
         Index("ix_meal_deals_brand_active", "brand_group_id", "is_active"),
         Index("ix_meal_deals_region_active", "region", "is_active"),
         Index("ix_meal_deals_type_region", "deal_type", "region"),
+        # Partial unique index for chain templates — prevents duplicate
+        # chain-wide deals.  Must match the migration in a8c3e9d1f720.
+        Index(
+            "uq_meal_deal_chain_template",
+            "brand_group_id", "deal_name", "source",
+            unique=True,
+            postgresql_where=text("is_chain_template = TRUE"),
+        ),
     )
 
     def to_dict(self) -> dict:
