@@ -58,7 +58,9 @@ The OPi pulls from `git@github.com:4Fortune8/First-Helios.git` using a deploy ke
 1. Checks for new commits on the remote
 2. Runs `git pull`
 3. Runs `pip install -r requirements.txt` if `requirements.txt` changed
-4. Restarts the `helios` service if any files changed
+4. Restarts the `helios` **and** `helios-collector` services if any files changed
+
+> **Important:** Both services must be restarted on deploy. If only `helios` is restarted, the collector keeps running stale code (or stays dead if it crashed).
 
 Update logs: `/var/log/helios-update.log`
 

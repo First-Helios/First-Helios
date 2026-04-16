@@ -37,6 +37,16 @@ def get_scheduler() -> BackgroundScheduler:
     return _scheduler
 
 
+def reset_scheduler() -> None:
+    """Discard the current scheduler instance so a fresh one is created
+    on the next call to ``get_scheduler()`` / ``init_scheduler()``.
+    Call this after ``shutdown()`` when you intend to restart the scheduler
+    in the same process (e.g. crash-recovery loop in collector_main).
+    """
+    global _scheduler
+    _scheduler = None
+
+
 def init_scheduler() -> BackgroundScheduler:
     """Configure and start the background scheduler.
 

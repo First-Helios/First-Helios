@@ -174,34 +174,87 @@ def run_jobs_now(job_ids: list[str], registry: dict) -> None:
     logger.info("Done. %d passed, %d failed (of %d jobs)", passed, failed, total)
 
 
+_MAX_RESTART_DELAY = 300  # cap backoff at 5 minutes
+
+
 def run_scheduler() -> None:
-    """Start APScheduler and block until SIGTERM or KeyboardInterrupt."""
-    from core.database import init_db
-    from core.scheduler import init_scheduler
+    """Start APScheduler and block until SIGTERM or KeyboardInterrupt.
 
-    logger.info("[collector_main] Initializing database …")
-    init_db()
-
-    logger.info("[collector_main] Starting scheduler …")
-    scheduler = init_scheduler()
+    Wraps the scheduler lifecycle in a retry loop so the process
+    automatically recovers from transient failures (DB hiccup, import
+    error after a deploy, OOM-killed thread pool, etc.) instead of
+    staying dead until someone manually restarts the systemd unit.
+    """
+    _shutting_down = False
 
     def _shutdown(signum, frame):
+        nonlocal _shutting_down
+        _shutting_down = True
         logger.info("[collector_main] Signal %d received — shutting down …", signum)
-        scheduler.shutdown(wait=False)
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
-    logger.info("[collector_main] Scheduler running with %d jobs. Press Ctrl-C to stop.",
-                len(scheduler.get_jobs()))
+    restart_delay = 10  # seconds, doubles on consecutive failures
 
-    for job in scheduler.get_jobs():
-        logger.info("  %-35s next: %s", job.id,
-                    job.next_run_time.strftime("%Y-%m-%d %H:%M:%S") if job.next_run_time else "—")
+    while not _shutting_down:
+        scheduler = None
+        try:
+            from core.database import init_db
+            from core.scheduler import init_scheduler
 
-    while scheduler.running:
-        time.sleep(30)
+            logger.info("[collector_main] Initializing database …")
+            init_db()
+
+            logger.info("[collector_main] Starting scheduler …")
+            scheduler = init_scheduler()
+
+            logger.info(
+                "[collector_main] Scheduler running with %d jobs. Press Ctrl-C to stop.",
+                len(scheduler.get_jobs()),
+            )
+            for job in scheduler.get_jobs():
+                logger.info(
+                    "  %-35s next: %s",
+                    job.id,
+                    job.next_run_time.strftime("%Y-%m-%d %H:%M:%S")
+                    if job.next_run_time
+                    else "—",
+                )
+
+            restart_delay = 10  # reset on successful start
+
+            while scheduler.running and not _shutting_down:
+                time.sleep(30)
+
+            if _shutting_down:
+                break
+
+            logger.error("[collector_main] Scheduler stopped unexpectedly — will restart")
+
+        except SystemExit:
+            raise
+        except Exception:
+            logger.exception("[collector_main] Scheduler crashed — restarting in %ds", restart_delay)
+        finally:
+            if scheduler is not None:
+                try:
+                    scheduler.shutdown(wait=False)
+                except Exception:
+                    pass
+                # Discard the singleton so a fresh scheduler is created on retry
+                try:
+                    from core.scheduler import reset_scheduler
+                    reset_scheduler()
+                except Exception:
+                    pass
+
+        if _shutting_down:
+            break
+
+        time.sleep(restart_delay)
+        restart_delay = min(restart_delay * 2, _MAX_RESTART_DELAY)
 
 
 def main() -> None:
