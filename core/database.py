@@ -20,6 +20,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -1202,6 +1203,10 @@ class MealDeal(Base):
     # ── Signal quality ────────────────────────────────────────────────────────
     raw_scraped_text = Column(Text, nullable=True)         # original text block before parsing
     signal_quality = Column(Float, nullable=True)          # 0.0–1.0 composite score
+    sub_deals = Column(JSON, nullable=True)                # JSONB on PG: list of offer dicts
+    # sub_deals example:
+    #   [{"item": "appetizers", "discount_type": "percentage_off", "discount_value": 50.0},
+    #    {"item": "cocktails", "discount_type": "discount_amount", "discount_value": 1.00}]
 
     # ── Status ────────────────────────────────────────────────────────────────
     is_active = Column(Boolean, default=True, index=True)
@@ -1249,6 +1254,7 @@ class MealDeal(Base):
             "source_url": self.source_url,
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,
             "signal_quality": self.signal_quality,
+            "sub_deals": self.sub_deals,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

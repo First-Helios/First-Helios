@@ -292,10 +292,23 @@ Write a one-time script that re-parses `deal_description` for all existing rows 
 | Chain duplicate rows | 882 | 0 (21 templates) |
 | Confirmed leak rows | unknown | 8 deactivated |
 
-### Phase 4 — Prevention
-14. Add `raw_scraped_text` preservation so future extraction improvements don't require re-scraping
-15. `sub_deals` JSONB for multi-promo representation (E)
-16. Automated quality dashboards / alerts when signal_quality drops
+### Phase 4 — Prevention ✅ COMPLETE (2026-04-16)
+14. ✅ `raw_scraped_text` preservation — delivered in Phase 1 migration `f7a1b2c3d4e5`.  Live scrapers populate it; legacy rows remain NULL and the populator/audit fall back to `deal_description`.
+15. ✅ `sub_deals` JSONB for multi-promo representation (E) — migration `a8c3e9d1f720`. [collectors/meal_deals/sub_deals.py](collectors/meal_deals/sub_deals.py) provides the extractor (≥2-offer floor, 3-word trailing-form cap). [scripts/populate_sub_deals.py](scripts/populate_sub_deals.py) backfilled 112 rows. Wired into ingest so new signals auto-decompose when the collector doesn't supply it.
+16. ✅ Automated quality dashboards / alerts — [scripts/meal_deal_quality_dashboard.py](scripts/meal_deal_quality_dashboard.py) emits per-source mean quality, field completeness, distribution percentiles, and fires alerts when any source drops below configurable thresholds (default: mean quality 0.50, active ratio 0.40). Supports `--json --exit-on-alert` for cron/CI.
+17. ✅ Re-audit sampler (new in Phase 4) — [scripts/reaudit_meal_deals.py](scripts/reaudit_meal_deals.py) runs a stratified random shuffle (default 3 per `(source, deal_type, is_active)` stratum) and replays today's rules. Surfaces drift, missing sub_deals, unclassified price_types, and stale add-on/nav rows. Deterministic with `--seed`.
+18. ✅ Process guide — [docs/guides/MEAL_DEAL_SIGNAL_REFINEMENT.md](docs/guides/MEAL_DEAL_SIGNAL_REFINEMENT.md) documents the full refinement pipeline, tool reference, recommended cadence, and audit flag interpretation.
+
+**Phase 4 metric impact (live DB, 3,392 rows):**
+| Metric | Before Phase 4 | After Phase 4 |
+|---|---|---|
+| Rows with `sub_deals` JSONB | 0 | 112 (3.3%) |
+| Tools for operator-driven quality review | ad-hoc | dashboard + stratified re-audit |
+| Alerting on quality regressions | none | per-source thresholds wired into dashboard |
+
+**First re-audit run (seed=42, 7 strata × 3 samples = 21 rows):**
+- Pass rate: 61.9% after running idempotent `backfill_signal_quality.py` to clear `quality_drift`.
+- Dominant remaining flag: `price_type_unknown` (1,577 population rows). These are pre-Phase-1 absolute-price rows that never got classified — cleanup script handles the discount/percentage forms but not plain "$13 lunch special".  Tracked as finding #1 in the process guide.
 
 ---
 

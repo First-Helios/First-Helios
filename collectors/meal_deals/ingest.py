@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.quality import compute_signal_quality, gate_decision
+from collectors.meal_deals.sub_deals import extract_sub_deals
 from core.database import (
     BrandGroup,
     LocalEmployer,
@@ -121,6 +122,7 @@ def _build_deal_data(
         "verified_at": now,
         "raw_scraped_text": signal.raw_scraped_text,
         "signal_quality": signal.signal_quality,
+        "sub_deals": signal.sub_deals,
         "is_active": is_active_flag,
         "lat": lat,
         "lng": lng,
@@ -168,6 +170,7 @@ def _upsert_deal_pg(session: Session, deal_data: dict) -> None:
             "verified_at": stmt.excluded.verified_at,
             "raw_scraped_text": stmt.excluded.raw_scraped_text,
             "signal_quality": stmt.excluded.signal_quality,
+            "sub_deals": stmt.excluded.sub_deals,
             "is_active": stmt.excluded.is_active,
             "updated_at": datetime.now(timezone.utc),
         },
@@ -199,6 +202,7 @@ def _upsert_chain_template_pg(session: Session, deal_data: dict) -> None:
             "verified_at": stmt.excluded.verified_at,
             "raw_scraped_text": stmt.excluded.raw_scraped_text,
             "signal_quality": stmt.excluded.signal_quality,
+            "sub_deals": stmt.excluded.sub_deals,
             "is_active": stmt.excluded.is_active,
             "updated_at": datetime.now(timezone.utc),
         },
@@ -251,6 +255,15 @@ def ingest_deal_signals(
                 logger.debug("[DealIngest] Skipping junk deal name: %r", signal.deal_name)
                 stats["skipped"] += 1
                 continue
+
+            # Decompose multi-promo text into structured sub_deals if the
+            # collector didn't already populate it.  Helps query layer show
+            # all offers within a happy-hour block.
+            if signal.sub_deals is None:
+                source_text = signal.raw_scraped_text or signal.deal_description
+                if source_text:
+                    subs = extract_sub_deals(source_text)
+                    signal.sub_deals = subs or None
 
             # Compute signal quality once per signal (location-independent fields)
             qscore = compute_signal_quality(
