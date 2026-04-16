@@ -31,6 +31,15 @@ This draft separates those concerns into stable contracts.
 	- ORM models in `core/database.py`
 	- Alembic migration `d4c7e2a91f31_add_canonical_meal_deal_identity_tables.py`
 	- rebuild script `scripts/backfill_meal_deal_identity.py`
+- Observation/applicability dual-write is now implemented in the current ingest path:
+	- ORM models in `core/database.py`
+	- Alembic migration `e82fa4b1c3d9_add_deal_observations_and_applicability.py`
+	- `collectors/meal_deals/ingest.py` now writes one `deal_observations` row per source artifact and separate `deal_applicability` rows for resolved venue or brand targets
+	- `core/scheduler.py` now threads `collector_run_id` onto meal-deal signals before ingest
+- Current write semantics for the new layer:
+	- shared-site fan-out copies collapse into one observation via `source_observation_key`
+	- multiple venue or brand targets attach through `deal_applicability`
+	- rejected signals are retained as observations with `review_state="rejected"`
 - Current dry-run backfill on the local synced database produced:
 	- `canonical_venues`: 5,369
 	- `venue_aliases`: 5,662
@@ -157,7 +166,7 @@ One row per observed deal artifact from a source.
 | start_date | DATETIME | Yes | Optional seasonal bound |
 | end_date | DATETIME | Yes | Optional seasonal bound |
 | raw_scraped_text | TEXT | Yes | Required when source is scrape-based |
-| extraction_payload | JSONB | Yes | Parser details / auxiliary metadata |
+| extraction_payload | JSON / JSONB | Yes | Parser details / auxiliary metadata |
 | signal_quality | DOUBLE | Yes | Quality score |
 | deal_value_score | DOUBLE | Yes | Consumer value score |
 | review_state | TEXT | No | `accepted`, `review`, `rejected`, `superseded` |
@@ -291,11 +300,20 @@ That layer must guarantee:
 2. Add `deal_observations` writes from collectors.
 3. Preserve `raw_scraped_text`, `metadata`, and parser artifacts in the new table.
 
+Current status:
+- Implemented through `collectors/meal_deals/ingest.py` for existing `DealSignal` producers.
+- One observation row is reused across shared-site fan-out copies when the underlying artifact is the same.
+
 ### Phase 3: Applicability resolution
 
 1. Resolve observations into `deal_applicability`.
 2. Add manual review hooks for disputed sites and ambiguous venue matches.
 3. Verify chain-page vs venue-page targeting.
+
+Current status:
+- Venue applicability now resolves through `canonical_venue_aliases` when available.
+- Brand applicability now resolves through `brand_groups` via `brand_fingerprint`.
+- Manual review tooling and disputed-site workflows are still pending.
 
 ### Phase 4: Read cutover
 
@@ -320,4 +338,5 @@ That layer must guarantee:
 1. Build `canonical_venue_aliases` using the current venue-identity helper and audit outputs.
 2. Introduce `site_identities` so website scraping operates once per normalized site.
 3. Add `deal_observations` dual-write from `website_scraper`, `chain_deals`, `gbp_offers`, and `manual_ingest`.
-4. Move the API to a shared materialized semantic layer before deeper collector expansion.
+4. Add `deal_applicability` dual-write from the current ingest path using canonical venue aliases and brand-group resolution.
+5. Move the API to a shared materialized semantic layer before deeper collector expansion.

@@ -1275,6 +1275,118 @@ class SiteAssignment(Base):
         }
 
 
+class DealObservation(Base):
+    """Canonical observed meal-deal artifact before applicability fan-out."""
+
+    __tablename__ = "deal_observations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False, index=True)
+    collector_run_id = Column(Integer, nullable=True, index=True)
+    site_identity_id = Column(Integer, ForeignKey("site_identities.id"), nullable=True, index=True)
+    source_url = Column(String, nullable=True)
+    source_observation_key = Column(String, nullable=False)
+    observed_at = Column(DateTime, nullable=False, index=True)
+    deal_name = Column(String, nullable=False)
+    deal_description = Column(Text, nullable=True)
+    deal_type = Column(String, nullable=False, index=True)
+    price = Column(Float, nullable=True)
+    price_type = Column(String, nullable=True)
+    discount_percentage = Column(Float, nullable=True)
+    original_price = Column(Float, nullable=True)
+    menu_avg_price = Column(Float, nullable=True)
+    calories = Column(Integer, nullable=True)
+    calorie_price_ratio = Column(Float, nullable=True)
+    valid_days = Column(String, nullable=True)
+    valid_start_time = Column(String, nullable=True)
+    valid_end_time = Column(String, nullable=True)
+    is_recurring = Column(Boolean, default=True, nullable=False)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    raw_scraped_text = Column(Text, nullable=True)
+    extraction_payload = Column(JSON, nullable=True)
+    signal_quality = Column(Float, nullable=True)
+    deal_value_score = Column(Float, nullable=True)
+    review_state = Column(String, nullable=False, default="accepted", index=True)
+    superseded_by_observation_id = Column(Integer, ForeignKey("deal_observations.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("source", "source_observation_key", name="uq_deal_observation_source_key"),
+        Index("ix_deal_observations_run_source", "collector_run_id", "source"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "source": self.source,
+            "collector_run_id": self.collector_run_id,
+            "site_identity_id": self.site_identity_id,
+            "source_url": self.source_url,
+            "source_observation_key": self.source_observation_key,
+            "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+            "deal_name": self.deal_name,
+            "deal_description": self.deal_description,
+            "deal_type": self.deal_type,
+            "price": self.price,
+            "price_type": self.price_type,
+            "discount_percentage": self.discount_percentage,
+            "original_price": self.original_price,
+            "menu_avg_price": self.menu_avg_price,
+            "calories": self.calories,
+            "calorie_price_ratio": self.calorie_price_ratio,
+            "valid_days": self.valid_days,
+            "valid_start_time": self.valid_start_time,
+            "valid_end_time": self.valid_end_time,
+            "is_recurring": self.is_recurring,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "signal_quality": self.signal_quality,
+            "deal_value_score": self.deal_value_score,
+            "review_state": self.review_state,
+        }
+
+
+class DealApplicability(Base):
+    """Resolved applicability targets for a canonical deal observation."""
+
+    __tablename__ = "deal_applicability"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    observation_id = Column(Integer, ForeignKey("deal_observations.id"), nullable=False, index=True)
+    applicability_scope = Column(String, nullable=False, index=True)
+    canonical_venue_id = Column(Integer, ForeignKey("canonical_venues.id"), nullable=True, index=True)
+    brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+    confidence = Column(Float, nullable=True)
+    resolver_method = Column(String, nullable=False)
+    resolver_notes = Column(Text, nullable=True)
+    valid_from = Column(DateTime, nullable=True)
+    valid_to = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_deal_applicability_observation_active", "observation_id", "is_active"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "observation_id": self.observation_id,
+            "applicability_scope": self.applicability_scope,
+            "canonical_venue_id": self.canonical_venue_id,
+            "brand_group_id": self.brand_group_id,
+            "confidence": self.confidence,
+            "resolver_method": self.resolver_method,
+            "resolver_notes": self.resolver_notes,
+            "valid_from": self.valid_from.isoformat() if self.valid_from else None,
+            "valid_to": self.valid_to.isoformat() if self.valid_to else None,
+            "is_active": self.is_active,
+        }
+
+
 class MealDeal(Base):
     """A meal deal / special offered by a restaurant in local_employers.
 

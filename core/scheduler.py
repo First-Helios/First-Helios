@@ -462,6 +462,8 @@ def _make_deal_runner(collector_cls):
             run.fetched = len(signals)
 
             if signals:
+                for sig in signals:
+                    sig.collector_run_id = run.id
                 stats = ingest_deal_signals(signals, region="austin_tx")
                 run.new = stats.get("total_rows", 0)
                 run.skipped = stats.get("skipped", 0)

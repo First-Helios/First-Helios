@@ -60,6 +60,7 @@ class DealSignal:
     source: str = "chain_website"
     source_url: str | None = None
     region: str = "austin_tx"
+    collector_run_id: int | None = None
 
     # ── Signal quality ────────────────────────────────────────────────────────
     raw_scraped_text: str | None = None           # original text block before parsing
