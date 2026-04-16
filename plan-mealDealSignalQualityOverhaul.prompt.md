@@ -276,11 +276,21 @@ Write a one-time script that re-parses `deal_description` for all existing rows 
 | Rows with valid_start_time | 25 (0.8%) | 836 (19.4%) |
 | Rows with valid_end_time | ~20 (0.6%) | 795 (18.4%) |
 
-### Phase 3 — Structural cleanup
-10. Signal quality scoring (K) — gates new data AND lets us triage existing
-11. Chain deal deduplication redesign (F)
-12. One-time data cleanup script (L)
-13. Cross-employer leak detection (L.8)
+### Phase 3 — Structural cleanup ✅ COMPLETE (2026-04-16)
+10. ✅ Signal quality scoring (K) — [collectors/meal_deals/quality.py](collectors/meal_deals/quality.py) computes 0.0–1.0 score from 6 factors (price, temporal, description, name, restaurant match, not-addon). Wired into ingest: reject <0.20, review 0.20–0.40 (stored inactive), active ≥0.40. Backfilled all rows via [scripts/backfill_signal_quality.py](scripts/backfill_signal_quality.py).
+11. ✅ Chain deal dedup (F) — `is_chain_template` column + nullable `local_employer_id`. [scripts/dedupe_chain_deals.py](scripts/dedupe_chain_deals.py) collapsed 882 fan-out duplicates into 21 templates. New ingest writes chain deals once as templates; query layer joins on `brand_group_id`.
+12. ✅ One-time cleanup (L) — [scripts/cleanup_meal_deals.py](scripts/cleanup_meal_deals.py): 43 deletions (4 × $0.00, 9 sub-$1 non-food, 19 nav/boilerplate, 10 TCBY retail leak, 1 event spam); 751 `price_type` reclassifications.
+13. ✅ Cross-employer leak detection (L.8) — [scripts/detect_cross_employer_leaks.py](scripts/detect_cross_employer_leaks.py): checks against employers-with-deals name index (669 employers, 286 phrases), deactivated 8 confirmed leaks (Barton BBQ → Green Mesquite content, etc.).
+
+**Metric impact (live DB, 3,392 rows after cleanup):**
+| Metric | Before Phase 3 | After Phase 3 |
+|---|---|---|
+| Active rows | 4,317 (all) | 2,588 (60.4%) |
+| signal_quality scored | 0 | 4,317 (100%) |
+| Rows quality ≥ 0.40 (usable) | N/A | 2,596 (61%) |
+| Rows quality ≥ 0.40 with price | N/A | 1,625 (38%) |
+| Chain duplicate rows | 882 | 0 (21 templates) |
+| Confirmed leak rows | unknown | 8 deactivated |
 
 ### Phase 4 — Prevention
 14. Add `raw_scraped_text` preservation so future extraction improvements don't require re-scraping
