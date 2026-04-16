@@ -271,6 +271,121 @@ def compute_signal_quality(
     return score
 
 
+def compute_deal_value_score(
+    *,
+    price: float | None = None,
+    price_type: str | None = None,
+    discount_percentage: float | None = None,
+    deal_name: str | None = None,
+    deal_description: str | None = None,
+    raw_scraped_text: str | None = None,
+) -> float:
+    """Compute 0.0–1.0 offer-strength score representing consumer value.
+
+    This is *separate* from signal_quality (data completeness).  A deal can
+    have perfect signal quality but weak value (e.g. "$1 off"), or strong
+    value but incomplete data.
+
+    Tier mapping (returned score → label):
+      0.90–1.00  Tier 5 — BOGO / buy-one-get-one / 2-for-1
+      0.70–0.89  Tier 4 — ≥40% off; half off; absolute ≤$3 drink/taco/item
+      0.50–0.69  Tier 3 — 20–39% off; $3–$5 off; absolute $4–$8
+      0.30–0.49  Tier 2 — 10–19% off; $2–$3 off
+      0.10–0.29  Tier 1 — <10% off; $1 off generic
+      0.00       Tier 0 — unknown / no price info
+    """
+    combined = " ".join(
+        s for s in (deal_name, deal_description, raw_scraped_text) if s
+    ).lower()
+
+    # ── Tier 5: BOGO ────────────────────────────────────────────────────────
+    _BOGO_RE = re.compile(
+        r"\b(?:bogo|buy\s+one\s+get\s+one|buy\s+1\s+get\s+1|2\s+for\s+1|two\s+for\s+one"
+        r"|get\s+one\s+free|buy\s+(?:one|1)\s+.{0,20}free)\b",
+        re.IGNORECASE,
+    )
+    if _BOGO_RE.search(combined):
+        return 0.95
+
+    # ── Tier 4–5: percentage off ─────────────────────────────────────────────
+    pct = discount_percentage
+    if pct is None and price_type == "percentage_off" and price:
+        pct = price  # some rows store the % in price field
+
+    # Also parse percentage from text if column is missing
+    if pct is None:
+        _PCT_TEXT_RE = re.compile(r"(\d{1,3})\s*%\s*off", re.IGNORECASE)
+        _HALF_RE = re.compile(r"\bhalf\s+(?:off|price)\b|½\s*(?:off|price)", re.IGNORECASE)
+        m = _PCT_TEXT_RE.search(combined)
+        if m:
+            pct = float(m.group(1))
+        elif _HALF_RE.search(combined):
+            pct = 50.0
+
+    if pct is not None:
+        if pct >= 75:
+            return 0.92
+        if pct >= 50:
+            return 0.85
+        if pct >= 40:
+            return 0.78
+        if pct >= 30:
+            return 0.65
+        if pct >= 20:
+            return 0.55
+        if pct >= 15:
+            return 0.40
+        if pct >= 10:
+            return 0.32
+        return 0.18  # <10% off
+
+    # ── Absolute price: item costs $X ───────────────────────────────────────
+    # Key insight: "$1 drinks" (absolute) >> "$1 off" (discount)
+    if price_type == "absolute" and price is not None:
+        if price <= 1.50:
+            return 0.88   # $1 drinks, $1 tacos — extremely high value
+        if price <= 3.00:
+            return 0.80   # $2–$3 items — still great
+        if price <= 5.00:
+            return 0.68   # $4–$5 items — good happy hour pricing
+        if price <= 8.00:
+            return 0.58   # $6–$8 — decent deal
+        if price <= 15.00:
+            return 0.45   # $9–$15 — moderate
+        return 0.30        # >$15 — unclear if it's really a deal
+
+    # ── Discount amount: saves $X off menu price ─────────────────────────────
+    # "$1 off" is weak. "$10 off" is meaningful. "$5 off" is moderate.
+    if price_type == "discount_amount" and price is not None:
+        if price >= 10.0:
+            return 0.70
+        if price >= 5.0:
+            return 0.58
+        if price >= 3.0:
+            return 0.42
+        if price >= 2.0:
+            return 0.30
+        return 0.15   # $1 off — weak
+
+    # ── Fallback: parse discount amount from text ─────────────────────────────
+    _DOLLAR_OFF_RE = re.compile(r"\$\s*(\d+(?:\.\d{1,2})?)\s*off\b", re.IGNORECASE)
+    m = _DOLLAR_OFF_RE.search(combined)
+    if m:
+        amt = float(m.group(1))
+        if amt >= 10:
+            return 0.68
+        if amt >= 5:
+            return 0.55
+        if amt >= 3:
+            return 0.40
+        if amt >= 2:
+            return 0.28
+        return 0.15
+
+    # ── No extractable offer value ────────────────────────────────────────────
+    return 0.0
+
+
 def gate_decision(score: float) -> tuple[str, bool]:
     """Return (decision, is_active) for a given quality score.
 

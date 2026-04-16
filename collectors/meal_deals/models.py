@@ -63,7 +63,8 @@ class DealSignal:
 
     # ── Signal quality ────────────────────────────────────────────────────────
     raw_scraped_text: str | None = None           # original text block before parsing
-    signal_quality: float | None = None           # 0.0–1.0 composite score
+    signal_quality: float | None = None           # 0.0–1.0 composite score (data completeness)
+    deal_value_score: float | None = None         # 0.0–1.0 offer strength (consumer value)
     sub_deals: list[dict[str, Any]] | None = None # structured multi-promo offers
     # sub_deals example:
     #   [{"item": "appetizers", "discount_type": "percentage_off", "discount_value": 50.0},

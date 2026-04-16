@@ -1202,7 +1202,8 @@ class MealDeal(Base):
 
     # ── Signal quality ────────────────────────────────────────────────────────
     raw_scraped_text = Column(Text, nullable=True)         # original text block before parsing
-    signal_quality = Column(Float, nullable=True)          # 0.0–1.0 composite score
+    signal_quality = Column(Float, nullable=True)          # 0.0–1.0 composite score (data completeness)
+    deal_value_score = Column(Float, nullable=True)        # 0.0–1.0 offer strength (consumer value)
     sub_deals = Column(JSON, nullable=True)                # JSONB on PG: list of offer dicts
     # sub_deals example:
     #   [{"item": "appetizers", "discount_type": "percentage_off", "discount_value": 50.0},
@@ -1254,6 +1255,7 @@ class MealDeal(Base):
             "source_url": self.source_url,
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,
             "signal_quality": self.signal_quality,
+            "deal_value_score": self.deal_value_score,
             "sub_deals": self.sub_deals,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
