@@ -29,6 +29,7 @@ from bs4 import BeautifulSoup, Tag
 
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
+from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation  # noqa: for user-agent
 
 logger = logging.getLogger(__name__)
@@ -196,12 +197,19 @@ def _extract_deals_generic(
             continue
         seen_names.add(name)
 
+        valid_days = extract_days(full_text)
+        v_start, v_end = extract_times(full_text)
+
         deals.append({
             "name": name,
             "description": " ".join(desc_parts)[:500] if desc_parts else None,
             "deal_type": _classify_deal_type(full_text),
             "price": prices[0] if prices else None,
             "original_price": prices[1] if len(prices) > 1 else None,
+            "valid_days": valid_days,
+            "valid_start_time": v_start,
+            "valid_end_time": v_end,
+            "raw_scraped_text": full_text[:2000],
         })
 
     # Strategy 2: Scan links with deal-like text (many chains use link cards)
@@ -220,12 +228,18 @@ def _extract_deals_generic(
             continue
 
         seen_names.add(link_text[:120])
+        valid_days = extract_days(link_text)
+        v_start, v_end = extract_times(link_text)
         deals.append({
             "name": link_text[:120],
             "description": None,
             "deal_type": _classify_deal_type(link_text),
             "price": prices[0] if prices else None,
             "original_price": prices[1] if len(prices) > 1 else None,
+            "valid_days": valid_days,
+            "valid_start_time": v_start,
+            "valid_end_time": v_end,
+            "raw_scraped_text": link_text[:2000],
         })
 
     return deals
@@ -386,6 +400,10 @@ class ChainDealCollector:
                         deal_type=deal.get("deal_type", "combo"),
                         price=deal.get("price"),
                         original_price=deal.get("original_price"),
+                        valid_days=deal.get("valid_days"),
+                        valid_start_time=deal.get("valid_start_time"),
+                        valid_end_time=deal.get("valid_end_time"),
+                        raw_scraped_text=deal.get("raw_scraped_text"),
                         source="chain_website",
                         source_url=url,
                         region=region,

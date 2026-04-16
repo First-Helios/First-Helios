@@ -254,11 +254,27 @@ Write a one-time script that re-parses `deal_description` for all existing rows 
 - "$1 Wings" → passes floor via food keyword (correct)
 - "$1,500 off event booking" → rejected as non-food (was: stored as $1 combo)
 
-### Phase 2 — Recover lost signals
-6. Temporal extraction fix (J) + backfill (M)
-7. Percentage/half-off capture (part of G step 3)
-8. Multi-promo splitter (H)
-9. Deal name extraction overhaul (I)
+### Phase 2 — Recover lost signals ✅ COMPLETE (2026-04-15)
+6. ✅ Temporal extraction fix (J) — new shared module [collectors/meal_deals/temporal.py](collectors/meal_deals/temporal.py) handles day ranges ("Mon-Fri", "Monday through Friday", "weekdays"), time ranges ("3-6pm", "11:00 AM – 2:00 PM"), "Close" sentinel, and is wired into both [website_scraper.py](collectors/meal_deals/website_scraper.py) and [chain_deals.py](collectors/meal_deals/chain_deals.py). Also passes `raw_scraped_text` to DealSignal from chain_deals.
+7. ✅ Temporal backfill (M) — [scripts/backfill_deal_temporal.py](scripts/backfill_deal_temporal.py) re-parses existing rows. Applied to live DB: 1,220 row updates committed.
+8. ✅ Percentage/half-off capture — already covered by Phase 1 `_extract_deal_pricing` (`_PERCENTAGE_RE` captures "half off", "½ off", "X% off").
+9. ✅ Multi-promo splitter (H) — `_split_multi_promo` in website_scraper.py splits text blocks with 3+ `$X` amounts into sub-deals, each becoming its own DealSignal with its own name, price, and price_type. Wrapped in helper `_text_block_to_signals`.
+10. ✅ Deal name extraction overhaul (I) — `_extract_deal_name` replaces `block.split(".")[0][:80]` in all 3 extraction sites (Phase 1 hardcoded paths, Phase 2 discovered pages, PDF parser). Uses label-pattern matching (Happy Hour, Kids Eat Free, $5 Combo, BOGO, Lunch Special, …) with heading override and fragment-marker rejection.
+
+**Verified test results:**
+- "Happy Hour Mon-Fri 3-6pm. $1 Off Bottle Beer. $1 Off Draft Beer. $5 Frozen Margaritas." → 4 split sub-deals with correct names, prices, price_types
+- "Monday through Friday 11:00 AM to 2:00 PM" → `days=Mon-Fri, start=11:00 AM, end=2:00 PM`
+- "Weekends 10am-2pm" → `days=Sat-Sun, start=10:00 AM, end=2:00 PM`
+- "3PM – Close" → `start=3:00 PM, end=Close`
+- "A spicy stir-fried dish made with breaded chicken…" → name=None (fragment rejected)
+- "$5.99 Combo Meal — burger, fries, drink" → name="$5.99 Combo Meal — burger, fries, drink"
+
+**Metric impact (live DB, 4,317 rows):**
+| Metric | Before Phase 2 | After Phase 2 |
+|---|---|---|
+| Rows with valid_days | 29 (0.9%) | 1,099 (25.5%) |
+| Rows with valid_start_time | 25 (0.8%) | 836 (19.4%) |
+| Rows with valid_end_time | ~20 (0.6%) | 795 (18.4%) |
 
 ### Phase 3 — Structural cleanup
 10. Signal quality scoring (K) — gates new data AND lets us triage existing

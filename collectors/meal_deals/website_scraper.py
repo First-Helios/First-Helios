@@ -32,6 +32,7 @@ from bs4 import BeautifulSoup, Tag
 
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
+from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation
 
 try:
@@ -260,24 +261,72 @@ def _extract_deal_pricing(text: str) -> DealPricing:
 
     return result
 
+
+# ── Multi-promo splitter ────────────────────────────────────────────────────
+
+# Sentence / clause boundary for splitting a block with multiple promos.
+# Looks for periods, exclamation/question marks, newlines, semicolons, or
+# pipe/bullet separators followed by whitespace.  A dollar amount starting
+# the next clause is also a strong boundary.
+_PROMO_SPLIT_RE = re.compile(
+    r"(?:[.!?;|•·\n]+\s+)|(?:\s{2,})|(?=\s\$\d)",
+)
+
+# A sub-block is valid only if it contains its own price OR its own
+# self-validating phrase (BOGO, half-off, etc.)
+_SUB_PROMO_MIN_LEN = 5
+_SUB_PROMO_MAX_LEN = 250
+
+
+def _split_multi_promo(block: str) -> list[str]:
+    """If `block` contains 3+ distinct prices, split into sub-promos.
+
+    Returns list[str].  A single-element list means the block wasn't split
+    (either because it has <3 prices or the split didn't produce multiple
+    valid sub-blocks).  Callers can always iterate the result as deals.
+
+    Triggers split only when there are ≥3 `$X` amounts in the block — we keep
+    single-price blocks whole so "$5 Combo Meal" doesn't get chopped.
+    """
+    if not block or len(block) < 20:
+        return [block]
+
+    prices = _PRICE_RE.findall(block)
+    if len(prices) < 3:
+        return [block]
+
+    # Split on clause boundaries / dollar anchors.
+    raw_parts = _PROMO_SPLIT_RE.split(block)
+    parts: list[str] = []
+    for p in raw_parts:
+        s = (p or "").strip(" -–—:,\n\t")
+        if not s:
+            continue
+        if not (_SUB_PROMO_MIN_LEN <= len(s) <= _SUB_PROMO_MAX_LEN):
+            continue
+        # Each sub must contain a price OR a self-validating phrase to be a deal
+        lower = s.lower()
+        has_price = bool(_PRICE_RE.search(s))
+        has_self_valid = any(kw in lower for kw in _SELF_VALIDATING_KEYWORDS)
+        has_percentage = bool(_PERCENTAGE_RE.search(s))
+        if not (has_price or has_self_valid or has_percentage):
+            continue
+        parts.append(s)
+
+    # Only consider it a successful split if we got ≥2 valid sub-promos.
+    if len(parts) >= 2:
+        return parts
+    return [block]
+
+
 # Calorie patterns: "450 cal", "450 calories", "450 kcal", "450Cal"
 _CALORIE_RE = re.compile(
     r"(\d{2,4})\s*(?:cal(?:ories?)?|kcal|Cal)\b",
     re.IGNORECASE,
 )
 
-# Day-of-week pattern (for matching valid_days)
-_DAY_PATTERN = re.compile(
-    r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday"
-    r"|mon|tue|wed|thu|fri|sat|sun"
-    r"|mon-fri|mon-sat|mon-sun)\b",
-    re.IGNORECASE,
-)
-
-# Time pattern: "11:00 AM", "2:00 PM", "11am", "2pm"
-_TIME_PATTERN = re.compile(
-    r"\b(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM))\b"
-)
+# Temporal extraction: use shared module (see collectors.meal_deals.temporal).
+# Day and time patterns moved there so chain_deals.py can reuse them.
 
 # Deal-type classification keywords
 _DEAL_TYPE_MAP = {
@@ -556,22 +605,122 @@ def _extract_all_prices(blocks: list[str]) -> list[float]:
     return prices
 
 
-def _extract_days(text: str) -> str | None:
-    """Extract day-of-week mention from text."""
-    match = _DAY_PATTERN.search(text)
-    if match:
-        return match.group(0).title()
+# Backwards-compatible aliases — implementations live in temporal.py now.
+_extract_days = extract_days
+_extract_times = extract_times
+
+
+# ── Deal name extraction ────────────────────────────────────────────────────
+
+# Strong, label-like phrases that make great deal names if present in text.
+# Order matters — earlier matches win.
+# NOTE: `\b` doesn't anchor before `$`, so `$` patterns use `(?<!\w)` instead.
+_DEAL_LABEL_PATTERNS = [
+    re.compile(r"\bhappy\s*hour\b", re.IGNORECASE),
+    re.compile(r"\bkids\s+eat\s+free\b", re.IGNORECASE),
+    re.compile(r"\bearly\s+bird(?:\s+special)?\b", re.IGNORECASE),
+    re.compile(r"\blate\s+night(?:\s+special)?\b", re.IGNORECASE),
+    re.compile(r"\b(?:lunch|dinner|breakfast|brunch)\s+(?:special|combo|deal)\b", re.IGNORECASE),
+    re.compile(r"\b(?:weekly|daily|weekend|weekday)\s+special(?:s)?\b", re.IGNORECASE),
+    re.compile(r"\b(?:taco|wing|burger|pizza|pasta|steak|seafood|sushi|margarita)\s+(?:tuesday|wednesday|thursday|monday|night|special|day)\b", re.IGNORECASE),
+    re.compile(r"\bbogo\b", re.IGNORECASE),
+    re.compile(r"\bbuy\s+one\s*,?\s*get\s+one(?:\s+free)?\b", re.IGNORECASE),
+    re.compile(r"(?<!\w)\$\d+(?:\.\d{2})?\s+(?:combo|meal|special|deal|lunch|dinner|burger|pizza|plate|platter|box|bucket|basket|taco|wings?)\b", re.IGNORECASE),
+    re.compile(r"\b2\s+for\s+\$\d+\b", re.IGNORECASE),
+    re.compile(r"\b(?:half|½)\s+(?:off|price)\s+(?:appetizers?|apps?|drinks?|wine|pizza|burgers?)\b", re.IGNORECASE),
+]
+
+# Leading / trailing filler to strip from candidate names
+_NAME_STOPWORDS_PREFIX_RE = re.compile(
+    r"^(?:check\s+out|take\s+a\s+look|introducing|new\s+deal|don't\s+miss)\s+",
+    re.IGNORECASE,
+)
+
+# Names that end up being sentence fragments — these markers indicate we
+# should fall back to a label search instead of keeping the fragment
+_FRAGMENT_MARKERS_RE = re.compile(
+    r"(?:\ba\s+spicy\b|\byour\s+choice\s+of\b|\b(?:made|served|seasoned|grilled)\s+with\b"
+    r"|\b(?:includ(?:ed|es|ing)?|comes?\s+with|topped\s+with)\b)",
+    re.IGNORECASE,
+)
+
+# Only trim these from the ends of a snippet (no periods — they're part of prices)
+_NAME_TRIM_CHARS = " -–—:,\n\t"
+
+
+def _trim_name(snippet: str) -> str:
+    """Collapse whitespace and strip trim chars from both ends."""
+    return re.sub(r"\s+", " ", snippet).strip(_NAME_TRIM_CHARS)
+
+
+def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str | None:
+    """Produce a concise, label-like deal name from a text block.
+
+    Strategy (first match wins):
+      1. If `fallback_heading` is a short, non-fragment string, use it.
+      2. Search for known deal-label patterns ("Happy Hour", "$5 Combo",
+         "BOGO", "Lunch Special", etc.) and return the match expanded up
+         to the nearest clause boundary (~70 chars).
+      3. Split on sentence boundaries; the first clause that's short,
+         not a sentence fragment, and contains a deal keyword wins.
+      4. Fallback: first clause trimmed to 70 chars, only if it doesn't
+         smell like a sentence fragment.
+
+    Returns None if no acceptable name can be produced — caller should skip.
+    """
+    if not block:
+        return None
+
+    # 1. Heading preference
+    if fallback_heading:
+        h = _trim_name(fallback_heading)
+        h = _NAME_STOPWORDS_PREFIX_RE.sub("", h)
+        if 3 <= len(h) <= 80 and not _FRAGMENT_MARKERS_RE.search(h):
+            return h[:80]
+
+    # 2. Label-pattern search — expand match to nearest clause boundary.
+    for pat in _DEAL_LABEL_PATTERNS:
+        m = pat.search(block)
+        if not m:
+            continue
+        # Find a reasonable end: prefer a comma or "featuring"/"with" split,
+        # fall back to 70 chars past the match start.
+        start = m.start()
+        stop_search = re.search(
+            r"[.!?\n]|\s(?:featuring|including|with|served)\s",
+            block[m.end():m.end() + 80],
+            re.IGNORECASE,
+        )
+        end = m.end() + (stop_search.start() if stop_search else min(40, len(block) - m.end()))
+        end = min(len(block), end)
+        snippet = _trim_name(block[start:end])
+        if 3 <= len(snippet) <= 80:
+            return snippet
+        # Very long — just return the bare match
+        bare = _trim_name(m.group(0))
+        if bare:
+            return bare[:80]
+
+    # 3. Short-clause scan
+    for clause in re.split(r"[.!?\n]", block):
+        c = _trim_name(clause)
+        if not (5 <= len(c) <= 70):
+            continue
+        if _FRAGMENT_MARKERS_RE.search(c):
+            continue
+        lower = c.lower()
+        if any(kw in lower for kw in (
+            "special", "deal", "combo", "happy hour", "bogo",
+            "kids eat", "lunch", "dinner", "discount", " off",
+        )):
+            return c[:80]
+
+    # 4. Last resort: first short clause if it doesn't look like a fragment
+    first = _trim_name(re.split(r"[.!?\n]", block, maxsplit=1)[0])
+    if 5 <= len(first) <= 70 and not _FRAGMENT_MARKERS_RE.search(first):
+        return first[:80]
+
     return None
-
-
-def _extract_times(text: str) -> tuple[str | None, str | None]:
-    """Extract time range from text. Returns (start_time, end_time)."""
-    matches = _TIME_PATTERN.findall(text)
-    if len(matches) >= 2:
-        return matches[0], matches[1]
-    elif len(matches) == 1:
-        return matches[0], None
-    return None, None
 
 
 def _extract_jsonld_deals(
@@ -932,6 +1081,74 @@ def _discover_pdf_links(soup: BeautifulSoup, base_url: str) -> list[str]:
     return [url for _, url in pdf_links[:5]]
 
 
+def _text_block_to_signals(
+    block: str,
+    *,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    source_url: str,
+    region: str,
+    seen_deals: set[str],
+) -> list[DealSignal]:
+    """Convert a single text block into 0-or-more DealSignals.
+
+    Applies the multi-promo splitter first, then runs the existing
+    extraction pipeline on each sub-block.  Handles dedup against
+    `seen_deals` (mutated in place) and skips add-on / non-food promos.
+    """
+    results: list[DealSignal] = []
+    if not _is_valid_deal_block(block):
+        return results
+
+    for sub in _split_multi_promo(block):
+        deal_name = _extract_deal_name(sub)
+        if not deal_name or len(deal_name) < 5:
+            continue
+
+        name_key = deal_name.lower()
+        if name_key in seen_deals:
+            continue
+        seen_deals.add(name_key)
+
+        pricing = _extract_deal_pricing(sub)
+        if pricing.is_addon or pricing.is_non_food:
+            continue
+
+        deal_type = _classify_deal_type(sub)
+        valid_days = _extract_days(sub)
+        start_time, end_time = _extract_times(sub)
+        calories = _extract_calories(sub)
+
+        calorie_price_ratio = None
+        if calories and pricing.price and pricing.price > 0:
+            calorie_price_ratio = round(calories / pricing.price, 1)
+
+        results.append(DealSignal(
+            restaurant_name=restaurant_name,
+            local_employer_id=local_employer_id,
+            brand_group_id=brand_group_id,
+            deal_name=deal_name,
+            deal_description=sub[:500],
+            deal_type=deal_type,
+            price=pricing.price,
+            price_type=pricing.price_type,
+            discount_percentage=pricing.discount_percentage,
+            calories=calories,
+            calorie_price_ratio=calorie_price_ratio,
+            valid_days=valid_days,
+            valid_start_time=start_time,
+            valid_end_time=end_time,
+            raw_scraped_text=sub,
+            source="website_scrape",
+            source_url=source_url,
+            region=region,
+            observed_at=datetime.now(timezone.utc),
+        ))
+
+    return results
+
+
 def _parse_pdf_for_deals(
     pdf_url: str,
     restaurant_name: str,
@@ -990,51 +1207,14 @@ def _parse_pdf_for_deals(
                 blocks.append(cleaned)
 
         for block in blocks:
-            if not _is_valid_deal_block(block):
-                continue
-
-            deal_name = block.split(".")[0].strip()[:80]
-            if not deal_name or len(deal_name) < 5:
-                continue
-
-            name_key = deal_name.lower()
-            if name_key in seen_deals:
-                continue
-            seen_deals.add(name_key)
-
-            pricing = _extract_deal_pricing(block)
-            if pricing.is_addon or pricing.is_non_food:
-                continue
-
-            deal_type = _classify_deal_type(block)
-            valid_days = _extract_days(block)
-            start_time, end_time = _extract_times(block)
-            calories = _extract_calories(block)
-
-            calorie_price_ratio = None
-            if calories and pricing.price and pricing.price > 0:
-                calorie_price_ratio = round(calories / pricing.price, 1)
-
-            signals.append(DealSignal(
+            signals.extend(_text_block_to_signals(
+                block,
                 restaurant_name=restaurant_name,
                 local_employer_id=local_employer_id,
                 brand_group_id=brand_group_id,
-                deal_name=deal_name,
-                deal_description=block[:500],
-                deal_type=deal_type,
-                price=pricing.price,
-                price_type=pricing.price_type,
-                discount_percentage=pricing.discount_percentage,
-                calories=calories,
-                calorie_price_ratio=calorie_price_ratio,
-                valid_days=valid_days,
-                valid_start_time=start_time,
-                valid_end_time=end_time,
-                raw_scraped_text=block,
-                source="website_scrape",
                 source_url=pdf_url,
                 region=region,
-                observed_at=datetime.now(timezone.utc),
+                seen_deals=seen_deals,
             ))
 
     except Exception as e:
@@ -1096,53 +1276,14 @@ def scrape_restaurant_website(
         all_menu_prices.extend(_extract_all_prices(blocks))
 
         for block in blocks:
-            if not _is_valid_deal_block(block):
-                continue
-
-            deal_name = block.split(".")[0].strip()[:80]
-            if not deal_name or len(deal_name) < 5:
-                continue
-
-            name_key = deal_name.lower()
-            if name_key in seen_deals:
-                continue
-            seen_deals.add(name_key)
-
-            pricing = _extract_deal_pricing(block)
-
-            # Skip add-on prices and non-food promos
-            if pricing.is_addon or pricing.is_non_food:
-                continue
-
-            deal_type = _classify_deal_type(block)
-            valid_days = _extract_days(block)
-            start_time, end_time = _extract_times(block)
-            calories = _extract_calories(block)
-
-            calorie_price_ratio = None
-            if calories and pricing.price and pricing.price > 0:
-                calorie_price_ratio = round(calories / pricing.price, 1)
-
-            signals.append(DealSignal(
+            signals.extend(_text_block_to_signals(
+                block,
                 restaurant_name=restaurant_name,
                 local_employer_id=local_employer_id,
                 brand_group_id=brand_group_id,
-                deal_name=deal_name,
-                deal_description=block[:500],
-                deal_type=deal_type,
-                price=pricing.price,
-                price_type=pricing.price_type,
-                discount_percentage=pricing.discount_percentage,
-                calories=calories,
-                calorie_price_ratio=calorie_price_ratio,
-                valid_days=valid_days,
-                valid_start_time=start_time,
-                valid_end_time=end_time,
-                raw_scraped_text=block,
-                source="website_scrape",
                 source_url=full_url,
                 region=region,
-                observed_at=datetime.now(timezone.utc),
+                seen_deals=seen_deals,
             ))
 
         # --- JSON-LD extraction ---
@@ -1176,53 +1317,14 @@ def scrape_restaurant_website(
             all_menu_prices.extend(_extract_all_prices(blocks))
 
             for block in blocks:
-                if not _is_valid_deal_block(block):
-                    continue
-
-                deal_name = block.split(".")[0].strip()[:80]
-                if not deal_name or len(deal_name) < 5:
-                    continue
-
-                name_key = deal_name.lower()
-                if name_key in seen_deals:
-                    continue
-                seen_deals.add(name_key)
-
-                pricing = _extract_deal_pricing(block)
-
-                # Skip add-on prices and non-food promos
-                if pricing.is_addon or pricing.is_non_food:
-                    continue
-
-                deal_type = _classify_deal_type(block)
-                valid_days = _extract_days(block)
-                start_time, end_time = _extract_times(block)
-                calories = _extract_calories(block)
-
-                calorie_price_ratio = None
-                if calories and pricing.price and pricing.price > 0:
-                    calorie_price_ratio = round(calories / pricing.price, 1)
-
-                signals.append(DealSignal(
+                signals.extend(_text_block_to_signals(
+                    block,
                     restaurant_name=restaurant_name,
                     local_employer_id=local_employer_id,
                     brand_group_id=brand_group_id,
-                    deal_name=deal_name,
-                    deal_description=block[:500],
-                    deal_type=deal_type,
-                    price=pricing.price,
-                    price_type=pricing.price_type,
-                    discount_percentage=pricing.discount_percentage,
-                    calories=calories,
-                    calorie_price_ratio=calorie_price_ratio,
-                    valid_days=valid_days,
-                    valid_start_time=start_time,
-                    valid_end_time=end_time,
-                    raw_scraped_text=block,
-                    source="website_scrape",
                     source_url=disc_url,
                     region=region,
-                    observed_at=datetime.now(timezone.utc),
+                    seen_deals=seen_deals,
                 ))
 
             # JSON-LD on discovered pages too
