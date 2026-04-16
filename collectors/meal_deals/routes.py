@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 
 from flask import Blueprint, jsonify, request
 
-from core.database import BrandGroup, LocalEmployer, MealDeal, get_engine, get_session
+from core.database import BrandGroup, DealMaterialization, LocalEmployer, MealDeal, get_engine, get_session
 from core.venue_identity import cluster_likely_same_venues, normalize_url_for_identity, pick_canonical_item
 
 logger = logging.getLogger(__name__)
@@ -153,6 +153,45 @@ def _load_deduped_deals(
     return _collapse_duplicate_deals(deals, employers), employers
 
 
+def _load_materialized_deals(
+    session,
+    *,
+    region: str,
+    active_only: bool = True,
+    deal_type: str | None = None,
+    brand: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_mi: float = 10.0,
+) -> list[DealMaterialization]:
+    q = session.query(DealMaterialization).filter(DealMaterialization.region == region)
+
+    if active_only:
+        q = q.filter(DealMaterialization.is_active.is_(True))
+
+    if deal_type:
+        q = q.filter(DealMaterialization.deal_type == deal_type)
+
+    if brand:
+        q = q.join(BrandGroup, DealMaterialization.brand_group_id == BrandGroup.id).filter(
+            BrandGroup.fingerprint == brand
+        )
+
+    if lat is not None and lng is not None:
+        lat_delta = radius_mi / 69.0
+        cos_lat = max(abs(math.cos(math.radians(lat))), 0.01)
+        lng_delta = radius_mi / (69.0 * cos_lat)
+        q = q.filter(
+            DealMaterialization.lat.between(lat - lat_delta, lat + lat_delta),
+            DealMaterialization.lng.between(lng - lng_delta, lng + lng_delta),
+        )
+
+    return q.order_by(
+        DealMaterialization.verified_at.desc(),
+        DealMaterialization.id.desc(),
+    ).all()
+
+
 # ── Deal listings ─────────────────────────────────────────────────────────────
 
 @deals_bp.route("")
@@ -185,7 +224,7 @@ def list_deals():
 
     session = _get_db_session()
     try:
-        deals, employers = _load_deduped_deals(
+        deals = _load_materialized_deals(
             session,
             region=region,
             active_only=active_only,
@@ -198,17 +237,8 @@ def list_deals():
         total = len(deals)
         deals = deals[offset: offset + limit]
 
-        result = []
-        for d in deals:
-            row = d.to_dict()
-            emp = employers.get(d.local_employer_id)
-            if emp:
-                row["restaurant_name"] = emp.name
-                row["address"] = emp.address
-            result.append(row)
-
         return jsonify({
-            "deals": result,
+            "deals": [deal.to_dict() for deal in deals],
             "count": total,
             "limit": limit,
             "offset": offset,
@@ -244,7 +274,7 @@ def deal_stats():
     radius_mi = request.args.get("radius_mi", 10.0, type=float)
     session = _get_db_session()
     try:
-        deals, _employers = _load_deduped_deals(
+        deals = _load_materialized_deals(
             session,
             region=region,
             active_only=active_only,
@@ -257,7 +287,7 @@ def deal_stats():
 
         type_counts = dict(Counter(deal.deal_type for deal in deals))
         source_counts = dict(Counter(deal.source for deal in deals))
-        restaurant_count = len({deal.local_employer_id for deal in deals if deal.local_employer_id is not None})
+        restaurant_count = len({deal.canonical_venue_id for deal in deals if deal.canonical_venue_id is not None})
         brand_count = len({deal.brand_group_id for deal in deals if deal.brand_group_id is not None})
 
         return jsonify({
@@ -296,7 +326,7 @@ def deal_brands():
     radius_mi = request.args.get("radius_mi", 10.0, type=float)
     session = _get_db_session()
     try:
-        deals, _employers = _load_deduped_deals(
+        deals = _load_materialized_deals(
             session,
             region=region,
             active_only=active_only,

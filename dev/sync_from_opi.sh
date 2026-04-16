@@ -15,6 +15,9 @@
 #   dev_capture.raw_signals   — dev-mode raw HTML / extracted / sanitized captures
 #   public.restaurant_urls    — resolved URLs (OSM, Google Places, manual)
 #   public.meal_deals         — scraped deal data with price/calorie fields
+#   public.deal_observations  — canonical observed deal artifacts
+#   public.deal_applicability — resolved venue/brand applicability rows
+#   public.deal_materializations — consumer-facing semantic deal rows
 #
 # What it does NOT sync (rebuild those separately):
 #   ref_*, oews_*, mob_*, brand_groups, local_employers, scores, meta_*
@@ -74,6 +77,9 @@ TABLES=(
     "dev_capture.raw_signals"
     "public.restaurant_urls"
     "public.meal_deals"
+    "public.deal_observations"
+    "public.deal_applicability"
+    "public.deal_materializations"
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

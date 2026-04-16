@@ -10,6 +10,7 @@ from core.database import (
     CanonicalVenue,
     CanonicalVenueAlias,
     DealApplicability,
+    DealMaterialization,
     DealObservation,
     LocalEmployer,
     MealDeal,
@@ -163,6 +164,7 @@ def test_ingest_dual_writes_observation_and_venue_applicability(engine, monkeypa
     with Session(engine) as session:
         observation = session.query(DealObservation).one()
         applicability = session.query(DealApplicability).one()
+        materialization = session.query(DealMaterialization).one()
         deal = session.query(MealDeal).one()
 
     assert observation.collector_run_id == 44
@@ -173,6 +175,10 @@ def test_ingest_dual_writes_observation_and_venue_applicability(engine, monkeypa
     assert applicability.canonical_venue_id == 9001
     assert applicability.brand_group_id is None
     assert applicability.resolver_method == "local_employer_alias"
+    assert materialization.canonical_venue_id == 9001
+    assert materialization.local_employer_id == 41201
+    assert materialization.restaurant_name == "Polvos Mexican Restaurant North"
+    assert materialization.is_active is True
     assert deal.local_employer_id == 41201
     assert deal.brand_group_id == 41201
 
@@ -289,6 +295,7 @@ def test_ingest_collapses_shared_site_fanout_into_one_observation(engine, monkey
     with Session(engine) as session:
         observations = session.query(DealObservation).all()
         applicability = session.query(DealApplicability).order_by(DealApplicability.canonical_venue_id).all()
+        materializations = session.query(DealMaterialization).order_by(DealMaterialization.canonical_venue_id).all()
         deals = session.query(MealDeal).order_by(MealDeal.local_employer_id).all()
 
     assert len(observations) == 1
@@ -296,6 +303,8 @@ def test_ingest_collapses_shared_site_fanout_into_one_observation(engine, monkey
     assert len(applicability) == 2
     assert {row.canonical_venue_id for row in applicability} == {9001, 9002}
     assert {row.applicability_scope for row in applicability} == {"venue"}
+    assert len(materializations) == 2
+    assert {row.canonical_venue_id for row in materializations} == {9001, 9002}
     assert [deal.local_employer_id for deal in deals] == [38677, 41201]
 
 
@@ -307,8 +316,34 @@ def test_ingest_dual_writes_chain_observation_and_brand_applicability(engine, mo
         session.add_all(
             [
                 _build_brand_group(500, fingerprint="chipotle", name="Chipotle"),
+                _build_employer(
+                    1500,
+                    name="Chipotle North Austin",
+                    address="11000 Domain Dr, Austin, TX",
+                    brand_group_id=500,
+                    lat=30.4013,
+                    lng=-97.7261,
+                ),
+                _build_canonical_venue(
+                    9500,
+                    name="Chipotle North Austin",
+                    address="11000 Domain Dr, Austin, TX",
+                    brand_group_id=500,
+                    lat=30.4013,
+                    lng=-97.7261,
+                ),
                 _build_site_identity(3003, source_url),
             ]
+        )
+        session.flush()
+        session.add(
+            CanonicalVenueAlias(
+                canonical_venue_id=9500,
+                local_employer_id=1500,
+                alias_role="primary",
+                match_method="manual",
+                match_confidence=1.0,
+            )
         )
         session.commit()
 
@@ -341,6 +376,7 @@ def test_ingest_dual_writes_chain_observation_and_brand_applicability(engine, mo
     with Session(engine) as session:
         observation = session.query(DealObservation).one()
         applicability = session.query(DealApplicability).one()
+        materializations = session.query(DealMaterialization).all()
         deal = session.query(MealDeal).one()
 
     assert observation.collector_run_id == 55
@@ -350,6 +386,10 @@ def test_ingest_dual_writes_chain_observation_and_brand_applicability(engine, mo
     assert applicability.brand_group_id == 500
     assert applicability.canonical_venue_id is None
     assert applicability.resolver_method == "brand_fingerprint"
+    assert len(materializations) == 1
+    assert materializations[0].canonical_venue_id == 9500
+    assert materializations[0].local_employer_id == 1500
+    assert materializations[0].is_chain_template is True
     assert deal.brand_group_id == 500
     assert deal.is_chain_template is True
 
@@ -385,10 +425,12 @@ def test_rejected_signals_still_persist_as_observations(engine, monkeypatch):
     with Session(engine) as session:
         observation = session.query(DealObservation).one()
         applicability_rows = session.query(DealApplicability).all()
+        materializations = session.query(DealMaterialization).all()
         deals = session.query(MealDeal).all()
 
     assert observation.review_state == "rejected"
     assert observation.collector_run_id == 66
     assert observation.site_identity_id == 3004
     assert applicability_rows == []
+    assert materializations == []
     assert deals == []

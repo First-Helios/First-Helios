@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.quality import compute_deal_value_score, compute_signal_quality, gate_decision
+from collectors.meal_deals.semantic_layer import refresh_deal_materializations
 from collectors.meal_deals.sub_deals import extract_sub_deals
 from core.database import (
     BrandGroup,
@@ -724,6 +725,11 @@ def ingest_deal_signals(
 
         for observation_id, rows in desired_applicability.items():
             _sync_observation_applicability(session, observation_id, list(rows.values()))
+
+        refresh_deal_materializations(
+            session,
+            observation_ids=list(desired_applicability.keys()),
+        )
 
         session.commit()
         logger.info(

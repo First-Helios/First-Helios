@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 from collectors.meal_deals.ingest import ingest_deal_signals
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.website_scraper import _copy_signal_for_location
-from core.database import BrandGroup, LocalEmployer, MealDeal
+from core.database import BrandGroup, CanonicalVenue, CanonicalVenueAlias, LocalEmployer, MealDeal
 from core.normalizer import make_fingerprint
+from core.venue_identity import normalize_address_for_identity
+from scripts.backfill_deal_observation_history import backfill_deal_observation_history
 
 
 def _build_employer(
@@ -57,6 +59,30 @@ def _build_deal(
         lat=30.44605,
         lng=-97.68565,
         region="austin_tx",
+        is_active=True,
+    )
+
+
+def _build_canonical_venue(
+    venue_id: int,
+    *,
+    name: str,
+    address: str,
+    brand_group_id: int | None,
+    lat: float,
+    lng: float,
+) -> CanonicalVenue:
+    return CanonicalVenue(
+        id=venue_id,
+        canonical_name=name,
+        normalized_name=make_fingerprint(name),
+        normalized_address=normalize_address_for_identity(address),
+        address=address,
+        lat=lat,
+        lng=lng,
+        region="austin_tx",
+        brand_group_id=brand_group_id,
+        site_status="shared_site",
         is_active=True,
     )
 
@@ -208,11 +234,50 @@ def test_stats_and_brands_use_deduped_deal_semantics(client, engine):
                     lat=30.446054045051,
                     lng=-97.685658122487,
                 ),
+                _build_canonical_venue(
+                    9001,
+                    name="Polvos Mexican Restaurant North",
+                    address="14735 Bratton Ln, Austin, TX",
+                    brand_group_id=41201,
+                    lat=30.446054045051,
+                    lng=-97.685658122487,
+                ),
                 _build_deal(1, employer_id=38677, brand_group_id=38677, signal_quality=0.73),
                 _build_deal(2, employer_id=41201, brand_group_id=41201, signal_quality=0.83),
             ]
         )
+        session.flush()
+        session.add_all(
+            [
+                CanonicalVenueAlias(
+                    canonical_venue_id=9001,
+                    local_employer_id=41201,
+                    alias_role="primary",
+                    match_method="manual",
+                    match_confidence=1.0,
+                ),
+                CanonicalVenueAlias(
+                    canonical_venue_id=9001,
+                    local_employer_id=38677,
+                    alias_role="alias",
+                    match_method="manual",
+                    match_confidence=0.92,
+                ),
+            ]
+        )
+        stats = backfill_deal_observation_history(session, region="austin_tx")
         session.commit()
+
+    assert stats["observations_inserted"] == 1
+    assert stats["materializations_inserted"] == 1
+
+    list_response = client.get("/api/deals?region=austin_tx")
+    assert list_response.status_code == 200
+    list_payload = list_response.get_json()
+
+    assert list_payload["count"] == 1
+    assert len(list_payload["deals"]) == 1
+    assert list_payload["deals"][0]["restaurant_name"] == "Polvos Mexican Restaurant North"
 
     stats_response = client.get("/api/deals/stats?region=austin_tx")
     assert stats_response.status_code == 200

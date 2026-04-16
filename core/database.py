@@ -1387,6 +1387,110 @@ class DealApplicability(Base):
         }
 
 
+class DealMaterialization(Base):
+    """Consumer-facing per-venue meal-deal rows derived from canonical layers."""
+
+    __tablename__ = "deal_materializations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    observation_id = Column(Integer, ForeignKey("deal_observations.id"), nullable=False, index=True)
+    applicability_id = Column(Integer, ForeignKey("deal_applicability.id"), nullable=False, index=True)
+    canonical_venue_id = Column(Integer, ForeignKey("canonical_venues.id"), nullable=False, index=True)
+    local_employer_id = Column(Integer, ForeignKey("local_employers.id"), nullable=True, index=True)
+    brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+    restaurant_name = Column(String, nullable=False)
+    address = Column(String, nullable=True)
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    region = Column(String, nullable=False, index=True)
+    applicability_scope = Column(String, nullable=False, index=True)
+    is_chain_template = Column(Boolean, default=False, nullable=False)
+    deal_name = Column(String, nullable=False)
+    deal_description = Column(Text, nullable=True)
+    deal_type = Column(String, nullable=False, index=True)
+    price = Column(Float, nullable=True)
+    price_type = Column(String, nullable=True)
+    discount_percentage = Column(Float, nullable=True)
+    original_price = Column(Float, nullable=True)
+    menu_avg_price = Column(Float, nullable=True)
+    calories = Column(Integer, nullable=True)
+    calorie_price_ratio = Column(Float, nullable=True)
+    valid_days = Column(String, nullable=True)
+    valid_start_time = Column(String, nullable=True)
+    valid_end_time = Column(String, nullable=True)
+    is_recurring = Column(Boolean, default=True, nullable=False)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    source = Column(String, nullable=False, index=True)
+    source_url = Column(String, nullable=True)
+    source_observation_key = Column(String, nullable=False, index=True)
+    verified_at = Column(DateTime, nullable=True, index=True)
+    raw_scraped_text = Column(Text, nullable=True)
+    signal_quality = Column(Float, nullable=True)
+    deal_value_score = Column(Float, nullable=True)
+    sub_deals = Column(JSON, nullable=True)
+    confidence = Column(Float, nullable=True)
+    resolver_method = Column(String, nullable=False)
+    review_state = Column(String, nullable=False, default="accepted", index=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("observation_id", "canonical_venue_id", name="uq_deal_materialization_observation_venue"),
+        Index("ix_deal_materializations_region_active", "region", "is_active"),
+        Index("ix_deal_materializations_brand_active", "brand_group_id", "is_active"),
+        Index("ix_deal_materializations_type_region", "deal_type", "region"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "observation_id": self.observation_id,
+            "applicability_id": self.applicability_id,
+            "canonical_venue_id": self.canonical_venue_id,
+            "local_employer_id": self.local_employer_id,
+            "brand_group_id": self.brand_group_id,
+            "restaurant_name": self.restaurant_name,
+            "address": self.address,
+            "lat": self.lat,
+            "lng": self.lng,
+            "region": self.region,
+            "applicability_scope": self.applicability_scope,
+            "is_chain_template": self.is_chain_template,
+            "deal_name": self.deal_name,
+            "deal_description": self.deal_description,
+            "deal_type": self.deal_type,
+            "price": self.price,
+            "price_type": self.price_type,
+            "discount_percentage": self.discount_percentage,
+            "original_price": self.original_price,
+            "menu_avg_price": self.menu_avg_price,
+            "calories": self.calories,
+            "calorie_price_ratio": self.calorie_price_ratio,
+            "valid_days": self.valid_days,
+            "valid_start_time": self.valid_start_time,
+            "valid_end_time": self.valid_end_time,
+            "is_recurring": self.is_recurring,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "source": self.source,
+            "source_url": self.source_url,
+            "source_observation_key": self.source_observation_key,
+            "verified_at": self.verified_at.isoformat() if self.verified_at else None,
+            "raw_scraped_text": self.raw_scraped_text,
+            "signal_quality": self.signal_quality,
+            "deal_value_score": self.deal_value_score,
+            "sub_deals": self.sub_deals,
+            "confidence": self.confidence,
+            "resolver_method": self.resolver_method,
+            "review_state": self.review_state,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class MealDeal(Base):
     """A meal deal / special offered by a restaurant in local_employers.
 
