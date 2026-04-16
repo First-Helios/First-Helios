@@ -66,16 +66,26 @@ def audit_cross_brand_urls(session) -> list[dict]:
 
     Returns list of problem records with details.
     """
-    # Query: group restaurant_urls by normalized URL, find groups with >1 distinct brand_group_id
+    # PostgreSQL is strict about GROUP BY expressions. Compute the normalized
+    # URL once in a subquery, then group by the subquery column.
+    normalized_urls = (
+        session.query(
+            RestaurantURL.id.label("restaurant_url_id"),
+            RestaurantURL.local_employer_id.label("local_employer_id"),
+            func.lower(func.rtrim(RestaurantURL.url, "/")).label("normalized_url"),
+        )
+        .filter(RestaurantURL.is_active.is_(True))
+        .subquery()
+    )
+
     url_groups = (
         session.query(
-            func.lower(func.rtrim(RestaurantURL.url, "/")),
-            func.count(RestaurantURL.id),
+            normalized_urls.c.normalized_url,
+            func.count(normalized_urls.c.restaurant_url_id),
             func.count(func.distinct(LocalEmployer.brand_group_id)),
         )
-        .join(LocalEmployer, LocalEmployer.id == RestaurantURL.local_employer_id)
-        .filter(RestaurantURL.is_active.is_(True))
-        .group_by(func.lower(func.rtrim(RestaurantURL.url, "/")))
+        .join(LocalEmployer, LocalEmployer.id == normalized_urls.c.local_employer_id)
+        .group_by(normalized_urls.c.normalized_url)
         .having(func.count(func.distinct(LocalEmployer.brand_group_id)) > 1)
         .all()
     )
