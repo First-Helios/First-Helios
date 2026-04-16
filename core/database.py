@@ -1173,6 +1173,8 @@ class MealDeal(Base):
 
     # ── Pricing ───────────────────────────────────────────────────────────────
     price = Column(Float, nullable=True)
+    price_type = Column(String, nullable=True)             # absolute | discount_amount | percentage_off | unknown
+    discount_percentage = Column(Float, nullable=True)     # e.g. 50.0 for "half off"
     original_price = Column(Float, nullable=True)
     menu_avg_price = Column(Float, nullable=True)          # avg entrée price on same menu
 
@@ -1192,6 +1194,10 @@ class MealDeal(Base):
     source = Column(String, nullable=False)             # chain_website | google_places | yelp | manual | website_scrape
     source_url = Column(String, nullable=True)
     verified_at = Column(DateTime, nullable=True)
+
+    # ── Signal quality ────────────────────────────────────────────────────────
+    raw_scraped_text = Column(Text, nullable=True)         # original text block before parsing
+    signal_quality = Column(Float, nullable=True)          # 0.0–1.0 composite score
 
     # ── Status ────────────────────────────────────────────────────────────────
     is_active = Column(Boolean, default=True, index=True)
@@ -1222,6 +1228,8 @@ class MealDeal(Base):
             "deal_description": self.deal_description,
             "deal_type": self.deal_type,
             "price": self.price,
+            "price_type": self.price_type,
+            "discount_percentage": self.discount_percentage,
             "original_price": self.original_price,
             "menu_avg_price": self.menu_avg_price,
             "calories": self.calories,
@@ -1235,6 +1243,7 @@ class MealDeal(Base):
             "source": self.source,
             "source_url": self.source_url,
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,
+            "signal_quality": self.signal_quality,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

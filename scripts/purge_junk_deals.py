@@ -36,7 +36,19 @@ _SPAM_PHRASES = [
     "live dealer", "online casino", "sports betting",
     "erectile", "viagra", "cbd gummies",
     "crypto", "bitcoin", "nft",
+    # Non-food promos (Issue 8)
+    "clearance", "apparel", "clothing",
 ]
+
+# Non-food promo patterns — event bookings, catering, retail mixed in
+_NON_FOOD_PROMO_RE = re.compile(
+    r"\b(?:book\s+a\s+(?:saturday|sunday|weekend|weekday)\s+event"
+    r"|private\s+(?:dining|event|party)"
+    r"|banquet|venue\s+(?:rental|hire)"
+    r"|wedding\s+(?:reception|package)"
+    r"|clearance|apparel|clothing|accessories)\b",
+    re.IGNORECASE,
+)
 
 _BOILERPLATE_PHRASES = [
     "privacy", "terms of use", "site map", "cookie",
@@ -49,6 +61,14 @@ _BOILERPLATE_PHRASES = [
     "skip to content", "skip to main",
     "open menu close menu",
     "locations specials jobs",
+    # DB-observed junk (Issue 7, 10)
+    "select a location",
+    "learn more about",
+    "check out how you can save",
+    "who doesn't love a good deal",
+    "who doesn\u2019t love a good deal",
+    "select your nearest",
+    "wanna save",
 ]
 
 # Price pattern
@@ -110,21 +130,25 @@ def _is_junk(deal_name: str, deal_description: str | None, source: str = "") -> 
         if bp in lower:
             return True, f"boilerplate:{bp}"
 
-    # For chain_website source, only purge spam + boilerplate above.
+    # 3. Non-food promos (event bookings, catering, retail) — always purge
+    if _NON_FOOD_PROMO_RE.search(text):
+        return True, "non_food_promo"
+
+    # For chain_website source, only purge spam + boilerplate + non-food above.
     # Chain deals already passed chain_deals.py quality filters.
     if source == "chain_website":
         return False, ""
 
-    # 3. Negative context (overrides keywords)
+    # 4. Negative context (overrides keywords)
     if any(pat.search(text) for pat in _NEGATIVE_CONTEXT_PATTERNS):
         return True, "negative_context"
 
-    # 4. No deal keyword at all (word-boundary matched)
+    # 5. No deal keyword at all (word-boundary matched)
     has_keyword = bool(_DEAL_KEYWORD_RE.search(text))
     if not has_keyword:
         return True, "no_deal_keyword"
 
-    # 5. Has keyword but no price and no self-validating phrase → junk
+    # 6. Has keyword but no price and no self-validating phrase → junk
     if any(kw in lower for kw in _SELF_VALIDATING):
         return False, ""
     has_price = bool(_PRICE_RE.search(text))

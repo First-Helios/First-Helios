@@ -39,6 +39,8 @@ class DealSignal:
 
     # ── Pricing ───────────────────────────────────────────────────────────────
     price: float | None = None
+    price_type: str | None = None                 # absolute | discount_amount | percentage_off | unknown
+    discount_percentage: float | None = None      # e.g. 50.0 for "half off"
     original_price: float | None = None
     menu_avg_price: float | None = None           # avg entrée price on same menu
 
@@ -58,6 +60,10 @@ class DealSignal:
     source: str = "chain_website"
     source_url: str | None = None
     region: str = "austin_tx"
+
+    # ── Signal quality ────────────────────────────────────────────────────────
+    raw_scraped_text: str | None = None           # original text block before parsing
+    signal_quality: float | None = None           # 0.0–1.0 composite score
 
     # ── Extras ────────────────────────────────────────────────────────────────
     metadata: dict[str, Any] = field(default_factory=dict)

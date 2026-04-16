@@ -21,6 +21,7 @@ import json
 import logging
 import re
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -109,6 +110,155 @@ _SPAM_PHRASES = [
 
 # Price pattern: "$5.99", "$10", "$12.50"
 _PRICE_RE = re.compile(r"\$(\d{1,3}\.?\d{0,2})")
+
+# ── Context-aware pricing patterns ──────────────────────────────────────────
+# Words immediately before/after a price that indicate discount (not a meal price)
+_DISCOUNT_CONTEXT_RE = re.compile(
+    r"(?:\b(?:off|discount|save|saving)\b)",
+    re.IGNORECASE,
+)
+
+# Words that indicate an absolute deal price
+_ABSOLUTE_CONTEXT_RE = re.compile(
+    r"(?:\b(?:for|just|only|starting\s+at|from|meal|combo|plate|platter|basket|bucket|box)\b)",
+    re.IGNORECASE,
+)
+
+# Add-on / modifier patterns — these are NOT deals
+_ADDON_CONTEXT_RE = re.compile(
+    r"(?:\+\s*\$|(?:\badd\b|\bextra\b|\bupgrade\b|\bsubstitut)\s.{0,15}\$)",
+    re.IGNORECASE,
+)
+
+# Percentage-off patterns: "half off", "½ off", "50% off", "X% off"
+_PERCENTAGE_RE = re.compile(
+    r"(?:(\d{1,2})%\s*off)|(?:half\s*(?:off|price))|(?:½\s*(?:off|price))",
+    re.IGNORECASE,
+)
+
+# Food keywords — allow sub-$1.50 prices if the text mentions these
+_FOOD_KEYWORDS_RE = re.compile(
+    r"\b(?:wing|wings|taco|tacos|slider|sliders|nugget|nuggets|fry|fries"
+    r"|oyster|oysters|shrimp|dumpling|dumplings|pierogi|pierogies"
+    r"|egg\s+roll|spring\s+roll|corn\s+dog|mozzarella\s+stick"
+    r"|bone[- ]?in|boneless)\b",
+    re.IGNORECASE,
+)
+
+# Minimum price floor — deals below this are almost always add-ons or noise
+_MIN_PRICE_FLOOR = 1.00
+
+# Event / catering / non-food promo patterns
+_NON_FOOD_PROMO_RE = re.compile(
+    r"\b(?:book|event|catering|wedding|venue|party\s+room|banquet|private\s+dining"
+    r"|clearance|sale|apparel|clothing|accessories)\b",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class DealPricing:
+    """Result of context-aware price extraction."""
+    price: float | None = None
+    price_type: str | None = None           # absolute | discount_amount | percentage_off | unknown
+    discount_percentage: float | None = None
+    is_addon: bool = False
+    is_non_food: bool = False
+
+
+def _extract_deal_pricing(text: str) -> DealPricing:
+    """Context-aware price extraction.
+
+    Instead of returning the first $X.XX found, this:
+    1. Checks for percentage-off patterns first (half off, X% off)
+    2. Scans ALL dollar amounts and classifies each by surrounding context
+    3. Prefers absolute prices over discount amounts
+    4. Detects add-on/modifier prices and non-food promos
+    5. Applies a price floor with food-keyword exception
+    """
+    result = DealPricing()
+
+    # Check for non-food promotions (events, catering, clearance)
+    if _NON_FOOD_PROMO_RE.search(text):
+        result.is_non_food = True
+
+    # 1. Check for percentage-off patterns
+    pct_match = _PERCENTAGE_RE.search(text)
+    if pct_match:
+        if pct_match.group(1):  # "X% off"
+            result.discount_percentage = float(pct_match.group(1))
+        else:  # "half off" / "half price" / "½ off"
+            result.discount_percentage = 50.0
+        result.price_type = "percentage_off"
+
+    # 2. Find all dollar amounts with surrounding context
+    absolute_prices: list[float] = []
+    discount_prices: list[float] = []
+    has_food_keyword = bool(_FOOD_KEYWORDS_RE.search(text))
+
+    for match in _PRICE_RE.finditer(text):
+        try:
+            price_val = float(match.group(1))
+        except ValueError:
+            continue
+
+        # Skip obviously broken prices ($0.00, $1500 from "$1,500")
+        if price_val == 0.0 or price_val > 200.0:
+            continue
+
+        # Get context window: 40 chars before and after the price match
+        start = max(0, match.start() - 40)
+        end = min(len(text), match.end() + 40)
+        context = text[start:end]
+
+        # Check if this is an add-on price
+        addon_start = max(0, match.start() - 20)
+        addon_context = text[addon_start:match.end() + 10]
+        if _ADDON_CONTEXT_RE.search(addon_context):
+            result.is_addon = True
+            continue
+
+        # Classify by context
+        if _DISCOUNT_CONTEXT_RE.search(context):
+            discount_prices.append(price_val)
+        elif _ABSOLUTE_CONTEXT_RE.search(context):
+            absolute_prices.append(price_val)
+        else:
+            # No clear context — treat as unknown, but bucket it
+            # If percentage already found, this is likely a discount amount
+            if result.discount_percentage is not None:
+                discount_prices.append(price_val)
+            else:
+                absolute_prices.append(price_val)
+
+    # 3. Pick the best price
+    if absolute_prices:
+        # Prefer the largest absolute price (more likely the actual deal, not a side)
+        best = max(absolute_prices)
+        if best >= _MIN_PRICE_FLOOR or has_food_keyword:
+            result.price = best
+            result.price_type = "absolute"
+    elif discount_prices:
+        # Only discount amounts found — store the largest
+        best = max(discount_prices)
+        result.price = best
+        if result.price_type != "percentage_off":
+            result.price_type = "discount_amount"
+    elif result.discount_percentage is not None:
+        # Percentage-off only (no dollar amounts)
+        pass  # price stays None, price_type already set
+    else:
+        # No prices found at all
+        return result
+
+    # 4. Price floor check (skip sub-$1.00 unless food keyword present)
+    if result.price is not None and result.price < _MIN_PRICE_FLOOR:
+        if not has_food_keyword:
+            result.is_addon = True
+            result.price = None
+            result.price_type = None
+
+    return result
 
 # Calorie patterns: "450 cal", "450 calories", "450 kcal", "450Cal"
 _CALORIE_RE = re.compile(
@@ -852,15 +1002,18 @@ def _parse_pdf_for_deals(
                 continue
             seen_deals.add(name_key)
 
-            price = _extract_price(block)
+            pricing = _extract_deal_pricing(block)
+            if pricing.is_addon or pricing.is_non_food:
+                continue
+
             deal_type = _classify_deal_type(block)
             valid_days = _extract_days(block)
             start_time, end_time = _extract_times(block)
             calories = _extract_calories(block)
 
             calorie_price_ratio = None
-            if calories and price and price > 0:
-                calorie_price_ratio = round(calories / price, 1)
+            if calories and pricing.price and pricing.price > 0:
+                calorie_price_ratio = round(calories / pricing.price, 1)
 
             signals.append(DealSignal(
                 restaurant_name=restaurant_name,
@@ -869,12 +1022,15 @@ def _parse_pdf_for_deals(
                 deal_name=deal_name,
                 deal_description=block[:500],
                 deal_type=deal_type,
-                price=price,
+                price=pricing.price,
+                price_type=pricing.price_type,
+                discount_percentage=pricing.discount_percentage,
                 calories=calories,
                 calorie_price_ratio=calorie_price_ratio,
                 valid_days=valid_days,
                 valid_start_time=start_time,
                 valid_end_time=end_time,
+                raw_scraped_text=block,
                 source="website_scrape",
                 source_url=pdf_url,
                 region=region,
@@ -952,15 +1108,20 @@ def scrape_restaurant_website(
                 continue
             seen_deals.add(name_key)
 
-            price = _extract_price(block)
+            pricing = _extract_deal_pricing(block)
+
+            # Skip add-on prices and non-food promos
+            if pricing.is_addon or pricing.is_non_food:
+                continue
+
             deal_type = _classify_deal_type(block)
             valid_days = _extract_days(block)
             start_time, end_time = _extract_times(block)
             calories = _extract_calories(block)
 
             calorie_price_ratio = None
-            if calories and price and price > 0:
-                calorie_price_ratio = round(calories / price, 1)
+            if calories and pricing.price and pricing.price > 0:
+                calorie_price_ratio = round(calories / pricing.price, 1)
 
             signals.append(DealSignal(
                 restaurant_name=restaurant_name,
@@ -969,12 +1130,15 @@ def scrape_restaurant_website(
                 deal_name=deal_name,
                 deal_description=block[:500],
                 deal_type=deal_type,
-                price=price,
+                price=pricing.price,
+                price_type=pricing.price_type,
+                discount_percentage=pricing.discount_percentage,
                 calories=calories,
                 calorie_price_ratio=calorie_price_ratio,
                 valid_days=valid_days,
                 valid_start_time=start_time,
                 valid_end_time=end_time,
+                raw_scraped_text=block,
                 source="website_scrape",
                 source_url=full_url,
                 region=region,
@@ -1024,15 +1188,20 @@ def scrape_restaurant_website(
                     continue
                 seen_deals.add(name_key)
 
-                price = _extract_price(block)
+                pricing = _extract_deal_pricing(block)
+
+                # Skip add-on prices and non-food promos
+                if pricing.is_addon or pricing.is_non_food:
+                    continue
+
                 deal_type = _classify_deal_type(block)
                 valid_days = _extract_days(block)
                 start_time, end_time = _extract_times(block)
                 calories = _extract_calories(block)
 
                 calorie_price_ratio = None
-                if calories and price and price > 0:
-                    calorie_price_ratio = round(calories / price, 1)
+                if calories and pricing.price and pricing.price > 0:
+                    calorie_price_ratio = round(calories / pricing.price, 1)
 
                 signals.append(DealSignal(
                     restaurant_name=restaurant_name,
@@ -1041,12 +1210,15 @@ def scrape_restaurant_website(
                     deal_name=deal_name,
                     deal_description=block[:500],
                     deal_type=deal_type,
-                    price=price,
+                    price=pricing.price,
+                    price_type=pricing.price_type,
+                    discount_percentage=pricing.discount_percentage,
                     calories=calories,
                     calorie_price_ratio=calorie_price_ratio,
                     valid_days=valid_days,
                     valid_start_time=start_time,
                     valid_end_time=end_time,
+                    raw_scraped_text=block,
                     source="website_scrape",
                     source_url=disc_url,
                     region=region,

@@ -39,12 +39,24 @@ _JUNK_DEAL_NAMES = {
     "order now", "order online", "sign in", "sign up",
     "download the app", "careers", "about us", "contact us",
     "gift cards", "gift card", "franchise", "locations",
+    "wanna save $$?", "rewards", "loyalty",
 }
 
-# Substrings that indicate a non-deal name
+# Substrings that indicate a non-deal name — matched anywhere in the text
 _JUNK_SUBSTRINGS = [
     "skip to content", "skip to main", "toggle menu",
     "toggle nav", "cookie", "privacy policy",
+    # DB-observed junk (Issue 10, 7)
+    "select a location",
+    "learn more about",
+    "check out how you can save",
+    "who doesn't love a good deal",
+    "who doesn\u2019t love a good deal",
+    "select your nearest",
+    "open menu close menu",
+    "international sites",
+    "all rights reserved",
+    "copyright",
 ]
 
 
@@ -126,6 +138,8 @@ def _upsert_deal_pg(session: Session, deal_data: dict) -> None:
             "deal_description": stmt.excluded.deal_description,
             "deal_type": stmt.excluded.deal_type,
             "price": stmt.excluded.price,
+            "price_type": stmt.excluded.price_type,
+            "discount_percentage": stmt.excluded.discount_percentage,
             "original_price": stmt.excluded.original_price,
             "menu_avg_price": stmt.excluded.menu_avg_price,
             "calories": stmt.excluded.calories,
@@ -135,6 +149,8 @@ def _upsert_deal_pg(session: Session, deal_data: dict) -> None:
             "valid_end_time": stmt.excluded.valid_end_time,
             "source_url": stmt.excluded.source_url,
             "verified_at": stmt.excluded.verified_at,
+            "raw_scraped_text": stmt.excluded.raw_scraped_text,
+            "signal_quality": stmt.excluded.signal_quality,
             "is_active": True,
             "updated_at": datetime.now(timezone.utc),
         },
@@ -220,6 +236,8 @@ def ingest_deal_signals(
                     "deal_description": signal.deal_description,
                     "deal_type": signal.deal_type,
                     "price": signal.price,
+                    "price_type": signal.price_type,
+                    "discount_percentage": signal.discount_percentage,
                     "original_price": signal.original_price,
                     "menu_avg_price": signal.menu_avg_price,
                     "calories": signal.calories,
@@ -233,6 +251,8 @@ def ingest_deal_signals(
                     "source": signal.source,
                     "source_url": signal.source_url,
                     "verified_at": now,
+                    "raw_scraped_text": signal.raw_scraped_text,
+                    "signal_quality": signal.signal_quality,
                     "is_active": True,
                     "lat": loc.get("lat"),
                     "lng": loc.get("lng"),
