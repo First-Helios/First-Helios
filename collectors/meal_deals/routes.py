@@ -8,11 +8,10 @@ Endpoints:
 """
 
 import logging
-from collections import defaultdict
-from datetime import datetime
+import math
+from collections import Counter, defaultdict
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func as sqlfunc
 
 from core.database import BrandGroup, LocalEmployer, MealDeal, get_engine, get_session
 from core.venue_identity import cluster_likely_same_venues, normalize_url_for_identity, pick_canonical_item
@@ -102,6 +101,58 @@ def _collapse_duplicate_deals(
     return collapsed
 
 
+def _build_employer_map(
+    session,
+    deals: list[MealDeal],
+) -> dict[int, LocalEmployer]:
+    employer_ids = {deal.local_employer_id for deal in deals if deal.local_employer_id is not None}
+    if not employer_ids:
+        return {}
+
+    employers = session.query(LocalEmployer).filter(
+        LocalEmployer.id.in_(employer_ids)
+    ).all()
+    return {employer.id: employer for employer in employers}
+
+
+def _load_deduped_deals(
+    session,
+    *,
+    region: str,
+    active_only: bool = True,
+    deal_type: str | None = None,
+    brand: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_mi: float = 10.0,
+) -> tuple[list[MealDeal], dict[int, LocalEmployer]]:
+    q = session.query(MealDeal).filter(MealDeal.region == region)
+
+    if active_only:
+        q = q.filter(MealDeal.is_active.is_(True))
+
+    if deal_type:
+        q = q.filter(MealDeal.deal_type == deal_type)
+
+    if brand:
+        q = q.join(BrandGroup, MealDeal.brand_group_id == BrandGroup.id).filter(
+            BrandGroup.fingerprint == brand
+        )
+
+    if lat is not None and lng is not None:
+        lat_delta = radius_mi / 69.0
+        cos_lat = max(abs(math.cos(math.radians(lat))), 0.01)
+        lng_delta = radius_mi / (69.0 * cos_lat)
+        q = q.filter(
+            MealDeal.lat.between(lat - lat_delta, lat + lat_delta),
+            MealDeal.lng.between(lng - lng_delta, lng + lng_delta),
+        )
+
+    deals = q.order_by(MealDeal.verified_at.desc(), MealDeal.id.desc()).all()
+    employers = _build_employer_map(session, deals)
+    return _collapse_duplicate_deals(deals, employers), employers
+
+
 # ── Deal listings ─────────────────────────────────────────────────────────────
 
 @deals_bp.route("")
@@ -134,41 +185,16 @@ def list_deals():
 
     session = _get_db_session()
     try:
-        q = session.query(MealDeal).filter(MealDeal.region == region)
-
-        if active_only:
-            q = q.filter(MealDeal.is_active.is_(True))
-
-        if deal_type:
-            q = q.filter(MealDeal.deal_type == deal_type)
-
-        if brand:
-            # Join to brand_groups to filter by fingerprint
-            q = q.join(BrandGroup, MealDeal.brand_group_id == BrandGroup.id).filter(
-                BrandGroup.fingerprint == brand
-            )
-
-        # Geo filter: bounding box approximation (1° lat ≈ 69 mi)
-        if lat is not None and lng is not None:
-            lat_delta = radius_mi / 69.0
-            lng_delta = radius_mi / (69.0 * abs(__import__("math").cos(__import__("math").radians(lat))))
-            q = q.filter(
-                MealDeal.lat.between(lat - lat_delta, lat + lat_delta),
-                MealDeal.lng.between(lng - lng_delta, lng + lng_delta),
-            )
-
-        deals = q.order_by(MealDeal.verified_at.desc(), MealDeal.id.desc()).all()
-
-        # Enrich with restaurant name from local_employers
-        employer_ids = {d.local_employer_id for d in deals if d.local_employer_id is not None}
-        employers = {}
-        if employer_ids:
-            emp_rows = session.query(LocalEmployer).filter(
-                LocalEmployer.id.in_(employer_ids)
-            ).all()
-            employers = {e.id: e for e in emp_rows}
-
-        deals = _collapse_duplicate_deals(deals, employers)
+        deals, employers = _load_deduped_deals(
+            session,
+            region=region,
+            active_only=active_only,
+            deal_type=deal_type,
+            brand=brand,
+            lat=lat,
+            lng=lng,
+            radius_mi=radius_mi,
+        )
         total = len(deals)
         deals = deals[offset: offset + limit]
 
@@ -201,46 +227,41 @@ def deal_stats():
     """Summary statistics for active deals.
 
     Query params:
-        region  (str, default austin_tx)
+        region      (str, default austin_tx)
+        deal_type   (str, optional)
+        brand       (str, optional)
+        active_only (bool, default true)
+        lat         (float, optional)
+        lng         (float, optional)
+        radius_mi   (float, default 10)
     """
     region = request.args.get("region", "austin_tx")
+    deal_type = request.args.get("deal_type")
+    brand = request.args.get("brand")
+    active_only = request.args.get("active_only", "true").lower() != "false"
+    lat = request.args.get("lat", type=float)
+    lng = request.args.get("lng", type=float)
+    radius_mi = request.args.get("radius_mi", 10.0, type=float)
     session = _get_db_session()
     try:
-        base = session.query(MealDeal).filter(
-            MealDeal.region == region,
-            MealDeal.is_active.is_(True),
+        deals, _employers = _load_deduped_deals(
+            session,
+            region=region,
+            active_only=active_only,
+            deal_type=deal_type,
+            brand=brand,
+            lat=lat,
+            lng=lng,
+            radius_mi=radius_mi,
         )
 
-        total = base.count()
-
-        # By deal type
-        type_counts = dict(
-            base.with_entities(
-                MealDeal.deal_type, sqlfunc.count()
-            ).group_by(MealDeal.deal_type).all()
-        )
-
-        # By source
-        source_counts = dict(
-            base.with_entities(
-                MealDeal.source, sqlfunc.count()
-            ).group_by(MealDeal.source).all()
-        )
-
-        # Distinct restaurants with deals
-        restaurant_count = base.with_entities(
-            sqlfunc.count(sqlfunc.distinct(MealDeal.local_employer_id))
-        ).scalar()
-
-        # Distinct brands with deals
-        brand_count = base.filter(
-            MealDeal.brand_group_id.isnot(None)
-        ).with_entities(
-            sqlfunc.count(sqlfunc.distinct(MealDeal.brand_group_id))
-        ).scalar()
+        type_counts = dict(Counter(deal.deal_type for deal in deals))
+        source_counts = dict(Counter(deal.source for deal in deals))
+        restaurant_count = len({deal.local_employer_id for deal in deals if deal.local_employer_id is not None})
+        brand_count = len({deal.brand_group_id for deal in deals if deal.brand_group_id is not None})
 
         return jsonify({
-            "total_deals": total,
+            "total_deals": len(deals),
             "by_type": type_counts,
             "by_source": source_counts,
             "restaurant_count": restaurant_count,
@@ -260,36 +281,58 @@ def deal_brands():
     """Brands with active deals and their deal counts.
 
     Query params:
-        region  (str, default austin_tx)
+        region      (str, default austin_tx)
+        deal_type   (str, optional)
+        active_only (bool, default true)
+        lat         (float, optional)
+        lng         (float, optional)
+        radius_mi   (float, default 10)
     """
     region = request.args.get("region", "austin_tx")
+    deal_type = request.args.get("deal_type")
+    active_only = request.args.get("active_only", "true").lower() != "false"
+    lat = request.args.get("lat", type=float)
+    lng = request.args.get("lng", type=float)
+    radius_mi = request.args.get("radius_mi", 10.0, type=float)
     session = _get_db_session()
     try:
-        rows = (
-            session.query(
-                BrandGroup.fingerprint,
-                BrandGroup.canonical_name,
-                BrandGroup.location_count,
-                sqlfunc.count(MealDeal.id).label("deal_count"),
-            )
-            .join(MealDeal, MealDeal.brand_group_id == BrandGroup.id)
-            .filter(
-                MealDeal.region == region,
-                MealDeal.is_active.is_(True),
-            )
-            .group_by(BrandGroup.id)
-            .order_by(sqlfunc.count(MealDeal.id).desc())
-            .all()
+        deals, _employers = _load_deduped_deals(
+            session,
+            region=region,
+            active_only=active_only,
+            deal_type=deal_type,
+            lat=lat,
+            lng=lng,
+            radius_mi=radius_mi,
+        )
+        deal_counts = Counter(
+            deal.brand_group_id for deal in deals if deal.brand_group_id is not None
+        )
+        if not deal_counts:
+            return jsonify({"brands": [], "count": 0, "region": region})
+
+        brand_rows = session.query(BrandGroup).filter(
+            BrandGroup.id.in_(deal_counts.keys())
+        ).all()
+        brand_map = {brand.id: brand for brand in brand_rows}
+
+        ordered_brand_ids = sorted(
+            deal_counts.keys(),
+            key=lambda brand_id: (
+                -deal_counts[brand_id],
+                brand_map[brand_id].canonical_name.casefold() if brand_id in brand_map and brand_map[brand_id].canonical_name else "",
+            ),
         )
 
         brands = [
             {
-                "fingerprint": r.fingerprint,
-                "name": r.canonical_name,
-                "location_count": r.location_count,
-                "deal_count": r.deal_count,
+                "fingerprint": brand_map[brand_id].fingerprint,
+                "name": brand_map[brand_id].canonical_name,
+                "location_count": brand_map[brand_id].location_count,
+                "deal_count": deal_counts[brand_id],
             }
-            for r in rows
+            for brand_id in ordered_brand_ids
+            if brand_id in brand_map
         ]
 
         return jsonify({"brands": brands, "count": len(brands), "region": region})

@@ -1149,6 +1149,132 @@ class RestaurantURL(Base):
     )
 
 
+class CanonicalVenue(Base):
+    """Canonical physical venue identity for meal-deal targeting and dedupe."""
+
+    __tablename__ = "canonical_venues"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    canonical_name = Column(String, nullable=False)
+    normalized_name = Column(String, nullable=False, index=True)
+    normalized_address = Column(String, nullable=True, index=True)
+    address = Column(String, nullable=True)
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    region = Column(String, nullable=False, index=True)
+    brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+    site_status = Column(String, nullable=False, default="no_site")
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "canonical_name": self.canonical_name,
+            "normalized_name": self.normalized_name,
+            "normalized_address": self.normalized_address,
+            "address": self.address,
+            "lat": self.lat,
+            "lng": self.lng,
+            "region": self.region,
+            "brand_group_id": self.brand_group_id,
+            "site_status": self.site_status,
+            "is_active": self.is_active,
+        }
+
+    __table_args__ = (
+        Index("ix_canonical_venues_region_name", "region", "normalized_name"),
+    )
+
+
+class CanonicalVenueAlias(Base):
+    """Maps source location rows into canonical venue identities."""
+
+    __tablename__ = "canonical_venue_aliases"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    canonical_venue_id = Column(Integer, ForeignKey("canonical_venues.id"), nullable=False, index=True)
+    local_employer_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    alias_role = Column(String, nullable=False, default="alias")
+    match_method = Column(String, nullable=False)
+    match_confidence = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "canonical_venue_id": self.canonical_venue_id,
+            "local_employer_id": self.local_employer_id,
+            "alias_role": self.alias_role,
+            "match_method": self.match_method,
+            "match_confidence": self.match_confidence,
+            "notes": self.notes,
+        }
+
+    __table_args__ = (
+        UniqueConstraint("local_employer_id", name="uq_canonical_venue_alias_local_employer"),
+    )
+
+
+class SiteIdentity(Base):
+    """Canonical website identity used by scrapers and deal applicability."""
+
+    __tablename__ = "site_identities"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    normalized_url = Column(String, nullable=False, unique=True, index=True)
+    canonical_url = Column(String, nullable=False)
+    host = Column(String, nullable=False, index=True)
+    path = Column(String, nullable=True)
+    ownership_scope = Column(String, nullable=False, default="unknown")
+    conflict_state = Column(String, nullable=False, default="needs_review")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "normalized_url": self.normalized_url,
+            "canonical_url": self.canonical_url,
+            "host": self.host,
+            "path": self.path,
+            "ownership_scope": self.ownership_scope,
+            "conflict_state": self.conflict_state,
+        }
+
+
+class SiteAssignment(Base):
+    """Maps site identities to canonical venues or brand scope."""
+
+    __tablename__ = "site_assignments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    site_identity_id = Column(Integer, ForeignKey("site_identities.id"), nullable=False, index=True)
+    canonical_venue_id = Column(Integer, ForeignKey("canonical_venues.id"), nullable=True, index=True)
+    brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+    assignment_scope = Column(String, nullable=False)
+    match_method = Column(String, nullable=False)
+    match_confidence = Column(Float, nullable=True)
+    is_primary = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "site_identity_id": self.site_identity_id,
+            "canonical_venue_id": self.canonical_venue_id,
+            "brand_group_id": self.brand_group_id,
+            "assignment_scope": self.assignment_scope,
+            "match_method": self.match_method,
+            "match_confidence": self.match_confidence,
+            "is_primary": self.is_primary,
+        }
+
+
 class MealDeal(Base):
     """A meal deal / special offered by a restaurant in local_employers.
 

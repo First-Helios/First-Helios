@@ -17,11 +17,13 @@ Depends on: requests, beautifulsoup4, collectors.rotation
 Called by: scheduler (Wednesday/Saturday 2:00 AM) or CLI
 """
 
+import hashlib
 import json
 import logging
 import re
 import time
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -34,7 +36,8 @@ from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
 from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation
-from core.venue_identity import cluster_likely_same_venues, pick_canonical_item
+from config.paths import CACHE_DIR, WEBSITE_SCRAPE_DEBUG_DIR
+from core.venue_identity import cluster_likely_same_venues, normalize_url_for_identity, pick_canonical_item
 
 try:
     import pdfplumber
@@ -393,7 +396,162 @@ MAX_PAGE_SIZE = 500_000  # 500KB
 REQUEST_TIMEOUT = 15
 
 
-_SCRAPE_AUDIT_PATH = Path(__file__).parent.parent.parent / "data" / "cache" / "website_scrape_audit.json"
+_SCRAPE_AUDIT_PATH = CACHE_DIR / "website_scrape_audit.json"
+
+
+def _debug_cache_key(url: str) -> str:
+    normalized = normalize_url_for_identity(url)
+    if normalized:
+        return normalized
+    return re.sub(r"[^a-z0-9]+", "-", url.strip().lower()).strip("-") or "site"
+
+
+def _debug_cache_path_from_key(site_key: str) -> Path:
+    slug = re.sub(r"[^a-z0-9]+", "_", site_key).strip("_")[:80] or "site"
+    digest = hashlib.sha1(site_key.encode("utf-8")).hexdigest()[:12]
+    return WEBSITE_SCRAPE_DEBUG_DIR / f"{slug}__{digest}.json"
+
+
+def _site_debug_cache_path(url: str) -> Path:
+    return _debug_cache_path_from_key(_debug_cache_key(url))
+
+
+def _serialize_signal(signal: DealSignal) -> dict[str, Any]:
+    return {
+        "restaurant_name": signal.restaurant_name,
+        "address": signal.address,
+        "lat": signal.lat,
+        "lng": signal.lng,
+        "brand_fingerprint": signal.brand_fingerprint,
+        "brand_group_id": signal.brand_group_id,
+        "local_employer_id": signal.local_employer_id,
+        "deal_name": signal.deal_name,
+        "deal_description": signal.deal_description,
+        "deal_type": signal.deal_type,
+        "price": signal.price,
+        "price_type": signal.price_type,
+        "discount_percentage": signal.discount_percentage,
+        "original_price": signal.original_price,
+        "menu_avg_price": signal.menu_avg_price,
+        "calories": signal.calories,
+        "calorie_price_ratio": signal.calorie_price_ratio,
+        "valid_days": signal.valid_days,
+        "valid_start_time": signal.valid_start_time,
+        "valid_end_time": signal.valid_end_time,
+        "is_recurring": signal.is_recurring,
+        "start_date": signal.start_date.isoformat() if signal.start_date else None,
+        "end_date": signal.end_date.isoformat() if signal.end_date else None,
+        "source": signal.source,
+        "source_url": signal.source_url,
+        "region": signal.region,
+        "raw_scraped_text": signal.raw_scraped_text,
+        "signal_quality": signal.signal_quality,
+        "deal_value_score": signal.deal_value_score,
+        "sub_deals": deepcopy(signal.sub_deals),
+        "metadata": deepcopy(signal.metadata),
+        "observed_at": signal.observed_at.isoformat() if signal.observed_at else None,
+    }
+
+
+def _new_site_debug_bundle(base_url: str, *, restaurant_name: str, region: str) -> dict[str, Any]:
+    return {
+        "site_key": _debug_cache_key(base_url),
+        "site_url": base_url,
+        "restaurant_name": restaurant_name,
+        "region": region,
+        "scraped_at": datetime.now(timezone.utc).isoformat(),
+        "pages": {},
+        "pdfs": {},
+        "signals": [],
+        "discovered_pages": [],
+        "pdf_links": [],
+        "menu_avg_price": None,
+    }
+
+
+def _write_site_debug_bundle(bundle: dict[str, Any]) -> None:
+    WEBSITE_SCRAPE_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    path = _debug_cache_path_from_key(bundle["site_key"])
+    path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+
+
+def _reset_site_debug_bundle(base_url: str, *, restaurant_name: str, region: str) -> dict[str, Any]:
+    path = _site_debug_cache_path(base_url)
+    if path.exists():
+        path.unlink()
+    bundle = _new_site_debug_bundle(base_url, restaurant_name=restaurant_name, region=region)
+    _write_site_debug_bundle(bundle)
+    return bundle
+
+
+def _load_site_debug_bundle(base_url: str) -> dict[str, Any] | None:
+    path = _site_debug_cache_path(base_url)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _record_debug_page(bundle: dict[str, Any], page_url: str, *, html: str, fetch_type: str) -> None:
+    bundle.setdefault("pages", {})[_debug_cache_key(page_url)] = {
+        "url": page_url,
+        "fetch_type": fetch_type,
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "html": html,
+    }
+    _write_site_debug_bundle(bundle)
+
+
+def _get_debug_page(bundle: dict[str, Any] | None, page_url: str) -> str | None:
+    if not bundle:
+        return None
+    page = bundle.get("pages", {}).get(_debug_cache_key(page_url))
+    if isinstance(page, dict):
+        html = page.get("html")
+        if isinstance(html, str):
+            return html
+    return None
+
+
+def _record_debug_pdf_text(bundle: dict[str, Any], pdf_url: str, *, full_text: str) -> None:
+    bundle.setdefault("pdfs", {})[_debug_cache_key(pdf_url)] = {
+        "url": pdf_url,
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "full_text": full_text,
+    }
+    _write_site_debug_bundle(bundle)
+
+
+def _get_debug_pdf_text(bundle: dict[str, Any] | None, pdf_url: str) -> str | None:
+    if not bundle:
+        return None
+    pdf = bundle.get("pdfs", {}).get(_debug_cache_key(pdf_url))
+    if isinstance(pdf, dict):
+        full_text = pdf.get("full_text")
+        if isinstance(full_text, str):
+            return full_text
+    return None
+
+
+def _finalize_site_debug_bundle(
+    bundle: dict[str, Any] | None,
+    *,
+    signals: list[DealSignal],
+    discovered_pages: list[str],
+    pdf_links: list[str],
+    menu_avg_price: float | None,
+) -> None:
+    if not bundle:
+        return
+    bundle["signals"] = [_serialize_signal(signal) for signal in signals]
+    bundle["discovered_pages"] = list(discovered_pages)
+    bundle["pdf_links"] = list(pdf_links)
+    bundle["menu_avg_price"] = menu_avg_price
+    bundle["completed_at"] = datetime.now(timezone.utc).isoformat()
+    _write_site_debug_bundle(bundle)
 
 
 def _write_scrape_audit(entries: list[dict], append: bool = False) -> None:
@@ -1150,7 +1308,9 @@ def _text_block_to_signals(
     return results
 
 
-def _parse_pdf_for_deals(
+def _pdf_text_to_signals(
+    full_text: str,
+    *,
     pdf_url: str,
     restaurant_name: str,
     local_employer_id: int,
@@ -1158,16 +1318,38 @@ def _parse_pdf_for_deals(
     region: str,
     seen_deals: set[str],
 ) -> list[DealSignal]:
-    """Download and parse a PDF file for deal signals.
-
-    Uses pdfplumber to extract text, then applies the same deal-validation
-    pipeline as text-block extraction. Returns DealSignal objects.
-    """
-    if not _HAS_PDFPLUMBER:
-        logger.debug("[WebScraper] pdfplumber not installed — skipping PDF: %s", pdf_url)
+    """Convert extracted PDF text into deal signals."""
+    if not full_text.strip():
         return []
 
     signals: list[DealSignal] = []
+    raw_blocks = re.split(r"\n{2,}|\r\n{2,}", full_text)
+    blocks: list[str] = []
+    for raw in raw_blocks:
+        cleaned = re.sub(r"\s+", " ", raw).strip()
+        if cleaned and 15 < len(cleaned) < 500:
+            blocks.append(cleaned)
+
+    for block in blocks:
+        signals.extend(_text_block_to_signals(
+            block,
+            restaurant_name=restaurant_name,
+            local_employer_id=local_employer_id,
+            brand_group_id=brand_group_id,
+            source_url=pdf_url,
+            region=region,
+            seen_deals=seen_deals,
+        ))
+
+    return signals
+
+
+def _download_pdf_text(pdf_url: str) -> str | None:
+    """Download a PDF and extract plain text for later parsing."""
+    if not _HAS_PDFPLUMBER:
+        logger.debug("[WebScraper] pdfplumber not installed — skipping PDF: %s", pdf_url)
+        return None
+
     try:
         resp = requests.get(
             pdf_url,
@@ -1176,18 +1358,18 @@ def _parse_pdf_for_deals(
             allow_redirects=True,
         )
         if resp.status_code != 200:
-            return []
+            return None
 
         # Size guard: skip PDFs larger than 5MB
         if len(resp.content) > 5_000_000:
             logger.debug("[WebScraper] PDF too large (%.1f MB): %s", len(resp.content) / 1e6, pdf_url)
-            return []
+            return None
 
         with pdfplumber.open(BytesIO(resp.content)) as pdf:
             # Page guard: skip PDFs with more than 20 pages
             if len(pdf.pages) > 20:
                 logger.debug("[WebScraper] PDF too many pages (%d): %s", len(pdf.pages), pdf_url)
-                return []
+                return None
 
             full_text = ""
             for page in pdf.pages:
@@ -1195,33 +1377,49 @@ def _parse_pdf_for_deals(
                 if page_text:
                     full_text += page_text + "\n"
 
-        if not full_text.strip():
-            return []
-
-        # Split into blocks by double-newline or significant whitespace
-        raw_blocks = re.split(r"\n{2,}|\r\n{2,}", full_text)
-        blocks: list[str] = []
-        for raw in raw_blocks:
-            # Clean up single newlines within a block
-            cleaned = re.sub(r"\s+", " ", raw).strip()
-            if cleaned and 15 < len(cleaned) < 500:
-                blocks.append(cleaned)
-
-        for block in blocks:
-            signals.extend(_text_block_to_signals(
-                block,
-                restaurant_name=restaurant_name,
-                local_employer_id=local_employer_id,
-                brand_group_id=brand_group_id,
-                source_url=pdf_url,
-                region=region,
-                seen_deals=seen_deals,
-            ))
+        return full_text.strip() or None
 
     except Exception as e:
         logger.debug("[WebScraper] Failed to parse PDF %s: %s", pdf_url, e)
+        return None
 
-    return signals
+    return None
+
+
+def _parse_pdf_for_deals(
+    pdf_url: str,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    region: str,
+    seen_deals: set[str],
+    *,
+    debug_bundle: dict[str, Any] | None = None,
+    replay_debug_cache: bool = False,
+) -> list[DealSignal]:
+    """Parse a PDF for deal signals, using local debug cache when requested."""
+    if replay_debug_cache:
+        full_text = _get_debug_pdf_text(debug_bundle, pdf_url)
+        if full_text is None:
+            logger.debug("[WebScraper] No cached PDF text for %s", pdf_url)
+            return []
+    else:
+        full_text = _download_pdf_text(pdf_url)
+        if full_text and debug_bundle is not None:
+            _record_debug_pdf_text(debug_bundle, pdf_url, full_text=full_text)
+
+    if not full_text:
+        return []
+
+    return _pdf_text_to_signals(
+        full_text,
+        pdf_url=pdf_url,
+        restaurant_name=restaurant_name,
+        local_employer_id=local_employer_id,
+        brand_group_id=brand_group_id,
+        region=region,
+        seen_deals=seen_deals,
+    )
 
 
 def scrape_restaurant_website(
@@ -1230,6 +1428,7 @@ def scrape_restaurant_website(
     local_employer_id: int,
     brand_group_id: int | None = None,
     region: str = "austin_tx",
+    replay_debug_cache: bool = False,
 ) -> list[DealSignal]:
     """Scrape a single restaurant's website for deals.
 
@@ -1244,6 +1443,14 @@ def scrape_restaurant_website(
     user_agent = _get_user_agent()
     parsed = urlparse(url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
+    debug_bundle = _load_site_debug_bundle(url) if replay_debug_cache else _reset_site_debug_bundle(
+        url,
+        restaurant_name=restaurant_name,
+        region=region,
+    )
+    if replay_debug_cache and debug_bundle is None:
+        logger.warning("[WebScraper] No local debug cache for %s", url)
+        return []
 
     signals: list[DealSignal] = []
     seen_deals: set[str] = set()  # dedup by deal_name
@@ -1261,9 +1468,11 @@ def scrape_restaurant_website(
 
         full_url = urljoin(base_url, path)
 
-        html = _fetch_page(full_url, user_agent)
+        html = _get_debug_page(debug_bundle, full_url) if replay_debug_cache else _fetch_page(full_url, user_agent)
         if not html:
             continue
+        if not replay_debug_cache and debug_bundle is not None:
+            _record_debug_page(debug_bundle, full_url, html=html, fetch_type="hardcoded")
 
         pages_fetched += 1
         soup = BeautifulSoup(html, "html.parser")
@@ -1308,9 +1517,11 @@ def scrape_restaurant_website(
             if pages_fetched >= MAX_PAGES_PER_SITE:
                 break
 
-            html = _fetch_page(disc_url, user_agent)
+            html = _get_debug_page(debug_bundle, disc_url) if replay_debug_cache else _fetch_page(disc_url, user_agent)
             if not html:
                 continue
+            if not replay_debug_cache and debug_bundle is not None:
+                _record_debug_page(debug_bundle, disc_url, html=html, fetch_type="discovered")
 
             pages_fetched += 1
             soup = BeautifulSoup(html, "html.parser")
@@ -1353,17 +1564,45 @@ def scrape_restaurant_website(
         pdf_signals = _parse_pdf_for_deals(
             pdf_url, restaurant_name, local_employer_id,
             brand_group_id, region, seen_deals,
+            debug_bundle=debug_bundle,
+            replay_debug_cache=replay_debug_cache,
         )
         signals.extend(pdf_signals)
         time.sleep(1.0)
 
     # Compute menu average price and attach to each signal
+    menu_avg_price = None
     if all_menu_prices and len(all_menu_prices) >= 3:
-        menu_avg = round(sum(all_menu_prices) / len(all_menu_prices), 2)
+        menu_avg_price = round(sum(all_menu_prices) / len(all_menu_prices), 2)
         for sig in signals:
-            sig.menu_avg_price = menu_avg
+            sig.menu_avg_price = menu_avg_price
+
+    _finalize_site_debug_bundle(
+        debug_bundle,
+        signals=signals,
+        discovered_pages=discovered_pages,
+        pdf_links=unique_pdfs,
+        menu_avg_price=menu_avg_price,
+    )
 
     return signals
+
+
+def _copy_signal_for_location(signal: DealSignal, employer: Any, *, region: str) -> DealSignal:
+    """Copy a scraped signal to another location without dropping extracted fields."""
+    return replace(
+        signal,
+        restaurant_name=employer.name,
+        address=employer.address or signal.address,
+        lat=employer.lat,
+        lng=employer.lng,
+        brand_fingerprint=None,
+        local_employer_id=employer.id,
+        brand_group_id=employer.brand_group_id,
+        region=region,
+        sub_deals=deepcopy(signal.sub_deals),
+        metadata=deepcopy(signal.metadata),
+    )
 
 
 def _collapse_shared_url_aliases(group: list[tuple]) -> tuple[list[tuple], list[tuple]]:
@@ -1419,6 +1658,7 @@ class WebsiteDealCollector:
         max_sites: int = 100,
         dry_run: bool = False,
         skip_checked_days: int | None = 3,
+        replay_debug_cache: bool = False,
     ) -> list[DealSignal]:
         """Scrape websites and return DealSignals.
 
@@ -1516,6 +1756,7 @@ class WebsiteDealCollector:
                         "employer_id": emp_rep.id,
                         "name": emp_rep.name,
                         "url": rurl_rep.url,
+                        "debug_cache_key": _debug_cache_key(rurl_rep.url),
                         "locations_sharing_url": len(group),
                         "canonical_locations": len(canonical_group),
                         "alias_rows_collapsed": len(alias_rows),
@@ -1530,6 +1771,7 @@ class WebsiteDealCollector:
                             local_employer_id=emp_rep.id,
                             brand_group_id=emp_rep.brand_group_id,
                             region=region,
+                            replay_debug_cache=replay_debug_cache,
                         )
 
                         if signals:
@@ -1553,20 +1795,7 @@ class WebsiteDealCollector:
                                     )
                                     continue
                                 for sig in signals:
-                                    loc_sig = DealSignal(
-                                        restaurant_name=emp_loc.name,
-                                        brand_fingerprint=None,
-                                        local_employer_id=emp_loc.id,
-                                        brand_group_id=emp_loc.brand_group_id,
-                                        deal_name=sig.deal_name,
-                                        deal_description=sig.deal_description,
-                                        deal_type=sig.deal_type,
-                                        price=sig.price,
-                                        source=sig.source,
-                                        source_url=sig.source_url,
-                                        region=region,
-                                        observed_at=sig.observed_at,
-                                    )
+                                    loc_sig = _copy_signal_for_location(sig, emp_loc, region=region)
                                     chunk_signals.append(loc_sig)
                             site_audit["deals_found"] = len(signals)
                             site_audit["outcome"] = "deals_found"
@@ -1574,7 +1803,8 @@ class WebsiteDealCollector:
                         else:
                             site_audit["outcome"] = "no_deals"
                             try:
-                                html = _fetch_page(rurl_rep.url, _get_user_agent())
+                                cached_bundle = _load_site_debug_bundle(rurl_rep.url) if replay_debug_cache else None
+                                html = _get_debug_page(cached_bundle, rurl_rep.url) if replay_debug_cache else _fetch_page(rurl_rep.url, _get_user_agent())
                                 if html:
                                     soup = BeautifulSoup(html, "html.parser")
                                     blocks = _extract_text_blocks(soup)
@@ -1660,6 +1890,7 @@ def run_website_scraper(
     max_sites: int = 100,
     dry_run: bool = False,
     skip_checked_days: int | None = 3,
+    replay_debug_cache: bool = False,
 ) -> dict:
     """Run the website scraper.
 
@@ -1669,11 +1900,13 @@ def run_website_scraper(
     signals = collector.collect(
         region=region, max_sites=max_sites, dry_run=dry_run,
         skip_checked_days=skip_checked_days,
+        replay_debug_cache=replay_debug_cache,
     )
 
     return {
         "signals_found": len(signals),
         "dry_run": dry_run,
+        "replay_debug_cache": replay_debug_cache,
     }
 
 
@@ -1691,6 +1924,11 @@ if __name__ == "__main__":
         "--skip-checked-days", type=int, default=3,
         help="Skip sites already checked within N days (default: 3). Use 0 to force re-scrape all.",
     )
+    parser.add_argument(
+        "--replay-debug-cache",
+        action="store_true",
+        help="Replay locally saved website scrape bundles instead of re-fetching pages.",
+    )
     args = parser.parse_args()
 
     max_sites = 999999 if args.all else args.max_sites
@@ -1700,6 +1938,7 @@ if __name__ == "__main__":
         max_sites=max_sites,
         dry_run=args.dry_run,
         skip_checked_days=args.skip_checked_days,
+        replay_debug_cache=args.replay_debug_cache,
     )
     print(f"\n--- Website Scraper Stats ---")
     for k, v in stats.items():

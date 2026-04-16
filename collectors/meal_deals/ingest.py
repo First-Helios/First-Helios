@@ -31,6 +31,8 @@ from core.database import (
     get_session,
     init_db,
 )
+from core.normalizer import make_fingerprint
+from core.venue_identity import likely_same_venue, pick_canonical_item
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,16 @@ def _resolve_brand_group_id(session: Session, fingerprint: str) -> int | None:
     return bg.id if bg else None
 
 
+def _employer_ref(emp: LocalEmployer) -> dict:
+    return {
+        "id": emp.id,
+        "lat": emp.lat,
+        "lng": emp.lng,
+        "brand_group_id": emp.brand_group_id,
+        "name": emp.name,
+    }
+
+
 def _build_deal_data(
     signal: DealSignal,
     now: datetime,
@@ -135,17 +147,65 @@ def _resolve_single_employer(
     session: Session,
     signal: DealSignal,
 ) -> dict | None:
-    """Try to match a DealSignal to a single local_employer by name/location."""
+    """Try to match a DealSignal to a single local_employer."""
     if signal.local_employer_id:
         emp = session.get(LocalEmployer, signal.local_employer_id)
         if emp:
-            return {
-                "id": emp.id,
-                "lat": emp.lat,
-                "lng": emp.lng,
-                "brand_group_id": emp.brand_group_id,
-                "name": emp.name,
-            }
+            return _employer_ref(emp)
+
+    if not signal.restaurant_name or not signal.address:
+        return None
+
+    base_query = session.query(LocalEmployer).filter(
+        LocalEmployer.is_active.is_(True)
+    )
+    if signal.region:
+        base_query = base_query.filter(LocalEmployer.region == signal.region)
+    if signal.brand_group_id is not None:
+        base_query = base_query.filter(LocalEmployer.brand_group_id == signal.brand_group_id)
+
+    candidate_groups: list[list[LocalEmployer]] = []
+    fingerprint = make_fingerprint(signal.restaurant_name)
+    if fingerprint:
+        candidate_groups.append(
+            base_query.filter(LocalEmployer.fingerprint == fingerprint).all()
+        )
+    candidate_groups.append(base_query.all())
+
+    seen_ids: set[int] = set()
+    for candidates in candidate_groups:
+        matches: list[LocalEmployer] = []
+        for emp in candidates:
+            if emp.id in seen_ids:
+                continue
+            seen_ids.add(emp.id)
+            if likely_same_venue(
+                name_a=signal.restaurant_name,
+                address_a=signal.address,
+                url_a=signal.source_url,
+                lat_a=signal.lat,
+                lng_a=signal.lng,
+                name_b=emp.name,
+                address_b=emp.address,
+                url_b=None,
+                lat_b=emp.lat,
+                lng_b=emp.lng,
+            ):
+                matches.append(emp)
+
+        if matches:
+            canonical = pick_canonical_item(
+                matches,
+                get_id=lambda emp: emp.id,
+                get_brand_group_id=lambda emp: emp.brand_group_id,
+                get_address=lambda emp: emp.address,
+                extra_rank=lambda emp: (
+                    1 if make_fingerprint(emp.name) == fingerprint else 0,
+                    emp.last_seen.timestamp() if emp.last_seen else 0.0,
+                ),
+            )
+            return _employer_ref(canonical)
+
     return None
 
 
@@ -331,16 +391,12 @@ def ingest_deal_signals(
                 continue
 
             # Non-chain deals — single location
-            if not signal.local_employer_id:
-                logger.debug(
-                    "[DealIngest] Skipping signal with no brand or employer: %s",
-                    signal.deal_name,
-                )
-                stats["skipped"] += 1
-                continue
-
             loc = _resolve_single_employer(session, signal)
             if not loc:
+                logger.debug(
+                    "[DealIngest] Skipping signal with no matched employer: %s",
+                    signal.deal_name,
+                )
                 stats["skipped"] += 1
                 continue
 

@@ -22,28 +22,46 @@ from collectors.meal_deals.models import DealSignal
 logger = logging.getLogger(__name__)
 
 
+def _to_float(raw: object) -> float | None:
+    if raw in (None, ""):
+        return None
+    return float(raw)
+
+
+def _to_int(raw: object) -> int | None:
+    if raw in (None, ""):
+        return None
+    return int(raw)
+
+
+def _build_signal(row: dict) -> DealSignal:
+    return DealSignal(
+        restaurant_name=row.get("restaurant_name", ""),
+        address=row.get("address"),
+        lat=_to_float(row.get("lat")),
+        lng=_to_float(row.get("lng")),
+        local_employer_id=_to_int(row.get("local_employer_id")),
+        deal_name=row.get("deal_name", ""),
+        deal_description=row.get("deal_description"),
+        deal_type=row.get("deal_type", "combo"),
+        price=_to_float(row.get("price")),
+        valid_days=row.get("valid_days"),
+        valid_start_time=row.get("valid_start_time"),
+        valid_end_time=row.get("valid_end_time"),
+        source="manual",
+        source_url=row.get("source_url"),
+        raw_scraped_text=row.get("raw_scraped_text"),
+        region=row.get("region", "austin_tx"),
+    )
+
+
 def load_from_csv(path: Path) -> list[DealSignal]:
     """Parse a CSV file into DealSignal objects."""
     signals: list[DealSignal] = []
     with open(path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            price = row.get("price")
-            signals.append(
-                DealSignal(
-                    restaurant_name=row.get("restaurant_name", ""),
-                    address=row.get("address"),
-                    deal_name=row.get("deal_name", ""),
-                    deal_description=row.get("deal_description"),
-                    deal_type=row.get("deal_type", "combo"),
-                    price=float(price) if price else None,
-                    valid_days=row.get("valid_days"),
-                    valid_start_time=row.get("valid_start_time"),
-                    valid_end_time=row.get("valid_end_time"),
-                    source="manual",
-                    region=row.get("region", "austin_tx"),
-                )
-            )
+            signals.append(_build_signal(row))
     return signals
 
 
@@ -57,22 +75,7 @@ def load_from_json(path: Path) -> list[DealSignal]:
 
     signals: list[DealSignal] = []
     for row in data:
-        price = row.get("price")
-        signals.append(
-            DealSignal(
-                restaurant_name=row.get("restaurant_name", ""),
-                address=row.get("address"),
-                deal_name=row.get("deal_name", ""),
-                deal_description=row.get("deal_description"),
-                deal_type=row.get("deal_type", "combo"),
-                price=float(price) if price else None,
-                valid_days=row.get("valid_days"),
-                valid_start_time=row.get("valid_start_time"),
-                valid_end_time=row.get("valid_end_time"),
-                source="manual",
-                region=row.get("region", "austin_tx"),
-            )
-        )
+        signals.append(_build_signal(row))
     return signals
 
 

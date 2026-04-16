@@ -151,6 +151,13 @@ def app(engine, monkeypatch):
     from postings.spiritpool_routes import spiritpool_bp
     test_app.register_blueprint(spiritpool_bp)
 
+    monkeypatch.setattr("collectors.meal_deals.routes.get_engine", _mock_init_db)
+    monkeypatch.setattr("collectors.meal_deals.routes.get_session", _mock_get_session)
+    monkeypatch.setattr("collectors.meal_deals.routes._engine", None, raising=False)
+
+    from collectors.meal_deals.routes import deals_bp
+    test_app.register_blueprint(deals_bp)
+
     return test_app
 
 

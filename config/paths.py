@@ -53,6 +53,7 @@ OCCUPATION_ALIASES_FILE = (
 CACHE_DIR = PROJECT_ROOT / "data" / "cache"
 BLS_CACHE_DIR = CACHE_DIR / "bls"       # BLS time-series JSON (download_bls_bulk.py)
 QCEW_CACHE_DIR = CACHE_DIR / "qcew"    # QCEW CSV files from BLS CEW API
+WEBSITE_SCRAPE_DEBUG_DIR = CACHE_DIR / "website_scrape_debug"
 
 # ── Silo 3: Skimmed data ──────────────────────────────────────────────────────
 # Raw internet-collected data from live scrapers, saved before DB processing.
