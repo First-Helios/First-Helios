@@ -1162,8 +1162,12 @@ class MealDeal(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # ── Restaurant link ───────────────────────────────────────────────────────
-    local_employer_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    # For per-location deals: local_employer_id is set. For chain templates
+    # (is_chain_template=True), local_employer_id is NULL and brand_group_id
+    # is the scope — query layer resolves to all locations of that brand.
+    local_employer_id = Column(Integer, ForeignKey("local_employers.id"), nullable=True, index=True)
     brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
+    is_chain_template = Column(Boolean, default=False, nullable=False)
 
     # ── Deal detail ───────────────────────────────────────────────────────────
     deal_name = Column(String, nullable=False)
@@ -1224,6 +1228,7 @@ class MealDeal(Base):
             "id": self.id,
             "local_employer_id": self.local_employer_id,
             "brand_group_id": self.brand_group_id,
+            "is_chain_template": self.is_chain_template,
             "deal_name": self.deal_name,
             "deal_description": self.deal_description,
             "deal_type": self.deal_type,

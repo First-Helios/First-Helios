@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from collectors.meal_deals.models import DealSignal
+from collectors.meal_deals.quality import compute_signal_quality, gate_decision
 from core.database import (
     BrandGroup,
     LocalEmployer,
@@ -74,41 +75,57 @@ def _is_postgres(session: Session) -> bool:
     return session.bind.dialect.name == "postgresql"  # type: ignore[union-attr]
 
 
-def _resolve_brand_locations(
-    session: Session,
-    fingerprint: str,
-    region: str,
-) -> list[dict]:
-    """Find all local_employer rows matching a brand fingerprint in the region.
-
-    Returns list of dicts with id, lat, lng, brand_group_id.
-    """
-    # Find the brand_group
+def _resolve_brand_group_id(session: Session, fingerprint: str) -> int | None:
+    """Return brand_group.id for a given fingerprint, or None."""
     bg = session.query(BrandGroup).filter(
         BrandGroup.fingerprint == fingerprint
     ).first()
+    return bg.id if bg else None
 
-    if not bg:
-        logger.debug("[DealIngest] No brand_group for fingerprint=%r", fingerprint)
-        return []
 
-    # Find all locations for this brand in the region
-    employers = session.query(LocalEmployer).filter(
-        LocalEmployer.brand_group_id == bg.id,
-        LocalEmployer.region == region,
-        LocalEmployer.is_active.is_(True),
-    ).all()
-
-    return [
-        {
-            "id": emp.id,
-            "lat": emp.lat,
-            "lng": emp.lng,
-            "brand_group_id": bg.id,
-            "name": emp.name,
-        }
-        for emp in employers
-    ]
+def _build_deal_data(
+    signal: DealSignal,
+    now: datetime,
+    is_active_flag: bool,
+    region: str,
+    *,
+    local_employer_id: int | None,
+    brand_group_id: int | None,
+    lat: float | None,
+    lng: float | None,
+    is_chain_template: bool,
+) -> dict:
+    """Common builder for the meal_deals row dict."""
+    return {
+        "local_employer_id": local_employer_id,
+        "brand_group_id": brand_group_id,
+        "is_chain_template": is_chain_template,
+        "deal_name": signal.deal_name,
+        "deal_description": signal.deal_description,
+        "deal_type": signal.deal_type,
+        "price": signal.price,
+        "price_type": signal.price_type,
+        "discount_percentage": signal.discount_percentage,
+        "original_price": signal.original_price,
+        "menu_avg_price": signal.menu_avg_price,
+        "calories": signal.calories,
+        "calorie_price_ratio": signal.calorie_price_ratio,
+        "valid_days": signal.valid_days,
+        "valid_start_time": signal.valid_start_time,
+        "valid_end_time": signal.valid_end_time,
+        "is_recurring": signal.is_recurring,
+        "start_date": signal.start_date,
+        "end_date": signal.end_date,
+        "source": signal.source,
+        "source_url": signal.source_url,
+        "verified_at": now,
+        "raw_scraped_text": signal.raw_scraped_text,
+        "signal_quality": signal.signal_quality,
+        "is_active": is_active_flag,
+        "lat": lat,
+        "lng": lng,
+        "region": region,
+    }
 
 
 def _resolve_single_employer(
@@ -151,7 +168,38 @@ def _upsert_deal_pg(session: Session, deal_data: dict) -> None:
             "verified_at": stmt.excluded.verified_at,
             "raw_scraped_text": stmt.excluded.raw_scraped_text,
             "signal_quality": stmt.excluded.signal_quality,
-            "is_active": True,
+            "is_active": stmt.excluded.is_active,
+            "updated_at": datetime.now(timezone.utc),
+        },
+    )
+    session.execute(stmt)
+
+
+def _upsert_chain_template_pg(session: Session, deal_data: dict) -> None:
+    """PostgreSQL upsert for chain templates — keys on the partial unique
+    index (brand_group_id, deal_name, source) WHERE is_chain_template=TRUE."""
+    stmt = pg_insert(MealDeal).values(**deal_data)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["brand_group_id", "deal_name", "source"],
+        index_where=MealDeal.is_chain_template.is_(True),
+        set_={
+            "deal_description": stmt.excluded.deal_description,
+            "deal_type": stmt.excluded.deal_type,
+            "price": stmt.excluded.price,
+            "price_type": stmt.excluded.price_type,
+            "discount_percentage": stmt.excluded.discount_percentage,
+            "original_price": stmt.excluded.original_price,
+            "menu_avg_price": stmt.excluded.menu_avg_price,
+            "calories": stmt.excluded.calories,
+            "calorie_price_ratio": stmt.excluded.calorie_price_ratio,
+            "valid_days": stmt.excluded.valid_days,
+            "valid_start_time": stmt.excluded.valid_start_time,
+            "valid_end_time": stmt.excluded.valid_end_time,
+            "source_url": stmt.excluded.source_url,
+            "verified_at": stmt.excluded.verified_at,
+            "raw_scraped_text": stmt.excluded.raw_scraped_text,
+            "signal_quality": stmt.excluded.signal_quality,
+            "is_active": stmt.excluded.is_active,
             "updated_at": datetime.now(timezone.utc),
         },
     )
@@ -171,7 +219,6 @@ def _upsert_deal_sqlite(session: Session, deal_data: dict) -> None:
             if key not in ("id", "created_at"):
                 setattr(existing, key, val)
         existing.updated_at = datetime.now(timezone.utc)
-        existing.is_active = True
     else:
         session.add(MealDeal(**deal_data))
 
@@ -191,7 +238,10 @@ def ingest_deal_signals(
     session = get_session(engine)
     is_pg = _is_postgres(session)
 
-    stats = {"inserted": 0, "updated": 0, "skipped": 0, "total_rows": 0}
+    stats = {
+        "inserted": 0, "updated": 0, "skipped": 0, "total_rows": 0,
+        "quality_rejected": 0, "quality_review": 0,
+    }
     now = datetime.now(timezone.utc)
 
     try:
@@ -202,15 +252,62 @@ def ingest_deal_signals(
                 stats["skipped"] += 1
                 continue
 
-            # Resolve target locations
-            if signal.brand_fingerprint:
-                locations = _resolve_brand_locations(
-                    session, signal.brand_fingerprint, region
+            # Compute signal quality once per signal (location-independent fields)
+            qscore = compute_signal_quality(
+                deal_name=signal.deal_name,
+                deal_description=signal.deal_description,
+                price=signal.price,
+                price_type=signal.price_type,
+                valid_days=signal.valid_days,
+                valid_start_time=signal.valid_start_time,
+                valid_end_time=signal.valid_end_time,
+                restaurant_name=signal.restaurant_name,
+                raw_scraped_text=signal.raw_scraped_text,
+            )
+            decision, is_active_flag = gate_decision(qscore.total)
+            signal.signal_quality = qscore.total
+
+            if decision == "reject":
+                logger.debug(
+                    "[DealIngest] Rejecting %r (quality=%.2f, %s)",
+                    signal.deal_name, qscore.total, "; ".join(qscore.reasons),
                 )
-            elif signal.local_employer_id:
-                loc = _resolve_single_employer(session, signal)
-                locations = [loc] if loc else []
-            else:
+                stats["skipped"] += 1
+                stats["quality_rejected"] += 1
+                continue
+
+            if decision == "review":
+                stats["quality_review"] += 1
+
+            # Chain deals (brand_fingerprint set) insert ONCE as a template
+            # rather than fanning out to every location.  Query layer resolves
+            # to per-location rows via brand_group_id JOIN.
+            if signal.brand_fingerprint:
+                brand_group_id = _resolve_brand_group_id(session, signal.brand_fingerprint)
+                if brand_group_id is None:
+                    logger.debug(
+                        "[DealIngest] No brand_group for fingerprint=%r",
+                        signal.brand_fingerprint,
+                    )
+                    stats["skipped"] += 1
+                    continue
+
+                deal_data = _build_deal_data(
+                    signal, now, is_active_flag, region,
+                    local_employer_id=None,
+                    brand_group_id=brand_group_id,
+                    lat=None, lng=None,
+                    is_chain_template=True,
+                )
+                if is_pg:
+                    _upsert_chain_template_pg(session, deal_data)
+                else:
+                    _upsert_deal_sqlite(session, deal_data)
+                stats["total_rows"] += 1
+                continue
+
+            # Non-chain deals — single location
+            if not signal.local_employer_id:
                 logger.debug(
                     "[DealIngest] Skipping signal with no brand or employer: %s",
                     signal.deal_name,
@@ -218,61 +315,34 @@ def ingest_deal_signals(
                 stats["skipped"] += 1
                 continue
 
-            if not locations:
-                logger.debug(
-                    "[DealIngest] No locations for %s (%s)",
-                    signal.restaurant_name,
-                    signal.brand_fingerprint,
-                )
+            loc = _resolve_single_employer(session, signal)
+            if not loc:
                 stats["skipped"] += 1
                 continue
 
-            # Fan out: one DealSignal → N rows (one per location)
-            for loc in locations:
-                deal_data = {
-                    "local_employer_id": loc["id"],
-                    "brand_group_id": loc.get("brand_group_id"),
-                    "deal_name": signal.deal_name,
-                    "deal_description": signal.deal_description,
-                    "deal_type": signal.deal_type,
-                    "price": signal.price,
-                    "price_type": signal.price_type,
-                    "discount_percentage": signal.discount_percentage,
-                    "original_price": signal.original_price,
-                    "menu_avg_price": signal.menu_avg_price,
-                    "calories": signal.calories,
-                    "calorie_price_ratio": signal.calorie_price_ratio,
-                    "valid_days": signal.valid_days,
-                    "valid_start_time": signal.valid_start_time,
-                    "valid_end_time": signal.valid_end_time,
-                    "is_recurring": signal.is_recurring,
-                    "start_date": signal.start_date,
-                    "end_date": signal.end_date,
-                    "source": signal.source,
-                    "source_url": signal.source_url,
-                    "verified_at": now,
-                    "raw_scraped_text": signal.raw_scraped_text,
-                    "signal_quality": signal.signal_quality,
-                    "is_active": True,
-                    "lat": loc.get("lat"),
-                    "lng": loc.get("lng"),
-                    "region": region,
-                }
-
-                if is_pg:
-                    _upsert_deal_pg(session, deal_data)
-                else:
-                    _upsert_deal_sqlite(session, deal_data)
-
-                stats["total_rows"] += 1
+            deal_data = _build_deal_data(
+                signal, now, is_active_flag, region,
+                local_employer_id=loc["id"],
+                brand_group_id=loc.get("brand_group_id"),
+                lat=loc.get("lat"),
+                lng=loc.get("lng"),
+                is_chain_template=False,
+            )
+            if is_pg:
+                _upsert_deal_pg(session, deal_data)
+            else:
+                _upsert_deal_sqlite(session, deal_data)
+            stats["total_rows"] += 1
 
         session.commit()
         logger.info(
             "[DealIngest] Committed %d deal rows from %d signals "
-            "(skipped %d)",
+            "(skipped %d, quality_rejected %d, quality_review %d)",
             stats["total_rows"],
             len(signals),
             stats["skipped"],
+            stats["quality_rejected"],
+            stats["quality_review"],
         )
     except Exception as exc:
         session.rollback()
