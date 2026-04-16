@@ -8,12 +8,14 @@ Endpoints:
 """
 
 import logging
+from collections import defaultdict
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func as sqlfunc
 
 from core.database import BrandGroup, LocalEmployer, MealDeal, get_engine, get_session
+from core.venue_identity import cluster_likely_same_venues, normalize_url_for_identity, pick_canonical_item
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,71 @@ def _get_db_session():
 def _err(e: Exception, status: int = 500):
     logger.error("[deals] %s", e, exc_info=True)
     return jsonify({"status": "error", "message": "An internal error occurred"}), status
+
+
+def _deal_signature(deal: MealDeal) -> tuple:
+    """Key that identifies the same underlying offer across alias venue rows."""
+    return (
+        deal.source or "",
+        (deal.deal_name or "").strip().casefold(),
+        normalize_url_for_identity(deal.source_url) or "",
+        deal.valid_days or "",
+        deal.valid_start_time or "",
+        deal.valid_end_time or "",
+        deal.price_type or "",
+        round(deal.price, 2) if deal.price is not None else None,
+    )
+
+
+def _collapse_duplicate_deals(
+    deals: list[MealDeal],
+    employers: dict[int, LocalEmployer],
+) -> list[MealDeal]:
+    """Collapse duplicate deal rows created by alias local_employer records."""
+    by_signature: dict[tuple, list[MealDeal]] = defaultdict(list)
+    for deal in deals:
+        by_signature[_deal_signature(deal)].append(deal)
+
+    collapsed: list[MealDeal] = []
+    for group in by_signature.values():
+        if len(group) == 1:
+            collapsed.extend(group)
+            continue
+
+        clusters = cluster_likely_same_venues(
+            group,
+            get_name=lambda deal: employers.get(deal.local_employer_id).name if employers.get(deal.local_employer_id) else None,
+            get_address=lambda deal: employers.get(deal.local_employer_id).address if employers.get(deal.local_employer_id) else None,
+            get_url=lambda deal: deal.source_url,
+            get_lat=lambda deal: deal.lat,
+            get_lng=lambda deal: deal.lng,
+        )
+
+        for cluster in clusters:
+            if len(cluster) == 1:
+                collapsed.extend(cluster)
+                continue
+
+            canonical = pick_canonical_item(
+                cluster,
+                get_id=lambda deal: deal.id,
+                get_brand_group_id=lambda deal: deal.brand_group_id,
+                get_address=lambda deal: employers.get(deal.local_employer_id).address if employers.get(deal.local_employer_id) else None,
+                extra_rank=lambda deal: (
+                    deal.signal_quality or 0.0,
+                    deal.verified_at.timestamp() if deal.verified_at else 0.0,
+                ),
+            )
+            collapsed.append(canonical)
+
+    collapsed.sort(
+        key=lambda deal: (
+            deal.verified_at.timestamp() if deal.verified_at else 0.0,
+            deal.id or 0,
+        ),
+        reverse=True,
+    )
+    return collapsed
 
 
 # ── Deal listings ─────────────────────────────────────────────────────────────
@@ -90,17 +157,20 @@ def list_deals():
                 MealDeal.lng.between(lng - lng_delta, lng + lng_delta),
             )
 
-        total = q.count()
-        deals = q.order_by(MealDeal.verified_at.desc()).offset(offset).limit(limit).all()
+        deals = q.order_by(MealDeal.verified_at.desc(), MealDeal.id.desc()).all()
 
         # Enrich with restaurant name from local_employers
-        employer_ids = {d.local_employer_id for d in deals}
+        employer_ids = {d.local_employer_id for d in deals if d.local_employer_id is not None}
         employers = {}
         if employer_ids:
             emp_rows = session.query(LocalEmployer).filter(
                 LocalEmployer.id.in_(employer_ids)
             ).all()
             employers = {e.id: e for e in emp_rows}
+
+        deals = _collapse_duplicate_deals(deals, employers)
+        total = len(deals)
+        deals = deals[offset: offset + limit]
 
         result = []
         for d in deals:

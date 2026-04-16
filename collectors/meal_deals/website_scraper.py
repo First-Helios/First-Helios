@@ -34,6 +34,7 @@ from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
 from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation
+from core.venue_identity import cluster_likely_same_venues, pick_canonical_item
 
 try:
     import pdfplumber
@@ -1365,6 +1366,37 @@ def scrape_restaurant_website(
     return signals
 
 
+def _collapse_shared_url_aliases(group: list[tuple]) -> tuple[list[tuple], list[tuple]]:
+    """Collapse same-URL alias employers down to one canonical venue row."""
+    if len(group) <= 1:
+        return group, []
+
+    original_index = {id(item): index for index, item in enumerate(group)}
+    clusters = cluster_likely_same_venues(
+        group,
+        get_name=lambda item: item[1].name,
+        get_address=lambda item: item[1].address,
+        get_url=lambda item: item[0].url,
+        get_lat=lambda item: item[1].lat,
+        get_lng=lambda item: item[1].lng,
+    )
+
+    canonical_items: list[tuple[int, tuple]] = []
+    skipped_items: list[tuple] = []
+    for cluster in clusters:
+        canonical = pick_canonical_item(
+            cluster,
+            get_id=lambda item: item[1].id,
+            get_brand_group_id=lambda item: item[1].brand_group_id,
+            get_address=lambda item: item[1].address,
+        )
+        canonical_items.append((min(original_index[id(item)] for item in cluster), canonical))
+        skipped_items.extend(item for item in cluster if item is not canonical)
+
+    canonical_items.sort(key=lambda pair: pair[0])
+    return [item for _, item in canonical_items], skipped_items
+
+
 @deal_collector("website_scraper", schedule="0 2 * * 1,3,5")
 class WebsiteDealCollector:
     """Scheduled collector: scrapes restaurant websites for deals.
@@ -1469,13 +1501,24 @@ class WebsiteDealCollector:
                 chunk_audit: list[dict] = []
 
                 for _norm_url, group in chunk:
-                    rurl_rep, emp_rep = group[0]
+                    canonical_group, alias_rows = _collapse_shared_url_aliases(group)
+                    rurl_rep, emp_rep = canonical_group[0]
+
+                    if alias_rows:
+                        logger.info(
+                            "[WebScraper] Collapsed %d alias rows for %s at %s",
+                            len(alias_rows),
+                            emp_rep.name,
+                            rurl_rep.url,
+                        )
 
                     site_audit: dict[str, Any] = {
                         "employer_id": emp_rep.id,
                         "name": emp_rep.name,
                         "url": rurl_rep.url,
                         "locations_sharing_url": len(group),
+                        "canonical_locations": len(canonical_group),
+                        "alias_rows_collapsed": len(alias_rows),
                         "scraped_at": datetime.now(timezone.utc).isoformat(),
                         "deals_found": 0,
                         "outcome": "pending",
@@ -1492,7 +1535,7 @@ class WebsiteDealCollector:
                         if signals:
                             logger.info(
                                 "[WebScraper] %s: %d deals found at %s (%d locations)",
-                                emp_rep.name, len(signals), rurl_rep.url, len(group),
+                                emp_rep.name, len(signals), rurl_rep.url, len(canonical_group),
                             )
                             # Fan out signals to every location sharing this URL,
                             # but ONLY if the location belongs to the same brand.
@@ -1500,8 +1543,8 @@ class WebsiteDealCollector:
                             # (data quality issue), skip the mismatched ones to
                             # prevent wrong deals from leaking across businesses.
                             rep_bg = emp_rep.brand_group_id
-                            for rurl_loc, emp_loc in group:
-                                if len(group) > 1 and emp_loc.brand_group_id != rep_bg:
+                            for rurl_loc, emp_loc in canonical_group:
+                                if len(canonical_group) > 1 and emp_loc.brand_group_id != rep_bg:
                                     logger.warning(
                                         "[WebScraper] Skipping fan-out of %s deals to %s "
                                         "(brand_group %s ≠ %s) — URL shared across brands",
