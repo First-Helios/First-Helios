@@ -1,7 +1,7 @@
 # Meal Deal Scraper Signal Refinement Roadmap
 
-Updated: 2026-04-16
-Status: active planning document for multi-agent execution
+Updated: 2026-04-17
+Status: active execution roadmap for multi-agent work; Wave 1 briefs created and `AUD-01` implemented
 Scope: open refinement work for `collectors/meal_deals/website_scraper.py` and adjacent audit, replay, extraction, and modeling tasks
 
 ## Purpose
@@ -11,6 +11,36 @@ This roadmap organizes the remaining meal-deal scraper work by implementation co
 The goal is to let multiple agents work in parallel without wasting high-reasoning agents on bounded chores, and without giving cross-cutting extraction architecture work to smaller agents that are more likely to produce brittle heuristics.
 
 This document covers the open website-scraper work after the already-completed pricing, temporal extraction, raw text capture, and signal-quality hardening documented elsewhere.
+
+## Progress Tracker
+
+- [x] Created separate Wave 1 agent briefs for `AUD-01`, `AUD-02`, `AUD-03`, `DISC-01`, `DISC-02`, and `JSONLD-01`.
+- [x] Implemented `AUD-01` in `scripts/summarize_website_scrape_audit.py`.
+- [ ] Start `AUD-02` replay manifest builder.
+- [ ] Start `AUD-03` shared wrong-target and page-family classifier.
+- [ ] Start `DISC-01` hidden promo page discovery improvements.
+- [ ] Start `DISC-02` locator-to-corporate promo hint routing.
+- [ ] Start `JSONLD-01` hierarchical schema.org traversal.
+
+## Wave 1 Brief Pack
+
+Separate briefs now exist for the first recommended assignments:
+
+- [agent_briefs/README.md](agent_briefs/README.md)
+- [agent_briefs/MEAL_DEAL_AUD_01_BRIEF.md](agent_briefs/MEAL_DEAL_AUD_01_BRIEF.md)
+- [agent_briefs/MEAL_DEAL_AUD_02_BRIEF.md](agent_briefs/MEAL_DEAL_AUD_02_BRIEF.md)
+- [agent_briefs/MEAL_DEAL_AUD_03_BRIEF.md](agent_briefs/MEAL_DEAL_AUD_03_BRIEF.md)
+- [agent_briefs/MEAL_DEAL_DISC_01_BRIEF.md](agent_briefs/MEAL_DEAL_DISC_01_BRIEF.md)
+- [agent_briefs/MEAL_DEAL_DISC_02_BRIEF.md](agent_briefs/MEAL_DEAL_DISC_02_BRIEF.md)
+- [agent_briefs/MEAL_DEAL_JSONLD_01_BRIEF.md](agent_briefs/MEAL_DEAL_JSONLD_01_BRIEF.md)
+
+## Wave 1 Dependency Notes
+
+1. `AUD-01` had no hard prerequisite beyond synced audit and replay files and is now complete.
+2. `AUD-02` has no hard dependency on `AUD-01`, but it should reuse the same outcome and failure-family terminology.
+3. `AUD-03` has no hard dependency on `AUD-01`, but it should refine or extract the same family labels rather than inventing a second taxonomy.
+4. `DISC-01` and `DISC-02` can start immediately, but they should use the `AUD-01` baseline report and preferably the `AUD-02` manifests once those exist.
+5. `JSONLD-01` can start immediately, but it benefits from an `AUD-02` subset of `JSON-LD present but zero-signal` pages if available.
 
 ## Current Evidence Snapshot
 
@@ -76,7 +106,7 @@ The work naturally falls into five streams:
 
 These are the best tasks for lightweight agents. They are bounded, measurable, and useful immediately.
 
-- `AUD-01` Build a repeatable audit summarizer script over `data/cache/website_scrape_audit.json` and `data/cache/website_scrape_debug`. Best agent: Tier 1. Complexity: low. Deliverable: a script in `scripts/` that outputs success rate, no-deal taxonomy, domain-family counts, shared-URL counts, JSON-LD prevalence, PDF prevalence, and page-type counts. Why this tier: it is deterministic aggregation over already-synced artifacts.
+- `AUD-01` Build a repeatable audit summarizer script over `data/cache/website_scrape_audit.json` and `data/cache/website_scrape_debug`. Best agent: Tier 1. Complexity: low. Deliverable: a script in `scripts/` that outputs success rate, no-deal taxonomy, domain-family counts, shared-URL counts, JSON-LD prevalence, PDF prevalence, and page-type counts. Why this tier: it is deterministic aggregation over already-synced artifacts. Status: complete locally in `scripts/summarize_website_scrape_audit.py`.
 - `AUD-02` Build replay corpus manifests by failure stage. Best agent: Tier 1. Complexity: low. Deliverable: machine-readable manifests grouping bundles into categories such as discovery miss, locator page, social/non-first-party page, JSON-LD present but zero-signal, PDF present but zero-signal, and content-seen-but-no-signal. Why this tier: it is labeling and packaging, not parser redesign.
 - `AUD-03` Add a wrong-target and page-family classifier. Best agent: Tier 1. Complexity: low. Deliverable: a script or config that tags hosts as restaurant first-party, locator, hotel, social, directory, vendor menu host, government, or obviously unrelated. This should feed audit reporting, not yet ingestion. Why now: the synced bundles already show obvious wrong-target families such as Facebook, Instagram, locator pages, and unrelated domains.
 - `AUD-04` Expand success-path audit logging so `deals_found` rows record the same context as `no_deals` rows. Best agent: Tier 1. Complexity: low. Deliverable: audit entries that always include block counts, discovered page counts, PDF link counts, and structured-data presence. Why now: current audit JSON is much more informative for failures than successes.
@@ -234,12 +264,12 @@ Escalate if:
 
 If work starts immediately, the best first distribution is:
 
-1. Tier 1 agent: `AUD-01`
-2. Tier 1 agent: `AUD-02`
-3. Tier 1 agent: `AUD-03`
-4. Tier 2 agent: `DISC-01`
-5. Tier 2 agent: `DISC-02`
-6. Tier 3 agent: `JSONLD-01`
+1. [x] Tier 1 agent: `AUD-01` — brief created and script implemented
+2. [x] Tier 1 agent: `AUD-02` — brief created
+3. [x] Tier 1 agent: `AUD-03` — brief created
+4. [x] Tier 2 agent: `DISC-01` — brief created
+5. [x] Tier 2 agent: `DISC-02` — brief created
+6. [x] Tier 3 agent: `JSONLD-01` — brief created
 
 That mix attacks the three biggest current needs at once:
 
