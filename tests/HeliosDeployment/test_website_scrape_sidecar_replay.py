@@ -75,6 +75,9 @@ def test_laposada_replay_populates_menu_sidecar(tmp_path, monkeypatch):
         if target["scope"] == "item":
             assert target["item_key"]
             assert target["section_key"]
+        # ARCH-02: every linked target should carry confidence + disposition.
+        assert "confidence" in target
+        assert target["disposition"] in {"auto_accept", "review", "discard"}
 
     # At least one signal should carry a narrow value profile tied to its offer target.
     vp_signals = [s for s in signals if isinstance(s.metadata.get("value_profile"), dict)]

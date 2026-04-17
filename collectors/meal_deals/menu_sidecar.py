@@ -140,13 +140,50 @@ class Modifier:
 
 @dataclass
 class OfferTarget:
-    """Links a promotion/signal to a baseline menu entity."""
+    """Links a promotion/signal to a baseline menu entity.
+
+    ARCH-02: confidence + disposition encode how strong the evidence is so
+    downstream consumers (scoring, review tooling) can route auto-accept
+    links straight into evidence and ambiguous links into review. The
+    match_method is kept for post-hoc auditing of false positives/negatives.
+    """
     key: str
     scope: str  # "item" | "section" | "service_period" | "venue"
     section_key: str | None = None
     item_key: str | None = None
     service_period: str | None = None
     signal_ref: str | None = None  # seen-deals name key
+    confidence: float | None = None
+    disposition: str | None = None  # "auto_accept" | "review" | "discard"
+    match_method: str | None = None
+
+
+# ── Offer-target confidence rubric (ARCH-02) ────────────────────────────────
+# Lead with the match method observed at link time — confidence follows from
+# that, and disposition follows from confidence. Keeping this as data rather
+# than branching keeps the rubric easy to tune from replay metrics.
+_OFFER_TARGET_CONFIDENCE_BY_METHOD: dict[str, float] = {
+    "path_plus_name_item": 0.95,   # full schema-path match AND item match
+    "path_only_section": 0.85,     # schema-path match, section scope only
+    "name_only_item": 0.65,        # name scan hit, no schema path → review
+    "service_period_only": 0.55,   # inferred service period, no entity match → review
+    "venue": 0.25,                 # nothing matched; venue-wide fallback → discard
+}
+
+_OFFER_TARGET_DISPOSITION_THRESHOLDS: tuple[tuple[float, str], ...] = (
+    (0.85, "auto_accept"),
+    (0.50, "review"),
+)
+
+
+def classify_offer_target_disposition(confidence: float | None) -> str:
+    """Thresholded routing rule for ARCH-02."""
+    if confidence is None:
+        return "discard"
+    for threshold, label in _OFFER_TARGET_DISPOSITION_THRESHOLDS:
+        if confidence >= threshold:
+            return label
+    return "discard"
 
 
 # ── Sidecar container ───────────────────────────────────────────────────────
@@ -1058,18 +1095,21 @@ def link_signal_to_target(
     target_section_key: str | None = None
     target_item_key: str | None = None
     scope = "venue"
+    match_method: str | None = None
 
     if path_list:
         candidate = _section_key(domain, path_list)
         if candidate in sidecar.sections:
             target_section_key = candidate
             scope = "section"
+            match_method = "path_only_section"
 
     if target_section_key and primary_name:
         candidate_item = _item_key(target_section_key, primary_name)
         if candidate_item in sidecar.items:
             target_item_key = candidate_item
             scope = "item"
+            match_method = "path_plus_name_item"
 
     # Fallback: scan items by name when no section path was provided.
     if target_item_key is None and primary_name:
@@ -1079,6 +1119,7 @@ def link_signal_to_target(
                 target_item_key = item.key
                 target_section_key = item.section_key
                 scope = "item"
+                match_method = "name_only_item"
                 break
 
     # Fallback: service period inferred from context path.
@@ -1087,11 +1128,16 @@ def link_signal_to_target(
 
     if target_section_key is None and target_item_key is None and service_period:
         scope = "service_period"
+        match_method = "service_period_only"
 
     if target_section_key is None and target_item_key is None and scope == "venue":
         # Only record venue-wide targets when they carry meaningful evidence.
         if not primary_name and not path_list and not service_period:
             return None
+        match_method = "venue"
+
+    confidence = _OFFER_TARGET_CONFIDENCE_BY_METHOD.get(match_method or "venue", 0.25)
+    disposition = classify_offer_target_disposition(confidence)
 
     ot_key = _offer_target_key(scope, target_section_key, target_item_key, signal_ref)
     sidecar.add_offer_target(OfferTarget(
@@ -1101,6 +1147,9 @@ def link_signal_to_target(
         item_key=target_item_key,
         service_period=service_period,
         signal_ref=signal_ref,
+        confidence=confidence,
+        disposition=disposition,
+        match_method=match_method,
     ))
     return {
         "key": ot_key,
@@ -1108,6 +1157,9 @@ def link_signal_to_target(
         "section_key": target_section_key,
         "item_key": target_item_key,
         "service_period": service_period,
+        "confidence": confidence,
+        "disposition": disposition,
+        "match_method": match_method,
     }
 
 

@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from collectors.meal_deals.menu_sidecar import (
     MenuSidecar,
     classify_course,
+    classify_offer_target_disposition,
     classify_service_period,
     ingest_dom_fallback,
     ingest_jsonld_from_html,
@@ -161,6 +162,67 @@ def test_link_signal_to_target_resolves_by_path_and_name():
     )
     assert target2 is not None
     assert target2["scope"] == "section"
+
+
+def test_link_signal_to_target_assigns_confidence_and_disposition():
+    """ARCH-02: each linkage method maps to a bounded confidence bucket."""
+    sidecar = MenuSidecar()
+    ingest_jsonld_payload(LAPOSADA_MENU_PAYLOAD, page_url="https://laposadasouth.com/menu", sidecar=sidecar)
+
+    # Full path + name match → auto_accept
+    strong = link_signal_to_target(
+        sidecar,
+        signal_ref="fajita_strong",
+        page_url="https://laposadasouth.com/menu",
+        context_path=["LIMITED LUNCH SPECIALS", "Family Packs"],
+        primary_name="Fajita platter",
+    )
+    assert strong["match_method"] == "path_plus_name_item"
+    assert strong["confidence"] >= 0.85
+    assert strong["disposition"] == "auto_accept"
+
+    # Path matches a real section, item unknown → section scope, auto_accept
+    section_only = link_signal_to_target(
+        sidecar,
+        signal_ref="mystery_promo",
+        page_url="https://laposadasouth.com/menu",
+        context_path=["LIMITED LUNCH SPECIALS"],
+        primary_name="Nonexistent Item",
+    )
+    assert section_only["match_method"] == "path_only_section"
+    assert section_only["disposition"] == "auto_accept"
+
+    # Name scan fallback — no schema path evidence → review
+    name_scan = link_signal_to_target(
+        sidecar,
+        signal_ref="loose_fajita",
+        page_url="https://laposadasouth.com/menu",
+        context_path=[],
+        primary_name="Fajita platter",
+    )
+    assert name_scan["match_method"] == "name_only_item"
+    assert name_scan["disposition"] == "review"
+
+    # Service-period-only fallback → review
+    sp_only = link_signal_to_target(
+        sidecar,
+        signal_ref="hh_sp",
+        page_url="https://laposadasouth.com/menu",
+        context_path=[],
+        primary_name=None,
+        service_period="happy_hour",
+    )
+    assert sp_only["match_method"] == "service_period_only"
+    assert sp_only["disposition"] == "review"
+
+
+def test_classify_offer_target_disposition_thresholds():
+    assert classify_offer_target_disposition(0.95) == "auto_accept"
+    assert classify_offer_target_disposition(0.85) == "auto_accept"
+    assert classify_offer_target_disposition(0.84) == "review"
+    assert classify_offer_target_disposition(0.50) == "review"
+    assert classify_offer_target_disposition(0.49) == "discard"
+    assert classify_offer_target_disposition(None) == "discard"
 
 
 def test_link_signal_to_target_falls_back_to_service_period():

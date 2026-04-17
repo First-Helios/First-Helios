@@ -75,3 +75,51 @@ def test_load_website_scrape_target_groups_dedupes_by_normalized_url(engine):
     assert group_items[0][0] == "https://alpha.example.com"
     assert len(group_items[0][1]) == 2
     assert group_items[1][0] == "https://bravo.example.com"
+
+
+def test_load_website_scrape_target_groups_filters_non_first_party_before_limit(engine):
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_employer(1, "Social Lead"),
+                _build_employer(2, "Real Restaurant"),
+                _build_employer(3, "Another Restaurant"),
+            ]
+        )
+        session.add_all(
+            [
+                RestaurantURL(
+                    local_employer_id=1,
+                    url="https://www.facebook.com/fake-restaurant",
+                    source="manual",
+                    is_active=True,
+                    last_checked=None,
+                ),
+                RestaurantURL(
+                    local_employer_id=2,
+                    url="https://real.example.com",
+                    source="manual",
+                    is_active=True,
+                    last_checked=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                ),
+                RestaurantURL(
+                    local_employer_id=3,
+                    url="https://another.example.com",
+                    source="manual",
+                    is_active=True,
+                    last_checked=datetime(2026, 4, 2, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        session.commit()
+
+        group_items, total_rows = load_website_scrape_target_groups(
+            session,
+            region="austin_tx",
+            max_sites=1,
+            skip_checked_days=0,
+        )
+
+    assert total_rows == 1
+    assert len(group_items) == 1
+    assert group_items[0][0] == "https://real.example.com"

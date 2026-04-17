@@ -1,7 +1,7 @@
 # Meal Deal Scraper Signal Refinement Roadmap
 
 Updated: 2026-04-17
-Status: Tier 1 through Tier 3 implementation work is complete locally except `RENDER-01`, which remains blocked on Tier 4 `ARCH-03`; exercised warning cleanup and handoff verification are complete
+Status: Tier 1 through Tier 4 policy and schema work is complete locally; `RENDER-01` is now unblocked by `ARCH-03`, 61/61 Tier 3 + Tier 4 + canonical regression tests pass locally, and the remaining work is runtime integration plus the still-open Tier 2 extraction tasks
 Scope: open refinement work for `collectors/meal_deals/website_scraper.py` and adjacent audit, replay, extraction, and modeling tasks
 
 ## Purpose
@@ -29,13 +29,19 @@ This document covers the open website-scraper work after the already-completed p
 - [x] Completed `TARGET-01` by linking extracted signals to item, section, service-period, or venue-wide targets through replay-validated `offer_target` metadata.
 - [x] Completed `PRICE-02`, `PDF-02`, and `VALUE-01` by deriving section-aware baseline pricing, adding strict layout-aware PDF table parsing, and attaching per-signal value-profile metadata.
 - [x] Verified the Tier 3 handoff with the consolidated replay and canonical regression matrix, then cleaned the exercised warning set to zero warnings locally.
+- [x] Completed `ARCH-01` in `collectors/meal_deals/menu_persistence_schema.py` by defining the target persistent row shape with sidecar-key IDs, restaurant scoping, provenance timestamps, and foreign-key consistency checks.
+- [x] Completed `ARCH-02` in `collectors/meal_deals/menu_sidecar.py` by adding offer-target confidence, disposition, and match-method routing with replay-tested thresholds.
+- [x] Completed `ARCH-03` in `collectors/meal_deals/render_policy.py` by defining bounded renderer escalation gates, budget categories, reason codes, and deterministic exploration sampling.
+- [x] Completed `ARCH-04` in `collectors/meal_deals/hint_registry.py` and `config/meal_deal_hint_registry.json` by defining an exploration-only hint registry with provenance, expiry, schema validation, and audit annotation.
+- [x] Verified the Tier 3 + Tier 4 + canonical regression suites locally; current combined matrix passes 61/61 tests.
 
 ## Completed Work Summary
 
 - Tier 1 closed the replay-first audit loop: audit summarization, replay manifests, wrong-target classification, success-path audit context, replay workflow docs, and deterministic regression-set generation are all in place.
 - Tier 2 closed the highest-value bounded recall gaps: promo-card and footer discovery scoring landed, obvious wrong-target suppression is enforced, locator-to-corporate hint routing records `hinted_pages`, and the initial JSON-LD traversal now respects inherited promo context.
 - Tier 3 added reusable menu intelligence instead of flat text only: `menu_sidecar.py` now preserves menu structure, signals are linked to offer targets, PDF tables can contribute item-price evidence, and value profiles carry category-aware baseline and savings inputs.
-- Verification work closed the immediate handoff gap before Tier 4: the replay plus canonical suite passes locally, and the exercised Python 3.12 and requests-stack warnings were cleaned up so future Tier 4 work starts from a quieter baseline.
+- Tier 4 locked the policy layer: the future persistence contract is defined, offer-target review thresholds are encoded, renderer escalation now has a bounded deterministic policy, and discovery hints now have governed exploration-only semantics.
+- Verification now covers the Tier 3 + Tier 4 + canonical handoff path: 61/61 local tests pass, and the exercised Python 3.12 and requests-stack warnings were cleaned up so runtime integration work starts from a quieter baseline.
 
 ## Wave 1 Brief Pack
 
@@ -108,6 +114,17 @@ Interpretation:
 5. Every extraction change should come with replay-based tests or at least replay-based before/after metrics.
 6. Low-power agents should work from a bounded task ID, target files, and acceptance criteria, not from open-ended HTML interpretation.
 
+## Pre-flight Checklist
+
+Before the next live scrape run, use this checklist to separate code readiness from run-ops readiness.
+
+1. Local readiness gate: run `PYTHONPATH=. python scripts/check_website_scrape_preflight.py --region austin_tx --max-sites 10 --skip-checked-days 0` and clear any blocking failures.
+2. Remote runner parity: if the scrape will run on Orange Pi or another remote host, verify SSH access first and confirm the remote checkout or overlay contains the same scraper, render-policy, hint-registry, and persistence-shape files as the local repo. Recent local attempts to reach `orangepi@192.168.1.191` exited with code 255, so remote access should be treated as a current run blocker until revalidated.
+3. Regression gate: rerun the Tier 3 + Tier 4 + canonical regression suites before a broad scrape when scraper runtime code has changed.
+4. Dry-run canary: run `PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 5 --skip-checked-days 0 --dry-run --region austin_tx` before any full scrape.
+5. Bundle inspection: verify the newest canary bundles contain `render_decisions` and `render_budget` on fetched first-party pages. Inspect `menu_persistence_summary` and `hint_audit` when the canary actually materializes sidecar structure or hint-driven exploration. If `menu_persistence_summary` is present, confirm `fk_violations == 0`; if a known menu-rich canary site still lacks it, treat that as a structure-coverage follow-up before widening the run.
+6. Go or no-go: only start a non-dry-run scrape after the canary confirms that the new audit fields, exploration-only hint provenance, and persistence snapshots are behaving as expected.
+
 ## Workstreams
 
 The work naturally falls into five streams:
@@ -151,26 +168,30 @@ These tasks should go to a high-reasoning agent. They involve ambiguous structur
 - `STRUCT-01` Emit structured menu sidecar artifacts in debug bundles and signal metadata. Best agent: Tier 3. Complexity: high. Deliverable: sidecar objects for menu pages, sections, items, price points, modifiers, and offer targets. Guardrail: do this in metadata or debug artifacts first, not persistent tables. Status: complete locally in `menu_sidecar.py` and threaded through `website_scraper.py` into replay bundles.
 - `TARGET-01` Link extracted offers to an item, section, service period, or venue-wide target. Best agent: Tier 3. Complexity: high. This is required before the system can reliably answer what the promotion changes relative to baseline pricing. Status: complete locally via `link_signal_to_target` and `offer_target` metadata on replay-validated signals.
 - `PRICE-02` Make baseline pricing section-aware or item-aware instead of page-average-only. Best agent: Tier 3. Complexity: high. Deliverable: richer price evidence that distinguishes appetizers, entrees, drinks, desserts, and modifiers when the page structure supports it. Status: complete locally with sidecar section and course baselines plus per-signal `value_profile` savings estimates.
-- `RENDER-01` Add targeted Playwright escalation for static-empty but menu-critical pages. Best agent: Tier 3. Complexity: high. Guardrail: this should be targeted to pages that are discovery-valid and structurally empty in static HTML, not used as a blanket fallback. Status: blocked pending Tier 4 `ARCH-03` renderer budget and allowlist policy.
+- `RENDER-01` Add targeted Playwright escalation for static-empty but menu-critical pages. Best agent: Tier 3. Complexity: high. Guardrail: this should be targeted to pages that are discovery-valid and structurally empty in static HTML, not used as a blanket fallback. Status: unblocked locally by completed `ARCH-03`; remaining work is wiring `collectors/meal_deals/render_policy.py` into runtime Playwright escalation inside `website_scraper.py`.
 - `PDF-02` Add layout-aware PDF parsing for menus and specials where plain text extraction loses item-price pairing. Best agent: Tier 3. Complexity: high. This should remain tightly scoped to PDFs that clearly matter in the replay corpus. Status: complete locally with `extract_tables()` capture and strict price-column detection to reject nutrition grids.
 - `VALUE-01` Derive category-aware value profiles from the structured menu sidecar. Best agent: Tier 3. Complexity: high. Deliverable: baseline appetizer, entree, and drink signals that can support savings estimation and downstream meal-planning UX. Status: complete locally through sidecar `value_profile()` summaries and attached per-signal baseline metadata.
 
 ## Tier 4 Tasks
 
-These tasks should be held for human review plus a high-reasoning implementation agent.
+These decisions are now complete locally as policy and schema layers. The remaining work is to adopt them in runtime code paths such as renderer escalation and hint-driven discovery, not to reopen the Tier 4 deliberation itself.
 
 - `ARCH-01` Decide whether the menu graph stays in sidecar artifacts or gets persistent tables. Best agent: Tier 4. Complexity: very high. Recommendation: defer persistent tables until the sidecar has been replay-tested across a larger corpus.
+Status: complete locally in `collectors/meal_deals/menu_persistence_schema.py` with TypedDict row shapes, deterministic sidecar-key IDs, restaurant scoping, provenance timestamps, and FK validation helpers.
 Recommended decision: stay sidecar-first until replay coverage is larger, but define the target persistent shape now so the sidecar stays compatible with a future schema.
 
 - `ARCH-02` Set confidence and review policy for offer-target links. Best agent: Tier 4. Complexity: very high. This defines when an item-level link is accepted, review-only, or discarded.
+Status: complete locally in `collectors/meal_deals/menu_sidecar.py` with confidence, disposition, and `match_method` carried on `OfferTarget` and exercised in replay tests.
 Recommended decision: auto-accept high-confidence structured links from strong evidence such as schema relationships or tight name-plus-price matches, but route ambiguous item-level links to review. This keeps automation high enough for scale without letting weak links silently become canonical truth.
 
 - `ARCH-03` Set renderer budget and allowlist policy. Best agent: Tier 4. Complexity: very high. This is an operational and cost decision, not just a coding task.
 
+Status: complete locally in `collectors/meal_deals/render_policy.py` with bounded escalation gates, reason codes, main-versus-exploration budgets, and deterministic URL-hash sampling.
 Recommended decision: use a bounded trigger policy. Escalate to rendering only when static HTML is structurally empty, discovery evidence is strong, the page is menu-critical, and the site is either on an allowlist or within a small per-run render budget. Keep default costs lean, but reserve a small sampled exploration budget for dead-end pages so you can measure whether the current render threshold is too strict without making fallback behavior noisy or unrepeatable.
 
 - `ARCH-04` Decide hint-registry governance. Best agent: Tier 4. Complexity: very high. This covers where brand-specific promo slugs, footer labels, and locator-to-corporate mappings live and how they are maintained.
 
+Status: complete locally in `collectors/meal_deals/hint_registry.py` and `config/meal_deal_hint_registry.json` with provenance enforcement, expiry filtering, immutable exploration-only scope, schema-version validation, and audit annotation helpers.
 Recommended decision: use a lightweight registry, but make it exploration-only, not evidence. Require provenance, last-verified date, and expiry or review cadence. External internet sources are permitted to propose or refresh hints, but they must never be treated as first-party evidence and must be verified against the restaurant's own site or cached first-party pages before they affect coverage claims or ingest decisions.
 
 
@@ -208,26 +229,28 @@ Expected output:
 
 Start after sidecar structure exists and is being populated reliably.
 
-- Assign Tier 3 agents to `TARGET-01`, `PRICE-02`, `RENDER-01`, and `PDF-02`.
+- Completed locally: `TARGET-01`, `PRICE-02`, and `PDF-02`.
+- Assign Tier 3 agents to `RENDER-01` runtime integration in `website_scraper.py`, using the completed `ARCH-03` policy module.
+- Keep a lightweight ops task on the pre-flight gate and canary inspection until renderer integration has been exercised on live fetches.
 - Keep Tier 2 agents on focused replay tests and bounded parser support work.
 
 Expected output:
 
-- stronger offer-to-target semantics
-- better baseline pricing
-- targeted renderer and PDF improvements where static HTML is insufficient
+- stronger offer-to-target semantics already in place
+- better baseline pricing already in place
+- targeted renderer integration where static HTML is insufficient
 
 ### Wave 4
 
 Start only after Waves 1-3 are stable on replay.
 
-- Assign a Tier 3 agent to `VALUE-01`.
-- Hold `ARCH-01` through `ARCH-04` for human review plus a Tier 3 implementation pass.
+- Completed locally: `VALUE-01` and `ARCH-01` through `ARCH-04`.
+- Remaining Wave 4 work is to apply these completed policy decisions in runtime integrations and revisit them only if replay metrics show that the policy needs adjustment.
 
 Expected output:
 
-- spend and savings estimation inputs
-- a stable basis for deciding whether to persist menu graph data
+- spend and savings estimation inputs already in place
+- a stable policy and schema basis for future persistence, rendering, and hint-governance work
 
 ## Sequencing Constraints
 

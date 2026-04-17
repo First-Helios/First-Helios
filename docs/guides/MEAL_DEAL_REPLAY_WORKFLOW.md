@@ -14,6 +14,38 @@ Use this workflow when you need to answer questions like:
 - which replay subsets should be handed to another agent
 - which bundles should be used for JSON-LD, PDF, discovery, or wrong-target audits
 
+## Step 0: Run The Pre-flight Gate Before A New Live Scrape
+
+Before restarting a live website scrape, run:
+
+```bash
+PYTHONPATH=. python scripts/check_website_scrape_preflight.py --region austin_tx --max-sites 10 --skip-checked-days 0
+```
+
+This validates:
+
+- local scraper imports
+- hint-registry load and active-hint count
+- website-scrape target query health
+- local cache path readiness
+- optional remote SSH reachability if you pass `--remote-host`
+
+After the script passes without blocking failures, run a dry-run canary before any broad scrape:
+
+```bash
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 5 --skip-checked-days 0 --dry-run --region austin_tx
+```
+
+Inspect the newest debug bundles for:
+
+- `render_decisions` and `render_budget` on fetched first-party pages
+- `menu_persistence_summary` when the canary actually materializes sidecar structure
+- `hint_audit` when the canary reaches hint-driven exploration paths
+
+If `menu_persistence_summary` is present, confirm `fk_violations == 0`. If a known menu-rich canary site still lacks it, treat that as a structure-coverage follow-up before widening the run.
+
+Only begin a full live scrape after the canary bundles look correct.
+
 ## Required Local Inputs
 
 The replay workflow depends on two synced artifact sets:
@@ -203,5 +235,6 @@ After parser or discovery changes:
 
 - `scripts/summarize_website_scrape_audit.py`
 - `scripts/build_website_scrape_replay_manifests.py`
+- `scripts/check_website_scrape_preflight.py`
 - `dev/sync_from_opi.sh`
 - `collectors/meal_deals/website_scraper.py`

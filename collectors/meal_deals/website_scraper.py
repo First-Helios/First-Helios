@@ -29,11 +29,21 @@ from datetime import datetime, timezone
 from html import unescape
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup, Tag
 
+from collectors.meal_deals.hint_registry import (
+    Hint,
+    annotate_exploration_use,
+    find_hints,
+    load_hints,
+)
+from collectors.meal_deals.menu_persistence_schema import (
+    serialize_sidecar,
+    summarize_shape,
+)
 from collectors.meal_deals.menu_sidecar import (
     MenuSidecar,
     ingest_dom_fallback,
@@ -43,6 +53,11 @@ from collectors.meal_deals.menu_sidecar import (
 )
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
+from collectors.meal_deals.render_policy import (
+    PageEvidence,
+    RenderBudget,
+    should_render,
+)
 from collectors.meal_deals.website_scrape_audit_utils import classify_domain_family, summarize_debug_bundle
 from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation
@@ -728,6 +743,10 @@ def _finalize_site_debug_bundle(
     pdf_links: list[str],
     menu_avg_price: float | None,
     sidecar: MenuSidecar | None = None,
+    render_decisions: list[dict[str, Any]] | None = None,
+    render_budget: RenderBudget | None = None,
+    restaurant_id: str | None = None,
+    source_url: str | None = None,
 ) -> None:
     if not bundle:
         return
@@ -738,6 +757,31 @@ def _finalize_site_debug_bundle(
     bundle["menu_avg_price"] = menu_avg_price
     if sidecar is not None and (sidecar.sections or sidecar.items or sidecar.price_points):
         bundle["menu_sidecar"] = sidecar.to_dict()
+        # ARCH-01: also emit the target persistent row shape so replay
+        # bundles are forward-compatible with a future menu_graph schema.
+        try:
+            shape = serialize_sidecar(
+                sidecar,
+                restaurant_id=restaurant_id,
+                source_url=source_url,
+                source_bundle=bundle.get("site_key"),
+            )
+            bundle["menu_persistence_shape"] = shape
+            bundle["menu_persistence_summary"] = summarize_shape(shape)
+        except Exception as exc:  # pragma: no cover — never let serializer crash a scrape
+            logger.warning("[WebScraper] persistence serializer failed: %s", exc)
+    if render_decisions:
+        # ARCH-03: audit-only render decisions. The scraper is requests-only
+        # today — these records let us tune escalation thresholds before
+        # wiring an actual renderer in RENDER-01.
+        bundle["render_decisions"] = list(render_decisions)
+    if render_budget is not None:
+        bundle["render_budget"] = {
+            "max_renders": render_budget.max_renders,
+            "max_exploration_samples": render_budget.max_exploration_samples,
+            "renders_used": render_budget.renders_used,
+            "exploration_used": render_budget.exploration_used,
+        }
     bundle["completed_at"] = datetime.now(timezone.utc).isoformat()
     _write_site_debug_bundle(bundle)
 
@@ -1043,21 +1087,34 @@ def _is_related_locator_corporate_host(current_host: str, candidate_host: str) -
     return False
 
 
-def _discover_locator_corporate_pages(soup: BeautifulSoup, page_url: str) -> list[dict[str, str]]:
+def _discover_locator_corporate_pages(
+    soup: BeautifulSoup,
+    page_url: str,
+    *,
+    registry_hints: list[Hint] | None = None,
+) -> list[dict[str, Any]]:
     parsed = urlparse(page_url)
     host = parsed.netloc.lower()
     if not host:
         return []
 
-    hinted: list[dict[str, str]] = []
+    hinted: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
 
-    def _add_hint(url: str, reason: str) -> None:
+    def _add_hint(
+        url: str,
+        reason: str,
+        *,
+        audit: dict[str, Any] | None = None,
+    ) -> None:
         normalized = url.strip()
         if not normalized or normalized in seen_urls:
             return
         seen_urls.add(normalized)
-        hinted.append({"url": normalized, "reason": reason})
+        entry: dict[str, Any] = {"url": normalized, "reason": reason}
+        if audit is not None:
+            entry["hint_audit"] = audit
+        hinted.append(entry)
 
     if host in _LOCATOR_HINT_HOST_RULES:
         corporate_root = _LOCATOR_HINT_HOST_RULES[host]
@@ -1089,6 +1146,23 @@ def _discover_locator_corporate_pages(soup: BeautifulSoup, page_url: str) -> lis
 
         corporate_root = f"{parsed_link.scheme}://{parsed_link.netloc}"
         _add_hint(corporate_root, f"locator_cross_domain_root:{a_tag.get_text(' ', strip=True)[:40] or parsed_link.netloc}")
+
+    # ARCH-04: layer in brand-tagged registry hints. Registry entries are
+    # exploration-only — they MUST NEVER be treated as first-party evidence.
+    # We annotate each probe with provenance so the debug bundle can tell
+    # hinted fetches apart from discovered ones.
+    if registry_hints:
+        for hint in registry_hints:
+            if not hint.slug or not hint.target_domain:
+                continue
+            if not _is_related_locator_corporate_host(host, hint.target_domain) \
+               and host != hint.target_domain \
+               and not host.endswith(f".{hint.target_domain}"):
+                continue
+            corporate_root = f"{parsed.scheme}://{hint.target_domain}"
+            probe_url = urljoin(corporate_root + "/", hint.slug.lstrip("/"))
+            audit = annotate_exploration_use(hint, used_at_url=probe_url)
+            _add_hint(probe_url, f"hint_registry:{hint.id}", audit=audit)
 
     return hinted[:6]
 
@@ -2144,6 +2218,63 @@ def _pdf_text_to_signals(
     return signals
 
 
+_RENDER_CRITICAL_PATH_TOKENS = (
+    "menu", "deal", "offer", "promo", "promotion",
+    "special", "happy-hour", "happyhour", "value", "lunch",
+)
+
+
+def _evaluate_render_decision(
+    *,
+    page_url: str,
+    page_signals: list[DealSignal],
+    sections_delta: int,
+    items_delta: int,
+    price_points_delta: int,
+    budget: RenderBudget,
+    allowlist_domains: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Derive evidence for this page and ask render_policy whether to escalate.
+
+    No actual rendering happens yet — decisions are logged to the debug
+    bundle so we can audit escalation cadence before wiring Playwright.
+    """
+    parsed = urlparse(page_url)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    static_html_empty = (
+        not page_signals
+        and sections_delta == 0
+        and items_delta == 0
+        and price_points_delta == 0
+    )
+    menu_critical = any(token in path for token in _RENDER_CRITICAL_PATH_TOKENS) or path in ("", "/")
+    # Rough discovery score: path match alone is weak; paired with zero
+    # static extraction it reads as "page *should* have had content."
+    if any(token in path for token in _RENDER_CRITICAL_PATH_TOKENS):
+        score = 0.8 if static_html_empty else 0.4
+    else:
+        score = 0.3
+    evidence = PageEvidence(
+        page_url=page_url,
+        domain=host,
+        static_html_empty=static_html_empty,
+        menu_critical=menu_critical,
+        discovery_evidence_score=score,
+        discovered_via=None,
+    )
+    decision = should_render(evidence, budget=budget, allowlist_domains=allowlist_domains)
+    return {
+        "page_url": page_url,
+        "should_render": decision.should_render,
+        "reason": decision.reason,
+        "budget_category": decision.budget_category,
+        "static_html_empty": static_html_empty,
+        "menu_critical": menu_critical,
+        "discovery_evidence_score": score,
+    }
+
+
 def _extract_page_artifacts(
     html: str,
     *,
@@ -2493,6 +2624,28 @@ def scrape_restaurant_website(
     pages_fetched = 0
     sidecar = MenuSidecar()  # STRUCT-01: structured menu artifacts for replay
 
+    # ARCH-03: per-run render budget tracker. The requests-only scraper does
+    # not actually escalate to Playwright yet, so decisions are recorded into
+    # the debug bundle in audit-only mode — this lets us tune thresholds and
+    # allowlists from real traffic before wiring an actual renderer.
+    render_budget = RenderBudget()
+    render_decisions: list[dict[str, Any]] = []
+
+    # ARCH-04: exploration-only hints, filtered to the site's apex domain so
+    # we only probe brand-relevant slugs. Hints are never trusted as evidence.
+    try:
+        all_hints = load_hints()
+    except Exception as exc:  # pragma: no cover — registry bugs must not kill scrapes
+        logger.warning("[WebScraper] hint registry load failed: %s", exc)
+        all_hints = []
+    apex_domain = parsed.netloc.lower().removeprefix("www.").removeprefix("locations.")
+    registry_hints = [
+        h for h in all_hints
+        if h.target_domain and (
+            h.target_domain == apex_domain or apex_domain.endswith(f".{h.target_domain}")
+        )
+    ]
+
     # --- Phase 1: Hardcoded paths ---
     homepage_soup = None
 
@@ -2509,6 +2662,9 @@ def scrape_restaurant_website(
             _record_debug_page(debug_bundle, full_url, html=html, fetch_type="hardcoded")
 
         pages_fetched += 1
+        sections_before = len(sidecar.sections)
+        items_before = len(sidecar.items)
+        pp_before = len(sidecar.price_points)
         soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
             html,
             page_url=full_url,
@@ -2522,6 +2678,14 @@ def scrape_restaurant_website(
         signals.extend(page_signals)
         all_menu_prices.extend(page_prices)
         all_pdf_links.extend(page_pdf_links)
+        render_decisions.append(_evaluate_render_decision(
+            page_url=full_url,
+            page_signals=page_signals,
+            sections_delta=len(sidecar.sections) - sections_before,
+            items_delta=len(sidecar.items) - items_before,
+            price_points_delta=len(sidecar.price_points) - pp_before,
+            budget=render_budget,
+        ))
 
         # Save homepage soup for link discovery
         if path == "/":
@@ -2533,7 +2697,9 @@ def scrape_restaurant_website(
 
     # --- Phase 2a: Locator-specific corporate hint routing ---
     if homepage_soup and domain_family == "locator" and pages_fetched < MAX_PAGES_PER_SITE:
-        locator_hint_pages = _discover_locator_corporate_pages(homepage_soup, url)
+        locator_hint_pages = _discover_locator_corporate_pages(
+            homepage_soup, url, registry_hints=registry_hints,
+        )
 
         for hint in locator_hint_pages:
             if pages_fetched >= MAX_PAGES_PER_SITE:
@@ -2543,10 +2709,13 @@ def scrape_restaurant_website(
             if not hint_url:
                 continue
 
-            hinted_pages.append({
+            hint_entry: dict[str, Any] = {
                 "url": hint_url,
                 "reason": str(hint.get("reason") or "locator_corporate_hint"),
-            })
+            }
+            if "hint_audit" in hint:
+                hint_entry["hint_audit"] = deepcopy(hint["hint_audit"])
+            hinted_pages.append(hint_entry)
             html = _get_replay_page(debug_bundle, hint_url) if replay_debug_cache else _fetch_page(hint_url, user_agent)
             if not html:
                 continue
@@ -2554,6 +2723,9 @@ def scrape_restaurant_website(
                 _record_debug_page(debug_bundle, hint_url, html=html, fetch_type="locator_hint")
 
             pages_fetched += 1
+            sections_before = len(sidecar.sections)
+            items_before = len(sidecar.items)
+            pp_before = len(sidecar.price_points)
             _soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
                 html,
                 page_url=hint_url,
@@ -2564,13 +2736,25 @@ def scrape_restaurant_website(
                 seen_deals=seen_deals,
                 sidecar=sidecar,
             )
-            _annotate_signals(page_signals, {
+            signal_metadata: dict[str, Any] = {
                 "locator_hint_source_url": url,
                 "locator_hint_reason": str(hint.get("reason") or "locator_corporate_hint"),
-            })
+            }
+            if "hint_audit" in hint:
+                # ARCH-04: hint-sourced signals carry exploration-only provenance.
+                signal_metadata["hint_audit"] = deepcopy(hint["hint_audit"])
+            _annotate_signals(page_signals, signal_metadata)
             signals.extend(page_signals)
             all_menu_prices.extend(page_prices)
             all_pdf_links.extend(page_pdf_links)
+            render_decisions.append(_evaluate_render_decision(
+                page_url=hint_url,
+                page_signals=page_signals,
+                sections_delta=len(sidecar.sections) - sections_before,
+                items_delta=len(sidecar.items) - items_before,
+                price_points_delta=len(sidecar.price_points) - pp_before,
+                budget=render_budget,
+            ))
 
             if not replay_debug_cache:
                 time.sleep(1.0)
@@ -2590,6 +2774,9 @@ def scrape_restaurant_website(
                 _record_debug_page(debug_bundle, disc_url, html=html, fetch_type="discovered")
 
             pages_fetched += 1
+            sections_before = len(sidecar.sections)
+            items_before = len(sidecar.items)
+            pp_before = len(sidecar.price_points)
             _soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
                 html,
                 page_url=disc_url,
@@ -2603,6 +2790,14 @@ def scrape_restaurant_website(
             signals.extend(page_signals)
             all_menu_prices.extend(page_prices)
             all_pdf_links.extend(page_pdf_links)
+            render_decisions.append(_evaluate_render_decision(
+                page_url=disc_url,
+                page_signals=page_signals,
+                sections_delta=len(sidecar.sections) - sections_before,
+                items_delta=len(sidecar.items) - items_before,
+                price_points_delta=len(sidecar.price_points) - pp_before,
+                budget=render_budget,
+            ))
 
             if not replay_debug_cache:
                 time.sleep(1.0)
@@ -2648,6 +2843,10 @@ def scrape_restaurant_website(
         pdf_links=unique_pdfs,
         menu_avg_price=menu_avg_price,
         sidecar=sidecar,
+        render_decisions=render_decisions,
+        render_budget=render_budget,
+        restaurant_id=str(local_employer_id) if local_employer_id is not None else None,
+        source_url=base_url,
     )
 
     return signals
@@ -2736,16 +2935,27 @@ def load_website_scrape_target_groups(
         .join(LocalEmployer, LocalEmployer.id == RestaurantURL.local_employer_id)
         .filter(*url_filters)
         .order_by(RestaurantURL.last_checked.asc().nullsfirst())
-        .limit(max_sites)
         .all()
     )
 
     url_groups_raw: dict[str, list[tuple[Any, Any]]] = defaultdict(list)
+    skipped_rows = 0
     for rurl, emp in urls:
+        if classify_domain_family(rurl.url) in _SKIP_DOMAIN_FAMILIES:
+            skipped_rows += 1
+            continue
         normalized = rurl.url.rstrip("/").lower()
         url_groups_raw[normalized].append((rurl, emp))
 
-    return list(url_groups_raw.items()), len(urls)
+    group_items = list(url_groups_raw.items())[:max_sites]
+    total_rows = sum(len(group) for _, group in group_items)
+    if skipped_rows:
+        logger.info(
+            "[WebScraper] Filtered %d obvious non-first-party restaurant_url rows before queueing targets",
+            skipped_rows,
+        )
+
+    return group_items, total_rows
 
 
 @deal_collector("website_scraper", schedule="0 2 * * 1,3,5")
