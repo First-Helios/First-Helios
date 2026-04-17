@@ -25,166 +25,34 @@ import argparse
 import json
 import logging
 import statistics
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-DEFAULT_AUDIT_PATH = Path("data/cache/website_scrape_audit.json")
-DEFAULT_DEBUG_DIR = Path("data/cache/website_scrape_debug")
+from collectors.meal_deals.website_scrape_audit_utils import (
+    DEFAULT_AUDIT_PATH,
+    DEFAULT_DEBUG_DIR,
+    classify_domain_family,
+    classify_no_deal_stage,
+    load_audit_entries,
+    load_debug_bundles,
+    page_has_jsonld,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
-
-_SOCIAL_DOMAINS = (
-    "facebook.com",
-    "instagram.com",
-    "x.com",
-    "twitter.com",
-    "tiktok.com",
-    "youtube.com",
-)
-
-_DIRECTORY_HOST_TOKENS = (
-    "tripadvisor",
-    "yelp",
-    "austintexas.org",
-    "texasbob",
-    "usmapiz",
-    "opentable",
-    "findmeglutenfree",
-)
-
-_HOTEL_HOST_TOKENS = (
-    "hilton.com",
-    "marriott.com",
-    "hyatt.com",
-    "ihg.com",
-    "fairmont",
-    "embassysuites",
-    "hotel",
-    "resort",
-)
-
-_VENDOR_MENU_HOST_TOKENS = (
-    "toasttab.com",
-    "square.site",
-    "smartonlineorder.com",
-    "s4shops.com",
-    "menufy.com",
-    "grubhub.com",
-    "doordash.com",
-    "ubereats.com",
-    "order.online",
-    "ezcater.com",
-)
-
-_OTHER_NON_RESTAURANT_HOST_TOKENS = (
-    "labcorp",
-    "aaa.com",
-    "amli.com",
-    "canva.site",
-    "linktr.ee",
-    "mailchi.mp",
-    "law",
-    "seminary",
-    "juniors",
-    "apartments",
-    "school",
-    "church",
-)
-
-_LOCATOR_PATH_TOKENS = (
-    "/locations/",
-    "/location/",
-    "/restaurants/",
-    "/store-locator",
-    "/stores/",
-    "/store/",
-)
 
 
 def _safe_percent(numerator: int, denominator: int) -> float:
     if denominator <= 0:
         return 0.0
     return round(numerator / denominator * 100, 1)
-
-
-def _classify_domain_family(url: str) -> str:
-    parsed = urlparse(url or "")
-    host = parsed.netloc.lower()
-    path = parsed.path.lower()
-
-    if not host:
-        return "unknown"
-    if any(host == domain or host.endswith(f".{domain}") for domain in _SOCIAL_DOMAINS):
-        return "social"
-    if host.endswith(".gov"):
-        return "government"
-    if any(token in host for token in _DIRECTORY_HOST_TOKENS):
-        return "directory"
-    if any(token in host for token in _HOTEL_HOST_TOKENS):
-        return "hotel"
-    if any(token in host for token in _VENDOR_MENU_HOST_TOKENS):
-        return "vendor_menu_host"
-    if host.startswith("locations.") or any(token in path for token in _LOCATOR_PATH_TOKENS):
-        return "locator"
-    if any(token in host for token in _OTHER_NON_RESTAURANT_HOST_TOKENS):
-        return "other_nonrestaurant"
-    return "restaurant_or_first_party"
-
-
-def _classify_no_deal_stage(entry: dict[str, Any]) -> str:
-    total_blocks = entry.get("total_blocks")
-    sample_blocks = entry.get("sample_blocks") or []
-    discovered_pages = entry.get("discovered_pages") or []
-    pdf_links = entry.get("pdf_links") or []
-
-    if total_blocks is None and not sample_blocks and not discovered_pages and not pdf_links:
-        return "fetch_or_parse_failed"
-    if discovered_pages:
-        return "discovery_found_candidates_but_no_signal"
-    if pdf_links:
-        return "pdf_present_but_no_signal"
-    if (total_blocks or 0) > 0 or sample_blocks:
-        return "content_seen_but_extraction_failed"
-    return "empty_or_unusable_page"
-
-
-def _load_audit_entries(path: Path) -> list[dict[str, Any]]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise SystemExit(f"Audit file not found: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"Audit file is not valid JSON: {path}") from exc
-
-    if not isinstance(payload, list):
-        raise SystemExit(f"Audit file must contain a JSON list: {path}")
-    return [entry for entry in payload if isinstance(entry, dict)]
-
-
-def _load_debug_bundles(debug_dir: Path) -> tuple[dict[str, dict[str, Any]], int]:
-    bundles: dict[str, dict[str, Any]] = {}
-    invalid_json = 0
-
-    if not debug_dir.exists():
-        return bundles, invalid_json
-
-    for path in sorted(debug_dir.glob("*.json")):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            invalid_json += 1
-            continue
-        if not isinstance(payload, dict):
-            invalid_json += 1
-            continue
-        site_key = payload.get("site_key")
-        if isinstance(site_key, str) and site_key:
-            bundles[site_key] = payload
-    return bundles, invalid_json
 
 
 def build_report(audit_entries: list[dict[str, Any]], debug_bundles: dict[str, dict[str, Any]], invalid_bundle_json: int) -> dict[str, Any]:
@@ -209,14 +77,14 @@ def build_report(audit_entries: list[dict[str, Any]], debug_bundles: dict[str, d
 
         url = str(entry.get("url") or "")
         host = urlparse(url).netloc.lower() or "unknown"
-        family = _classify_domain_family(url)
+        family = classify_domain_family(url)
         family_counts[family] += 1
         family_by_outcome[outcome][family] += 1
         host_counts[host] += 1
         host_by_outcome[outcome][host] += 1
 
         if outcome == "no_deals":
-            no_deal_taxonomy[_classify_no_deal_stage(entry)] += 1
+            no_deal_taxonomy[classify_no_deal_stage(entry)] += 1
 
         locations_sharing_url = int(entry.get("locations_sharing_url") or 0)
         if locations_sharing_url > 1:
@@ -262,7 +130,7 @@ def build_report(audit_entries: list[dict[str, Any]], debug_bundles: dict[str, d
             fetch_type = str(page.get("fetch_type") or "unknown")
             page_fetch_type_counts[fetch_type] += 1
             html = page.get("html")
-            if isinstance(html, str) and "application/ld+json" in html:
+            if page_has_jsonld(html if isinstance(html, str) else None):
                 has_jsonld = True
 
         if has_jsonld:
@@ -420,8 +288,8 @@ def main() -> int:
     parser.add_argument("--top-hosts", type=int, default=15, help="How many top hosts to show in text output")
     args = parser.parse_args()
 
-    audit_entries = _load_audit_entries(args.audit_path)
-    debug_bundles, invalid_bundle_json = _load_debug_bundles(args.debug_dir)
+    audit_entries = load_audit_entries(args.audit_path)
+    debug_bundles, invalid_bundle_json = load_debug_bundles(args.debug_dir)
     report = build_report(audit_entries, debug_bundles, invalid_bundle_json)
 
     report["audit_paths"] = {

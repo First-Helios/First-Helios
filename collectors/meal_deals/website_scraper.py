@@ -34,6 +34,7 @@ from bs4 import BeautifulSoup, Tag
 
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
+from collectors.meal_deals.website_scrape_audit_utils import classify_domain_family, summarize_debug_bundle
 from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation
 from config.paths import CACHE_DIR, WEBSITE_SCRAPE_DEBUG_DIR
@@ -371,6 +372,27 @@ _DEAL_URL_KEYWORDS = frozenset([
     "combo", "value", "discount", "weekly", "daily", "today",
 ])
 
+_DISCOVERY_CONTEXT_KEYWORDS = frozenset([
+    "special", "specials", "deal", "deals", "offer", "offers",
+    "promo", "promotion", "promotions", "happy hour", "coupon",
+    "discount", "save", "limited time", "bogo", "buy one get one",
+    "lunch", "dinner", "daily", "weekly",
+])
+
+_DISCOVERY_SOFT_LABELS = frozenset([
+    "learn more",
+    "see details",
+    "details",
+    "more info",
+    "view details",
+])
+
+_DISCOVERY_FOOTER_TOKENS = frozenset([
+    "footer",
+    "site-footer",
+    "bottom",
+])
+
 # URL paths that are definitely NOT deal pages — exclude from discovery
 _NON_DEAL_URL_KEYWORDS = frozenset([
     "career", "careers", "jobs", "about", "contact", "privacy",
@@ -469,6 +491,14 @@ def _new_site_debug_bundle(base_url: str, *, restaurant_name: str, region: str) 
     }
 
 
+_SKIP_DOMAIN_FAMILIES = frozenset({
+    "social",
+    "government",
+    "directory",
+    "other_nonrestaurant",
+})
+
+
 def _write_site_debug_bundle(bundle: dict[str, Any]) -> None:
     WEBSITE_SCRAPE_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
     path = _debug_cache_path_from_key(bundle["site_key"])
@@ -534,6 +564,40 @@ def _get_debug_pdf_text(bundle: dict[str, Any] | None, pdf_url: str) -> str | No
         if isinstance(full_text, str):
             return full_text
     return None
+
+
+def _extract_blocks_from_html(html: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    return _extract_text_blocks(soup)
+
+
+def _site_audit_context_from_debug_bundle(base_url: str) -> dict[str, Any]:
+    bundle = _load_site_debug_bundle(base_url)
+    if not bundle:
+        return {}
+
+    summary = summarize_debug_bundle(bundle, extract_text_blocks=_extract_blocks_from_html)
+    context: dict[str, Any] = {
+        "page_count": summary["page_count"],
+        "page_fetch_types": summary["page_fetch_types"],
+        "structured_data_present": summary["has_jsonld"],
+        "parsed_pdf_count": summary["parsed_pdf_count"],
+        "menu_avg_price": summary["menu_avg_price"],
+        "bundle_signal_count": summary["signal_count"],
+    }
+
+    if summary["total_blocks"] is not None:
+        context["total_blocks"] = summary["total_blocks"]
+    if summary["sample_blocks"]:
+        context["sample_blocks"] = summary["sample_blocks"]
+    if summary["discovered_pages"]:
+        context["discovered_pages"] = summary["discovered_pages"]
+        context["discovered_page_count"] = len(summary["discovered_pages"])
+    if summary["pdf_links"]:
+        context["pdf_links"] = summary["pdf_links"][:5]
+        context["needs_pdf_reader"] = not _HAS_PDFPLUMBER
+
+    return context
 
 
 def _finalize_site_debug_bundle(
@@ -1145,6 +1209,36 @@ def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
 
     scored: list[tuple[int, str]] = []
 
+    def _tag_has_footer_context(tag: Tag) -> bool:
+        footer_ancestor = tag.find_parent("footer")
+        if footer_ancestor is not None:
+            return True
+        for ancestor in tag.parents:
+            if not isinstance(ancestor, Tag):
+                continue
+            class_str = " ".join(ancestor.get("class", [])).lower()
+            id_str = (ancestor.get("id") or "").lower()
+            combined = f"{class_str} {id_str}"
+            if any(token in combined for token in _DISCOVERY_FOOTER_TOKENS):
+                return True
+        return False
+
+    def _context_text(tag: Tag) -> str:
+        parts: list[str] = []
+        anchor_text = tag.get_text(" ", strip=True)
+        if anchor_text:
+            parts.append(anchor_text)
+        for attr in ("title", "aria-label"):
+            val = tag.get(attr)
+            if isinstance(val, str) and val.strip():
+                parts.append(val.strip())
+        parent = tag.find_parent(["li", "div", "section", "footer", "article"])
+        if parent is not None:
+            parent_text = parent.get_text(" ", strip=True)
+            if parent_text:
+                parts.append(parent_text[:300])
+        return " ".join(parts).lower()
+
     for a_tag in soup.find_all("a", href=True):
         href = a_tag["href"]
         full_url = urljoin(base_url, href)
@@ -1179,11 +1273,23 @@ def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
             if keyword in path:
                 score += 2
 
-        # Score by anchor text keywords
-        anchor_text = a_tag.get_text(strip=True).lower()
-        for keyword in _DEAL_KEYWORDS:
+        context_text = _context_text(a_tag)
+        anchor_text = a_tag.get_text(" ", strip=True).lower()
+        has_soft_label = anchor_text in _DISCOVERY_SOFT_LABELS
+
+        for keyword in _DISCOVERY_CONTEXT_KEYWORDS:
             if keyword in anchor_text:
+                score += 2
+            elif keyword in context_text:
                 score += 1
+
+        # Soft-label links like "Learn More" only count when nearby context or
+        # the URL path already looks promotional.
+        if has_soft_label and score < 2:
+            continue
+
+        if _tag_has_footer_context(a_tag) and score > 0:
+            score += 1
 
         if score > 0:
             scored.append((score, full_url))
@@ -1443,6 +1549,7 @@ def scrape_restaurant_website(
     user_agent = _get_user_agent()
     parsed = urlparse(url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
+    domain_family = classify_domain_family(url)
     debug_bundle = _load_site_debug_bundle(url) if replay_debug_cache else _reset_site_debug_bundle(
         url,
         restaurant_name=restaurant_name,
@@ -1450,6 +1557,21 @@ def scrape_restaurant_website(
     )
     if replay_debug_cache and debug_bundle is None:
         logger.warning("[WebScraper] No local debug cache for %s", url)
+        return []
+
+    if debug_bundle is not None:
+        debug_bundle["domain_family"] = domain_family
+
+    if domain_family in _SKIP_DOMAIN_FAMILIES:
+        logger.info(
+            "[WebScraper] Skipping obvious non-first-party target %s (%s)",
+            url,
+            domain_family,
+        )
+        if debug_bundle is not None:
+            debug_bundle["skip_reason"] = "non_first_party_target"
+            debug_bundle["completed_at"] = datetime.now(timezone.utc).isoformat()
+            _write_site_debug_bundle(debug_bundle)
         return []
 
     signals: list[DealSignal] = []
@@ -1782,6 +1904,7 @@ class WebsiteDealCollector:
                         "employer_id": emp_rep.id,
                         "name": emp_rep.name,
                         "url": rurl_rep.url,
+                        "domain_family": classify_domain_family(rurl_rep.url),
                         "debug_cache_key": _debug_cache_key(rurl_rep.url),
                         "locations_sharing_url": len(group),
                         "canonical_locations": len(canonical_group),
@@ -1799,6 +1922,7 @@ class WebsiteDealCollector:
                             region=region,
                             replay_debug_cache=replay_debug_cache,
                         )
+                        site_audit.update(_site_audit_context_from_debug_bundle(rurl_rep.url))
 
                         if signals:
                             logger.info(
@@ -1828,23 +1952,28 @@ class WebsiteDealCollector:
                             site_audit["deal_names"] = [s.deal_name[:80] for s in signals]
                         else:
                             site_audit["outcome"] = "no_deals"
-                            try:
-                                cached_bundle = _load_site_debug_bundle(rurl_rep.url) if replay_debug_cache else None
-                                html = _get_debug_page(cached_bundle, rurl_rep.url) if replay_debug_cache else _fetch_page(rurl_rep.url, _get_user_agent())
-                                if html:
-                                    soup = BeautifulSoup(html, "html.parser")
-                                    blocks = _extract_text_blocks(soup)
-                                    site_audit["sample_blocks"] = [b[:200] for b in blocks[:10]]
-                                    site_audit["total_blocks"] = len(blocks)
-                                    pdf_links = _discover_pdf_links(soup, rurl_rep.url)
-                                    if pdf_links:
-                                        site_audit["pdf_links"] = pdf_links[:5]
-                                        site_audit["needs_pdf_reader"] = not _HAS_PDFPLUMBER
-                                    disc = _discover_deal_pages(soup, rurl_rep.url)
-                                    if disc:
-                                        site_audit["discovered_pages"] = disc
-                            except Exception:
-                                pass  # audit is best-effort
+                            if "total_blocks" not in site_audit:
+                                try:
+                                    cached_bundle = _load_site_debug_bundle(rurl_rep.url) if replay_debug_cache else None
+                                    html = _get_debug_page(cached_bundle, rurl_rep.url) if replay_debug_cache else _fetch_page(rurl_rep.url, _get_user_agent())
+                                    if html:
+                                        soup = BeautifulSoup(html, "html.parser")
+                                        blocks = _extract_text_blocks(soup)
+                                        site_audit["sample_blocks"] = [b[:200] for b in blocks[:10]]
+                                        site_audit["total_blocks"] = len(blocks)
+                                        pdf_links = _discover_pdf_links(soup, rurl_rep.url)
+                                        if pdf_links:
+                                            site_audit["pdf_links"] = pdf_links[:5]
+                                            site_audit["needs_pdf_reader"] = not _HAS_PDFPLUMBER
+                                        disc = _discover_deal_pages(soup, rurl_rep.url)
+                                        if disc:
+                                            site_audit["discovered_pages"] = disc
+                                            site_audit["discovered_page_count"] = len(disc)
+                                        site_audit["page_count"] = max(int(site_audit.get("page_count") or 0), 1)
+                                        site_audit.setdefault("page_fetch_types", {"hardcoded": 1})
+                                        site_audit.setdefault("structured_data_present", "application/ld+json" in html)
+                                except Exception:
+                                    pass  # audit is best-effort
 
                         # Update ALL restaurant_url records sharing this URL
                         if not dry_run:
