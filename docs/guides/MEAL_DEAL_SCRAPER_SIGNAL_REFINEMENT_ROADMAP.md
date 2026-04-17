@@ -1,7 +1,7 @@
 # Meal Deal Scraper Signal Refinement Roadmap
 
 Updated: 2026-04-17
-Status: Tier 1 through Tier 3 work completed locally; Tier 4 architectural decisions remain, with `RENDER-01` blocked on `ARCH-03`
+Status: Tier 1 through Tier 3 implementation work is complete locally except `RENDER-01`, which remains blocked on Tier 4 `ARCH-03`; exercised warning cleanup and handoff verification are complete
 Scope: open refinement work for `collectors/meal_deals/website_scraper.py` and adjacent audit, replay, extraction, and modeling tasks
 
 ## Purpose
@@ -25,6 +25,17 @@ This document covers the open website-scraper work after the already-completed p
 - [x] Implemented `DISC-04` obvious wrong-target suppression for social, government, directory, and clearly unrelated pages.
 - [x] Implemented `DISC-02` locator-to-corporate promo hint routing for bounded locator patterns with debug-bundle recording and focused tests.
 - [x] Implemented an initial `JSONLD-01` hierarchical schema.org traversal pass with replay-tested special-menu extraction and focused guardrail tests.
+- [x] Completed `STRUCT-01` by adding sidecar menu artifacts for pages, sections, items, price points, modifiers, and offer targets in debug bundles and signal metadata.
+- [x] Completed `TARGET-01` by linking extracted signals to item, section, service-period, or venue-wide targets through replay-validated `offer_target` metadata.
+- [x] Completed `PRICE-02`, `PDF-02`, and `VALUE-01` by deriving section-aware baseline pricing, adding strict layout-aware PDF table parsing, and attaching per-signal value-profile metadata.
+- [x] Verified the Tier 3 handoff with the consolidated replay and canonical regression matrix, then cleaned the exercised warning set to zero warnings locally.
+
+## Completed Work Summary
+
+- Tier 1 closed the replay-first audit loop: audit summarization, replay manifests, wrong-target classification, success-path audit context, replay workflow docs, and deterministic regression-set generation are all in place.
+- Tier 2 closed the highest-value bounded recall gaps: promo-card and footer discovery scoring landed, obvious wrong-target suppression is enforced, locator-to-corporate hint routing records `hinted_pages`, and the initial JSON-LD traversal now respects inherited promo context.
+- Tier 3 added reusable menu intelligence instead of flat text only: `menu_sidecar.py` now preserves menu structure, signals are linked to offer targets, PDF tables can contribute item-price evidence, and value profiles carry category-aware baseline and savings inputs.
+- Verification work closed the immediate handoff gap before Tier 4: the replay plus canonical suite passes locally, and the exercised Python 3.12 and requests-stack warnings were cleaned up so future Tier 4 work starts from a quieter baseline.
 
 ## Wave 1 Brief Pack
 
@@ -149,9 +160,19 @@ These tasks should go to a high-reasoning agent. They involve ambiguous structur
 These tasks should be held for human review plus a high-reasoning implementation agent.
 
 - `ARCH-01` Decide whether the menu graph stays in sidecar artifacts or gets persistent tables. Best agent: Tier 4. Complexity: very high. Recommendation: defer persistent tables until the sidecar has been replay-tested across a larger corpus.
+Recommended decision: stay sidecar-first until replay coverage is larger, but define the target persistent shape now so the sidecar stays compatible with a future schema.
+
 - `ARCH-02` Set confidence and review policy for offer-target links. Best agent: Tier 4. Complexity: very high. This defines when an item-level link is accepted, review-only, or discarded.
+Recommended decision: auto-accept high-confidence structured links from strong evidence such as schema relationships or tight name-plus-price matches, but route ambiguous item-level links to review. This keeps automation high enough for scale without letting weak links silently become canonical truth.
+
 - `ARCH-03` Set renderer budget and allowlist policy. Best agent: Tier 4. Complexity: very high. This is an operational and cost decision, not just a coding task.
+
+Recommended decision: use a bounded trigger policy. Escalate to rendering only when static HTML is structurally empty, discovery evidence is strong, the page is menu-critical, and the site is either on an allowlist or within a small per-run render budget. Keep default costs lean, but reserve a small sampled exploration budget for dead-end pages so you can measure whether the current render threshold is too strict without making fallback behavior noisy or unrepeatable.
+
 - `ARCH-04` Decide hint-registry governance. Best agent: Tier 4. Complexity: very high. This covers where brand-specific promo slugs, footer labels, and locator-to-corporate mappings live and how they are maintained.
+
+Recommended decision: use a lightweight registry, but make it exploration-only, not evidence. Require provenance, last-verified date, and expiry or review cadence. External internet sources are permitted to propose or refresh hints, but they must never be treated as first-party evidence and must be verified against the restaurant's own site or cached first-party pages before they affect coverage claims or ingest decisions.
+
 
 ## Recommended Parallel Execution Plan
 
@@ -270,11 +291,11 @@ Escalate if:
 If work starts immediately, the best first distribution is:
 
 1. [x] Tier 1 agent: `AUD-01` — brief created and script implemented
-2. [x] Tier 1 agent: `AUD-02` — brief created
-3. [x] Tier 1 agent: `AUD-03` — brief created
-4. [x] Tier 2 agent: `DISC-01` — brief created
-5. [x] Tier 2 agent: `DISC-02` — brief created
-6. [x] Tier 3 agent: `JSONLD-01` — brief created
+2. [x] Tier 1 agent: `AUD-02` — brief created and replay manifest builder implemented
+3. [x] Tier 1 agent: `AUD-03` — brief created and shared wrong-target classifier implemented
+4. [x] Tier 2 agent: `DISC-01` — brief created and initial discovery scoring implemented
+5. [x] Tier 2 agent: `DISC-02` — brief created and bounded locator-to-corporate hint routing implemented
+6. [x] Tier 3 agent: `JSONLD-01` — brief created and hierarchical schema.org traversal implemented
 
 That mix attacks the three biggest current needs at once:
 
