@@ -4,8 +4,20 @@ from sqlalchemy.orm import Session
 
 from collectors.meal_deals.ingest import ingest_deal_signals
 from collectors.meal_deals.models import DealSignal
+from collectors.meal_deals.semantic_layer import refresh_deal_materializations
 from collectors.meal_deals.website_scraper import _copy_signal_for_location
-from core.database import BrandGroup, CanonicalVenue, CanonicalVenueAlias, LocalEmployer, MealDeal, SiteAssignment, SiteIdentity
+from core.database import (
+    BrandGroup,
+    CanonicalVenue,
+    CanonicalVenueAlias,
+    DealApplicability,
+    DealMaterialization,
+    DealObservation,
+    LocalEmployer,
+    MealDeal,
+    SiteAssignment,
+    SiteIdentity,
+)
 from core.normalizer import make_fingerprint
 from core.venue_identity import normalize_address_for_identity
 from scripts.backfill_deal_observation_history import backfill_deal_observation_history
@@ -404,3 +416,229 @@ def test_review_queue_lists_contested_sites_and_medium_confidence_aliases(client
     assert payload["items"][1]["queue_type"] == "venue_alias"
     assert payload["items"][1]["match_confidence"] == 0.92
     assert payload["items"][1]["canonical_name"] == "Satellite Bistro"
+
+
+def test_review_queue_site_action_resolves_contested_site(client, engine):
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_employer(
+                    5001,
+                    name="Satellite Bistro",
+                    address="100 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2601,
+                    lng=-97.7420,
+                ),
+                _build_employer(
+                    5002,
+                    name="Satellite Bar",
+                    address="102 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2602,
+                    lng=-97.7421,
+                ),
+                _build_canonical_venue(
+                    9001,
+                    name="Satellite Bistro",
+                    address="100 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2601,
+                    lng=-97.7420,
+                ),
+                _build_canonical_venue(
+                    9002,
+                    name="Satellite Bar",
+                    address="102 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2602,
+                    lng=-97.7421,
+                ),
+                SiteIdentity(
+                    id=3001,
+                    normalized_url="satelliteatx.com",
+                    canonical_url="https://satelliteatx.com",
+                    host="satelliteatx.com",
+                    path="/",
+                    ownership_scope="mixed",
+                    conflict_state="needs_review",
+                ),
+            ]
+        )
+        session.flush()
+        session.add_all(
+            [
+                SiteAssignment(
+                    site_identity_id=3001,
+                    canonical_venue_id=9001,
+                    assignment_scope="contested",
+                    match_method="restaurant_url_backfill",
+                    match_confidence=0.5,
+                    is_primary=False,
+                ),
+                SiteAssignment(
+                    site_identity_id=3001,
+                    canonical_venue_id=9002,
+                    assignment_scope="contested",
+                    match_method="restaurant_url_backfill",
+                    match_confidence=0.5,
+                    is_primary=False,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.post(
+        "/api/deals/review-queue/actions",
+        json={
+            "queue_type": "site",
+            "action": "resolve",
+            "resolution": "venue",
+            "site_identity_id": 3001,
+            "canonical_venue_id": 9001,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["result"]["resolution"] == "venue"
+
+    with Session(engine) as session:
+        site = session.query(SiteIdentity).one()
+        assignments = session.query(SiteAssignment).order_by(SiteAssignment.canonical_venue_id).all()
+
+    assert site.conflict_state == "clear"
+    assert site.ownership_scope == "venue"
+    assert assignments[0].canonical_venue_id == 9001
+    assert assignments[0].assignment_scope == "venue"
+    assert assignments[0].is_primary is True
+    assert assignments[1].canonical_venue_id == 9002
+    assert assignments[1].assignment_scope == "fallback"
+    assert assignments[1].is_primary is False
+
+    queue_response = client.get("/api/deals/review-queue?region=austin_tx&kind=site")
+    queue_payload = queue_response.get_json()
+    assert queue_payload["summary"]["contested_sites"] == 0
+    assert queue_payload["count"] == 0
+
+
+def test_review_queue_venue_alias_reassign_repairs_canonical_outputs(client, engine):
+    source_url = "https://example.com/lunch"
+
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_employer(
+                    5001,
+                    name="Wrong Employer",
+                    address="100 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2601,
+                    lng=-97.7420,
+                ),
+                _build_canonical_venue(
+                    9001,
+                    name="Old Venue",
+                    address="100 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2601,
+                    lng=-97.7420,
+                ),
+                _build_canonical_venue(
+                    9002,
+                    name="New Venue",
+                    address="101 Main St, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.2602,
+                    lng=-97.7421,
+                ),
+                SiteIdentity(
+                    id=3001,
+                    normalized_url="example.com/lunch",
+                    canonical_url=source_url,
+                    host="example.com",
+                    path="/lunch",
+                    ownership_scope="venue",
+                    conflict_state="clear",
+                ),
+            ]
+        )
+        session.flush()
+        session.add(
+            CanonicalVenueAlias(
+                canonical_venue_id=9001,
+                local_employer_id=5001,
+                alias_role="primary",
+                match_method="heuristic",
+                match_confidence=0.92,
+            )
+        )
+        observation = DealObservation(
+            source="website_scrape",
+            collector_run_id=55,
+            site_identity_id=3001,
+            source_url=source_url,
+            source_observation_key="obs-reassign-1",
+            observed_at=datetime(2026, 4, 16, 10, 0, 0, tzinfo=timezone.utc),
+            deal_name="Lunch Special $10",
+            deal_description="Lunch Special $10 Monday-Friday",
+            deal_type="combo",
+            price=10.0,
+            price_type="absolute",
+            valid_days="Mon-Fri",
+            raw_scraped_text="Lunch Special $10 Monday-Friday",
+            extraction_payload={
+                "restaurant_name": "Wrong Employer",
+                "local_employer_id_hint": 5001,
+                "region": "austin_tx",
+            },
+            signal_quality=0.8,
+            review_state="accepted",
+        )
+        session.add(observation)
+        session.flush()
+        session.add(
+            DealApplicability(
+                observation_id=observation.id,
+                applicability_scope="venue",
+                canonical_venue_id=9001,
+                confidence=0.92,
+                resolver_method="local_employer_alias",
+                is_active=True,
+            )
+        )
+        session.flush()
+        refresh_deal_materializations(session, observation_ids=[observation.id])
+        session.commit()
+
+    response = client.post(
+        "/api/deals/review-queue/actions",
+        json={
+            "queue_type": "venue_alias",
+            "action": "reassign",
+            "local_employer_id": 5001,
+            "canonical_venue_id": 9002,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["result"]["canonical_venue_id"] == 9002
+    assert payload["result"]["applicability_rows_updated"] == 1
+
+    with Session(engine) as session:
+        alias = session.query(CanonicalVenueAlias).one()
+        applicability = session.query(DealApplicability).one()
+        materialization = session.query(DealMaterialization).one()
+
+    assert alias.canonical_venue_id == 9002
+    assert alias.match_confidence == 1.0
+    assert alias.match_method == "manual_review"
+    assert applicability.canonical_venue_id == 9002
+    assert applicability.resolver_method == "manual_review_alias"
+    assert materialization.canonical_venue_id == 9002
+
+    queue_response = client.get("/api/deals/review-queue?region=austin_tx&kind=venue")
+    queue_payload = queue_response.get_json()
+    assert queue_payload["summary"]["ambiguous_venue_aliases"] == 0
+    assert queue_payload["count"] == 0

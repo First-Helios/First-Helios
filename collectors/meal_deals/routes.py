@@ -13,11 +13,14 @@ from collections import Counter, defaultdict
 
 from flask import Blueprint, jsonify, request
 
+from collectors.meal_deals.semantic_layer import refresh_deal_materializations
 from core.database import (
     BrandGroup,
     CanonicalVenue,
     CanonicalVenueAlias,
+    DealApplicability,
     DealMaterialization,
+    DealObservation,
     LocalEmployer,
     MealDeal,
     SiteAssignment,
@@ -45,6 +48,21 @@ def _get_db_session():
 def _err(e: Exception, status: int = 500):
     logger.error("[deals] %s", e, exc_info=True)
     return jsonify({"status": "error", "message": "An internal error occurred"}), status
+
+
+def _bad_request(message: str):
+    return jsonify({"status": "error", "message": message}), 400
+
+
+def _coerce_int(value, field_name: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be an integer") from exc
+
+
+def _payload_dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
 
 
 def _deal_signature(deal: MealDeal) -> tuple:
@@ -334,6 +352,264 @@ def _load_review_queue(
     }
 
 
+def _apply_site_review_action(session, payload: dict) -> dict:
+    action = (payload.get("action") or "").strip().lower()
+    site_identity_id = _coerce_int(payload.get("site_identity_id"), "site_identity_id")
+    site = session.get(SiteIdentity, site_identity_id)
+    if site is None:
+        raise ValueError("site_identity_id was not found")
+
+    assignments = session.query(SiteAssignment).filter(
+        SiteAssignment.site_identity_id == site_identity_id
+    ).all()
+
+    if action == "block":
+        deleted = len(assignments)
+        for assignment in assignments:
+            session.delete(assignment)
+        site.ownership_scope = "unknown"
+        site.conflict_state = "blocked"
+        session.flush()
+        return {
+            "queue_type": "site",
+            "action": "block",
+            "site_identity_id": site.id,
+            "conflict_state": site.conflict_state,
+            "assignments_deleted": deleted,
+        }
+
+    if action != "resolve":
+        raise ValueError("site action must be one of: resolve, block")
+
+    resolution = (payload.get("resolution") or "").strip().lower()
+    updated = 0
+    created = 0
+
+    if resolution == "venue":
+        canonical_venue_id = _coerce_int(payload.get("canonical_venue_id"), "canonical_venue_id")
+        venue = session.get(CanonicalVenue, canonical_venue_id)
+        if venue is None:
+            raise ValueError("canonical_venue_id was not found")
+
+        matched = False
+        for assignment in assignments:
+            if assignment.canonical_venue_id == canonical_venue_id and assignment.brand_group_id is None:
+                assignment.assignment_scope = "venue"
+                assignment.match_method = "manual_review"
+                assignment.match_confidence = 1.0
+                assignment.is_primary = True
+                matched = True
+            else:
+                assignment.assignment_scope = "fallback"
+                assignment.is_primary = False
+            updated += 1
+
+        if not matched:
+            session.add(
+                SiteAssignment(
+                    site_identity_id=site.id,
+                    canonical_venue_id=canonical_venue_id,
+                    assignment_scope="venue",
+                    match_method="manual_review",
+                    match_confidence=1.0,
+                    is_primary=True,
+                )
+            )
+            created += 1
+
+        site.ownership_scope = "venue"
+        site.conflict_state = "clear"
+        session.flush()
+        return {
+            "queue_type": "site",
+            "action": "resolve",
+            "resolution": "venue",
+            "site_identity_id": site.id,
+            "canonical_venue_id": canonical_venue_id,
+            "conflict_state": site.conflict_state,
+            "assignments_updated": updated,
+            "assignments_created": created,
+        }
+
+    if resolution == "brand":
+        brand_group_id = _coerce_int(payload.get("brand_group_id"), "brand_group_id")
+        brand = session.get(BrandGroup, brand_group_id)
+        if brand is None:
+            raise ValueError("brand_group_id was not found")
+
+        matched = False
+        for assignment in assignments:
+            if assignment.brand_group_id == brand_group_id and assignment.canonical_venue_id is None:
+                assignment.assignment_scope = "brand"
+                assignment.match_method = "manual_review"
+                assignment.match_confidence = 1.0
+                assignment.is_primary = True
+                matched = True
+            else:
+                assignment.assignment_scope = "fallback"
+                assignment.is_primary = False
+            updated += 1
+
+        if not matched:
+            session.add(
+                SiteAssignment(
+                    site_identity_id=site.id,
+                    brand_group_id=brand_group_id,
+                    assignment_scope="brand",
+                    match_method="manual_review",
+                    match_confidence=1.0,
+                    is_primary=True,
+                )
+            )
+            created += 1
+
+        site.ownership_scope = "brand"
+        site.conflict_state = "clear"
+        session.flush()
+        return {
+            "queue_type": "site",
+            "action": "resolve",
+            "resolution": "brand",
+            "site_identity_id": site.id,
+            "brand_group_id": brand_group_id,
+            "conflict_state": site.conflict_state,
+            "assignments_updated": updated,
+            "assignments_created": created,
+        }
+
+    raise ValueError("resolution must be one of: venue, brand")
+
+
+def _repair_venue_applicability_for_local_employer(
+    session,
+    *,
+    local_employer_id: int,
+    canonical_venue_id: int | None,
+    remove: bool,
+) -> dict:
+    changed_rows = 0
+    observation_ids: list[int] = []
+
+    observations = session.query(DealObservation).all()
+    for observation in observations:
+        payload = _payload_dict(observation.extraction_payload)
+        if payload.get("local_employer_id_hint") != local_employer_id:
+            continue
+
+        applicability_rows = session.query(DealApplicability).filter(
+            DealApplicability.observation_id == observation.id,
+            DealApplicability.applicability_scope == "venue",
+        ).all()
+        if not applicability_rows:
+            continue
+
+        touched = False
+        for applicability in applicability_rows:
+            if remove:
+                applicability.is_active = False
+                applicability.confidence = 0.0
+                applicability.resolver_method = "manual_review_removed_alias"
+                applicability.resolver_notes = f"local_employer_id={local_employer_id}"
+            else:
+                applicability.canonical_venue_id = canonical_venue_id
+                applicability.is_active = True
+                applicability.confidence = 1.0
+                applicability.resolver_method = "manual_review_alias"
+                applicability.resolver_notes = f"local_employer_id={local_employer_id}"
+            changed_rows += 1
+            touched = True
+
+        if touched:
+            observation_ids.append(observation.id)
+
+    materialization_stats = {"deleted": 0, "inserted": 0}
+    if observation_ids:
+        materialization_stats = refresh_deal_materializations(
+            session,
+            observation_ids=observation_ids,
+        )
+
+    return {
+        "applicability_rows_updated": changed_rows,
+        "observation_ids": observation_ids,
+        "materializations_deleted": materialization_stats["deleted"],
+        "materializations_inserted": materialization_stats["inserted"],
+    }
+
+
+def _apply_venue_alias_review_action(session, payload: dict) -> dict:
+    action = (payload.get("action") or "").strip().lower()
+    local_employer_id = _coerce_int(payload.get("local_employer_id"), "local_employer_id")
+
+    alias = session.query(CanonicalVenueAlias).filter(
+        CanonicalVenueAlias.local_employer_id == local_employer_id
+    ).first()
+    if alias is None:
+        raise ValueError("local_employer_id does not have a canonical venue alias")
+
+    if action == "confirm":
+        alias.match_confidence = 1.0
+        alias.match_method = "manual_review"
+        repair_stats = _repair_venue_applicability_for_local_employer(
+            session,
+            local_employer_id=local_employer_id,
+            canonical_venue_id=alias.canonical_venue_id,
+            remove=False,
+        )
+        session.flush()
+        return {
+            "queue_type": "venue_alias",
+            "action": "confirm",
+            "local_employer_id": local_employer_id,
+            "canonical_venue_id": alias.canonical_venue_id,
+            "match_confidence": alias.match_confidence,
+            **repair_stats,
+        }
+
+    if action == "reassign":
+        canonical_venue_id = _coerce_int(payload.get("canonical_venue_id"), "canonical_venue_id")
+        venue = session.get(CanonicalVenue, canonical_venue_id)
+        if venue is None:
+            raise ValueError("canonical_venue_id was not found")
+
+        alias.canonical_venue_id = canonical_venue_id
+        alias.match_confidence = 1.0
+        alias.match_method = "manual_review"
+        repair_stats = _repair_venue_applicability_for_local_employer(
+            session,
+            local_employer_id=local_employer_id,
+            canonical_venue_id=canonical_venue_id,
+            remove=False,
+        )
+        session.flush()
+        return {
+            "queue_type": "venue_alias",
+            "action": "reassign",
+            "local_employer_id": local_employer_id,
+            "canonical_venue_id": canonical_venue_id,
+            "match_confidence": alias.match_confidence,
+            **repair_stats,
+        }
+
+    if action == "remove":
+        repair_stats = _repair_venue_applicability_for_local_employer(
+            session,
+            local_employer_id=local_employer_id,
+            canonical_venue_id=None,
+            remove=True,
+        )
+        session.delete(alias)
+        session.flush()
+        return {
+            "queue_type": "venue_alias",
+            "action": "remove",
+            "local_employer_id": local_employer_id,
+            **repair_stats,
+        }
+
+    raise ValueError("venue_alias action must be one of: confirm, reassign, remove")
+
+
 # ── Deal listings ─────────────────────────────────────────────────────────────
 
 @deals_bp.route("")
@@ -550,6 +826,35 @@ def deal_review_queue():
             }
         )
     except Exception as exc:
+        return _err(exc)
+    finally:
+        session.close()
+
+
+@deals_bp.route("/review-queue/actions", methods=["POST"])
+def apply_review_queue_action():
+    """Apply a manual review action for contested sites or venue aliases."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return _bad_request("JSON object body is required")
+
+    queue_type = (payload.get("queue_type") or "").strip().lower()
+    if queue_type not in {"site", "venue_alias"}:
+        return _bad_request("queue_type must be one of: site, venue_alias")
+
+    session = _get_db_session()
+    try:
+        if queue_type == "site":
+            result = _apply_site_review_action(session, payload)
+        else:
+            result = _apply_venue_alias_review_action(session, payload)
+        session.commit()
+        return jsonify({"status": "ok", "result": result})
+    except ValueError as exc:
+        session.rollback()
+        return _bad_request(str(exc))
+    except Exception as exc:
+        session.rollback()
         return _err(exc)
     finally:
         session.close()

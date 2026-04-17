@@ -509,7 +509,25 @@ Current queue contents:
 Important note:
 
 - this is a read-only review surface for triage
-- final adjudication is still manual; there is not yet a write-back UI for resolving queue items in place
+- final adjudication is still manual from an operator perspective, but the API now exposes write-back actions so resolution does not require direct SQL
+
+### `/api/deals/review-queue/actions`
+
+Applies manual operator resolutions for review-queue items.
+
+Current action coverage:
+
+- contested-site resolution to a single venue
+- contested-site resolution to a brand
+- contested-site blocking
+- venue-alias confirm
+- venue-alias reassign
+- venue-alias remove
+
+Important behavior:
+
+- venue-alias write-backs also repair matching `deal_applicability` rows and refresh affected `deal_materializations`
+- site-resolution write-backs update canonical site ownership state for future scraping and review workflow
 
 ## Operations
 
