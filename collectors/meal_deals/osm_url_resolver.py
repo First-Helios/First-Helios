@@ -196,6 +196,7 @@ def match_and_store_urls(
     region: str = "austin_tx",
     max_distance_mi: float = 0.3,
     dry_run: bool = False,
+    target_employer_ids: set[int] | None = None,
 ) -> dict:
     """Match OSM POIs to local_employers and store URLs in restaurant_urls.
 
@@ -218,12 +219,20 @@ def match_and_store_urls(
         "stored": 0,
     }
 
-    # Pre-load all food employers with their fingerprints
-    employers = session.query(LocalEmployer).filter(
+    employer_filters = [
         LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
         LocalEmployer.region == region,
         LocalEmployer.is_active.is_(True),
-    ).all()
+    ]
+    if target_employer_ids is not None:
+        target_ids = sorted(set(target_employer_ids))
+        if not target_ids:
+            session.close()
+            return stats
+        employer_filters.append(LocalEmployer.id.in_(target_ids))
+
+    # Pre-load all candidate food employers with their fingerprints
+    employers = session.query(LocalEmployer).filter(*employer_filters).all()
 
     # Build lookup indexes
     fp_to_employers: dict[str, list[LocalEmployer]] = {}
@@ -320,8 +329,10 @@ def match_and_store_urls(
                     stmt = stmt.on_conflict_do_update(
                         constraint="uq_restaurant_url_employer_source",
                         set_={
+                            "brand_group_id": stmt.excluded.brand_group_id,
                             "url": stmt.excluded.url,
                             "confidence": stmt.excluded.confidence,
+                            "is_active": True,
                             "last_checked": stmt.excluded.last_checked,
                             "updated_at": now,
                         },
@@ -333,7 +344,9 @@ def match_and_store_urls(
                         RestaurantURL.source == "osm",
                     ).first()
                     if existing:
+                        existing.brand_group_id = emp.brand_group_id
                         existing.url = poi["website"]
+                        existing.is_active = True
                         existing.last_checked = now
                         existing.updated_at = now
                         stats["skipped_duplicate"] += 1

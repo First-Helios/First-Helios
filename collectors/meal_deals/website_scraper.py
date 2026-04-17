@@ -1636,6 +1636,53 @@ def _collapse_shared_url_aliases(group: list[tuple]) -> tuple[list[tuple], list[
     return [item for _, item in canonical_items], skipped_items
 
 
+def load_website_scrape_target_groups(
+    session: Any,
+    *,
+    region: str = "austin_tx",
+    max_sites: int = 100,
+    skip_checked_days: int | None = 3,
+) -> tuple[list[tuple[str, list[tuple[Any, Any]]]], int]:
+    """Load the exact deduped target URL groups the website scraper will process."""
+    from collections import defaultdict
+    from datetime import timedelta
+
+    from core.database import LocalEmployer, RestaurantURL
+
+    url_filters = [
+        RestaurantURL.is_active.is_(True),
+        LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
+        LocalEmployer.region == region,
+        LocalEmployer.is_active.is_(True),
+    ]
+    if skip_checked_days:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=skip_checked_days)
+        url_filters.append(
+            (RestaurantURL.last_checked.is_(None))
+            | (RestaurantURL.last_checked < cutoff)
+        )
+        logger.info(
+            "[WebScraper] Skipping sites checked within the last %d day(s)",
+            skip_checked_days,
+        )
+
+    urls = (
+        session.query(RestaurantURL, LocalEmployer)
+        .join(LocalEmployer, LocalEmployer.id == RestaurantURL.local_employer_id)
+        .filter(*url_filters)
+        .order_by(RestaurantURL.last_checked.asc().nullsfirst())
+        .limit(max_sites)
+        .all()
+    )
+
+    url_groups_raw: dict[str, list[tuple[Any, Any]]] = defaultdict(list)
+    for rurl, emp in urls:
+        normalized = rurl.url.rstrip("/").lower()
+        url_groups_raw[normalized].append((rurl, emp))
+
+    return list(url_groups_raw.items()), len(urls)
+
+
 @deal_collector("website_scraper", schedule="0 2 * * 1,3,5")
 class WebsiteDealCollector:
     """Scheduled collector: scrapes restaurant websites for deals.
@@ -1649,8 +1696,13 @@ class WebsiteDealCollector:
     """
 
     SOURCE = "website_scraper"
+    INGESTS_INLINE = True
 
-    CHUNK_SIZE = 100  # Scrape/ingest in batches to avoid data loss and RAM buildup
+    CHUNK_SIZE = 25  # Lower default to keep Orange Pi RAM stable during full re-scrapes.
+
+    def __init__(self, *, chunk_size: int | None = None) -> None:
+        self.chunk_size = max(1, chunk_size or self.CHUNK_SIZE)
+        self.last_run_stats: dict[str, Any] = {}
 
     def collect(
         self,
@@ -1662,61 +1714,36 @@ class WebsiteDealCollector:
     ) -> list[DealSignal]:
         """Scrape websites and return DealSignals.
 
-        Processes in chunks of CHUNK_SIZE unique URLs.  After each chunk the
+        Processes in chunks of ``self.chunk_size`` unique URLs. After each chunk the
         DB is committed (last_checked updates), signals are ingested, and the
         audit log is flushed to disk.  This means a crash at site #350 still
         keeps the first 300 sites' data.
         """
-        from collections import defaultdict
-        from core.database import LocalEmployer, MealDeal, RestaurantURL, get_engine, get_session, init_db
+        from core.database import get_session, init_db
 
         engine = init_db()
         session = get_session(engine)
 
-        all_signals: list[DealSignal] = []
-        url_groups: dict[str, list[tuple]] = {}
+        retained_signals: list[DealSignal] = []
+        total_signals_found = 0
+        total_skipped = 0
+        retain_run_signals = dry_run or replay_debug_cache
+        group_items: list[tuple[str, list[tuple[Any, Any]]]] = []
+        total_unique = 0
 
         try:
             # ── Build URL list ──────────────────────────────────────────
-            url_filters = [
-                RestaurantURL.is_active.is_(True),
-                LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
-                LocalEmployer.region == region,
-                LocalEmployer.is_active.is_(True),
-            ]
-            if skip_checked_days:  # 0 or None means "scrape all"
-                from datetime import timedelta
-                cutoff = datetime.now(timezone.utc) - timedelta(days=skip_checked_days)
-                url_filters.append(
-                    (RestaurantURL.last_checked.is_(None)) |
-                    (RestaurantURL.last_checked < cutoff)
-                )
-                logger.info(
-                    "[WebScraper] Skipping sites checked within the last %d day(s)", skip_checked_days
-                )
-
-            urls = session.query(
-                RestaurantURL, LocalEmployer
-            ).join(
-                LocalEmployer, LocalEmployer.id == RestaurantURL.local_employer_id
-            ).filter(
-                *url_filters
-            ).order_by(
-                RestaurantURL.last_checked.asc().nullsfirst()
-            ).limit(max_sites).all()
-
-            # ── Deduplicate by URL ──────────────────────────────────────
-            url_groups_raw: dict[str, list[tuple]] = defaultdict(list)
-            for rurl, emp in urls:
-                normalized = rurl.url.rstrip("/").lower()
-                url_groups_raw[normalized].append((rurl, emp))
-            # Convert to regular dict so we can slice it
-            url_groups = dict(url_groups_raw)
-
-            total_unique = len(url_groups)
+            group_items, total_rows = load_website_scrape_target_groups(
+                session,
+                region=region,
+                max_sites=max_sites,
+                skip_checked_days=skip_checked_days,
+            )
+            total_unique = len(group_items)
             logger.info(
                 "[WebScraper] Scanning %d unique websites (%d restaurant_url rows)",
-                total_unique, len(urls),
+                total_unique,
+                total_rows,
             )
 
             # ── Process in chunks ───────────────────────────────────────
@@ -1724,14 +1751,13 @@ class WebsiteDealCollector:
             if _SCRAPE_AUDIT_PATH.exists():
                 _SCRAPE_AUDIT_PATH.unlink()
 
-            group_items = list(url_groups.items())
             total_ingested = 0
             is_first_chunk = True
 
-            for chunk_start in range(0, len(group_items), self.CHUNK_SIZE):
-                chunk = group_items[chunk_start : chunk_start + self.CHUNK_SIZE]
-                chunk_num = chunk_start // self.CHUNK_SIZE + 1
-                chunk_end = min(chunk_start + self.CHUNK_SIZE, len(group_items))
+            for chunk_start in range(0, len(group_items), self.chunk_size):
+                chunk = group_items[chunk_start : chunk_start + self.chunk_size]
+                chunk_num = chunk_start // self.chunk_size + 1
+                chunk_end = min(chunk_start + self.chunk_size, len(group_items))
                 logger.info(
                     "[WebScraper] ── Chunk %d: sites %d–%d of %d ──",
                     chunk_num, chunk_start + 1, chunk_end, total_unique,
@@ -1852,12 +1878,15 @@ class WebsiteDealCollector:
                     from collectors.meal_deals.ingest import ingest_deal_signals
                     stats = ingest_deal_signals(chunk_signals, region=region)
                     total_ingested += stats.get("total_rows", 0)
+                    total_skipped += stats.get("skipped", 0)
                     logger.info(
                         "[WebScraper] Chunk %d ingested: %d rows (%d total so far)",
                         chunk_num, stats.get("total_rows", 0), total_ingested,
                     )
 
-                all_signals.extend(chunk_signals)
+                total_signals_found += len(chunk_signals)
+                if retain_run_signals:
+                    retained_signals.extend(chunk_signals)
 
                 # Append audit entries (first chunk overwrites, rest append)
                 if chunk_audit:
@@ -1878,11 +1907,24 @@ class WebsiteDealCollector:
         finally:
             session.close()
 
+        self.last_run_stats = {
+            "signals_found": total_signals_found,
+            "rows_written": total_ingested,
+            "skipped": total_skipped,
+            "sites_scanned": total_unique,
+            "chunk_size": self.chunk_size,
+            "dry_run": dry_run,
+            "replay_debug_cache": replay_debug_cache,
+        }
+
         logger.info(
-            "[WebScraper] Done: %d deal signals from %d unique sites (%d ingested to DB)",
-            len(all_signals), len(url_groups), total_ingested,
+            "[WebScraper] Done: %d deal signals from %d unique sites (%d ingested to DB, chunk_size=%d)",
+            total_signals_found,
+            total_unique,
+            total_ingested,
+            self.chunk_size,
         )
-        return all_signals
+        return retained_signals
 
 
 def run_website_scraper(
@@ -1891,20 +1933,27 @@ def run_website_scraper(
     dry_run: bool = False,
     skip_checked_days: int | None = 3,
     replay_debug_cache: bool = False,
+    chunk_size: int | None = None,
 ) -> dict:
     """Run the website scraper.
 
     Ingestion happens per-chunk inside collect() — no bulk ingest at the end.
     """
-    collector = WebsiteDealCollector()
-    signals = collector.collect(
+    collector = WebsiteDealCollector(chunk_size=chunk_size)
+    collector.collect(
         region=region, max_sites=max_sites, dry_run=dry_run,
         skip_checked_days=skip_checked_days,
         replay_debug_cache=replay_debug_cache,
     )
 
+    summary = collector.last_run_stats
+
     return {
-        "signals_found": len(signals),
+        "signals_found": summary.get("signals_found", 0),
+        "rows_written": summary.get("rows_written", 0),
+        "skipped": summary.get("skipped", 0),
+        "sites_scanned": summary.get("sites_scanned", 0),
+        "chunk_size": summary.get("chunk_size", collector.chunk_size),
         "dry_run": dry_run,
         "replay_debug_cache": replay_debug_cache,
     }
@@ -1919,6 +1968,12 @@ if __name__ == "__main__":
     parser.add_argument("--max-sites", type=int, default=100, help="Max sites to scrape (default: 100)")
     parser.add_argument("--all", action="store_true", help="Scan ALL sites (overrides --max-sites)")
     parser.add_argument("--dry-run", action="store_true", help="Don't write to DB")
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=WebsiteDealCollector.CHUNK_SIZE,
+        help="Unique-site batch size before ingest/audit flush (default: 25)",
+    )
     parser.add_argument("--region", default="austin_tx")
     parser.add_argument(
         "--skip-checked-days", type=int, default=3,
@@ -1937,6 +1992,7 @@ if __name__ == "__main__":
         region=args.region,
         max_sites=max_sites,
         dry_run=args.dry_run,
+        chunk_size=args.chunk_size,
         skip_checked_days=args.skip_checked_days,
         replay_debug_cache=args.replay_debug_cache,
     )

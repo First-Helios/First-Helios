@@ -459,14 +459,20 @@ def _make_deal_runner(collector_cls):
 
             collector = collector_cls()
             signals = collector.collect(region="austin_tx")
-            run.fetched = len(signals)
+            if getattr(collector, "INGESTS_INLINE", False):
+                summary = getattr(collector, "last_run_stats", {})
+                run.fetched = int(summary.get("signals_found", 0))
+                run.new = int(summary.get("rows_written", 0))
+                run.skipped = int(summary.get("skipped", 0))
+            else:
+                run.fetched = len(signals)
 
-            if signals:
-                for sig in signals:
-                    sig.collector_run_id = run.id
-                stats = ingest_deal_signals(signals, region="austin_tx")
-                run.new = stats.get("total_rows", 0)
-                run.skipped = stats.get("skipped", 0)
+                if signals:
+                    for sig in signals:
+                        sig.collector_run_id = run.id
+                    stats = ingest_deal_signals(signals, region="austin_tx")
+                    run.new = stats.get("total_rows", 0)
+                    run.skipped = stats.get("skipped", 0)
 
             session.commit()
             logger.info(

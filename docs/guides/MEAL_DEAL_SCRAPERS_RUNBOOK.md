@@ -103,6 +103,9 @@ PYTHONPATH=. python collectors/meal_deals/website_scraper.py
 # Limit to 20 sites (useful for testing)
 PYTHONPATH=. python collectors/meal_deals/website_scraper.py --max-sites 20
 
+# Lower-memory live run on Orange Pi
+PYTHONPATH=. python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25
+
 # SCAN EVERYTHING — all sites, ignore skip window, no DB writes
 PYTHONPATH=. python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --dry-run
 
@@ -123,6 +126,7 @@ PYTHONPATH=. python collectors/meal_deals/website_scraper.py --region austin_tx
 | `--max-sites` | int | 100 | Maximum number of restaurant websites to scrape |
 | `--all` | flag | false | Scan ALL sites (overrides `--max-sites`) |
 | `--dry-run` | flag | false | Preview mode — extract deals but don't write to DB |
+| `--chunk-size` | int | 25 | Unique-site batch size before inline ingest and audit flush |
 | `--region` | str | `austin_tx` | Geographic region scope |
 | `--skip-checked-days` | int | 3 | Skip sites checked within N days. Use `0` to force re-scrape all |
 
@@ -138,12 +142,22 @@ PYTHONPATH=. python collectors/meal_deals/website_scraper.py --region austin_tx
 8. Produces `DealSignal` objects → `ingest_deal_signals()` → DB
 9. Writes audit log to `data/cache/website_scrape_audit.json`
 
+Important caching/runtime notes:
+
+- each fetched page snapshot is written to the debug bundle immediately
+- each parsed PDF text snapshot is also written immediately
+- page cache durability is therefore not tied to the 25-site chunk size
+- the chunk size exists to limit in-memory signal and audit buildup on smaller hosts such as the Orange Pi
+
 #### Output
 
 ```
 --- Website Scraper Stats ---
   signals_found: 47
-  ingest: {'inserted': 12, 'updated': 35, 'skipped': 0, 'total_rows': 1031}
+  rows_written: 1031
+  skipped: 0
+  sites_scanned: 100
+  chunk_size: 25
 ```
 
 ---

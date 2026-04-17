@@ -122,6 +122,22 @@ def validate_place_name(query_name: str, result_name: str) -> bool:
     return len(overlap) / min_size > 0.5
 
 
+def _normalize_failure_reason(reason: str) -> str:
+    """Clamp failure reasons to the DB column budget."""
+    normalized = (reason or "").strip().lower()
+    if normalized.startswith("name_mismatch"):
+        return "name_mismatch"
+    if normalized.startswith("no_website"):
+        return "no_website"
+    if normalized.startswith("no_result"):
+        return "no_result"
+    if normalized.startswith("api_error"):
+        return "api_error"
+    if not normalized:
+        return "unknown"
+    return normalized[:20]
+
+
 def _record_failure(
     session,
     entity_type: str,
@@ -130,11 +146,12 @@ def _record_failure(
     reason: str,
 ) -> None:
     """Upsert a failure record. Increments retry_count on repeat failures."""
+    reason_code = _normalize_failure_reason(reason)
     stmt = pg_insert(GooglePlacesFailure).values(
         entity_type=entity_type,
         entity_id=entity_id,
         canonical_name=canonical_name,
-        failure_reason=reason,
+        failure_reason=reason_code,
         failed_at=datetime.now(timezone.utc),
         retry_count=0,
     )
@@ -259,6 +276,8 @@ def resolve_brand_urls(
             RestaurantURL.brand_group_id
         ).filter(
             RestaurantURL.source == "google_places",
+            RestaurantURL.is_active.is_(True),
+            RestaurantURL.url.isnot(None),
             RestaurantURL.brand_group_id.isnot(None),
         ).distinct().subquery()
 
@@ -267,6 +286,8 @@ def resolve_brand_urls(
             RestaurantURL.brand_group_id
         ).filter(
             RestaurantURL.source == "osm",
+            RestaurantURL.is_active.is_(True),
+            RestaurantURL.url.isnot(None),
             RestaurantURL.brand_group_id.isnot(None),
         ).distinct().subquery()
 
@@ -421,8 +442,10 @@ def resolve_brand_urls(
                 stmt = stmt.on_conflict_do_update(
                     constraint="uq_restaurant_url_employer_source",
                     set_={
+                        "brand_group_id": stmt.excluded.brand_group_id,
                         "url": stmt.excluded.url,
                         "confidence": stmt.excluded.confidence,
+                        "is_active": True,
                         "is_permanent": True,
                         "last_checked": stmt.excluded.last_checked,
                         "updated_at": now,
@@ -458,6 +481,7 @@ def resolve_local_urls(
     max_calls: int = MAX_BATCH_CALLS,
     dry_run: bool = False,
     retry_failed: bool = False,
+    target_employer_ids: set[int] | None = None,
 ) -> dict:
     """Resolve URLs for individual local (non-chain) restaurants without any URL yet.
 
@@ -478,8 +502,11 @@ def resolve_local_urls(
     }
 
     try:
-        # Employers with no restaurant_url at all
-        has_url = session.query(RestaurantURL.local_employer_id).distinct().subquery()
+        # Employers with no ACTIVE restaurant_url at all
+        has_url = session.query(RestaurantURL.local_employer_id).filter(
+            RestaurantURL.is_active.is_(True),
+            RestaurantURL.url.isnot(None),
+        ).distinct().subquery()
 
         # Previously-failed employers (skip unless --retry-failed)
         previously_failed_emps = session.query(
@@ -502,6 +529,11 @@ def resolve_local_urls(
             LocalEmployer.is_active.is_(True),
             ~LocalEmployer.id.in_(session.query(has_url)),
         ]
+        if target_employer_ids is not None:
+            target_ids = sorted(set(target_employer_ids))
+            if not target_ids:
+                return stats
+            emp_filters.append(LocalEmployer.id.in_(target_ids))
         if not retry_failed:
             emp_filters.append(~LocalEmployer.id.in_(previously_failed_emps))
 
@@ -600,8 +632,10 @@ def resolve_local_urls(
             stmt = stmt.on_conflict_do_update(
                 constraint="uq_restaurant_url_employer_source",
                 set_={
+                    "brand_group_id": stmt.excluded.brand_group_id,
                     "url": stmt.excluded.url,
                     "confidence": stmt.excluded.confidence,
+                    "is_active": True,
                     "is_permanent": True,
                     "last_checked": stmt.excluded.last_checked,
                     "updated_at": now,

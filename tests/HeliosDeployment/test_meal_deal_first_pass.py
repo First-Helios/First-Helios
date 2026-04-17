@@ -15,12 +15,14 @@ from core.database import (
     DealObservation,
     LocalEmployer,
     MealDeal,
+    RestaurantURL,
     SiteAssignment,
     SiteIdentity,
 )
 from core.normalizer import make_fingerprint
 from core.venue_identity import normalize_address_for_identity
 from scripts.backfill_deal_observation_history import backfill_deal_observation_history
+from scripts.reset_meal_deal_dataset import reset_meal_deal_dataset
 
 
 def _build_employer(
@@ -314,6 +316,139 @@ def test_stats_and_brands_use_deduped_deal_semantics(client, engine):
             "deal_count": 1,
         }
     ]
+
+
+def test_reset_meal_deal_dataset_clears_canonical_and_legacy_rows(engine, monkeypatch, tmp_path):
+    monkeypatch.setattr("scripts.reset_meal_deal_dataset.init_db", lambda: engine)
+    monkeypatch.setattr("scripts.reset_meal_deal_dataset.get_session", lambda eng: Session(bind=eng))
+    monkeypatch.setattr("scripts.reset_meal_deal_dataset.WEBSITE_SCRAPE_DEBUG_DIR", tmp_path)
+
+    debug_file = tmp_path / "debug.json"
+    debug_file.write_text("{}", encoding="utf-8")
+
+    with Session(engine) as session:
+        session.add(
+            _build_employer(
+                1,
+                name="Polvos",
+                address="14735 Bratton Ln, Austin, TX",
+                brand_group_id=None,
+                lat=30.44605,
+                lng=-97.68565,
+            )
+        )
+        session.add(
+            _build_canonical_venue(
+                1,
+                name="Polvos",
+                address="14735 Bratton Ln, Austin, TX",
+                brand_group_id=None,
+                lat=30.44605,
+                lng=-97.68565,
+            )
+        )
+        session.add(
+            RestaurantURL(
+                id=1,
+                local_employer_id=1,
+                brand_group_id=None,
+                url="https://example.com",
+                source="manual",
+                is_active=True,
+                last_http_status=200,
+                has_deals_page=True,
+                deals_page_url="https://example.com/menu",
+            )
+        )
+        session.add(
+            DealObservation(
+                id=1,
+                source="website_scrape",
+                source_observation_key="obs-1",
+                observed_at=datetime(2026, 4, 16, 2, 0, 0, tzinfo=timezone.utc),
+                deal_name="Lunch Combo",
+                deal_type="combo",
+                review_state="accepted",
+            )
+        )
+        session.flush()
+        session.add(
+            DealApplicability(
+                id=1,
+                observation_id=1,
+                applicability_scope="venue",
+                canonical_venue_id=None,
+                brand_group_id=None,
+                resolver_method="test",
+                is_active=True,
+            )
+        )
+        session.add(
+            DealMaterialization(
+                id=1,
+                observation_id=1,
+                applicability_id=1,
+                canonical_venue_id=1,
+                local_employer_id=None,
+                brand_group_id=None,
+                restaurant_name="Polvos",
+                address=None,
+                lat=None,
+                lng=None,
+                region="austin_tx",
+                applicability_scope="venue",
+                is_chain_template=False,
+                deal_name="Lunch Combo",
+                deal_description=None,
+                deal_type="combo",
+                source="website_scrape",
+                source_url="https://example.com",
+                source_observation_key="obs-1",
+                resolver_method="test",
+                review_state="accepted",
+                is_active=True,
+            )
+        )
+        session.add(
+            MealDeal(
+                id=1,
+                local_employer_id=None,
+                brand_group_id=None,
+                is_chain_template=False,
+                deal_name="Lunch Combo",
+                deal_description=None,
+                deal_type="combo",
+                source="website_scrape",
+                source_url="https://example.com",
+                region="austin_tx",
+                is_active=True,
+            )
+        )
+        session.commit()
+
+    stats = reset_meal_deal_dataset(
+        apply=True,
+        reset_url_state=True,
+        clear_debug_cache=True,
+    )
+
+    assert stats["deleted_materializations"] == 1
+    assert stats["deleted_applicability"] == 1
+    assert stats["deleted_observations"] == 1
+    assert stats["deleted_meal_deals"] == 1
+    assert stats["reset_restaurant_urls"] == 1
+    assert stats["cleared_debug_cache_files"] == 1
+
+    with Session(engine) as session:
+        assert session.query(DealMaterialization).count() == 0
+        assert session.query(DealApplicability).count() == 0
+        assert session.query(DealObservation).count() == 0
+        assert session.query(MealDeal).count() == 0
+        url = session.query(RestaurantURL).one()
+        assert url.last_checked is None
+        assert url.last_http_status is None
+        assert url.has_deals_page is None
+        assert url.deals_page_url is None
 
 
 def test_review_queue_lists_contested_sites_and_medium_confidence_aliases(client, engine):

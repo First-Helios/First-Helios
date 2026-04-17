@@ -447,11 +447,10 @@ Effect:
 
 - canonical observations can retain collector lineage in `deal_observations.collector_run_id`
 
-Important quirk:
+Important behavior:
 
-- `website_scraper.collect()` already has an internal ingest path for its chunked scraping flow
-- scheduler-level ingest can therefore process related outputs again
-- observation upserts and applicability synchronization must remain idempotent because of this
+- `website_scraper.collect()` ingests inline per chunk
+- the scheduler now respects inline-ingest meal-deal collectors and records their reported stats instead of ingesting them a second time
 
 ## Website Debug Cache
 
@@ -466,8 +465,16 @@ Purpose:
 
 Important behavior:
 
+- each fetched page HTML snapshot is written to the debug bundle immediately, not only at the end of a 100-site batch
+- each parsed PDF text snapshot is also written immediately
 - rerunning the same normalized URL overwrites the previous debug bundle
 - replay mode avoids live fetching and uses the cached bundle instead
+
+Operational implication:
+
+- website page caching is already page-level durable
+- Orange Pi RAM pressure is driven mainly by in-memory signal retention and site chunk size, not by delayed debug-cache flushes
+- `website_scraper.py` now defaults to a smaller unique-site chunk size and only retains full signal lists for dry-run or replay workflows
 
 ## API Semantics
 
@@ -537,9 +544,10 @@ Recommended order:
 
 1. Sync production-like data with `bash dev/sync_from_opi.sh`
 2. Run migrations
-3. Rebuild canonical identity
-4. Dry-run or run historical backfill
-5. Run focused tests
+3. If rebuilding from scratch, reset meal-deal tables and scraper state
+4. Rebuild canonical identity
+5. Dry-run or run historical backfill
+6. Run focused tests
 
 Useful commands:
 
@@ -547,10 +555,41 @@ Useful commands:
 cd /home/fortune/CodeProjects/First-Helios
 
 /home/fortune/CodeProjects/First-Helios/.venv/bin/alembic upgrade head
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/reset_meal_deal_dataset.py --apply --reset-url-state --clear-debug-cache
 PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/backfill_meal_deal_identity.py --region austin_tx
 PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/backfill_deal_observation_history.py --region austin_tx --dry-run
 PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/reaudit_deal_observations.py --source website_scrape --backfill-source meal_deals --region austin_tx
 /home/fortune/CodeProjects/First-Helios/.venv/bin/python -m pytest tests/HeliosDeployment/test_meal_deal_observations.py tests/HeliosDeployment/test_meal_deal_first_pass.py tests/HeliosDeployment/test_meal_deal_alias_dedupe.py tests/HeliosDeployment/test_website_scrape_debug_cache.py tests/HeliosDeployment/test_meal_deal_identity_backfill.py
+```
+
+### Full dataset rebuild
+
+Use this when meal-deal extraction, scoring, identity resolution, or caching behavior has changed enough that existing rows are no longer trustworthy.
+
+Recommended sequence:
+
+1. Reset canonical and legacy meal-deal rows.
+2. Reset `restaurant_urls` scrape state so the website scraper starts from a clean slate.
+3. Clear saved website debug bundles if you want the cache directory to reflect only the new scrape.
+4. Rebuild canonical identity.
+5. Re-run the collectors.
+
+Reset command:
+
+```bash
+cd /home/fortune/CodeProjects/First-Helios
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/reset_meal_deal_dataset.py --apply --reset-url-state --clear-debug-cache
+```
+
+Reingest commands:
+
+```bash
+cd /home/fortune/CodeProjects/First-Helios
+
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python scripts/backfill_meal_deal_identity.py --region austin_tx
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python collectors/meal_deals/chain_deals.py --region austin_tx
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python -m collectors.meal_deals.gbp_offers --region austin_tx
+PYTHONPATH=. /home/fortune/CodeProjects/First-Helios/.venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
 ```
 
 ### Orange Pi deploy workflow
@@ -559,10 +598,11 @@ Required high-level steps:
 
 1. Copy or pull updated runtime files and migrations to the host
 2. Run Alembic upgrade
-3. Rebuild canonical identity
-4. Run historical backfill
-5. Restart both `helios` and `helios-collector`
-6. Verify `/api/deals`, `/api/deals/stats`, and `/api/deals/brands`
+3. If doing a clean rebuild, reset meal-deal tables plus website scraper state
+4. Rebuild canonical identity
+5. Re-run collectors with full scrape settings
+6. Restart both `helios` and `helios-collector`
+7. Verify `/api/deals`, `/api/deals/stats`, and `/api/deals/brands`
 
 Important deployment caveats:
 

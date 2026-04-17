@@ -2,8 +2,10 @@ import json
 
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.website_scraper import (
+    WebsiteDealCollector,
     _load_site_debug_bundle,
     _site_debug_cache_path,
+    run_website_scraper,
     scrape_restaurant_website,
 )
 
@@ -109,3 +111,30 @@ def test_website_scrape_debug_cache_replays_without_network(tmp_path, monkeypatc
 
     assert len(replayed) == 1
     assert replayed[0].deal_name == "Lunch Special"
+
+
+def test_run_website_scraper_reports_inline_ingest_stats(monkeypatch):
+    def _fake_collect(self, **_kwargs):
+        self.last_run_stats = {
+            "signals_found": 14,
+            "rows_written": 21,
+            "skipped": 3,
+            "sites_scanned": 6,
+            "chunk_size": 5,
+        }
+        return []
+
+    monkeypatch.setattr(WebsiteDealCollector, "collect", _fake_collect)
+
+    stats = run_website_scraper(
+        region="austin_tx",
+        max_sites=20,
+        dry_run=False,
+        chunk_size=5,
+    )
+
+    assert stats["signals_found"] == 14
+    assert stats["rows_written"] == 21
+    assert stats["skipped"] == 3
+    assert stats["sites_scanned"] == 6
+    assert stats["chunk_size"] == 5
