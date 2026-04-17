@@ -1,6 +1,14 @@
 # Meal Deal Scrapers — Runbook & Operations Guide
 
+Updated: 2026-04-17
+
 > Audience: developers/operators who run, tune, or debug the meal deal collection pipeline.
+
+Quick links:
+
+- Short restart path: [MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md](MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md)
+- Replay-first workflow: [MEAL_DEAL_REPLAY_WORKFLOW.md](MEAL_DEAL_REPLAY_WORKFLOW.md)
+- Full ingestion reference: [../data/ingestion/MEAL_DEAL_INGESTION.md](../data/ingestion/MEAL_DEAL_INGESTION.md)
 
 ---
 
@@ -27,19 +35,29 @@
 
 ## Architecture Overview
 
-The meal deal system has three independent scrapers feeding into a shared ingest pipeline:
+The meal-deal system has three collectors feeding into a shared canonical ingest pipeline:
 
-| Component | Targets | Schedule | Source Tag |
-|---|---|---|---|
-| **website_scraper** | Individual restaurant websites (non-chain) | Mon/Wed/Fri 2 AM | `website_scrape` |
-| **chain_deals** | National chain deal pages (McDonald's, etc.) | Monday 6 AM | `chain_website` |
-| **gbp_offers** | Google Business Profile offer posts via SerpApi | Tue/Fri 3 AM | `gbp_offer` |
+| Component | Targets | Schedule | Collector tag | `DealSignal.source` |
+|---|---|---|---|---|
+| **website_scraper** | Individual restaurant websites (non-chain) | Mon/Wed/Fri 2 AM | `website_scraper` | `website_scrape` |
+| **chain_deals** | National chain deal pages (McDonald's, etc.) | Monday 6 AM | `chain_deals` | `chain_website` |
+| **gbp_offers** | Google Business Profile offer posts via SerpApi | Tue/Fri 3 AM | `gbp_offers` | `gbp_offer` |
 
-Each scraper produces `DealSignal` objects that flow through `ingest_deal_signals()` into the `meal_deals` database table.
+Each collector emits `DealSignal` objects. `ingest_deal_signals()` then:
+
+- computes quality and value scoring
+- upserts canonical `deal_observations`
+- syncs `deal_applicability`
+- refreshes `deal_materializations`, the API read layer
+- still dual-writes `meal_deals` as a compatibility table
 
 Supporting services:
+
 - **OSM URL Resolver** — free batch URL discovery via OpenStreetMap Overpass
 - **Google Places Resolver** — paid URL discovery for restaurants OSM misses
+- **Replay/debug bundle cache** — per-site HTML, PDF, signal, sidecar, render-policy, and hint-provenance artifacts under `data/cache/website_scrape_debug/`
+- **Pre-flight gate + canary flow** — bounded restart workflow before broad scrapes
+- **Review queue write-backs** — manual site and venue-alias decisions refresh canonical state
 - **Stale Deal Sweep** — deactivates deals not re-verified in 14 days
 - **Purge Script** — retroactive junk data cleanup
 
@@ -62,20 +80,29 @@ Supporting services:
          │  list[DealSignal] │                 │
          └──────────┬────────┴─────────────────┘
                     ▼
-         ┌──────────────────┐
-         │ ingest_deal_signals()  │
-         │ dedup + brand fan-out  │
-         └────────┬─────────┘
-                  ▼
-         ┌──────────────────┐
-         │   meal_deals      │
-         │   (PostgreSQL)    │
-         └────────┬─────────┘
-                  ▼
-         ┌──────────────────┐
-         │ deactivate_stale  │
-         │ _deals() (Sun 5AM)│
-         └──────────────────┘
+    ┌────────────────────────────┐
+    │ ingest_deal_signals()      │
+    │ score + observation upsert │
+    │ + applicability sync       │
+    └────────────┬───────────────┘
+           ▼
+     ┌───────────────────────────┐
+     │ deal_observations         │
+     │ deal_applicability        │
+     │ deal_materializations     │
+     └────────────┬──────────────┘
+            │
+    ┌─────────────┴──────────────┐
+    ▼                            ▼
+  ┌──────────────────┐        ┌──────────────────┐
+  │ /api/deals*      │        │ meal_deals       │
+  │ canonical read   │        │ compatibility    │
+  │ layer            │        │ write path       │
+  └──────────────────┘        └──────────────────┘
+
+  website_scraper also writes:
+    data/cache/website_scrape_audit.json
+    data/cache/website_scrape_debug/*.json
 ```
 
 ---
@@ -84,39 +111,63 @@ Supporting services:
 
 ### Website Scraper (local restaurants)
 
-Scrapes non-chain restaurant websites by probing common deal paths: `/`, `/menu`, `/specials`, `/deals`, `/lunch`, `/happy-hour`, `/promotions`, `/offers`, plus dynamically discovered subpages.
+Scrapes non-chain first-party restaurant websites by probing common deal paths such as `/`, `/menu`, `/specials`, `/deals`, `/lunch`, `/happy-hour`, `/promotions`, and `/offers`, plus dynamically discovered same-domain pages and bounded locator-to-corporate hint routes.
 
 > **Note:** robots.txt is intentionally ignored — we are promoting restaurants' own deals to drive them traffic and customers. Rate limiting (1 req/sec) and the `skip-checked-days` default (3 days) keep server load minimal.
 
+Recommended operator order before a broad live run:
+
+1. Sync production-like data and replay bundles locally when needed: `bash dev/sync_from_opi.sh`
+2. Apply migrations: `.venv/bin/alembic upgrade head`
+3. Run the pre-flight gate
+4. Run a 5-site dry-run canary
+5. Inspect the newest bundles before starting any wider live scrape
+
+For the short version, use [MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md](MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md).
+
 ```bash
-# Activate environment
-cd ~/First-Helios
-source .venv/bin/activate
+# Standard local setup
+cd /home/fortune/CodeProjects/First-Helios
 set -a && source .env && set +a
 
+# Sync replay corpus and production-like meal-deal tables when needed
+bash dev/sync_from_opi.sh
+
+# Apply migrations before validation or live runs
+.venv/bin/alembic upgrade head
+
+# Pre-flight gate before any broad live scrape
+PYTHONPATH=. .venv/bin/python scripts/check_website_scrape_preflight.py --region austin_tx --skip-checked-days 0
+
+# Dry-run canary
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 5 --skip-checked-days 0 --dry-run --region austin_tx
+
 # Dry run — see what would be found, no DB writes
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --dry-run
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --dry-run
 
 # Live run — scrape and ingest into DB (default: 100 sites, skip recently checked)
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py
 
 # Limit to 20 sites (useful for testing)
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --max-sites 20
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 20
 
 # Lower-memory live run on Orange Pi
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25
 
 # SCAN EVERYTHING — all sites, ignore skip window, no DB writes
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --dry-run
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --dry-run
 
 # SCAN EVERYTHING — all sites, ignore skip window, write to DB
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0
 
 # Force re-scrape all but still cap at 100 sites
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --skip-checked-days 0
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --skip-checked-days 0
 
 # Target a specific region
-PYTHONPATH=. python collectors/meal_deals/website_scraper.py --region austin_tx
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --region austin_tx
+
+# Replay locally saved debug bundles instead of live fetches
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-debug-cache --max-sites 5 --skip-checked-days 0 --region austin_tx
 ```
 
 #### CLI Flags
@@ -129,18 +180,18 @@ PYTHONPATH=. python collectors/meal_deals/website_scraper.py --region austin_tx
 | `--chunk-size` | int | 25 | Unique-site batch size before inline ingest and audit flush |
 | `--region` | str | `austin_tx` | Geographic region scope |
 | `--skip-checked-days` | int | 3 | Skip sites checked within N days. Use `0` to force re-scrape all |
+| `--replay-debug-cache` | flag | false | Replay locally saved site bundles instead of live fetching |
 
 #### What it does per site
 
-1. Fetches each path in `DEAL_PATHS` (8 URLs, 1 req/sec)
-2. Discovers additional deal subpages from homepage links (up to 4 more, 12 pages max per site)
-3. Strips nav/footer/script/style HTML subtrees
-4. Extracts text blocks from `<p>`, `<h1>`-`<h6>`, `<li>`, `<td>`, `<div>`, `<span>`, `<article>`, `<section>` tags
-5. Parses JSON-LD structured data (`<script type="application/ld+json">`) for schema.org Offer/MenuItem types
-6. Downloads and parses PDF menus/flyers found on pages (up to 3 per site, requires `pdfplumber`)
-7. Filters through quality gates (keyword match, price required, no boilerplate)
-8. Produces `DealSignal` objects → `ingest_deal_signals()` → DB
-9. Writes audit log to `data/cache/website_scrape_audit.json`
+1. Loads deduped site targets from `restaurant_urls` and filters obvious non-first-party domain families before queue slots are consumed
+2. Fetches bounded first-party paths and discovers additional same-domain candidates
+3. Applies locator-to-corporate hint routing and exploration-only registry hints when relevant
+4. Extracts DOM text, JSON-LD, page-level prices, and bounded PDF content
+5. Builds `menu_sidecar`, offer-target metadata, and value-profile hints when real menu structure is present
+6. Records `render_decisions` and `render_budget` in audit-only mode for static-empty but menu-critical pages
+7. Produces `DealSignal` objects and feeds them through canonical ingest into `deal_observations`, `deal_applicability`, and `deal_materializations`, with `meal_deals` dual-written for compatibility
+8. Writes `data/cache/website_scrape_audit.json` plus replay bundles under `data/cache/website_scrape_debug/`
 
 Important caching/runtime notes:
 
@@ -168,13 +219,13 @@ Scrapes deal pages for national chains defined in `config/meal_deal_sources.yaml
 
 ```bash
 # Dry run — print deals without writing
-PYTHONPATH=. python collectors/meal_deals/chain_deals.py --dry-run
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/chain_deals.py --dry-run
 
 # Live run
-PYTHONPATH=. python collectors/meal_deals/chain_deals.py
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/chain_deals.py
 
 # Specific region
-PYTHONPATH=. python collectors/meal_deals/chain_deals.py --region austin_tx
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/chain_deals.py --region austin_tx
 ```
 
 #### CLI Flags
@@ -212,19 +263,19 @@ source .venv/bin/activate
 set -a && source .env && set +a
 
 # Dry run — see what would be found, no DB writes (5 API calls)
-PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --max-calls 5 --dry-run
+PYTHONPATH=. .venv/bin/python -m collectors.meal_deals.gbp_offers --max-calls 5 --dry-run
 
 # Live run — default 100 API calls, writes to DB
-PYTHONPATH=. python -m collectors.meal_deals.gbp_offers
+PYTHONPATH=. .venv/bin/python -m collectors.meal_deals.gbp_offers
 
 # Query ALL restaurants (up to 200 API calls)
-PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --all
+PYTHONPATH=. .venv/bin/python -m collectors.meal_deals.gbp_offers --all
 
 # Query ALL, dry run
-PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --all --dry-run
+PYTHONPATH=. .venv/bin/python -m collectors.meal_deals.gbp_offers --all --dry-run
 
 # Custom call budget
-PYTHONPATH=. python -m collectors.meal_deals.gbp_offers --max-calls 50
+PYTHONPATH=. .venv/bin/python -m collectors.meal_deals.gbp_offers --max-calls 50
 ```
 
 #### CLI Flags
@@ -259,10 +310,10 @@ Before the website scraper can run, restaurants need URLs in the `restaurant_url
 
 ```bash
 # Dry run
-PYTHONPATH=. python scripts/osm_url_resolver.py --dry-run
+PYTHONPATH=. .venv/bin/python scripts/osm_url_resolver.py --dry-run
 
 # Live — resolves URLs from OpenStreetMap Overpass
-PYTHONPATH=. python scripts/osm_url_resolver.py
+PYTHONPATH=. .venv/bin/python scripts/osm_url_resolver.py
 ```
 
 Runs weekly on Sunday 1 AM. Free, bulk, but incomplete (~40% coverage).
@@ -271,10 +322,10 @@ Runs weekly on Sunday 1 AM. Free, bulk, but incomplete (~40% coverage).
 
 ```bash
 # Dry run — shows what would be resolved
-PYTHONPATH=. python scripts/google_places_resolver.py --mode both --max-calls 50 --dry-run
+PYTHONPATH=. .venv/bin/python scripts/google_places_resolver.py --mode both --max-calls 50 --dry-run
 
 # Live — resolve up to 200 URLs (brands first, then individual)
-PYTHONPATH=. python scripts/google_places_resolver.py --mode both --max-calls 200
+PYTHONPATH=. .venv/bin/python scripts/google_places_resolver.py --mode both --max-calls 200
 ```
 
 | Flag | Type | Default | Description |
@@ -344,10 +395,10 @@ Retroactively removes junk deals from the database using the same quality filter
 
 ```bash
 # Dry run — see what would be deleted, with breakdown by reason
-PYTHONPATH=. python scripts/purge_junk_deals.py
+PYTHONPATH=. .venv/bin/python scripts/purge_junk_deals.py
 
 # Actually delete junk rows
-PYTHONPATH=. python scripts/purge_junk_deals.py --apply
+PYTHONPATH=. .venv/bin/python scripts/purge_junk_deals.py --apply
 ```
 
 #### What it filters
@@ -379,15 +430,28 @@ Junk breakdown:
 
 ## Audit & Review Process
 
-Every website scraper run writes an audit log with per-site outcomes.
+Every website scraper run now writes two operator-facing evidence layers:
 
-### Audit log location
+- `data/cache/website_scrape_audit.json` — per-site outcome snapshot
+- `data/cache/website_scrape_debug/*.json` — per-site replay bundles with fetched HTML, PDFs, extracted signals, sidecar output, render-policy decisions, and hint provenance
+
+Use the audit snapshot for fast counts and triage. Use the debug bundles for replay-first root-cause analysis.
+
+For the full replay workflow, use [MEAL_DEAL_REPLAY_WORKFLOW.md](MEAL_DEAL_REPLAY_WORKFLOW.md).
+
+### Audit snapshot location
 
 ```
 data/cache/website_scrape_audit.json
 ```
 
-### Audit entry fields
+### Replay bundle location
+
+```
+data/cache/website_scrape_debug/
+```
+
+### Audit snapshot fields
 
 | Field | When Present | Description |
 |---|---|---|
@@ -404,60 +468,38 @@ data/cache/website_scrape_audit.json
 | `needs_pdf_reader` | `no_deals` + PDFs exist | `true` — site may have deals in PDF menus |
 | `error` | `error` | Error message (truncated to 200 chars) |
 
-### How to use the audit log
+Current success-path entries may also include the same structural context used for failure rows, such as discovered-page counts, PDF counts, and structured-data presence.
 
-**1. Check overall success rate:**
+### What to inspect in replay bundles
+
+- `render_decisions` and `render_budget` on fetched first-party pages
+- `menu_persistence_summary` only when the canary actually materializes sidecar structure
+- `hint_audit` only when hint-driven exploration was used
+- `fk_violations == []` whenever `menu_persistence_summary` is present
+
+### Quick audit commands
+
+Check overall success rate:
+
 ```bash
-cat data/cache/website_scrape_audit.json | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-outcomes = {}
-for e in data:
-    outcomes[e['outcome']] = outcomes.get(e['outcome'], 0) + 1
-total = len(data)
-for k, v in sorted(outcomes.items(), key=lambda x: -x[1]):
-    print(f'  {k:20s} {v:4d}  ({v/total*100:.0f}%)')
-print(f'  {\"TOTAL\":20s} {total:4d}')
-"
+PYTHONPATH=. .venv/bin/python scripts/summarize_website_scrape_audit.py
 ```
 
-**2. Find sites that need PDF reading:**
-```bash
-cat data/cache/website_scrape_audit.json | python3 -c "
-import json, sys
-for e in json.load(sys.stdin):
-    if e.get('needs_pdf_reader'):
-        print(f\"{e['name']:40s} {e['url']}\")
-        for pdf in e.get('pdf_links', []):
-            print(f\"  → {pdf}\")
-"
-```
+Build replay manifests for targeted bundle sets:
 
-**3. Review no-deal sites with text samples:**
 ```bash
-cat data/cache/website_scrape_audit.json | python3 -c "
-import json, sys
-for e in json.load(sys.stdin):
-    if e['outcome'] == 'no_deals' and e.get('sample_blocks'):
-        print(f\"\\n=== {e['name']} ({e['url']}) ===\")
-        print(f\"  Total text blocks: {e.get('total_blocks', '?')}\")
-        for b in e['sample_blocks'][:3]:
-            print(f\"  → {b[:120]}\")
-"
+PYTHONPATH=. .venv/bin/python scripts/build_website_scrape_replay_manifests.py --per-set 6
 ```
 
 ### Manual assessment workflow
 
-1. Run the scraper: `PYTHONPATH=. python collectors/meal_deals/website_scraper.py --max-sites 200`
-2. Open `data/cache/website_scrape_audit.json`
-3. Filter for `outcome: "no_deals"` entries
-4. Review `sample_blocks` to determine why no deals were found:
-   - **Blocks look like deals but were filtered** → loosen quality filters
-   - **Blocks are all menu items** → site doesn't advertise deals on the web
-   - **No text blocks extracted at all** → page is JS-rendered, may need Playwright
-   - **PDF links present but `needs_pdf_reader: true`** → install `pdfplumber` (`pip install pdfplumber`)
-   - **HTTP 403/503 errors** → site blocks scraping at HTTP level, enter deals manually via SpiritPool
-5. Track improvement opportunities in `MEAL_DEAL_ROADMAP.md`
+1. Run the pre-flight gate and a dry-run canary, or use [MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md](MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md)
+2. Review `data/cache/website_scrape_audit.json` for outcome mix and likely failure families
+3. Open the newest per-site bundles under `data/cache/website_scrape_debug/` for root-cause evidence
+4. If `sample_blocks` look deal-like, consider extraction or quality-filter changes
+5. If `render_decisions` show static-empty, menu-critical pages, treat them as `RENDER-01` or JS-render follow-up candidates rather than generic no-deal failures
+6. If a site or venue mapping looks wrong, use `/api/deals/review-queue` and `/api/deals/review-queue/actions` to resolve canonical ownership rather than only patching downstream rows
+7. Track parser and discovery follow-ups in `docs/guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md`
 
 ---
 
@@ -470,9 +512,9 @@ Deactivates deals not re-verified within a configurable window (default: 14 days
 RUN_STALE_SWEEP=1 bash scripts/run_meal_deal_full_test.sh
 
 # Inline Python (as used by the test script)
-PYTHONPATH=. python -c "
+PYTHONPATH=. .venv/bin/python -c "
 from collectors.meal_deals.ingest import deactivate_stale_deals
-for src in ['website_scrape', 'chain_website', 'google_places']:
+for src in ['website_scrape', 'chain_website', 'gbp_offer']:
     n = deactivate_stale_deals(src, region='austin_tx', max_age_days=14)
     print(f'  {src}: {n} stale deals deactivated')
 "
@@ -529,34 +571,23 @@ Keywords are matched with `\b` (word boundary) regex, so "specialty pizza" does 
 
 ## Database Schema Reference
 
-### `meal_deals` table
+This runbook keeps the schema view operator-focused. For the deeper end-to-end reference, use [../data/ingestion/MEAL_DEAL_INGESTION.md](../data/ingestion/MEAL_DEAL_INGESTION.md).
 
-| Column | Type | Notes |
+### Canonical meal-deal tables
+
+| Table | Purpose | Operator note |
 |---|---|---|
-| `id` | Integer PK | Auto-increment |
-| `local_employer_id` | Integer FK | Links to `local_employers.id` |
-| `brand_group_id` | Integer FK | Nullable; chains have this set |
-| `deal_name` | String | NOT NULL |
-| `deal_description` | Text | Nullable; full text block |
-| `deal_type` | String | `lunch_special`, `combo`, `bogo`, `happy_hour`, `kids_eat_free`, `daily_special` |
-| `price` | Float | Nullable; extracted `$X.XX` value |
-| `original_price` | Float | Nullable; before-discount price |
-| `menu_avg_price` | Float | Nullable; average entrée price on same page |
-| `calories` | Integer | Nullable; extracted kcal |
-| `calorie_price_ratio` | Float | Nullable; `calories / price` |
-| `valid_days` | String | Nullable; "Mon-Fri", "Tuesday", etc. |
-| `valid_start_time` | String | Nullable; "11:00 AM" |
-| `valid_end_time` | String | Nullable; "2:00 PM" |
-| `is_recurring` | Boolean | Default `true` |
-| `source` | String | `chain_website`, `website_scrape`, `gbp_offer`, `google_places`, `manual` |
-| `source_url` | String | Nullable |
-| `is_active` | Boolean | Default `true`; stale sweep sets to `false` |
-| `verified_at` | DateTime | Nullable; last time deal was confirmed |
-| `region` | String | Default `austin_tx` |
+| `canonical_venues` | Canonical physical venue identity | Venue-level targeting and dedupe live here, not in raw `local_employers`. |
+| `canonical_venue_aliases` | Maps `local_employers` to canonical venues | Review-queue alias actions update this table. |
+| `site_identities` | Canonical normalized website identity | Contested-site state and ownership scope live here. |
+| `site_assignments` | Maps sites to venue or brand scope | Site review actions write back here. |
+| `deal_observations` | Canonical observed deal artifact | First place to debug `review_state`, `signal_quality`, and raw evidence. |
+| `deal_applicability` | Venue or brand targeting for an observation | Drives where observations materialize. |
+| `deal_materializations` | Consumer-facing per-venue deal rows | `/api/deals`, `/api/deals/stats`, and `/api/deals/brands` read this layer. |
 
-**Unique constraint:** `(local_employer_id, deal_name, source)` — prevents duplicate deals per restaurant per source.
+### Operational and compatibility tables
 
-### `restaurant_urls` table
+#### `restaurant_urls` table
 
 | Column | Type | Notes |
 |---|---|---|
@@ -568,6 +599,24 @@ Keywords are matched with `\b` (word boundary) regex, so "specialty pizza" does 
 | `last_checked` | DateTime | Last scrape attempt |
 | `last_http_status` | Integer | HTTP status from last fetch |
 | `has_deals_page` | Boolean | `true` if deals were found last run |
+
+#### `meal_deals` compatibility table
+
+`meal_deals` is still dual-written, but it is no longer the primary semantic read source.
+
+| Column | Type | Notes |
+|---|---|---|
+| `local_employer_id` | Integer FK | Nullable for some historical or chain-template rows |
+| `brand_group_id` | Integer FK | Set for chain-scoped rows |
+| `deal_name` | String | Compatibility display field |
+| `deal_description` | Text | Raw or normalized deal text |
+| `price`, `original_price`, `menu_avg_price` | Float | Legacy-compatible pricing fields |
+| `valid_days`, `valid_start_time`, `valid_end_time` | String | Normalized temporal fields |
+| `source` | String | `website_scrape`, `chain_website`, `gbp_offer`, `manual`, and other legacy values |
+| `verified_at` | DateTime | Used by stale sweep |
+| `is_active` | Boolean | Legacy visibility flag |
+
+**Unique constraint:** `(local_employer_id, deal_name, source)` remains the compatibility dedupe key in `meal_deals`.
 
 ---
 

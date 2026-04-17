@@ -7,6 +7,8 @@ Scope: replay-first workflow for website scraper audit, manifest generation, and
 
 This guide documents the standard local workflow for analyzing and improving the meal-deal website scraper using synced cache artifacts instead of repeated live crawls.
 
+For the short operator-only restart path, use [MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md](MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md). For the wider operations guide, use [MEAL_DEAL_SCRAPERS_RUNBOOK.md](MEAL_DEAL_SCRAPERS_RUNBOOK.md).
+
 Use this workflow when you need to answer questions like:
 
 - which sites returned zero signals and why
@@ -14,12 +16,37 @@ Use this workflow when you need to answer questions like:
 - which replay subsets should be handed to another agent
 - which bundles should be used for JSON-LD, PDF, discovery, or wrong-target audits
 
-## Step 0: Run The Pre-flight Gate Before A New Live Scrape
+## Step 1: Sync The Replay Corpus
 
-Before restarting a live website scrape, run:
+The replay workflow depends on two synced artifact sets:
+
+- `data/cache/website_scrape_audit.json`
+- `data/cache/website_scrape_debug/`
+
+Sync them first:
 
 ```bash
-PYTHONPATH=. python scripts/check_website_scrape_preflight.py --region austin_tx --max-sites 10 --skip-checked-days 0
+bash dev/sync_from_opi.sh
+```
+
+If you only want the database rows and not the replay cache, use:
+
+```bash
+bash dev/sync_from_opi.sh --skip-cache
+```
+
+Verify the debug bundle count when needed:
+
+```bash
+find data/cache/website_scrape_debug -maxdepth 1 -type f | wc -l
+```
+
+## Step 2: Run The Pre-flight Gate Before A New Live Scrape
+
+If you are preparing to restart a live website scrape, run:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/check_website_scrape_preflight.py --region austin_tx --skip-checked-days 0
 ```
 
 This validates:
@@ -30,7 +57,9 @@ This validates:
 - local cache path readiness
 - optional remote SSH reachability if you pass `--remote-host`
 
-After the script passes without blocking failures, run a dry-run canary before any broad scrape:
+## Step 3: Run A Dry-Run Canary Before Any Broad Scrape
+
+After the script passes without blocking failures, run:
 
 ```bash
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 5 --skip-checked-days 0 --dry-run --region austin_tx
@@ -46,56 +75,18 @@ If `menu_persistence_summary` is present, confirm `fk_violations == 0`. If a kno
 
 Only begin a full live scrape after the canary bundles look correct.
 
-## Required Local Inputs
-
-The replay workflow depends on two synced artifact sets:
-
-- `data/cache/website_scrape_audit.json`
-- `data/cache/website_scrape_debug/`
-
-Those artifacts are pulled from the Orange Pi by:
-
-```bash
-bash dev/sync_from_opi.sh
-```
-
-The sync script now also pulls:
-
-- `data/cache/website_scrape_debug/`
-- `data/cache/website_scrape_audit.json`
-
-If you only want the database rows and not the replay cache, use:
-
-```bash
-bash dev/sync_from_opi.sh --skip-cache
-```
-
-## Step 1: Sync The Replay Corpus
+## Step 4: Build A Baseline Audit Summary
 
 Run:
 
 ```bash
-bash dev/sync_from_opi.sh
-```
-
-Verify the debug bundle count:
-
-```bash
-find data/cache/website_scrape_debug -maxdepth 1 -type f | wc -l
-```
-
-## Step 2: Build A Baseline Audit Summary
-
-Run:
-
-```bash
-python scripts/summarize_website_scrape_audit.py
+PYTHONPATH=. .venv/bin/python scripts/summarize_website_scrape_audit.py
 ```
 
 Optional JSON output:
 
 ```bash
-python scripts/summarize_website_scrape_audit.py --json
+PYTHONPATH=. .venv/bin/python scripts/summarize_website_scrape_audit.py --json
 ```
 
 What this gives you:
@@ -110,18 +101,18 @@ What this gives you:
 
 Use this output as the before-state baseline for any discovery or extraction change.
 
-## Step 3: Build Replay Manifests
+## Step 5: Build Replay Manifests
 
 Run:
 
 ```bash
-python scripts/build_website_scrape_replay_manifests.py
+PYTHONPATH=. .venv/bin/python scripts/build_website_scrape_replay_manifests.py
 ```
 
 Optional smaller regression sets:
 
 ```bash
-python scripts/build_website_scrape_replay_manifests.py --per-set 6
+PYTHONPATH=. .venv/bin/python scripts/build_website_scrape_replay_manifests.py --per-set 6
 ```
 
 Generated outputs land in:
@@ -144,7 +135,7 @@ Important category files include:
 - `categories/social_or_non_first_party.json`
 - `categories/static_empty_candidate.json`
 
-## Step 4: Select The Right Replay Set
+## Step 6: Select The Right Replay Set
 
 Use the manifests to match the task to the right subset.
 
@@ -161,7 +152,7 @@ For a smaller deterministic working set, use:
 
 - `data/cache/website_scrape_manifests/regression_sets.json`
 
-## Step 5: Replay Extraction Locally
+## Step 7: Replay Extraction Locally
 
 Use replay mode instead of live fetches whenever possible.
 
@@ -182,7 +173,7 @@ signals = scrape_restaurant_website(
 
 This lets you iterate on parsing logic without re-hitting the live site.
 
-## Step 6: Compare Before And After
+## Step 8: Compare Before And After
 
 After parser or discovery changes:
 
@@ -238,3 +229,5 @@ After parser or discovery changes:
 - `scripts/check_website_scrape_preflight.py`
 - `dev/sync_from_opi.sh`
 - `collectors/meal_deals/website_scraper.py`
+- [MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md](MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md)
+- [MEAL_DEAL_SCRAPERS_RUNBOOK.md](MEAL_DEAL_SCRAPERS_RUNBOOK.md)
