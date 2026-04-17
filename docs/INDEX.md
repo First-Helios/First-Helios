@@ -43,6 +43,7 @@ Multi-source event aggregation for Austin.
 How-to docs for contributors.
 
 - [Geocoding Guide](guides/GEOCODING_AGENT.md) — Rules for extracting geocodable locations from job APIs; checklist for new adapters
+- [Meal Deal Scraper Signal Refinement Roadmap](guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md) — Open website scraper tasks grouped by complexity and recommended agent power
 - [Spirit Pool Integration](guides/SPIRIT_POOL_INTEGRATION.md) — Browser extension integration: what's built, what remains, signal format
 
 ---
