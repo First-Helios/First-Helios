@@ -60,6 +60,17 @@ logger = logging.getLogger(__name__)
 _SITE_FETCH_HEADERS = {
     "User-Agent": "FirstHelios/1.0 (community labor research)",
 }
+_MAX_CANDIDATE_TOKEN_FANOUT = 25
+_LOCATION_DESCRIPTOR_TOKENS = {
+    "airport", "avenue", "block", "blvd", "boulevard", "building",
+    "campus", "center", "centre", "corner", "corners", "crossing",
+    "direction", "district", "downtown", "drive", "dr", "east",
+    "highway", "hill", "hills", "hwy", "junction", "lane", "ln",
+    "mall", "market", "midtown", "north", "northeast", "northwest",
+    "park", "parkway", "plaza", "rd", "road", "south", "southeast",
+    "southwest", "square", "station", "st", "street", "suite",
+    "ste", "terminal", "tower", "town", "uptown", "village", "west",
+}
 
 
 def _normalize_url_key(url: str | None) -> str:
@@ -139,7 +150,7 @@ def _build_employer_identity_index(
     session: Any,
     *,
     region: str = "austin_tx",
-) -> tuple[dict[int, dict[str, Any]], dict[str, set[int]]]:
+) -> tuple[dict[int, dict[str, Any]], dict[str, set[int]], dict[str, int]]:
     employers = (
         session.query(LocalEmployer)
         .filter(
@@ -152,6 +163,7 @@ def _build_employer_identity_index(
 
     by_id: dict[int, dict[str, Any]] = {}
     token_index: dict[str, set[int]] = defaultdict(set)
+    token_counts: dict[str, int] = {}
 
     for emp in employers:
         fingerprint = emp.fingerprint or make_fingerprint(emp.name)
@@ -165,14 +177,41 @@ def _build_employer_identity_index(
         for token in _name_tokens(emp.name):
             token_index[token].add(emp.id)
 
-    return by_id, token_index
+    token_counts = {token: len(emp_ids) for token, emp_ids in token_index.items()}
+
+    return by_id, token_index, token_counts
 
 
-def _candidate_employer_ids(identity_basis: str, token_index: dict[str, set[int]]) -> set[int]:
+def _candidate_employer_ids(
+    identity_basis: str,
+    token_index: dict[str, set[int]],
+    token_counts: dict[str, int],
+) -> set[int]:
     candidate_ids: set[int] = set()
     for token in _name_tokens(identity_basis):
+        if token_counts.get(token, 0) > _MAX_CANDIDATE_TOKEN_FANOUT:
+            continue
         candidate_ids.update(token_index.get(token, set()))
     return candidate_ids
+
+
+def _looks_like_location_label(name: str) -> bool:
+    lowered = name.lower()
+    tokens = [token for token in make_fingerprint(name).split() if len(token) > 1]
+    if not tokens:
+        return False
+
+    if "&" in lowered or "+" in lowered:
+        return True
+    if any(any(ch.isdigit() for ch in token) for token in tokens):
+        return True
+
+    descriptor_count = sum(token in _LOCATION_DESCRIPTOR_TOKENS for token in tokens)
+    if descriptor_count >= max(1, len(tokens) - 1):
+        return True
+    if len(tokens) <= 2 and descriptor_count >= 1:
+        return True
+    return False
 
 
 def audit_site_identity_mismatches(
@@ -202,7 +241,7 @@ def audit_site_identity_mismatches(
     for rurl, emp in rows:
         url_groups[_normalize_url_key(rurl.url)].append((rurl, emp))
 
-    employers_by_id, token_index = _build_employer_identity_index(session, region=region)
+    employers_by_id, token_index, token_counts = _build_employer_identity_index(session, region=region)
     mismatches: list[dict[str, Any]] = []
     fetch_count = 0
 
@@ -218,11 +257,11 @@ def audit_site_identity_mismatches(
         if not snapshot:
             continue
 
-        identity_basis = f"{_url_identity_text(snapshot['final_url'])} {snapshot['identity_text']}".strip()
+        identity_basis = f"{snapshot['host'].replace('.', ' ')} {snapshot['identity_text']}".strip()
         if not identity_basis:
             continue
 
-        candidate_ids = _candidate_employer_ids(identity_basis, token_index)
+        candidate_ids = _candidate_employer_ids(identity_basis, token_index, token_counts)
         if not candidate_ids:
             continue
 
@@ -256,6 +295,8 @@ def audit_site_identity_mismatches(
 
             if not best_alt or best_alt["score"] < 3 or owner_score > 0:
                 continue
+            if _looks_like_location_label(emp.name):
+                continue
 
             mismatches.append(
                 {
@@ -277,7 +318,12 @@ def merge_actionable_mismatches(*mismatch_groups: list[dict[str, Any]]) -> list[
     merged: dict[int, dict[str, Any]] = {}
     for group in mismatch_groups:
         for mismatch in group:
-            merged.setdefault(mismatch["rurl_id"], mismatch)
+            existing = merged.get(mismatch["rurl_id"])
+            if existing is None:
+                merged[mismatch["rurl_id"]] = mismatch
+                continue
+            if mismatch.get("evidence") and not existing.get("evidence"):
+                merged[mismatch["rurl_id"]] = mismatch
     return list(merged.values())
 
 
@@ -575,6 +621,11 @@ def main() -> None:
         default=None,
         help="Optional cap on site-identity fetches during mismatch detection",
     )
+    parser.add_argument(
+        "--include-shared-url",
+        action="store_true",
+        help="Include lower-confidence shared-URL mismatches in the actionable cleanup set",
+    )
     args = parser.parse_args()
 
     if args.recollect and not args.fix:
@@ -604,10 +655,12 @@ def main() -> None:
             target_employer_ids=target_employer_ids or None,
             max_fetches=args.site_fetch_limit,
         )
-        actionable_mismatches = merge_actionable_mismatches(
-            shared_url_mismatches,
-            site_identity_mismatches,
-        )
+        actionable_mismatches = merge_actionable_mismatches(site_identity_mismatches)
+        if args.include_shared_url:
+            actionable_mismatches = merge_actionable_mismatches(
+                shared_url_mismatches,
+                site_identity_mismatches,
+            )
         contaminated_counts = find_contaminated_scrape_counts(session, actionable_mismatches)
 
         print("\n── Summary ─────────────────────────────────────────────────")
@@ -617,6 +670,8 @@ def main() -> None:
         print(f"  Actionable mismatch rows:      {len(actionable_mismatches)}")
         print(f"  Contaminated meal_deals rows:  {contaminated_counts['legacy_meal_deals']}")
         print(f"  Contaminated materializations: {contaminated_counts['materializations']}")
+        if shared_url_mismatches and not args.include_shared_url:
+            print("  Shared-URL mismatches are diagnostic only unless --include-shared-url is set.")
 
         if actionable_mismatches:
             print("\n── First Mismatches ───────────────────────────────────────")

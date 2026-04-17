@@ -22,16 +22,22 @@
 # What it does NOT sync (rebuild those separately):
 #   ref_*, oews_*, mob_*, brand_groups, local_employers, scores, meta_*
 #
+# What it ALSO syncs by default:
+#   data/cache/website_scrape_debug/  — replayable website scrape page bundles
+#   data/cache/website_scrape_audit.json — per-site scrape audit output
+#
 # Usage:
 #   bash dev/sync_from_opi.sh              # pull data
 #   bash dev/sync_from_opi.sh --dry-run    # compare OPi vs local row counts only
+#   bash dev/sync_from_opi.sh --skip-cache # skip website scrape cache sync
 #
 # Environment overrides (otherwise .env is sourced):
 #   OPI_HOST    — default orangepi@192.168.1.191
 #   OPI_PGURL   — default postgresql://helios:helios@localhost:5432/helios
+#   OPI_PROJECT_ROOT — default /home/orangepi/First-Helios
 #   LOCAL_PGURL — default DATABASE_URL from .env (SQLAlchemy +psycopg prefix stripped)
 #
-# Requirements: ssh key auth to OPi, psql on PATH, local Postgres schema
+# Requirements: ssh key auth to OPi, psql on PATH, tar on both machines, local Postgres schema
 # already migrated (alembic upgrade head).
 
 set -euo pipefail
@@ -50,7 +56,9 @@ fi
 
 OPI_HOST="${OPI_HOST:-orangepi@192.168.1.191}"
 OPI_PGURL="${OPI_PGURL:-postgresql://helios:helios@localhost:5432/helios}"
+OPI_PROJECT_ROOT="${OPI_PROJECT_ROOT:-/home/orangepi/First-Helios}"
 LOCAL_PGURL="${LOCAL_PGURL:-${DATABASE_URL:-postgresql://helios:helios@localhost:5432/helios}}"
+CACHE_MIN_AGE_MINUTES="${CACHE_MIN_AGE_MINUTES:-1}"
 
 # Strip SQLAlchemy driver prefix so libpq tools accept the URL
 LOCAL_PGURL="${LOCAL_PGURL/postgresql+psycopg:\/\//postgresql:\/\/}"
@@ -58,9 +66,11 @@ LOCAL_PGURL="${LOCAL_PGURL/postgresql+psycopg2:\/\//postgresql:\/\/}"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 DRY_RUN=false
+SYNC_CACHE=true
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=true ;;
+        --skip-cache) SYNC_CACHE=false ;;
         -h|--help) sed -n '2,35p' "$0"; exit 0 ;;
         *) echo "Unknown argument: $arg" >&2; exit 1 ;;
     esac
@@ -94,12 +104,59 @@ count_opi() {
         "psql '$OPI_PGURL' -tAc 'SELECT COUNT(*) FROM $table;'" 2>/dev/null || echo "?"
 }
 
+sync_remote_cache_path() {
+    local rel_path="$1"
+    local local_path="$PROJECT_ROOT/$rel_path"
+    local remote_path="$OPI_PROJECT_ROOT/$rel_path"
+    local kind="$2"
+
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$OPI_HOST" "test -e '$remote_path'" >/dev/null 2>&1; then
+        echo "[cache] missing on OPi: $rel_path"
+        if [[ "$kind" == "dir" ]]; then
+            rm -rf "$local_path"
+        else
+            rm -f "$local_path"
+        fi
+        return 0
+    fi
+
+    if [[ "$kind" == "dir" ]]; then
+        rm -rf "$local_path"
+    else
+        rm -f "$local_path"
+    fi
+    mkdir -p "$(dirname "$local_path")"
+
+    if [[ "$kind" == "dir" ]]; then
+        mkdir -p "$local_path"
+        ssh -o BatchMode=yes -o ConnectTimeout=5 -C "$OPI_HOST" \
+            "cd '$OPI_PROJECT_ROOT' && find '$rel_path' -type f -mmin +$CACHE_MIN_AGE_MINUTES -print0 | tar --null -T - -cf -" \
+            | tar -xf - -C "$PROJECT_ROOT"
+        echo "[cache] synced stable files from: $rel_path"
+        return 0
+    fi
+
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$OPI_HOST" \
+        "find '$remote_path' -maxdepth 0 -type f -mmin +$CACHE_MIN_AGE_MINUTES | grep -q ." >/dev/null 2>&1; then
+        echo "[cache] skipping active file: $rel_path"
+        return 0
+    fi
+
+    ssh -o BatchMode=yes -o ConnectTimeout=5 -C "$OPI_HOST" \
+        "cd '$OPI_PROJECT_ROOT' && tar -cf - '$rel_path'" \
+        | tar -xf - -C "$PROJECT_ROOT"
+
+    echo "[cache] synced: $rel_path"
+}
+
 echo "============================================================"
 echo "  sync_from_opi"
 echo "  OPI host     : $OPI_HOST"
 echo "  OPI DB       : $OPI_PGURL"
+echo "  OPI root     : $OPI_PROJECT_ROOT"
 echo "  Local DB     : $LOCAL_PGURL"
 echo "  Dry run      : $DRY_RUN"
+echo "  Sync cache   : $SYNC_CACHE"
 echo "============================================================"
 
 # ── Pre-sync row count comparison ─────────────────────────────────────────────
@@ -145,6 +202,12 @@ done
 ssh -o BatchMode=yes -o ConnectTimeout=5 -C "$OPI_HOST" \
     "pg_dump '$OPI_PGURL' --data-only --no-owner --no-privileges$TABLE_ARGS" \
     | psql "$LOCAL_PGURL" -v ON_ERROR_STOP=1 --quiet
+
+if [[ "$SYNC_CACHE" == "true" ]]; then
+    echo "-- Syncing website scrape replay cache --"
+    sync_remote_cache_path "data/cache/website_scrape_debug" dir
+    sync_remote_cache_path "data/cache/website_scrape_audit.json" file
+fi
 
 # ── Post-sync row counts ──────────────────────────────────────────────────────
 echo ""

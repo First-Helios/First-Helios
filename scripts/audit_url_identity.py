@@ -24,7 +24,9 @@ Usage:
 
 import argparse
 import logging
+import re
 import sys
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -48,17 +50,89 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_NAME_TOKEN_STOPWORDS = {
+    "restaurant", "restaurants", "bar", "grill", "cafe", "coffee",
+    "the", "and", "of", "at", "on", "n", "sports", "pub", "lounge",
+    "kitchen", "house", "place", "shop", "food", "foods",
+    "diner", "eatery", "bistro", "tavern", "inn",
+}
+_NAME_FRAGMENT_STOPWORDS = _NAME_TOKEN_STOPWORDS | {"s"}
+_LOCATION_DESCRIPTOR_TOKENS = {
+    "airport", "avenue", "block", "blvd", "boulevard", "building",
+    "campus", "center", "centre", "corner", "corners", "crossing",
+    "direction", "district", "downtown", "drive", "dr", "east",
+    "highway", "hill", "hills", "hwy", "junction", "lane", "ln",
+    "mall", "market", "midtown", "north", "northeast", "northwest",
+    "park", "parkway", "plaza", "rd", "road", "south", "southeast",
+    "southwest", "square", "station", "st", "street", "suite",
+    "ste", "terminal", "tower", "town", "uptown", "village", "west",
+}
+
+_URL_TOKEN_STOPWORDS = {
+    "www", "com", "net", "org", "co", "io", "biz", "info",
+    "html", "htm", "php", "asp", "aspx",
+    "index", "home", "homepage", "location", "locations",
+    "menu", "menus", "static", "page", "pages",
+    "official", "site", "visit", "tx", "texas",
+}
+
+
+def _ordered_name_fragments(name: str) -> list[str]:
+    normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    raw_tokens = [re.sub(r"[^a-z0-9]", "", token) for token in re.findall(r"[a-z0-9']+", normalized.lower())]
+    return [token for token in raw_tokens if token and token not in _NAME_FRAGMENT_STOPWORDS and (len(token) > 1 or token == "e")]
+
+
+def _ordered_name_tokens(name: str) -> list[str]:
+    return [token for token in _ordered_name_fragments(name) if len(token) > 1]
+
 
 def _name_tokens(name: str) -> set[str]:
     """Significant tokens from a name for comparison (mirrors google_places_resolver)."""
-    stopwords = {
-        "restaurant", "restaurants", "bar", "grill", "cafe", "coffee",
-        "the", "and", "of", "at", "n", "sports", "pub", "lounge",
-        "kitchen", "house", "place", "shop", "food", "foods",
-        "diner", "eatery", "bistro", "tavern", "inn",
-    }
-    fp = make_fingerprint(name)
-    return {t for t in fp.split() if t not in stopwords and len(t) > 1}
+    return set(_ordered_name_tokens(name))
+
+
+def _compact_name_variants(name: str) -> set[str]:
+    """Compact adjacent token groups to catch split brand spellings like Chi Lantro."""
+    ordered_tokens = _ordered_name_fragments(name)
+    variants: set[str] = set()
+    for width in (2, 3, 4):
+        for idx in range(len(ordered_tokens) - width + 1):
+            variant = "".join(ordered_tokens[idx:idx + width])
+            if len(variant) > 4:
+                variants.add(variant)
+    return variants
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        key = make_fingerprint(value)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(value)
+    return deduped
+
+
+def _looks_like_location_label(name: str) -> bool:
+    lowered = name.lower()
+    tokens = [token for token in _ordered_name_tokens(name) if len(token) > 1]
+    if not tokens:
+        return False
+
+    if "&" in lowered or "+" in lowered:
+        return True
+    if any(any(ch.isdigit() for ch in token) for token in tokens):
+        return True
+
+    descriptor_count = sum(token in _LOCATION_DESCRIPTOR_TOKENS for token in tokens)
+    if descriptor_count >= max(1, len(tokens) - 1):
+        return True
+    if len(tokens) <= 2 and descriptor_count >= 1:
+        return True
+    return False
 
 
 def _compact_name(name: str) -> str:
@@ -74,8 +148,14 @@ def _url_identity_text(url: str) -> str:
     host = (parsed.netloc or "").lower()
     host = host.removeprefix("www.")
     path = (parsed.path or "").lower()
-    text = f"{host} {path}".replace("-", " ").replace("_", " ").replace("/", " ")
-    return text
+    raw_text = f"{host} {path}"
+    tokens = re.split(r"[^a-z0-9]+", raw_text)
+    filtered = [
+        token
+        for token in tokens
+        if len(token) > 1 and not token.isdigit() and token not in _URL_TOKEN_STOPWORDS
+    ]
+    return " ".join(filtered)
 
 
 def _url_match_score(name: str, url: str) -> int:
@@ -85,14 +165,20 @@ def _url_match_score(name: str, url: str) -> int:
     domains like wingsnmore-austin.com still match "Wings N More".
     """
     name_tokens = _name_tokens(name)
+    ordered_tokens = _ordered_name_tokens(name)
     url_text = _url_identity_text(url)
     url_tokens = _name_tokens(url_text)
     compact_name = _compact_name(name)
     compact_url = _compact_name(url_text)
+    compact_variants = _compact_name_variants(name)
 
     score = 0
     if compact_name and compact_name in compact_url:
         score += 2
+    elif any(variant in compact_url for variant in compact_variants):
+        score += 2
+    elif any(len(token) > 4 and compact_url.startswith(token) for token in ordered_tokens):
+        score += 1
     if name_tokens & url_tokens:
         score += 1
     return score
@@ -197,12 +283,12 @@ def audit_name_mismatch_urls(session) -> list[dict]:
             scored_group.append((rurl, emp, score))
 
         best_score = max(score for _, _, score in scored_group)
-        if best_score <= 0:
+        if best_score < 2:
             continue
 
-        likely_owners = [emp.name for _, emp, score in scored_group if score == best_score]
+        likely_owners = _dedupe_preserve_order([emp.name for _, emp, score in scored_group if score == best_score])
         for rurl, emp, score in scored_group:
-            if score > 0:
+            if score > 0 or _looks_like_location_label(emp.name):
                 continue
             mismatches.append({
                 "rurl_id": rurl.id,

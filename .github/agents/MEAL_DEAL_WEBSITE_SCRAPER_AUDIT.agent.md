@@ -40,6 +40,8 @@ The current scraper can already:
 - capture calories and `calorie_price_ratio` when present
 - persist replayable debug bundles under `data/cache/website_scrape_debug`
 
+The cached page bundles are not just for debugging one-off misses. They exist so we can replay extraction against deeper menu flows without repeatedly hitting live restaurant sites while we improve discovery and parsing.
+
 That is useful, but it is still optimized for extracting a deal signal from a block of text. It is not yet optimized for building a menu graph that can answer questions like:
 
 - What does a normal entree here cost?
@@ -103,6 +105,15 @@ These are the important current limitations, confirmed from the codebase and rec
 
 10. Downstream cleanup still compensates for upstream ambiguity.
    The existence of repeated re-audit and repair scripts means upstream extraction still leaks too much uncertainty into the canonical pipeline.
+
+11. Nested menu depth is still insufficient.
+   Many restaurants expose the real offer details one or two layers below the obvious entry page, such as `Menu -> Happy Hour -> location or state tabs` or `Daily Specials -> market selector -> submenu`. The audit should treat reaching this depth as a goal whenever the needed links or cached evidence exist, not as an edge case.
+
+12. Hidden first-party promo landing pages are under-discovered.
+   Some real offer pages are not obvious from the homepage or main navigation at all. They may be linked only from footer clusters such as `Learn More`, `Promotions`, `Offers`, `FAQ`, `Gift Cards`, or regional/country selectors, or they may live on stable first-party slugs such as `/bogo-days/` that need stronger discovery logic.
+
+13. Discovery intelligence is not yet formalized.
+   We do not yet have a durable way to use prior audits, existing meal-deal registries, or known brand-specific promo patterns as hints for what first-party paths and navigation structures to probe next. That gap reduces recall on sites whose deal pages are real but poorly linked.
 
 ## External Standards And Current Methods
 
@@ -172,7 +183,10 @@ If a proposed change improves recall but makes those five outcomes harder, it is
 When auditing code, focus on these seams first:
 
 - `_discover_deal_pages`
-  Check whether we discover menu pages, specials pages, happy-hour pages, and vendor-hosted menu endpoints with enough recall.
+  Check whether we discover menu pages, specials pages, happy-hour pages, footer-only promotions pages, regional selector pages, and vendor-hosted menu endpoints with enough recall.
+
+- discovery seed logic and site-specific hints
+  Check whether homepage links, footer links, sitemap-like assets, known promo slugs, and registry-derived first-party hints are being used appropriately to find real offer pages that are not surfaced by the main nav.
 
 - `_discover_pdf_links`
   Check whether menu PDFs and specials PDFs are scored and categorized well enough.
@@ -298,6 +312,28 @@ The scraper should distinguish:
 
 Each type needs different extraction logic and confidence rules.
 
+### 9. Better hidden-page discovery
+
+The scraper needs stronger discovery logic for first-party deal pages that may be reachable through:
+
+- footer navigation such as `Promotions`, `Offers`, `Learn More`, or `Gift Cards`
+- region or country switchers that reveal different promo menus or landing pages
+- known brand-specific slugs like `/bogo-days/`, `/promotions/`, or campaign pages not linked from the homepage body
+- sitemap or other first-party discovery assets when they stay scoped to the restaurant domain
+
+The goal is not broad crawling. The goal is to find first-party promotional pages that obviously belong to the restaurant but are currently missed by shallow discovery.
+
+### 10. Discovery-hint registry
+
+Future audit work should consider maintaining a lightweight hint layer for exploration, for example:
+
+- known promo path patterns by brand or site platform
+- known footer labels that often hide deal pages
+- known vendor or CMS templates that bury menus and offers behind secondary nav
+- registry-derived hints about first-party promo pages that should be verified on the restaurant site
+
+These hints are not a source of truth for ingestion. They are exploration and test-design inputs that should help the scraper find real first-party evidence.
+
 ## Desired Output Model
 
 When the current `DealSignal` abstraction is not enough, extend the upstream capture model rather than overloading `deal_name` and `deal_description`.
@@ -331,26 +367,33 @@ If new persistent tables are not yet warranted, at least capture these in struct
 
 1. Build the audit corpus.
    Start with newly demoted or review-band `website_scrape` observations and corresponding debug bundles.
+   Use the cached pages to replay deeper extraction attempts on nested menu and tab flows before increasing live crawl breadth.
 
-2. Classify each failure by extraction stage.
+2. Build discovery hints for the audit set.
+   For each target site, note footer labels, known promo slugs, region selectors, sitemap assets, and any external registry hints that suggest a missing first-party offer page.
+
+3. Classify each failure by extraction stage.
    Use categories such as page discovery, rendering failure, DOM segmentation, JSON-LD miss, PDF miss, item-price pairing miss, offer-target miss, and fan-out contamination.
 
-3. Measure structure loss, not just acceptance loss.
+4. Measure structure loss, not just acceptance loss.
    Count pages where the site clearly has menu structure but the scraper only emits a weak text block or a flat page-average price.
 
-4. Upgrade structured-data handling first.
+5. Upgrade structured-data handling first.
    Fully exploit schema.org menus and offers before adding more regex complexity.
 
-5. Upgrade DOM extraction second.
+6. Upgrade discovery before broad renderer escalation.
+  Strengthen homepage, footer, promotions-link, and first-party hint discovery before assuming a rendering problem.
+
+7. Upgrade DOM extraction second.
    Preserve heading, sibling, list, and table relationships so item-price pairing becomes testable.
 
-6. Add renderer escalation only where justified.
+8. Add renderer escalation only where justified.
    Use a targeted JS or browser fallback for pages that are menu-critical and structurally empty in static HTML.
 
-7. Add value-profile derivation after menu entities exist.
+9. Add value-profile derivation after menu entities exist.
    Do not try to infer robust savings from flat text alone.
 
-8. Replay test every change.
+10. Replay test every change.
    Every heuristic or parser change should be validated against saved debug bundles and regression tests.
 
 ## Guardrails
@@ -362,6 +405,9 @@ If new persistent tables are not yet warranted, at least capture these in struct
 - Preserve raw evidence whenever new structure is inferred.
 - Fix root causes in extraction or data modeling before adding downstream repair scripts.
 - Avoid broad web crawling; stay scoped to the known restaurant site and clearly linked menu assets.
+- Because page bundles are cached, prefer replay-driven iteration when testing deeper discovery or parsing changes for nested menu flows.
+- Use external meal-deal registries only as hint sources for exploration, not as first-party evidence and not as direct ingest inputs.
+- If a registry hint suggests a hidden promo page, verify it on the restaurant's own site or cached first-party pages before treating it as real coverage.
 
 ## Expected Deliverables
 
@@ -378,7 +424,7 @@ Depending on the assignment, return some or all of these:
 
 Use this template when invoking the agent:
 
-"Audit `collectors/meal_deals/website_scraper.py` against [debug bundle set or site list]. Focus on [page discovery | JSON-LD extraction | menu section parsing | PDF menus | JS-rendered menus | offer-target linking | value profile]. Return: 1) failure taxonomy, 2) concrete code changes or schema changes, 3) tests, 4) what this unlocks for spend/savings estimation."
+"Audit `collectors/meal_deals/website_scraper.py` against [debug bundle set or site list]. Focus on [page discovery | hidden promo pages | footer or promotions discovery | registry-guided first-party hints | JSON-LD extraction | menu section parsing | PDF menus | JS-rendered menus | offer-target linking | value profile]. Return: 1) failure taxonomy, 2) concrete code changes or schema changes, 3) tests, 4) what this unlocks for spend/savings estimation."
 
 ## Final Standard
 

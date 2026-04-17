@@ -278,6 +278,9 @@ def match_and_store_urls(
                         LocalEmployer.region == region,
                         LocalEmployer.is_active.is_(True),
                     ).all()
+                    if target_employer_ids is not None:
+                        target_ids = set(target_employer_ids)
+                        brand_emps = [emp for emp in brand_emps if emp.id in target_ids]
                     # For brand match, apply the URL to the nearest location
                     for emp in brand_emps:
                         if emp.lat and emp.lng:
