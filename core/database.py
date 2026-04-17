@@ -15,7 +15,7 @@ Called by: core/ingest.py, core/scoring/, core/targeting.py, server.py
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -41,6 +41,11 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "tracker.db"
+
+
+def _utcnow() -> datetime:
+    """Return naive UTC timestamps without using deprecated _utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _import_reference_models() -> None:
@@ -130,8 +135,8 @@ class Store(Base):
     lng = Column(Float, nullable=True)
     region = Column(String, nullable=False, index=True)
     source_discovery = Column(String, nullable=True)  # alltheplaces, overture, osm, gmaps, jobspy
-    first_seen = Column(DateTime, default=datetime.utcnow)
-    last_seen = Column(DateTime, default=datetime.utcnow)
+    first_seen = Column(DateTime, default=_utcnow)
+    last_seen = Column(DateTime, default=_utcnow)
     is_active = Column(Boolean, default=True)
 
     # ── H3 hexagonal index ────────────────────────────────────────────────────
@@ -171,7 +176,7 @@ class Signal(Base):
     value = Column(Float, nullable=False)
     metadata_json = Column(Text, default="{}")
     observed_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     def get_metadata(self) -> dict:
         return json.loads(self.metadata_json) if self.metadata_json else {}
@@ -206,7 +211,7 @@ class Snapshot(Base):
     region = Column(String, nullable=False, index=True)
     chain = Column(String, nullable=False)
     source = Column(String, nullable=False)
-    scanned_at = Column(DateTime, default=datetime.utcnow)
+    scanned_at = Column(DateTime, default=_utcnow)
     store_count = Column(Integer, default=0)
     signal_count = Column(Integer, default=0)
     summary_json = Column(Text, default="{}")
@@ -239,7 +244,7 @@ class Score(Base):
     score_type = Column(String, primary_key=True)
     value = Column(Float, nullable=False, default=0.0)
     tier = Column(String, nullable=False, default="unknown")
-    computed_at = Column(DateTime, default=datetime.utcnow)
+    computed_at = Column(DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -268,7 +273,7 @@ class WageIndex(Base):
     location = Column(String, nullable=False)
     zip_code = Column(String, nullable=True)
     source = Column(String, nullable=False)
-    observed_at = Column(DateTime, default=datetime.utcnow)
+    observed_at = Column(DateTime, default=_utcnow)
     source_url = Column(String, nullable=True)
 
     def to_dict(self) -> dict:
@@ -315,7 +320,7 @@ class QCEWRecord(Base):
     avg_weekly_wage = Column(Float, nullable=True)
     avg_annual_pay = Column(Float, nullable=True)
     region = Column(String, nullable=True, index=True)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -372,7 +377,7 @@ class CBPRecord(Base):
     employment_noise_flag = Column(String(1), nullable=True)  # Census noise flag
     annual_payroll_k = Column(Float, nullable=True)  # in thousands
     region = Column(String, nullable=True, index=True)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -417,7 +422,7 @@ class JOLTSRecord(Base):
     year = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)  # 1-12
     value = Column(Float, nullable=False)  # rate as percentage
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -460,7 +465,7 @@ class OEWSRecord(Base):
     wage_90pct = Column(Float, nullable=True)
     year = Column(Integer, nullable=False)
     region = Column(String, nullable=True, index=True)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -501,7 +506,7 @@ class LAUSRecord(Base):
     unemployed = Column(Integer, nullable=True)
     unemployment_rate = Column(Float, nullable=True)
     region = Column(String, nullable=True, index=True)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -559,7 +564,7 @@ class LaborMarketBaseline(Base):
     hiring_intensity_baseline = Column(Float, nullable=True)  # postings / establishment at normal
     seasonal_index = Column(Float, nullable=True)  # month-over-month ratio vs annual avg
 
-    computed_at = Column(DateTime, default=datetime.utcnow)
+    computed_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -607,7 +612,7 @@ class BrandGroup(Base):
     canonical_name = Column(String, nullable=False)
     location_count = Column(Integer, nullable=False, default=0)
     industry = Column(String, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -671,8 +676,8 @@ class LocalEmployer(Base):
     source_discovery = Column(String, nullable=True)           # overture_local | osm | jobspy
     confidence = Column(Float, nullable=True)
     is_active = Column(Boolean, default=True)
-    first_seen = Column(DateTime, default=datetime.utcnow)
-    last_seen = Column(DateTime, default=datetime.utcnow)
+    first_seen = Column(DateTime, default=_utcnow)
+    last_seen = Column(DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -722,7 +727,7 @@ class EmployerNameIndex(Base):
     is_chain = Column(Boolean, default=False)             # True for regional + national
     notes = Column(String, nullable=True)                 # e.g. "Texas regional", "excluded chain"
     reviewed = Column(Boolean, default=False)             # manually reviewed flag
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -759,7 +764,7 @@ class ApiSource(Base):
     reset_hour_utc = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -796,7 +801,7 @@ class ApiRequestLog(Base):
     response_bytes = Column(Integer, nullable=True)         # response size
     data_items_returned = Column(Integer, nullable=True)    # records / rows / signals yielded
     request_params_json = Column(Text, nullable=True)       # JSON — what was asked for
-    requested_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    requested_at = Column(DateTime, nullable=False, default=_utcnow, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -897,7 +902,7 @@ class RevelioEmployment(Base):
     soc2d_name = Column(String, nullable=True)
     count_nsa = Column(Float, nullable=True)  # Non-seasonally adjusted
     count_sa = Column(Float, nullable=True)   # Seasonally adjusted
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -939,7 +944,7 @@ class RevelioHiring(Base):
     hiring_rate_sa = Column(Float, nullable=True)       # Seasonally adjusted
     attrition_rate_nsa = Column(Float, nullable=True)
     attrition_rate_sa = Column(Float, nullable=True)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -981,7 +986,7 @@ class RevelioPostings(Base):
     soc2d_name = Column(String, nullable=True)
     active_postings_nsa = Column(Float, nullable=True)  # Non-seasonally adjusted
     active_postings_sa = Column(Float, nullable=True)   # Seasonally adjusted
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1022,7 +1027,7 @@ class RevelioSalaries(Base):
     salary_nsa = Column(Float, nullable=True)           # Annual salary USD, non-seasonally adjusted
     salary_sa = Column(Float, nullable=True)            # Seasonally adjusted
     salary_count = Column(Float, nullable=True)         # Number of postings with salary data
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1063,7 +1068,7 @@ class RevelioLayoffs(Base):
     employees_notified = Column(Float, nullable=True)
     notices_issued = Column(Float, nullable=True)
     employees_laidoff = Column(Float, nullable=True)
-    fetched_at = Column(DateTime, default=datetime.utcnow)
+    fetched_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1125,8 +1130,8 @@ class RestaurantURL(Base):
     last_http_status = Column(Integer, nullable=True)
     has_deals_page = Column(Boolean, nullable=True)
     deals_page_url = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -1165,8 +1170,8 @@ class CanonicalVenue(Base):
     brand_group_id = Column(Integer, ForeignKey("brand_groups.id"), nullable=True, index=True)
     site_status = Column(String, nullable=False, default="no_site")
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -1200,8 +1205,8 @@ class CanonicalVenueAlias(Base):
     match_method = Column(String, nullable=False)
     match_confidence = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -1231,8 +1236,8 @@ class SiteIdentity(Base):
     path = Column(String, nullable=True)
     ownership_scope = Column(String, nullable=False, default="unknown")
     conflict_state = Column(String, nullable=False, default="needs_review")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -1259,8 +1264,8 @@ class SiteAssignment(Base):
     match_method = Column(String, nullable=False)
     match_confidence = Column(Float, nullable=True)
     is_primary = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -1309,8 +1314,8 @@ class DealObservation(Base):
     deal_value_score = Column(Float, nullable=True)
     review_state = Column(String, nullable=False, default="accepted", index=True)
     superseded_by_observation_id = Column(Integer, ForeignKey("deal_observations.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     __table_args__ = (
         UniqueConstraint("source", "source_observation_key", name="uq_deal_observation_source_key"),
@@ -1364,8 +1369,8 @@ class DealApplicability(Base):
     valid_from = Column(DateTime, nullable=True)
     valid_to = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     __table_args__ = (
         Index("ix_deal_applicability_observation_active", "observation_id", "is_active"),
@@ -1433,8 +1438,8 @@ class DealMaterialization(Base):
     resolver_method = Column(String, nullable=False)
     review_state = Column(String, nullable=False, default="accepted", index=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     __table_args__ = (
         UniqueConstraint("observation_id", "canonical_venue_id", name="uq_deal_materialization_observation_venue"),
@@ -1555,8 +1560,8 @@ class MealDeal(Base):
     is_active = Column(Boolean, default=True, index=True)
 
     # ── Timestamps ────────────────────────────────────────────────────────────
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # ── Denormalized location (from local_employer) ───────────────────────────
     lat = Column(Float, nullable=True)
@@ -1637,7 +1642,7 @@ class GooglePlacesFailure(Base):
     entity_id      = Column(Integer, nullable=False)
     canonical_name = Column(String(255), nullable=True)   # human-readable for manual lookup
     failure_reason = Column(String(20), nullable=True)    # no_website | no_result | api_error
-    failed_at      = Column(DateTime, default=datetime.utcnow)
+    failed_at      = Column(DateTime, default=_utcnow)
     retry_count    = Column(Integer, default=0)
 
     __table_args__ = (

@@ -37,6 +37,7 @@ def test_summarize_debug_bundle_counts_pages_jsonld_and_blocks():
         },
         "pdf_links": ["https://example.com/menu.pdf"],
         "discovered_pages": ["https://example.com/specials"],
+        "hinted_pages": [{"url": "https://brand.example.com/deals", "reason": "locator_host_rule:test"}],
         "signals": [{"deal_name": "Lunch Special"}],
         "menu_avg_price": 9.5,
     }
@@ -56,6 +57,7 @@ def test_summarize_debug_bundle_counts_pages_jsonld_and_blocks():
     assert summary["has_jsonld"] is True
     assert summary["total_blocks"] == 2
     assert summary["pdf_links"] == ["https://example.com/menu.pdf"]
+    assert summary["hinted_pages"] == [{"url": "https://brand.example.com/deals", "reason": "locator_host_rule:test"}]
     assert summary["parsed_pdf_count"] == 1
     assert summary["signal_count"] == 1
     assert summary["menu_avg_price"] == 9.5
@@ -201,11 +203,11 @@ def test_scrape_restaurant_website_skips_obvious_non_first_party_targets(tmp_pat
 def test_discover_deal_pages_picks_promo_card_learn_more_link():
         html = """
         <html><body>
-            <section class="promo-card">
-                <h2>BOGO Days</h2>
-                <p>Limited time offer every Tuesday.</p>
-                <a href="/bogo-days/">Learn More</a>
-            </section>
+                <section class="promo-card">
+                        <h2>BOGO Days</h2>
+                        <p>Limited time offer every Tuesday.</p>
+                        <a href="/bogo-days/">Learn More</a>
+                </section>
         </body></html>
         """
         soup = BeautifulSoup(html, "html.parser")
@@ -218,11 +220,11 @@ def test_discover_deal_pages_picks_promo_card_learn_more_link():
 def test_discover_deal_pages_rejects_generic_learn_more_link_without_promo_context():
         html = """
         <html><body>
-            <section class="about-card">
-                <h2>About Our Story</h2>
-                <p>Get to know the team.</p>
-                <a href="/about-us/">Learn More</a>
-            </section>
+                <section class="about-card">
+                        <h2>About Our Story</h2>
+                        <p>Get to know the team.</p>
+                        <a href="/about-us/">Learn More</a>
+                </section>
         </body></html>
         """
         soup = BeautifulSoup(html, "html.parser")
@@ -230,3 +232,139 @@ def test_discover_deal_pages_rejects_generic_learn_more_link_without_promo_conte
         discovered = website_scraper_module._discover_deal_pages(soup, "https://example.com")
 
         assert discovered == []
+
+
+def test_extract_jsonld_deals_uses_special_menu_context_and_inherited_price():
+        html = """
+        <html><body>
+            <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "Restaurant",
+                "name": "La Posada",
+                "hasMenu": {
+                    "@type": "Menu",
+                    "name": "Weekday Lunch Specials",
+                    "description": "Served 11 a.m. - 3 p.m. Monday through Friday. 10.99 - No substitutions.",
+                    "hasMenuSection": {
+                        "@type": "MenuSection",
+                        "hasMenuItem": [
+                            {
+                                "@type": "MenuItem",
+                                "name": "#1 Crispy Tacos",
+                                "description": "Ground beef or shredded chicken tacos"
+                            }
+                        ]
+                    }
+                }
+            }
+            </script>
+        </body></html>
+        """
+
+        signals = website_scraper_module._extract_jsonld_deals(
+                html,
+                restaurant_name="La Posada",
+                local_employer_id=1,
+                brand_group_id=None,
+                source_url="http://www.laposadasouth.com/menu",
+                region="austin_tx",
+                seen_deals=set(),
+        )
+
+        assert len(signals) == 1
+        signal = signals[0]
+        assert signal.deal_name == "Weekday Lunch Specials - #1 Crispy Tacos"
+        assert signal.price == 10.99
+        assert signal.price_type == "absolute"
+        assert signal.valid_days == "Mon-Fri"
+        assert signal.valid_start_time == "11:00 AM"
+        assert signal.valid_end_time == "3:00 PM"
+        assert signal.metadata["structured_source"] == "jsonld"
+        assert signal.metadata["jsonld_path"] == ["Weekday Lunch Specials"]
+
+
+def test_extract_jsonld_deals_rejects_plain_combo_menu_items_without_promo_context():
+        html = """
+        <html><body>
+            <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "Menu",
+                "name": "Combination Plates",
+                "hasMenuItem": [
+                    {
+                        "@type": "MenuItem",
+                        "name": "#5 Super Combo",
+                        "description": "Beef or chicken fajitas with taco and enchilada",
+                        "offers": {
+                            "@type": "Offer",
+                            "price": "14.99",
+                            "priceCurrency": "USD"
+                        }
+                    }
+                ]
+            }
+            </script>
+        </body></html>
+        """
+
+        signals = website_scraper_module._extract_jsonld_deals(
+                html,
+                restaurant_name="Combo Cafe",
+                local_employer_id=1,
+                brand_group_id=None,
+                source_url="https://example.com/menu",
+                region="austin_tx",
+                seen_deals=set(),
+        )
+
+        assert signals == []
+
+
+def test_scrape_restaurant_website_probes_locator_corporate_hints(tmp_path, monkeypatch):
+        monkeypatch.setattr(
+                "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+                tmp_path,
+        )
+        monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda *_args, **_kwargs: None)
+
+        pages = {
+                "https://locations.dennys.com/": """
+                        <html><body>
+                            <a href=\"https://www.dennys.com/menu\">Our Menu</a>
+                        </body></html>
+                """,
+                "https://www.dennys.com/": "<html><body><h1>Denny's</h1></body></html>",
+                "https://www.dennys.com/deals": "<html><body><p>Lunch Special $9.99 Weekdays 11am-2pm.</p></body></html>",
+        }
+
+        def fake_fetch(url: str, _user_agent: str) -> str | None:
+                if url in pages:
+                        return pages[url]
+                trimmed = url.rstrip("/")
+                if trimmed and trimmed in pages:
+                        return pages[trimmed]
+                return None
+
+        monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", fake_fetch)
+
+        site_url = "https://locations.dennys.com/TX/AUSTIN/200686"
+        signals = website_scraper_module.scrape_restaurant_website(
+                url=site_url,
+                restaurant_name="Denny's",
+                local_employer_id=1,
+                brand_group_id=None,
+                region="austin_tx",
+        )
+
+        assert any(signal.source_url == "https://www.dennys.com/deals" for signal in signals)
+        assert any(signal.metadata.get("locator_hint_reason") == "locator_host_rule:locations.dennys.com" for signal in signals)
+
+        bundle = website_scraper_module._load_site_debug_bundle(site_url)
+        assert bundle is not None
+        assert any(page["url"] == "https://www.dennys.com/deals" for page in bundle["hinted_pages"])
+        assert any(
+                page.get("fetch_type") == "locator_hint" and page.get("url") == "https://www.dennys.com/deals"
+                for page in bundle["pages"].values()
+        )

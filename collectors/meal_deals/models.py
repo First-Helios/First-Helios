@@ -7,8 +7,13 @@ EventSignal (events/ingest.py).
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
+
+
+def _utcnow() -> datetime:
+    """Return naive UTC timestamps without using deprecated datetime.utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @dataclass
@@ -73,4 +78,4 @@ class DealSignal:
 
     # ── Extras ────────────────────────────────────────────────────────────────
     metadata: dict[str, Any] = field(default_factory=dict)
-    observed_at: datetime = field(default_factory=datetime.utcnow)
+    observed_at: datetime = field(default_factory=_utcnow)

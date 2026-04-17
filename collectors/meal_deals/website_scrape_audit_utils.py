@@ -180,6 +180,7 @@ def summarize_debug_bundle(
             "total_blocks": None,
             "sample_blocks": [],
             "discovered_pages": [],
+            "hinted_pages": [],
             "pdf_links": [],
             "parsed_pdf_count": 0,
             "menu_avg_price": None,
@@ -189,6 +190,7 @@ def summarize_debug_bundle(
     pages = bundle.get("pages") if isinstance(bundle.get("pages"), dict) else {}
     pdfs = bundle.get("pdfs") if isinstance(bundle.get("pdfs"), dict) else {}
     discovered_pages = bundle.get("discovered_pages") if isinstance(bundle.get("discovered_pages"), list) else []
+    hinted_pages = bundle.get("hinted_pages") if isinstance(bundle.get("hinted_pages"), list) else []
     pdf_links = bundle.get("pdf_links") if isinstance(bundle.get("pdf_links"), list) else []
     signals = bundle.get("signals") if isinstance(bundle.get("signals"), list) else []
 
@@ -221,6 +223,7 @@ def summarize_debug_bundle(
         "total_blocks": total_blocks,
         "sample_blocks": sample_blocks,
         "discovered_pages": list(discovered_pages),
+        "hinted_pages": list(hinted_pages),
         "pdf_links": list(pdf_links),
         "parsed_pdf_count": len(pdfs),
         "menu_avg_price": bundle.get("menu_avg_price"),

@@ -22,9 +22,11 @@ import json
 import logging
 import re
 import time
+from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from html import unescape
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,13 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup, Tag
 
+from collectors.meal_deals.menu_sidecar import (
+    MenuSidecar,
+    ingest_dom_fallback,
+    ingest_jsonld_from_html,
+    ingest_pdf_tables,
+    link_signal_to_target,
+)
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.registry import deal_collector
 from collectors.meal_deals.website_scrape_audit_utils import classify_domain_family, summarize_debug_bundle
@@ -358,10 +367,31 @@ _JSONLD_RE = re.compile(
     re.DOTALL,
 )
 
+_JSONLD_INLINE_PRICE_RE = re.compile(r"(?<![\d$])(\d{1,3}\.\d{2})(?!\d)")
+_JSONLD_CONTEXT_NOISE_RE = re.compile(r"\bno\s+substitutions?\b", re.IGNORECASE)
+
 # Schema.org types that may contain deals or menu items with prices
 _DEAL_SCHEMA_TYPES = frozenset([
     "Offer", "AggregateOffer", "MenuItem", "MenuSection",
     "Menu", "Restaurant", "FoodEstablishment",
+])
+
+_JSONLD_PROMO_CONTEXT_KEYWORDS = frozenset([
+    "special",
+    "specials",
+    "deal",
+    "deals",
+    "offer",
+    "offers",
+    "promo",
+    "promotion",
+    "promotions",
+    "happy hour",
+    "bogo",
+    "buy one get one",
+    "kids eat free",
+    "prix fixe",
+    "limited time",
 ])
 
 # URL path fragments that suggest a deal-related page (for link discovery)
@@ -392,6 +422,34 @@ _DISCOVERY_FOOTER_TOKENS = frozenset([
     "site-footer",
     "bottom",
 ])
+
+_LOCATOR_HINT_TEXT_KEYWORDS = frozenset([
+    "deal", "deals", "offer", "offers", "promo", "promotion",
+    "promotions", "special", "specials", "happy hour", "lunch",
+    "menu",
+])
+
+_LOCATOR_HINT_EXCLUDED_TOKENS = frozenset([
+    "apparel",
+    "itunes.apple.com",
+    "play.google.com",
+    "google play",
+    "app store",
+    "careers",
+    "jobs",
+])
+
+_LOCATOR_HINT_PATHS = (
+    "/",
+    "/deals",
+    "/offers",
+    "/promotions",
+)
+
+_LOCATOR_HINT_HOST_RULES = {
+    "locations.dennys.com": "https://www.dennys.com",
+    "locations.tropicalsmoothiecafe.com": "https://www.tropicalsmoothiecafe.com",
+}
 
 # URL paths that are definitely NOT deal pages — exclude from discovery
 _NON_DEAL_URL_KEYWORDS = frozenset([
@@ -486,6 +544,7 @@ def _new_site_debug_bundle(base_url: str, *, restaurant_name: str, region: str) 
         "pdfs": {},
         "signals": [],
         "discovered_pages": [],
+        "hinted_pages": [],
         "pdf_links": [],
         "menu_avg_price": None,
     }
@@ -546,12 +605,55 @@ def _get_debug_page(bundle: dict[str, Any] | None, page_url: str) -> str | None:
     return None
 
 
-def _record_debug_pdf_text(bundle: dict[str, Any], pdf_url: str, *, full_text: str) -> None:
-    bundle.setdefault("pdfs", {})[_debug_cache_key(pdf_url)] = {
+def _get_replay_page(bundle: dict[str, Any] | None, page_url: str) -> str | None:
+    html = _get_debug_page(bundle, page_url)
+    if html:
+        return html
+
+    parsed = urlparse(page_url)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+
+    candidate_urls = [
+        page_url,
+        f"{parsed.scheme}://{parsed.netloc}",
+    ]
+    seen_site_keys: set[str] = set()
+    primary_site_key = bundle.get("site_key") if isinstance(bundle, dict) else None
+    if isinstance(primary_site_key, str) and primary_site_key:
+        seen_site_keys.add(primary_site_key)
+
+    for candidate_url in candidate_urls:
+        candidate_bundle = _load_site_debug_bundle(candidate_url)
+        if not candidate_bundle:
+            continue
+        site_key = candidate_bundle.get("site_key")
+        if isinstance(site_key, str) and site_key in seen_site_keys:
+            continue
+        if isinstance(site_key, str) and site_key:
+            seen_site_keys.add(site_key)
+        html = _get_debug_page(candidate_bundle, page_url)
+        if html:
+            return html
+
+    return None
+
+
+def _record_debug_pdf_text(
+    bundle: dict[str, Any],
+    pdf_url: str,
+    *,
+    full_text: str,
+    tables: list[list[list[str | None]]] | None = None,
+) -> None:
+    entry: dict[str, Any] = {
         "url": pdf_url,
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "full_text": full_text,
     }
+    if tables:
+        entry["tables"] = tables
+    bundle.setdefault("pdfs", {})[_debug_cache_key(pdf_url)] = entry
     _write_site_debug_bundle(bundle)
 
 
@@ -564,6 +666,20 @@ def _get_debug_pdf_text(bundle: dict[str, Any] | None, pdf_url: str) -> str | No
         if isinstance(full_text, str):
             return full_text
     return None
+
+
+def _get_debug_pdf_tables(
+    bundle: dict[str, Any] | None,
+    pdf_url: str,
+) -> list[list[list[str | None]]]:
+    if not bundle:
+        return []
+    pdf = bundle.get("pdfs", {}).get(_debug_cache_key(pdf_url))
+    if isinstance(pdf, dict):
+        tables = pdf.get("tables")
+        if isinstance(tables, list):
+            return tables
+    return []
 
 
 def _extract_blocks_from_html(html: str) -> list[str]:
@@ -593,6 +709,9 @@ def _site_audit_context_from_debug_bundle(base_url: str) -> dict[str, Any]:
     if summary["discovered_pages"]:
         context["discovered_pages"] = summary["discovered_pages"]
         context["discovered_page_count"] = len(summary["discovered_pages"])
+    if summary["hinted_pages"]:
+        context["hinted_pages"] = summary["hinted_pages"]
+        context["hinted_page_count"] = len(summary["hinted_pages"])
     if summary["pdf_links"]:
         context["pdf_links"] = summary["pdf_links"][:5]
         context["needs_pdf_reader"] = not _HAS_PDFPLUMBER
@@ -605,17 +724,373 @@ def _finalize_site_debug_bundle(
     *,
     signals: list[DealSignal],
     discovered_pages: list[str],
+    hinted_pages: list[dict[str, Any]],
     pdf_links: list[str],
     menu_avg_price: float | None,
+    sidecar: MenuSidecar | None = None,
 ) -> None:
     if not bundle:
         return
     bundle["signals"] = [_serialize_signal(signal) for signal in signals]
     bundle["discovered_pages"] = list(discovered_pages)
+    bundle["hinted_pages"] = [deepcopy(page) for page in hinted_pages]
     bundle["pdf_links"] = list(pdf_links)
     bundle["menu_avg_price"] = menu_avg_price
+    if sidecar is not None and (sidecar.sections or sidecar.items or sidecar.price_points):
+        bundle["menu_sidecar"] = sidecar.to_dict()
     bundle["completed_at"] = datetime.now(timezone.utc).isoformat()
     _write_site_debug_bundle(bundle)
+
+
+def _annotate_signals(signals: list[DealSignal], metadata: dict[str, Any]) -> None:
+    if not signals or not metadata:
+        return
+    for signal in signals:
+        if signal.metadata is None:
+            signal.metadata = {}
+        for key, value in metadata.items():
+            signal.metadata.setdefault(key, deepcopy(value))
+
+
+def _jsonld_clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return str(value)
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"\s+", " ", unescape(value)).strip()
+
+
+def _jsonld_clean_fragment(value: Any) -> str:
+    cleaned = _jsonld_clean_text(value)
+    if not cleaned:
+        return ""
+    cleaned = _JSONLD_CONTEXT_NOISE_RE.sub("", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -;,.")
+    return cleaned
+
+
+def _jsonld_node_types(node: dict[str, Any]) -> set[str]:
+    raw_type = node.get("@type")
+    if isinstance(raw_type, str):
+        return {raw_type}
+    if isinstance(raw_type, list):
+        return {item for item in raw_type if isinstance(item, str)}
+    return set()
+
+
+def _jsonld_top_level_nodes(payload: Any) -> list[dict[str, Any]]:
+    items = payload if isinstance(payload, list) else [payload]
+    nodes: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        graph = item.get("@graph")
+        if isinstance(graph, list):
+            nodes.extend(node for node in graph if isinstance(node, dict))
+            continue
+        nodes.append(item)
+    return nodes
+
+
+def _jsonld_collect_id_index(nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    id_index: dict[str, dict[str, Any]] = {}
+    queue: deque[Any] = deque(nodes)
+    seen_objects: set[int] = set()
+
+    while queue:
+        value = queue.popleft()
+        if isinstance(value, list):
+            queue.extend(value)
+            continue
+        if not isinstance(value, dict):
+            continue
+        obj_id = id(value)
+        if obj_id in seen_objects:
+            continue
+        seen_objects.add(obj_id)
+
+        node_id = value.get("@id")
+        if isinstance(node_id, str) and node_id and node_id not in id_index:
+            id_index[node_id] = value
+
+        for child in value.values():
+            if isinstance(child, (dict, list)):
+                queue.append(child)
+
+    return id_index
+
+
+def _jsonld_resolve_node(value: Any, id_index: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    if isinstance(value, str):
+        resolved = id_index.get(value)
+        return resolved if isinstance(resolved, dict) else None
+    if not isinstance(value, dict):
+        return None
+
+    ref_id = value.get("@id")
+    if isinstance(ref_id, str) and ref_id and len(value) == 1:
+        resolved = id_index.get(ref_id)
+        if isinstance(resolved, dict):
+            return resolved
+    return value
+
+
+def _jsonld_child_nodes(node: dict[str, Any], key: str, id_index: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    raw_value = node.get(key)
+    values = raw_value if isinstance(raw_value, list) else [raw_value] if raw_value is not None else []
+    children: list[dict[str, Any]] = []
+    for value in values:
+        resolved = _jsonld_resolve_node(value, id_index)
+        if isinstance(resolved, dict):
+            children.append(resolved)
+    return children
+
+
+def _jsonld_parse_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    cleaned = re.sub(r"[^0-9.]+", "", cleaned)
+    if not cleaned or cleaned.count(".") > 1:
+        return None
+
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def _jsonld_extract_price_details(
+    node: dict[str, Any] | None,
+    id_index: dict[str, dict[str, Any]],
+) -> tuple[float | None, str | None]:
+    if not isinstance(node, dict):
+        return None, None
+
+    price = _jsonld_parse_float(node.get("price"))
+    if price is None:
+        price = _jsonld_parse_float(node.get("minPrice"))
+    if price is None:
+        price = _jsonld_parse_float(node.get("maxPrice"))
+    currency = _jsonld_clean_text(node.get("priceCurrency")) or None
+
+    for spec in _jsonld_child_nodes(node, "priceSpecification", id_index):
+        spec_price, spec_currency = _jsonld_extract_price_details(spec, id_index)
+        if price is None and spec_price is not None:
+            price = spec_price
+        if currency is None and spec_currency:
+            currency = spec_currency
+        if price is not None and currency is not None:
+            break
+
+    return price, currency
+
+
+def _jsonld_parse_datetime(value: Any) -> datetime | None:
+    text = _jsonld_clean_text(value)
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _jsonld_extract_valid_window(
+    node: dict[str, Any] | None,
+    id_index: dict[str, dict[str, Any]],
+) -> tuple[datetime | None, datetime | None]:
+    if not isinstance(node, dict):
+        return None, None
+
+    start_date = _jsonld_parse_datetime(node.get("validFrom"))
+    end_date = _jsonld_parse_datetime(node.get("validThrough"))
+    if start_date or end_date:
+        return start_date, end_date
+
+    for spec in _jsonld_child_nodes(node, "priceSpecification", id_index):
+        spec_start, spec_end = _jsonld_extract_valid_window(spec, id_index)
+        if spec_start or spec_end:
+            return spec_start, spec_end
+
+    return None, None
+
+
+def _jsonld_extract_inline_price(texts: list[str]) -> float | None:
+    for text in texts:
+        cleaned = _jsonld_clean_text(text)
+        if not cleaned:
+            continue
+        match = _JSONLD_INLINE_PRICE_RE.search(cleaned)
+        if not match:
+            continue
+        try:
+            return float(match.group(1))
+        except ValueError:
+            continue
+    return None
+
+
+def _jsonld_extract_calories_from_node(node: dict[str, Any] | None) -> int | None:
+    if not isinstance(node, dict):
+        return None
+    nutrition = node.get("nutrition")
+    if isinstance(nutrition, dict):
+        cal_val = nutrition.get("calories")
+        if cal_val is not None:
+            try:
+                cal_int = int(str(cal_val).replace(" calories", "").replace(" cal", ""))
+                if 50 <= cal_int <= 5000:
+                    return cal_int
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _jsonld_compose_text(
+    *,
+    context_path: list[str],
+    context_fragments: list[str],
+    primary_name: str | None,
+    description: str | None,
+    price: float | None,
+) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for raw in [*context_path, *context_fragments, primary_name or "", description or ""]:
+        cleaned = _jsonld_clean_fragment(raw)
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        parts.append(cleaned)
+
+    text = " ".join(parts).strip()
+    if price is not None and "$" not in text:
+        text = f"{text} ${price:.2f}".strip()
+    return text
+
+
+def _jsonld_fallback_heading(context_path: list[str], name: str | None) -> str | None:
+    cleaned_path = [_jsonld_clean_text(part) for part in context_path if _jsonld_clean_text(part)]
+    cleaned_name = _jsonld_clean_text(name)
+
+    if cleaned_path and cleaned_name and cleaned_name.lower() != cleaned_path[-1].lower():
+        return f"{cleaned_path[-1]} - {cleaned_name}"[:80]
+    if cleaned_name:
+        return cleaned_name[:80]
+    if cleaned_path:
+        return cleaned_path[-1][:80]
+    return None
+
+
+def _jsonld_build_metadata(
+    *,
+    context_path: list[str],
+    node_types: set[str],
+    price: float | None,
+    price_currency: str | None,
+    primary_name: str | None,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "structured_source": "jsonld",
+        "jsonld_path": [part for part in context_path if part],
+        "jsonld_types": sorted(node_types),
+    }
+    cleaned_name = _jsonld_clean_text(primary_name)
+    if cleaned_name:
+        metadata["jsonld_primary_name"] = cleaned_name
+    if price is not None:
+        metadata["jsonld_structured_price"] = price
+    if price_currency:
+        metadata["jsonld_price_currency"] = price_currency
+    return metadata
+
+
+def _jsonld_has_promo_context(text: str, context_path: list[str], source_url: str) -> bool:
+    haystacks = [text.lower(), " ".join(context_path).lower(), source_url.lower()]
+    return any(
+        keyword in haystack
+        for haystack in haystacks
+        for keyword in _JSONLD_PROMO_CONTEXT_KEYWORDS
+    )
+
+
+def _is_related_locator_corporate_host(current_host: str, candidate_host: str) -> bool:
+    current = current_host.lower()
+    candidate = candidate_host.lower()
+    if not current or not candidate or current == candidate:
+        return False
+    if current in _LOCATOR_HINT_HOST_RULES:
+        expected = urlparse(_LOCATOR_HINT_HOST_RULES[current]).netloc.lower()
+        if candidate == expected:
+            return True
+    if current.startswith("locations."):
+        base = current[len("locations."):]
+        return candidate in {base, f"www.{base}"} or candidate.endswith(f".{base}")
+    return False
+
+
+def _discover_locator_corporate_pages(soup: BeautifulSoup, page_url: str) -> list[dict[str, str]]:
+    parsed = urlparse(page_url)
+    host = parsed.netloc.lower()
+    if not host:
+        return []
+
+    hinted: list[dict[str, str]] = []
+    seen_urls: set[str] = set()
+
+    def _add_hint(url: str, reason: str) -> None:
+        normalized = url.strip()
+        if not normalized or normalized in seen_urls:
+            return
+        seen_urls.add(normalized)
+        hinted.append({"url": normalized, "reason": reason})
+
+    if host in _LOCATOR_HINT_HOST_RULES:
+        corporate_root = _LOCATOR_HINT_HOST_RULES[host]
+        for path in _LOCATOR_HINT_PATHS:
+            _add_hint(urljoin(corporate_root, path), f"locator_host_rule:{host}")
+    elif host.startswith("locations."):
+        corporate_root = f"{parsed.scheme}://www.{host[len('locations.'):] }"
+        for path in _LOCATOR_HINT_PATHS:
+            _add_hint(urljoin(corporate_root, path), "locator_host_rule:locations_subdomain")
+
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        full_url = urljoin(page_url, href)
+        parsed_link = urlparse(full_url)
+        if parsed_link.scheme not in ("http", "https"):
+            continue
+        if not _is_related_locator_corporate_host(host, parsed_link.netloc.lower()):
+            continue
+
+        combined = f"{a_tag.get_text(' ', strip=True)} {full_url}".lower()
+        if any(token in combined for token in _LOCATOR_HINT_EXCLUDED_TOKENS):
+            continue
+        if not any(token in combined for token in _LOCATOR_HINT_TEXT_KEYWORDS):
+            continue
+
+        link_path = parsed_link.path.rstrip("/").lower()
+        if any(keyword in link_path for keyword in ("deal", "offer", "promo", "special", "happy-hour", "happyhour")):
+            _add_hint(full_url, f"locator_cross_domain_link:{a_tag.get_text(' ', strip=True)[:40] or parsed_link.path or parsed_link.netloc}")
+
+        corporate_root = f"{parsed_link.scheme}://{parsed_link.netloc}"
+        _add_hint(corporate_root, f"locator_cross_domain_root:{a_tag.get_text(' ', strip=True)[:40] or parsed_link.netloc}")
+
+    return hinted[:6]
 
 
 def _write_scrape_audit(entries: list[dict], append: bool = False) -> None:
@@ -955,96 +1430,33 @@ def _extract_jsonld_deals(
     region: str,
     seen_deals: set[str],
 ) -> list[DealSignal]:
-    """Extract deal signals from JSON-LD structured data on the page.
-
-    Looks for schema.org Offer, MenuItem, Menu, MenuSection, Restaurant,
-    and FoodEstablishment types. Applies the same deal-validation logic
-    as text-block extraction to avoid ingesting regular menu items.
-
-    Pattern adapted from collectors/events/austintexas_org.py:266-299.
-    """
+    """Extract deal signals from hierarchical JSON-LD structured data."""
     signals: list[DealSignal] = []
 
     for match in _JSONLD_RE.finditer(html):
         try:
-            ld_data = json.loads(match.group(1))
-            items = ld_data if isinstance(ld_data, list) else [ld_data]
+            nodes = _jsonld_top_level_nodes(json.loads(match.group(1)))
+            if not nodes:
+                continue
 
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                # Handle @graph arrays (common in WordPress sites)
-                if item.get("@graph"):
-                    graph = item["@graph"]
-                    if isinstance(graph, list):
-                        items.extend(graph)
-                    continue
-
-                item_type = item.get("@type", "")
-                # Normalize list types like ["Restaurant", "FoodEstablishment"]
-                if isinstance(item_type, list):
-                    item_type = item_type[0] if item_type else ""
-
-                if item_type not in _DEAL_SCHEMA_TYPES:
-                    continue
-
-                # Route by type
-                if item_type in ("Offer", "AggregateOffer"):
-                    _jsonld_offer_to_signal(
-                        item, restaurant_name, local_employer_id,
-                        brand_group_id, source_url, region,
-                        seen_deals, signals,
-                    )
-                elif item_type == "MenuItem":
-                    _jsonld_menuitem_to_signal(
-                        item, restaurant_name, local_employer_id,
-                        brand_group_id, source_url, region,
-                        seen_deals, signals,
-                    )
-                elif item_type == "MenuSection":
-                    # MenuSection contains a list of MenuItems
-                    for menu_item in item.get("hasMenuItem", []):
-                        if isinstance(menu_item, dict):
-                            _jsonld_menuitem_to_signal(
-                                menu_item, restaurant_name, local_employer_id,
-                                brand_group_id, source_url, region,
-                                seen_deals, signals,
-                            )
-                elif item_type == "Menu":
-                    # Menu → hasMenuSection → hasMenuItem
-                    for section in item.get("hasMenuSection", []):
-                        if isinstance(section, dict):
-                            for menu_item in section.get("hasMenuItem", []):
-                                if isinstance(menu_item, dict):
-                                    _jsonld_menuitem_to_signal(
-                                        menu_item, restaurant_name, local_employer_id,
-                                        brand_group_id, source_url, region,
-                                        seen_deals, signals,
-                                    )
-                elif item_type in ("Restaurant", "FoodEstablishment"):
-                    # Check for nested offers
-                    offers = item.get("makesOffer") or item.get("offers") or []
-                    if isinstance(offers, dict):
-                        offers = [offers]
-                    for offer in offers:
-                        if isinstance(offer, dict):
-                            _jsonld_offer_to_signal(
-                                offer, restaurant_name, local_employer_id,
-                                brand_group_id, source_url, region,
-                                seen_deals, signals,
-                            )
-                    # Check for nested menu
-                    menu = item.get("hasMenu")
-                    if isinstance(menu, dict) and menu.get("@type") == "Menu":
-                        for section in menu.get("hasMenuSection", []):
-                            if isinstance(section, dict):
-                                for mi in section.get("hasMenuItem", []):
-                                    if isinstance(mi, dict):
-                                        _jsonld_menuitem_to_signal(
-                                            mi, restaurant_name, local_employer_id,
-                                            brand_group_id, source_url, region,
-                                            seen_deals, signals,
-                                        )
+            id_index = _jsonld_collect_id_index(nodes)
+            for node in nodes:
+                _jsonld_traverse_node(
+                    node,
+                    context_path=[],
+                    context_fragments=[],
+                    inherited_price=None,
+                    inherited_currency=None,
+                    id_index=id_index,
+                    lineage_keys=set(),
+                    restaurant_name=restaurant_name,
+                    local_employer_id=local_employer_id,
+                    brand_group_id=brand_group_id,
+                    source_url=source_url,
+                    region=region,
+                    seen_deals=seen_deals,
+                    signals=signals,
+                )
 
         except (json.JSONDecodeError, KeyError, TypeError):
             continue
@@ -1052,8 +1464,17 @@ def _extract_jsonld_deals(
     return signals
 
 
-def _jsonld_offer_to_signal(
-    offer: dict,
+def _jsonld_append_signal(
+    *,
+    text: str,
+    context_path: list[str],
+    primary_name: str | None,
+    structured_price: float | None,
+    price_currency: str | None,
+    calories: int | None,
+    metadata: dict[str, Any],
+    start_date: datetime | None,
+    end_date: datetime | None,
     restaurant_name: str,
     local_employer_id: int,
     brand_group_id: int | None,
@@ -1062,137 +1483,410 @@ def _jsonld_offer_to_signal(
     seen_deals: set[str],
     signals: list[DealSignal],
 ) -> None:
-    """Convert a schema.org Offer to a DealSignal if it passes deal validation."""
-    name = offer.get("name") or offer.get("description", "")
-    if not name:
+    if not text or not _jsonld_has_promo_context(text, context_path, source_url):
         return
-
-    # Build text for deal validation
-    desc = offer.get("description", "")
-    text = f"{name} {desc}".strip()
-
-    # Must pass the same validation as text-block deals
     if not _is_valid_deal_block(text):
         return
 
-    name_key = name[:80].lower()
+    fallback_heading = _jsonld_fallback_heading(context_path, primary_name)
+    deal_name = _extract_deal_name(text, fallback_heading=fallback_heading)
+    if not deal_name or len(deal_name) < 5:
+        return
+
+    name_key = deal_name.lower()
     if name_key in seen_deals:
         return
+
+    pricing = _extract_deal_pricing(text)
+    if pricing.is_non_food:
+        return
+    if structured_price is None and pricing.is_addon:
+        return
+
     seen_deals.add(name_key)
 
-    price = None
-    raw_price = offer.get("price")
-    if raw_price is not None:
-        try:
-            price = float(raw_price)
-        except (ValueError, TypeError):
-            price = _extract_price(str(raw_price))
-
-    deal_type = _classify_deal_type(text)
-    valid_days = _extract_days(text)
-    start_time, end_time = _extract_times(text)
-
-    signals.append(DealSignal(
-        restaurant_name=restaurant_name,
-        local_employer_id=local_employer_id,
-        brand_group_id=brand_group_id,
-        deal_name=name[:80],
-        deal_description=text[:500],
-        deal_type=deal_type,
-        price=price,
-        valid_days=valid_days,
-        valid_start_time=start_time,
-        valid_end_time=end_time,
-        source="website_scrape",
-        source_url=source_url,
-        region=region,
-        observed_at=datetime.now(timezone.utc),
-    ))
-
-
-def _jsonld_menuitem_to_signal(
-    item: dict,
-    restaurant_name: str,
-    local_employer_id: int,
-    brand_group_id: int | None,
-    source_url: str,
-    region: str,
-    seen_deals: set[str],
-    signals: list[DealSignal],
-) -> None:
-    """Convert a schema.org MenuItem to a DealSignal if it looks like a deal."""
-    name = item.get("name", "")
-    desc = item.get("description", "")
-    text = f"{name} {desc}".strip()
-    if not text:
-        return
-
-    # Must pass deal validation — prevents ingesting plain menu items
-    if not _is_valid_deal_block(text):
-        return
-
-    name_key = name[:80].lower()
-    if name_key in seen_deals:
-        return
-    seen_deals.add(name_key)
-
-    # Extract price from nested offers
-    price = None
-    offers = item.get("offers")
-    if isinstance(offers, dict):
-        try:
-            price = float(offers.get("price", 0))
-        except (ValueError, TypeError):
-            pass
-    elif isinstance(offers, list) and offers:
-        try:
-            price = float(offers[0].get("price", 0))
-        except (ValueError, TypeError):
-            pass
-    if not price:
-        price = _extract_price(text)
-
-    # Extract calories from nutrition
-    calories = None
-    nutrition = item.get("nutrition")
-    if isinstance(nutrition, dict):
-        cal_val = nutrition.get("calories")
-        if cal_val is not None:
-            try:
-                cal_int = int(str(cal_val).replace(" calories", "").replace(" cal", ""))
-                if 50 <= cal_int <= 5000:
-                    calories = cal_int
-            except (ValueError, TypeError):
-                pass
-    if not calories:
-        calories = _extract_calories(text)
+    price = structured_price if structured_price is not None else pricing.price
+    price_type = pricing.price_type
+    if structured_price is not None and price_type is None and price is not None:
+        price_type = "absolute"
 
     calorie_price_ratio = None
     if calories and price and price > 0:
         calorie_price_ratio = round(calories / price, 1)
 
-    deal_type = _classify_deal_type(text)
     valid_days = _extract_days(text)
     start_time, end_time = _extract_times(text)
+
+    signal_metadata = deepcopy(metadata)
+    if price_currency:
+        signal_metadata.setdefault("jsonld_price_currency", price_currency)
 
     signals.append(DealSignal(
         restaurant_name=restaurant_name,
         local_employer_id=local_employer_id,
         brand_group_id=brand_group_id,
-        deal_name=name[:80],
+        deal_name=deal_name,
         deal_description=text[:500],
-        deal_type=deal_type,
+        deal_type=_classify_deal_type(text),
         price=price,
+        price_type=price_type,
+        discount_percentage=pricing.discount_percentage,
         calories=calories,
         calorie_price_ratio=calorie_price_ratio,
         valid_days=valid_days,
         valid_start_time=start_time,
         valid_end_time=end_time,
+        start_date=start_date,
+        end_date=end_date,
+        raw_scraped_text=text[:2000],
+        metadata=signal_metadata,
         source="website_scrape",
         source_url=source_url,
         region=region,
         observed_at=datetime.now(timezone.utc),
     ))
+
+
+def _jsonld_offer_to_signal(
+    offer: dict,
+    *,
+    context_path: list[str],
+    context_fragments: list[str],
+    inherited_price: float | None,
+    inherited_currency: str | None,
+    id_index: dict[str, dict[str, Any]],
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    source_url: str,
+    region: str,
+    seen_deals: set[str],
+    signals: list[DealSignal],
+) -> None:
+    """Convert a schema.org Offer to a DealSignal using inherited menu context."""
+    name = _jsonld_clean_text(offer.get("name"))
+    desc = _jsonld_clean_text(offer.get("description"))
+    item_offered = None
+    child_items = _jsonld_child_nodes(offer, "itemOffered", id_index)
+    if child_items:
+        item_offered = child_items[0]
+
+    item_name = _jsonld_clean_text(item_offered.get("name")) if isinstance(item_offered, dict) else ""
+    item_desc = _jsonld_clean_text(item_offered.get("description")) if isinstance(item_offered, dict) else ""
+    primary_name = name or item_name
+    if not primary_name and not context_path:
+        return
+
+    price, currency = _jsonld_extract_price_details(offer, id_index)
+    if price is None:
+        price = inherited_price
+    if currency is None:
+        currency = inherited_currency
+
+    start_date, end_date = _jsonld_extract_valid_window(offer, id_index)
+    calories = _jsonld_extract_calories_from_node(item_offered)
+    text = _jsonld_compose_text(
+        context_path=context_path,
+        context_fragments=[*context_fragments, item_desc],
+        primary_name=primary_name,
+        description=desc,
+        price=price,
+    )
+    metadata = _jsonld_build_metadata(
+        context_path=context_path,
+        node_types=_jsonld_node_types(offer) | (_jsonld_node_types(item_offered) if isinstance(item_offered, dict) else set()),
+        price=price,
+        price_currency=currency,
+        primary_name=primary_name,
+    )
+    if item_name:
+        metadata.setdefault("jsonld_item_name", item_name)
+
+    _jsonld_append_signal(
+        text=text,
+        context_path=context_path,
+        primary_name=primary_name,
+        structured_price=price,
+        price_currency=currency,
+        calories=calories,
+        metadata=metadata,
+        start_date=start_date,
+        end_date=end_date,
+        restaurant_name=restaurant_name,
+        local_employer_id=local_employer_id,
+        brand_group_id=brand_group_id,
+        source_url=source_url,
+        region=region,
+        seen_deals=seen_deals,
+        signals=signals,
+    )
+
+
+def _jsonld_menuitem_to_signal(
+    item: dict,
+    *,
+    context_path: list[str],
+    context_fragments: list[str],
+    inherited_price: float | None,
+    inherited_currency: str | None,
+    id_index: dict[str, dict[str, Any]],
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    source_url: str,
+    region: str,
+    seen_deals: set[str],
+    signals: list[DealSignal],
+) -> None:
+    """Convert a schema.org MenuItem to a DealSignal using inherited menu context."""
+    name = _jsonld_clean_text(item.get("name"))
+    desc = _jsonld_clean_text(item.get("description"))
+    if not name and not desc:
+        return
+
+    offers = _jsonld_child_nodes(item, "offers", id_index)
+    offer_fragments: list[str] = []
+    price = inherited_price
+    currency = inherited_currency
+    start_date = None
+    end_date = None
+
+    for offer in offers:
+        offer_name = _jsonld_clean_text(offer.get("name"))
+        offer_desc = _jsonld_clean_text(offer.get("description"))
+        if offer_name:
+            offer_fragments.append(offer_name)
+        if offer_desc:
+            offer_fragments.append(offer_desc)
+        offer_price, offer_currency = _jsonld_extract_price_details(offer, id_index)
+        if price is None and offer_price is not None:
+            price = offer_price
+        if currency is None and offer_currency is not None:
+            currency = offer_currency
+        if start_date is None and end_date is None:
+            start_date, end_date = _jsonld_extract_valid_window(offer, id_index)
+
+    if price is None:
+        price = _jsonld_extract_inline_price([*context_fragments, desc])
+
+    calories = _jsonld_extract_calories_from_node(item)
+    if calories is None:
+        calories = _extract_calories(desc)
+
+    text = _jsonld_compose_text(
+        context_path=context_path,
+        context_fragments=[*context_fragments, *offer_fragments],
+        primary_name=name,
+        description=desc,
+        price=price,
+    )
+    metadata = _jsonld_build_metadata(
+        context_path=context_path,
+        node_types=_jsonld_node_types(item),
+        price=price,
+        price_currency=currency,
+        primary_name=name,
+    )
+    if offers:
+        metadata.setdefault("jsonld_offer_count", len(offers))
+
+    _jsonld_append_signal(
+        text=text,
+        context_path=context_path,
+        primary_name=name,
+        structured_price=price,
+        price_currency=currency,
+        calories=calories,
+        metadata=metadata,
+        start_date=start_date,
+        end_date=end_date,
+        restaurant_name=restaurant_name,
+        local_employer_id=local_employer_id,
+        brand_group_id=brand_group_id,
+        source_url=source_url,
+        region=region,
+        seen_deals=seen_deals,
+        signals=signals,
+    )
+
+
+def _jsonld_traverse_node(
+    node: dict[str, Any],
+    *,
+    context_path: list[str],
+    context_fragments: list[str],
+    inherited_price: float | None,
+    inherited_currency: str | None,
+    id_index: dict[str, dict[str, Any]],
+    lineage_keys: set[str],
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    source_url: str,
+    region: str,
+    seen_deals: set[str],
+    signals: list[DealSignal],
+) -> None:
+    resolved = _jsonld_resolve_node(node, id_index)
+    if not isinstance(resolved, dict):
+        return
+
+    node_types = _jsonld_node_types(resolved)
+    if not node_types.intersection(_DEAL_SCHEMA_TYPES):
+        return
+
+    node_key = resolved.get("@id")
+    lineage_key = node_key if isinstance(node_key, str) and node_key else f"anon:{id(resolved)}"
+    if lineage_key in lineage_keys:
+        return
+    next_lineage = set(lineage_keys)
+    next_lineage.add(lineage_key)
+
+    name = _jsonld_clean_text(resolved.get("name"))
+    desc = _jsonld_clean_text(resolved.get("description"))
+    node_price, node_currency = _jsonld_extract_price_details(resolved, id_index)
+    if node_price is None:
+        node_price = _jsonld_extract_inline_price([desc])
+    effective_price = node_price if node_price is not None else inherited_price
+    effective_currency = node_currency if node_currency is not None else inherited_currency
+
+    if node_types.intersection({"Restaurant", "FoodEstablishment"}):
+        next_fragments = [*context_fragments]
+        if name:
+            next_fragments.append(name)
+        if desc:
+            next_fragments.append(desc)
+
+        for offer in _jsonld_child_nodes(resolved, "makesOffer", id_index) + _jsonld_child_nodes(resolved, "offers", id_index):
+            _jsonld_offer_to_signal(
+                offer,
+                context_path=context_path,
+                context_fragments=next_fragments,
+                inherited_price=effective_price,
+                inherited_currency=effective_currency,
+                id_index=id_index,
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                source_url=source_url,
+                region=region,
+                seen_deals=seen_deals,
+                signals=signals,
+            )
+        for menu in _jsonld_child_nodes(resolved, "hasMenu", id_index):
+            _jsonld_traverse_node(
+                menu,
+                context_path=context_path,
+                context_fragments=next_fragments,
+                inherited_price=effective_price,
+                inherited_currency=effective_currency,
+                id_index=id_index,
+                lineage_keys=next_lineage,
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                source_url=source_url,
+                region=region,
+                seen_deals=seen_deals,
+                signals=signals,
+            )
+        return
+
+    if "Menu" in node_types or "MenuSection" in node_types:
+        next_path = [*context_path]
+        if name:
+            next_path.append(name)
+        next_fragments = [*context_fragments]
+        if desc:
+            next_fragments.append(desc)
+
+        for offer in _jsonld_child_nodes(resolved, "offers", id_index):
+            _jsonld_offer_to_signal(
+                offer,
+                context_path=next_path,
+                context_fragments=next_fragments,
+                inherited_price=effective_price,
+                inherited_currency=effective_currency,
+                id_index=id_index,
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                source_url=source_url,
+                region=region,
+                seen_deals=seen_deals,
+                signals=signals,
+            )
+
+        for menu_item in _jsonld_child_nodes(resolved, "hasMenuItem", id_index):
+            _jsonld_menuitem_to_signal(
+                menu_item,
+                context_path=next_path,
+                context_fragments=next_fragments,
+                inherited_price=effective_price,
+                inherited_currency=effective_currency,
+                id_index=id_index,
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                source_url=source_url,
+                region=region,
+                seen_deals=seen_deals,
+                signals=signals,
+            )
+
+        for section in _jsonld_child_nodes(resolved, "hasMenuSection", id_index):
+            _jsonld_traverse_node(
+                section,
+                context_path=next_path,
+                context_fragments=next_fragments,
+                inherited_price=effective_price,
+                inherited_currency=effective_currency,
+                id_index=id_index,
+                lineage_keys=next_lineage,
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                source_url=source_url,
+                region=region,
+                seen_deals=seen_deals,
+                signals=signals,
+            )
+        return
+
+    if "MenuItem" in node_types:
+        _jsonld_menuitem_to_signal(
+            resolved,
+            context_path=context_path,
+            context_fragments=context_fragments,
+            inherited_price=effective_price,
+            inherited_currency=effective_currency,
+            id_index=id_index,
+            restaurant_name=restaurant_name,
+            local_employer_id=local_employer_id,
+            brand_group_id=brand_group_id,
+            source_url=source_url,
+            region=region,
+            seen_deals=seen_deals,
+            signals=signals,
+        )
+        return
+
+    if node_types.intersection({"Offer", "AggregateOffer"}):
+        _jsonld_offer_to_signal(
+            resolved,
+            context_path=context_path,
+            context_fragments=context_fragments,
+            inherited_price=effective_price,
+            inherited_currency=effective_currency,
+            id_index=id_index,
+            restaurant_name=restaurant_name,
+            local_employer_id=local_employer_id,
+            brand_group_id=brand_group_id,
+            source_url=source_url,
+            region=region,
+            seen_deals=seen_deals,
+            signals=signals,
+        )
 
 
 def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
@@ -1450,11 +2144,186 @@ def _pdf_text_to_signals(
     return signals
 
 
+def _extract_page_artifacts(
+    html: str,
+    *,
+    page_url: str,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    region: str,
+    seen_deals: set[str],
+    sidecar: MenuSidecar | None = None,
+) -> tuple[BeautifulSoup, list[DealSignal], list[float], list[str]]:
+    soup = BeautifulSoup(html, "html.parser")
+    blocks = _extract_text_blocks(soup)
+    page_prices = _extract_all_prices(blocks)
+    page_signals: list[DealSignal] = []
+
+    for block in blocks:
+        page_signals.extend(_text_block_to_signals(
+            block,
+            restaurant_name=restaurant_name,
+            local_employer_id=local_employer_id,
+            brand_group_id=brand_group_id,
+            source_url=page_url,
+            region=region,
+            seen_deals=seen_deals,
+        ))
+
+    page_signals.extend(_extract_jsonld_deals(
+        html,
+        restaurant_name,
+        local_employer_id,
+        brand_group_id,
+        page_url,
+        region,
+        seen_deals,
+    ))
+
+    if sidecar is not None:
+        _populate_sidecar_for_page(sidecar, html=html, soup=soup, page_url=page_url)
+        _link_signals_to_sidecar(sidecar, page_signals, page_url=page_url)
+
+    pdf_links = _discover_pdf_links(soup, page_url)
+    return soup, page_signals, page_prices, pdf_links
+
+
+def _populate_sidecar_for_page(
+    sidecar: MenuSidecar,
+    *,
+    html: str,
+    soup: BeautifulSoup,
+    page_url: str,
+) -> None:
+    """Feed a page's JSON-LD (preferred) and DOM (fallback) into the sidecar."""
+    sections_before = len(sidecar.sections)
+    items_before = len(sidecar.items)
+    try:
+        ingest_jsonld_from_html(html, page_url=page_url, sidecar=sidecar)
+    except Exception as exc:  # pragma: no cover — never let sidecar kill the scrape
+        logger.debug("[WebScraper] sidecar JSON-LD ingest failed for %s: %s", page_url, exc)
+
+    # Only fall back to DOM heuristics if JSON-LD added nothing new for this page.
+    if len(sidecar.sections) == sections_before and len(sidecar.items) == items_before:
+        try:
+            ingest_dom_fallback(soup, page_url=page_url, sidecar=sidecar)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("[WebScraper] sidecar DOM ingest failed for %s: %s", page_url, exc)
+
+
+def _link_signals_to_sidecar(
+    sidecar: MenuSidecar,
+    signals: list[DealSignal],
+    *,
+    page_url: str,
+) -> None:
+    """Attach an offer_target metadata entry to each signal when possible."""
+    for signal in signals:
+        if signal.metadata is None:
+            signal.metadata = {}
+        if "offer_target" in signal.metadata:
+            continue
+
+        jsonld_path = signal.metadata.get("jsonld_path") if isinstance(signal.metadata, dict) else None
+        primary_name = signal.metadata.get("jsonld_primary_name") if isinstance(signal.metadata, dict) else None
+        service_period = _infer_service_period_from_signal(signal)
+        signal_ref = (signal.deal_name or "").lower()[:120]
+        target = link_signal_to_target(
+            sidecar,
+            signal_ref=signal_ref,
+            page_url=signal.source_url or page_url,
+            context_path=jsonld_path if isinstance(jsonld_path, list) else None,
+            primary_name=primary_name if isinstance(primary_name, str) else signal.deal_name,
+            service_period=service_period,
+        )
+        if target is not None:
+            signal.metadata["offer_target"] = target
+
+
+def _infer_service_period_from_signal(signal: DealSignal) -> str | None:
+    deal_type = (signal.deal_type or "").lower()
+    if deal_type in ("happy_hour", "lunch_special", "daily_special", "kids_eat_free"):
+        if deal_type == "happy_hour":
+            return "happy_hour"
+        if deal_type == "lunch_special":
+            return "lunch"
+    return None
+
+
+def _attach_value_profile_from_sidecar(
+    signals: list[DealSignal],
+    sidecar: MenuSidecar,
+) -> None:
+    """PRICE-02: attach the specific category baseline + savings to each signal.
+
+    We keep the attachment narrow: only the baseline relevant to the signal's
+    offer target ends up on metadata, plus an estimated_savings when the
+    signal carries an absolute price. No aggregate map gets broadcast.
+    """
+    course_baselines = sidecar.course_price_baseline()
+    section_baselines = sidecar.section_price_baseline()
+    if not course_baselines and not section_baselines:
+        return
+
+    for sig in signals:
+        if sig.metadata is None:
+            sig.metadata = {}
+        target = sig.metadata.get("offer_target") or {}
+        if not isinstance(target, dict):
+            continue
+
+        section_key = target.get("section_key")
+        item_key = target.get("item_key")
+        course = None
+        if item_key and item_key in sidecar.items:
+            course = sidecar.items[item_key].course
+        if not course and section_key and section_key in sidecar.sections:
+            course = sidecar.sections[section_key].course
+
+        value_profile: dict[str, Any] = {}
+        if course and course in course_baselines:
+            value_profile["course"] = course
+            value_profile["course_baseline"] = course_baselines[course]
+        if section_key and section_key in section_baselines:
+            value_profile["section_baseline"] = section_baselines[section_key]
+
+        baseline_for_savings: float | None = (
+            value_profile.get("section_baseline")
+            or value_profile.get("course_baseline")
+        )
+        if (
+            sig.price is not None
+            and sig.price_type == "absolute"
+            and baseline_for_savings is not None
+            and baseline_for_savings > sig.price
+        ):
+            savings = round(baseline_for_savings - sig.price, 2)
+            value_profile["estimated_savings"] = savings
+            value_profile["estimated_savings_pct"] = round(
+                100.0 * savings / baseline_for_savings, 1
+            )
+
+        if value_profile:
+            sig.metadata.setdefault("value_profile", value_profile)
+
+
 def _download_pdf_text(pdf_url: str) -> str | None:
     """Download a PDF and extract plain text for later parsing."""
+    text, _ = _download_pdf_artifacts(pdf_url)
+    return text
+
+
+def _download_pdf_artifacts(pdf_url: str) -> tuple[str | None, list[list[list[str | None]]]]:
+    """Download a PDF and return (text, tables).
+
+    PDF-02: also pulls layout-aware tables via pdfplumber.extract_tables()
+    so menu rows keep their item-price pairing instead of being flattened
+    into a paragraph. Returns ([], []) on any failure.
+    """
     if not _HAS_PDFPLUMBER:
         logger.debug("[WebScraper] pdfplumber not installed — skipping PDF: %s", pdf_url)
-        return None
+        return None, []
 
     try:
         resp = requests.get(
@@ -1464,32 +2333,38 @@ def _download_pdf_text(pdf_url: str) -> str | None:
             allow_redirects=True,
         )
         if resp.status_code != 200:
-            return None
+            return None, []
 
         # Size guard: skip PDFs larger than 5MB
         if len(resp.content) > 5_000_000:
             logger.debug("[WebScraper] PDF too large (%.1f MB): %s", len(resp.content) / 1e6, pdf_url)
-            return None
+            return None, []
 
+        tables: list[list[list[str | None]]] = []
         with pdfplumber.open(BytesIO(resp.content)) as pdf:
             # Page guard: skip PDFs with more than 20 pages
             if len(pdf.pages) > 20:
                 logger.debug("[WebScraper] PDF too many pages (%d): %s", len(pdf.pages), pdf_url)
-                return None
+                return None, []
 
             full_text = ""
             for page in pdf.pages:
                 page_text = page.extract_text()
                 if page_text:
                     full_text += page_text + "\n"
+                try:
+                    page_tables = page.extract_tables() or []
+                except Exception:
+                    page_tables = []
+                for tbl in page_tables:
+                    if tbl and len(tbl) >= 2:
+                        tables.append(tbl)
 
-        return full_text.strip() or None
+        return (full_text.strip() or None), tables
 
     except Exception as e:
         logger.debug("[WebScraper] Failed to parse PDF %s: %s", pdf_url, e)
-        return None
-
-    return None
+        return None, []
 
 
 def _parse_pdf_for_deals(
@@ -1502,17 +2377,36 @@ def _parse_pdf_for_deals(
     *,
     debug_bundle: dict[str, Any] | None = None,
     replay_debug_cache: bool = False,
+    sidecar: MenuSidecar | None = None,
 ) -> list[DealSignal]:
-    """Parse a PDF for deal signals, using local debug cache when requested."""
+    """Parse a PDF for deal signals, using local debug cache when requested.
+
+    PDF-02: also pulls extract_tables() into the menu sidecar so menu-PDF
+    rows feed the baseline and offer-target graph rather than being lost
+    to flat text extraction.
+    """
+    tables: list[list[list[str | None]]] = []
     if replay_debug_cache:
         full_text = _get_debug_pdf_text(debug_bundle, pdf_url)
+        tables = _get_debug_pdf_tables(debug_bundle, pdf_url)
         if full_text is None:
             logger.debug("[WebScraper] No cached PDF text for %s", pdf_url)
             return []
     else:
-        full_text = _download_pdf_text(pdf_url)
+        full_text, tables = _download_pdf_artifacts(pdf_url)
         if full_text and debug_bundle is not None:
-            _record_debug_pdf_text(debug_bundle, pdf_url, full_text=full_text)
+            _record_debug_pdf_text(debug_bundle, pdf_url, full_text=full_text, tables=tables)
+
+    if sidecar is not None and tables:
+        try:
+            ingest_pdf_tables(
+                tables,
+                page_url=pdf_url,
+                section_hint=_pdf_section_hint(pdf_url),
+                sidecar=sidecar,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.debug("[WebScraper] sidecar PDF ingest failed for %s: %s", pdf_url, exc)
 
     if not full_text:
         return []
@@ -1526,6 +2420,22 @@ def _parse_pdf_for_deals(
         region=region,
         seen_deals=seen_deals,
     )
+
+
+def _pdf_section_hint(pdf_url: str) -> str | None:
+    """Derive a best-effort section label from the PDF filename or path."""
+    try:
+        path = urlparse(pdf_url).path
+    except Exception:
+        return None
+    if not path:
+        return None
+    base = path.rsplit("/", 1)[-1]
+    name = base.rsplit(".", 1)[0]
+    if not name:
+        return None
+    cleaned = re.sub(r"[-_]+", " ", name).strip()
+    return cleaned[:60] or None
 
 
 def scrape_restaurant_website(
@@ -1579,7 +2489,9 @@ def scrape_restaurant_website(
     all_menu_prices: list[float] = []  # collect all prices across pages for avg
     all_pdf_links: list[str] = []  # collect PDF links across all pages
     discovered_pages: list[str] = []  # track link-discovered pages
+    hinted_pages: list[dict[str, Any]] = []  # track locator-to-corporate hint probes
     pages_fetched = 0
+    sidecar = MenuSidecar()  # STRUCT-01: structured menu artifacts for replay
 
     # --- Phase 1: Hardcoded paths ---
     homepage_soup = None
@@ -1590,48 +2502,80 @@ def scrape_restaurant_website(
 
         full_url = urljoin(base_url, path)
 
-        html = _get_debug_page(debug_bundle, full_url) if replay_debug_cache else _fetch_page(full_url, user_agent)
+        html = _get_replay_page(debug_bundle, full_url) if replay_debug_cache else _fetch_page(full_url, user_agent)
         if not html:
             continue
         if not replay_debug_cache and debug_bundle is not None:
             _record_debug_page(debug_bundle, full_url, html=html, fetch_type="hardcoded")
 
         pages_fetched += 1
-        soup = BeautifulSoup(html, "html.parser")
+        soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
+            html,
+            page_url=full_url,
+            restaurant_name=restaurant_name,
+            local_employer_id=local_employer_id,
+            brand_group_id=brand_group_id,
+            region=region,
+            seen_deals=seen_deals,
+            sidecar=sidecar,
+        )
+        signals.extend(page_signals)
+        all_menu_prices.extend(page_prices)
+        all_pdf_links.extend(page_pdf_links)
 
         # Save homepage soup for link discovery
         if path == "/":
             homepage_soup = soup
 
-        # --- Text block extraction ---
-        blocks = _extract_text_blocks(soup)
-        all_menu_prices.extend(_extract_all_prices(blocks))
+        # Rate limit: 1 req/sec between pages
+        if not replay_debug_cache:
+            time.sleep(1.0)
 
-        for block in blocks:
-            signals.extend(_text_block_to_signals(
-                block,
+    # --- Phase 2a: Locator-specific corporate hint routing ---
+    if homepage_soup and domain_family == "locator" and pages_fetched < MAX_PAGES_PER_SITE:
+        locator_hint_pages = _discover_locator_corporate_pages(homepage_soup, url)
+
+        for hint in locator_hint_pages:
+            if pages_fetched >= MAX_PAGES_PER_SITE:
+                break
+
+            hint_url = str(hint.get("url") or "").strip()
+            if not hint_url:
+                continue
+
+            hinted_pages.append({
+                "url": hint_url,
+                "reason": str(hint.get("reason") or "locator_corporate_hint"),
+            })
+            html = _get_replay_page(debug_bundle, hint_url) if replay_debug_cache else _fetch_page(hint_url, user_agent)
+            if not html:
+                continue
+            if not replay_debug_cache and debug_bundle is not None:
+                _record_debug_page(debug_bundle, hint_url, html=html, fetch_type="locator_hint")
+
+            pages_fetched += 1
+            _soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
+                html,
+                page_url=hint_url,
                 restaurant_name=restaurant_name,
                 local_employer_id=local_employer_id,
                 brand_group_id=brand_group_id,
-                source_url=full_url,
                 region=region,
                 seen_deals=seen_deals,
-            ))
+                sidecar=sidecar,
+            )
+            _annotate_signals(page_signals, {
+                "locator_hint_source_url": url,
+                "locator_hint_reason": str(hint.get("reason") or "locator_corporate_hint"),
+            })
+            signals.extend(page_signals)
+            all_menu_prices.extend(page_prices)
+            all_pdf_links.extend(page_pdf_links)
 
-        # --- JSON-LD extraction ---
-        jsonld_signals = _extract_jsonld_deals(
-            html, restaurant_name, local_employer_id,
-            brand_group_id, full_url, region, seen_deals,
-        )
-        signals.extend(jsonld_signals)
+            if not replay_debug_cache:
+                time.sleep(1.0)
 
-        # --- PDF link discovery ---
-        all_pdf_links.extend(_discover_pdf_links(soup, base_url))
-
-        # Rate limit: 1 req/sec between pages
-        time.sleep(1.0)
-
-    # --- Phase 2: Discover additional deal pages from homepage links ---
+    # --- Phase 2b: Discover additional same-domain deal pages from homepage links ---
     if homepage_soup and pages_fetched < MAX_PAGES_PER_SITE:
         discovered_pages = _discover_deal_pages(homepage_soup, base_url)
 
@@ -1639,39 +2583,29 @@ def scrape_restaurant_website(
             if pages_fetched >= MAX_PAGES_PER_SITE:
                 break
 
-            html = _get_debug_page(debug_bundle, disc_url) if replay_debug_cache else _fetch_page(disc_url, user_agent)
+            html = _get_replay_page(debug_bundle, disc_url) if replay_debug_cache else _fetch_page(disc_url, user_agent)
             if not html:
                 continue
             if not replay_debug_cache and debug_bundle is not None:
                 _record_debug_page(debug_bundle, disc_url, html=html, fetch_type="discovered")
 
             pages_fetched += 1
-            soup = BeautifulSoup(html, "html.parser")
-            blocks = _extract_text_blocks(soup)
-            all_menu_prices.extend(_extract_all_prices(blocks))
-
-            for block in blocks:
-                signals.extend(_text_block_to_signals(
-                    block,
-                    restaurant_name=restaurant_name,
-                    local_employer_id=local_employer_id,
-                    brand_group_id=brand_group_id,
-                    source_url=disc_url,
-                    region=region,
-                    seen_deals=seen_deals,
-                ))
-
-            # JSON-LD on discovered pages too
-            jsonld_signals = _extract_jsonld_deals(
-                html, restaurant_name, local_employer_id,
-                brand_group_id, disc_url, region, seen_deals,
+            _soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
+                html,
+                page_url=disc_url,
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                region=region,
+                seen_deals=seen_deals,
+                sidecar=sidecar,
             )
-            signals.extend(jsonld_signals)
+            signals.extend(page_signals)
+            all_menu_prices.extend(page_prices)
+            all_pdf_links.extend(page_pdf_links)
 
-            # PDF links on discovered pages
-            all_pdf_links.extend(_discover_pdf_links(soup, base_url))
-
-            time.sleep(1.0)
+            if not replay_debug_cache:
+                time.sleep(1.0)
 
     # --- Phase 3: Parse PDF links ---
     # Dedup PDFs and limit to MAX_PDFS_PER_SITE
@@ -1688,9 +2622,11 @@ def scrape_restaurant_website(
             brand_group_id, region, seen_deals,
             debug_bundle=debug_bundle,
             replay_debug_cache=replay_debug_cache,
+            sidecar=sidecar,
         )
         signals.extend(pdf_signals)
-        time.sleep(1.0)
+        if not replay_debug_cache:
+            time.sleep(1.0)
 
     # Compute menu average price and attach to each signal
     menu_avg_price = None
@@ -1699,12 +2635,19 @@ def scrape_restaurant_website(
         for sig in signals:
             sig.menu_avg_price = menu_avg_price
 
+    # PRICE-02: sidecar-derived category baseline + savings estimate. The
+    # existing flat `menu_avg_price` stays unchanged for back-compat; richer
+    # evidence goes on signal.metadata without DB schema changes.
+    _attach_value_profile_from_sidecar(signals, sidecar)
+
     _finalize_site_debug_bundle(
         debug_bundle,
         signals=signals,
         discovered_pages=discovered_pages,
+        hinted_pages=hinted_pages,
         pdf_links=unique_pdfs,
         menu_avg_price=menu_avg_price,
+        sidecar=sidecar,
     )
 
     return signals
