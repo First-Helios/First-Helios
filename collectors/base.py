@@ -12,8 +12,13 @@ Called by: each concrete scraper adapter, backend/ingest.py
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
+
+
+def _utcnow() -> datetime:
+    """Return naive UTC timestamps without using deprecated datetime.utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @dataclass
@@ -30,7 +35,7 @@ class ScraperSignal:
     signal_type: str            # "listing", "wage", "sentiment", "review_score"
     value: float                # normalized 0-1 or raw numeric
     metadata: dict[str, Any] = field(default_factory=dict)
-    observed_at: datetime = field(default_factory=datetime.utcnow)
+    observed_at: datetime = field(default_factory=_utcnow)
 
     # Optional fields
     wage_min: float | None = None

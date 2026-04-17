@@ -12,7 +12,7 @@ Depends on: SQLAlchemy
 Called by: backend/database.py, CLI tools, audits
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -27,6 +27,11 @@ from sqlalchemy import (
 )
 
 from core.database import Base
+
+
+def _utcnow() -> datetime:
+    """Return naive UTC timestamps without using deprecated datetime.utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -64,8 +69,8 @@ class MetaTableCatalog(Base):
     documentation_url = Column(String)  # Link to data dictionary
 
     # Audit
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     __table_args__ = (
         Index("idx_layer_source", "layer", "source"),
@@ -106,8 +111,8 @@ class MetaColumnCatalog(Base):
     sla_null_allowed = Column(Boolean, default=False)  # Is NULL expected?
 
     # Audit
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     __table_args__ = (
         UniqueConstraint("table_name", "column_name"),
@@ -134,7 +139,7 @@ class MetaDataLineage(Base):
 
     # Metadata
     description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     deprecated_at = Column(DateTime)  # When was this lineage obsolete?
 
     __table_args__ = (

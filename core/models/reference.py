@@ -19,7 +19,7 @@ Called by: scripts/populate_reference_data.py, server.py /api/ref/*, revelio_ing
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -36,6 +36,11 @@ from sqlalchemy import (
 from core.database import Base
 
 logger = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    """Return naive UTC timestamps without using deprecated datetime.utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class IndustryCategory(Base):
@@ -101,7 +106,7 @@ class BrandProfile(Base):
     typical_store_staff = Column(Integer, nullable=True)
     union_presence = Column(Boolean, default=False)
 
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
     # ── JSON property helpers ────────────────────────────────────
 
@@ -190,7 +195,7 @@ class RegionProfile(Base):
     retail_establishments = Column(Integer, nullable=True)
     retail_employees = Column(Integer, nullable=True)
 
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -300,7 +305,7 @@ class IndustryTaxonomy(Base):
     overture_categories = Column(Text, nullable=True)
 
     notes = Column(String, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -366,7 +371,7 @@ class MobOccupation(Base):
     traj_pct_earn_25plus_10yr = Column(Float, nullable=True)
     traj_pct_same_cluster_3yr = Column(Float, nullable=True)   # % still in same occ cluster at 3yr
 
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -527,7 +532,7 @@ class TexasWages(Base):
     wage_tier = Column(String(20), nullable=False)              # entry_level | experienced | mean | median
     hourly_wage = Column(Float, nullable=True)                  # null when suppressed by TWC
     vintage_year = Column(Integer, nullable=False)              # e.g. 2024
-    loaded_at = Column(DateTime, default=datetime.utcnow)
+    loaded_at = Column(DateTime, default=_utcnow)
 
     __table_args__ = (
         UniqueConstraint(

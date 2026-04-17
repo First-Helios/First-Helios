@@ -18,7 +18,7 @@ Depends on: core.database.Base
 Called by: intake endpoint (POST /api/contribute), burn endpoint, scheduler cleanup
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -33,6 +33,11 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 
 from core.database import Base
+
+
+def _utcnow() -> datetime:
+    """Return naive UTC timestamps without using deprecated datetime.utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── Portable JSON column ─────────────────────────────────────────────────────
@@ -68,7 +73,7 @@ class SpEvent(Base):
     event_type = Column(String, nullable=False)  # job_listing | salary_signal | business_review | event_listing
     payload = Column(JSONB, nullable=False)  # structured extraction data, unknown fields preserved
     source_type = Column(String, nullable=False, default="extension")
-    collected_at = Column(DateTime, nullable=False, default=datetime.utcnow)  # server-set, never from client
+    collected_at = Column(DateTime, nullable=False, default=_utcnow)  # server-set, never from client
     pipeline_version = Column(Integer, nullable=False, default=1)  # PII rule version for re-processing
 
     __table_args__ = (
@@ -102,7 +107,7 @@ class Quarantine(Base):
     original_payload = Column(JSONB, nullable=False)  # complete original event body
     redaction_types = Column(Text, nullable=False)  # JSON array e.g. '["email","phone"]'
     rule_version = Column(Integer, nullable=False)  # matches pipeline_version logic
-    quarantined_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    quarantined_at = Column(DateTime, nullable=False, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {
@@ -126,7 +131,7 @@ class SessionEpoch(Base):
     session_token = Column(Text, nullable=False, unique=True)  # one row per token
     epoch_id = Column(Integer, nullable=False)
     contributor_id = Column(Integer, ForeignKey("contributors.id"), nullable=True)  # NULL on burn
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
     burned_at = Column(DateTime, nullable=True)  # set on burn, NULL while active
 
     def to_dict(self) -> dict:
@@ -152,7 +157,7 @@ class BurnPool(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     month_key = Column(String, nullable=False)  # 'YYYY-MM'
     signal_count = Column(Integer, nullable=False, default=0)  # incremented on burn
-    burned_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    burned_at = Column(DateTime, nullable=False, default=_utcnow)
     expires_at = Column(DateTime, nullable=False)  # burned_at + 1 year
 
     def to_dict(self) -> dict:
@@ -177,7 +182,7 @@ class Contributor(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     uuid = Column(Text, nullable=False, unique=True)  # per-install anonymous identity
     total_signals = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
 
     def to_dict(self) -> dict:
         return {

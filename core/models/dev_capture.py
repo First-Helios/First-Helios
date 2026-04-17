@@ -20,12 +20,17 @@ Depends on: core.database.Base
 Called by: postings.spiritpool_routes._store_dev_capture()
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from core.database import Base
+
+
+def _utcnow() -> datetime:
+    """Return naive UTC timestamps without using deprecated datetime.utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class RawSignalCapture(Base):
@@ -43,7 +48,7 @@ class RawSignalCapture(Base):
     # ── Provenance ───────────────────────────────────────────────────────────
     domain = Column(String, nullable=False)             # "linkedin", "indeed", etc.
     session_token = Column(Text, nullable=False)        # opaque contributor identity
-    captured_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    captured_at = Column(DateTime, nullable=False, default=_utcnow)
 
     # ── Three layers for A/B comparison ──────────────────────────────────────
     raw_html = Column(Text, nullable=True)              # full outerHTML of job card element
