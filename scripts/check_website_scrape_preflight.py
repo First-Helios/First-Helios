@@ -31,7 +31,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from collectors.meal_deals.hint_registry import DEFAULT_REGISTRY_PATH, load_hints
 from collectors.meal_deals.website_scrape_audit_utils import classify_domain_family
-from collectors.meal_deals.website_scraper import load_website_scrape_target_groups
+from collectors.meal_deals.website_scraper import _SKIP_DOMAIN_FAMILIES, load_website_scrape_target_groups
 from config.paths import CACHE_DIR, WEBSITE_SCRAPE_DEBUG_DIR
 from core.database import get_session, init_db
 
@@ -163,7 +163,7 @@ def check_target_query(
 
     unique_urls = len(group_items)
     family_counts: Counter[str] = Counter()
-    suppressed_families = {"social", "government", "directory", "other_nonrestaurant"}
+    suppressed_families = set(_SKIP_DOMAIN_FAMILIES)
     suppressed_candidates = 0
     preview: list[str] = []
     for _normalized_url, group in group_items:

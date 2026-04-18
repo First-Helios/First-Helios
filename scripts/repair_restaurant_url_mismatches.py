@@ -4,7 +4,7 @@
 This script extends the existing URL-identity audit by handling isolated bad URL
 assignments like a restaurant pointing at another business's website. It can:
 
-1. Detect mismatches from shared-URL conflicts and fetched site identity text.
+1. Detect mismatches from shared-URL conflicts, fetched site identity text, and non-first-party URL families.
 2. Purge the bad `restaurant_urls` rows.
 3. Purge contaminated `website_scrape` legacy and semantic rows for the same employer/url.
 4. Re-resolve websites for the cleaned employers via OSM first, then targeted Google Places.
@@ -29,6 +29,8 @@ from bs4 import BeautifulSoup
 
 from collectors.meal_deals.google_places_resolver import resolve_local_urls
 from collectors.meal_deals.osm_url_resolver import fetch_osm_restaurant_websites, match_and_store_urls
+from collectors.meal_deals.website_scrape_audit_utils import classify_domain_family
+from collectors.meal_deals.website_scraper import _SKIP_DOMAIN_FAMILIES
 from core.database import (
     DealApplicability,
     DealMaterialization,
@@ -310,6 +312,50 @@ def audit_site_identity_mismatches(
                     "evidence_url": snapshot["final_url"],
                 }
             )
+
+    return mismatches
+
+
+def audit_non_first_party_restaurant_urls(
+    session: Any,
+    *,
+    region: str = "austin_tx",
+    target_employer_ids: set[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Flag active restaurant URLs that already point at skipped non-first-party families."""
+    query = (
+        session.query(RestaurantURL, LocalEmployer)
+        .join(LocalEmployer, LocalEmployer.id == RestaurantURL.local_employer_id)
+        .filter(
+            RestaurantURL.is_active.is_(True),
+            RestaurantURL.url.isnot(None),
+            LocalEmployer.industry.in_(["food_full_service", "fast_food", "bar_nightlife"]),
+            LocalEmployer.region == region,
+            LocalEmployer.is_active.is_(True),
+        )
+    )
+    if target_employer_ids:
+        query = query.filter(LocalEmployer.id.in_(sorted(target_employer_ids)))
+
+    mismatches: list[dict[str, Any]] = []
+    for rurl, emp in query.all():
+        family = classify_domain_family(rurl.url or "")
+        if family not in _SKIP_DOMAIN_FAMILIES:
+            continue
+        mismatches.append(
+            {
+                "rurl_id": rurl.id,
+                "emp_id": emp.id,
+                "emp_name": emp.name,
+                "url": rurl.url,
+                "source": rurl.source,
+                "domain_family": family,
+                "mismatch_reason": f"non-first-party {family} host",
+                "likely_owner_names": [],
+                "evidence": (urlparse(rurl.url).netloc or "").lower(),
+                "evidence_url": rurl.url,
+            }
+        )
 
     return mismatches
 
@@ -649,15 +695,24 @@ def main() -> None:
             audit_name_mismatch_urls(session),
             target_employer_ids,
         )
+        non_first_party_mismatches = audit_non_first_party_restaurant_urls(
+            session,
+            region=args.region,
+            target_employer_ids=target_employer_ids or None,
+        )
         site_identity_mismatches = audit_site_identity_mismatches(
             session,
             region=args.region,
             target_employer_ids=target_employer_ids or None,
             max_fetches=args.site_fetch_limit,
         )
-        actionable_mismatches = merge_actionable_mismatches(site_identity_mismatches)
+        actionable_mismatches = merge_actionable_mismatches(
+            non_first_party_mismatches,
+            site_identity_mismatches,
+        )
         if args.include_shared_url:
             actionable_mismatches = merge_actionable_mismatches(
+                non_first_party_mismatches,
                 shared_url_mismatches,
                 site_identity_mismatches,
             )
@@ -666,6 +721,7 @@ def main() -> None:
         print("\n── Summary ─────────────────────────────────────────────────")
         print(f"  Cross-brand URL conflicts:     {len(cross_brand_problems)}")
         print(f"  Shared-URL mismatches:         {len(shared_url_mismatches)}")
+        print(f"  Non-first-party URL rows:      {len(non_first_party_mismatches)}")
         print(f"  Site-identity mismatches:      {len(site_identity_mismatches)}")
         print(f"  Actionable mismatch rows:      {len(actionable_mismatches)}")
         print(f"  Contaminated meal_deals rows:  {contaminated_counts['legacy_meal_deals']}")
@@ -677,7 +733,11 @@ def main() -> None:
             print("\n── First Mismatches ───────────────────────────────────────")
             for mismatch in actionable_mismatches[:25]:
                 print(f"  URL row #{mismatch['rurl_id']}: {mismatch['emp_name']} -> {mismatch['url']}")
-                print(f"    likely owner: {', '.join(mismatch['likely_owner_names'])}")
+                likely_owner_names = mismatch.get("likely_owner_names") or []
+                if likely_owner_names:
+                    print(f"    likely owner: {', '.join(likely_owner_names)}")
+                elif mismatch.get("mismatch_reason"):
+                    print(f"    reason: {mismatch['mismatch_reason']}")
                 evidence = mismatch.get("evidence")
                 if evidence:
                     print(f"    evidence: {evidence}")

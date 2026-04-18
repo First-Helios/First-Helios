@@ -1,7 +1,7 @@
 # Meal Deal Ingestion
 
-Updated: 2026-04-17
-Status: canonical identity, observation/applicability, and semantic read-layer are live; website scraper sidecar, persistence-shape, hint-registry, replay, and pre-flight tooling are in place; runtime renderer escalation is still pending
+Updated: 2026-04-18
+Status: canonical identity, observation/applicability, and semantic read-layer are live; website scraper sidecar, persistence-shape, hint-registry, replay, and pre-flight tooling are in place; active remediation now focuses on target hygiene, current-source precedence, canonical-row selection, and modeled gated offers; runtime renderer escalation is still pending
 
 ## Purpose
 
@@ -16,6 +16,26 @@ Use it when you need to understand or change:
 - how operators validate, re-audit, and safely resume scraping
 
 This file is intentionally broader than a schema note. It is meant to give a human or agent enough context to work safely in this subsystem without re-deriving the architecture from source every time.
+
+## Roadmap Consolidation
+
+This document now absorbs the still-useful foundation context from the retired meal-deal rollout roadmap.
+
+What is already done and no longer belongs on the active roadmap:
+
+- schema, collector registry, URL resolution, chain collection, website scraping, manual ingest, and deal read APIs all exist
+- canonical observations, applicability, and materializations replaced the old mental model of `meal_deals` as the primary semantic source
+- replay bundles, audit manifests, menu sidecars, forward-compatible persistence shapes, render-policy decisions, and exploration-only hints are live
+
+What is still active work:
+
+- keeping wrong-target and non-food sites out of the scrape queue
+- preferring current and specific evidence over stale pages and summary rows
+- using `offer_target` and value-profile metadata in downstream ranking and explanation
+- modeling rewards, birthday, loyalty, and app-gated offers explicitly instead of treating them as generic promo chrome
+- keeping the map-layer contract downstream of canonical read APIs rather than reviving a separate ingestion-era roadmap for it
+
+Use `docs/guides/MEAL_DEAL_REMEDIATION_TRACKER.md` for the live fix checklist and `docs/guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md` for the broader scraper-task inventory.
 
 ## If You Only Remember Five Things
 
@@ -42,6 +62,7 @@ Read these files first when working in this area:
 11. `scripts/reaudit_deal_observations.py`
 12. `docs/guides/MEAL_DEAL_REPLAY_WORKFLOW.md`
 13. `docs/guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md`
+14. `docs/guides/MEAL_DEAL_REMEDIATION_TRACKER.md`
 
 ## System At A Glance
 
@@ -910,14 +931,17 @@ When changing scraper discovery, DOM extraction, sidecar logic, hint handling, r
 These are the current meaningful caveats, not historical ones.
 
 1. `RENDER-01` is still open. Render policy exists, but runtime Playwright escalation is not wired into `website_scraper.py` yet.
-2. The menu graph is sidecar-first, not DB-backed. Structured menu artifacts live in replay bundles and signal metadata today, not persistent tables.
-3. Remaining open Tier 2 scraper tasks still matter: `DISC-03`, `DOM-01`, `NAME-01`, `PRICE-01`, `PDF-01`, and `TEST-02`.
-4. Remote Orange Pi parity is still maintained manually. That is workable, but brittle.
-5. `meal_deals` is still dual-written and still contains legacy semantics. Do not use it as the primary read model.
-6. Source naming is still inconsistent in a few places, for example `website_scraper` versus `website_scrape` and `gbp_offers` versus `gbp_offer`.
-7. Some module docstrings and older docs still reflect the pre-canonical or pre-sidecar model. Prefer this document plus the roadmap and replay guide when they disagree.
+2. Wrong-target ingress is still not fully blocked. Hotel-family hosts, clearly unrelated businesses, and isolated bad URL assignments can still survive into the website scrape queue unless they are purged or filtered earlier.
+3. Stale-source precedence and canonical row ranking still need work. Older HTML or broad summary rows can beat newer PDFs or more specific sibling offers because read-path ranking still leans too heavily on `signal_quality` and recency.
+4. The menu graph is sidecar-first, not DB-backed. Structured menu artifacts live in replay bundles and signal metadata today, not persistent tables.
+5. Remaining open Tier 2 scraper tasks still matter: `DISC-03`, `DOM-01`, `NAME-01`, `PRICE-01`, `PDF-01`, and `TEST-02`.
+6. Rewards, birthday, loyalty, and app-gated offers are not explicitly modeled yet. Current boilerplate and non-deal filters suppress much of that family by design.
+7. Remote Orange Pi parity is still maintained manually. That is workable, but brittle.
+8. `meal_deals` is still dual-written and still contains legacy semantics. Do not use it as the primary read model.
+9. Source naming is still inconsistent in a few places, for example `website_scraper` versus `website_scrape` and `gbp_offers` versus `gbp_offer`.
+10. Some module docstrings and older docs still reflect the pre-canonical or pre-sidecar model. Prefer this document, the remediation tracker, the roadmap, and the replay guide when they disagree.
 
-For the active implementation queue, see `docs/guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md`.
+For the active implementation queue, use both `docs/guides/MEAL_DEAL_REMEDIATION_TRACKER.md` and `docs/guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md`.
 
 ## Module Map
 

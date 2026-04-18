@@ -65,6 +65,10 @@ _OTHER_NON_RESTAURANT_HOST_TOKENS = (
     "aaa.com",
     "amli.com",
     "canva.site",
+    "circlek",
+    "autocare",
+    "carcare",
+    "greatwater360autocare",
     "linktr.ee",
     "mailchi.mp",
     "law",
@@ -102,10 +106,10 @@ def classify_domain_family(url: str) -> str:
         return "hotel"
     if any(token in host for token in _VENDOR_MENU_HOST_TOKENS):
         return "vendor_menu_host"
-    if host.startswith("locations.") or any(token in path for token in _LOCATOR_PATH_TOKENS):
-        return "locator"
     if any(token in host for token in _OTHER_NON_RESTAURANT_HOST_TOKENS):
         return "other_nonrestaurant"
+    if host.startswith("locations.") or any(token in path for token in _LOCATOR_PATH_TOKENS):
+        return "locator"
     return "restaurant_or_first_party"
 
 

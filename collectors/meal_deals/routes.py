@@ -9,6 +9,7 @@ Endpoints:
 
 import logging
 import math
+import re
 from collections import Counter, defaultdict
 
 from flask import Blueprint, jsonify, request
@@ -63,6 +64,61 @@ def _coerce_int(value, field_name: str) -> int:
 
 def _payload_dict(value) -> dict:
     return value if isinstance(value, dict) else {}
+
+
+_GENERIC_SUMMARY_NAME_RE = re.compile(
+    r"^\s*(?:happy\s*hour|daily\s+specials?|lunch\s+specials?|dinner\s+specials?|specials?|offers?|deals?|promotions?|menu)\s*$",
+    re.IGNORECASE,
+)
+_SPECIFICITY_PRICE_SIGNAL_RE = re.compile(r"(?:\$\d|\d+%\s*off|half\s+(?:off|price)|bogo)", re.IGNORECASE)
+
+
+def _sub_deal_count(value) -> int:
+    return len(value) if isinstance(value, list) else 0
+
+
+def _materialization_specificity_score(deal: DealMaterialization) -> int:
+    score = 0
+    name = (deal.deal_name or "").strip()
+    description = (deal.deal_description or "").strip()
+    combined_text = " ".join(part for part in (name, description) if part)
+    sub_deal_count = _sub_deal_count(deal.sub_deals)
+
+    if deal.price is not None:
+        score += 4
+    if deal.discount_percentage is not None:
+        score += 3
+    if deal.original_price is not None:
+        score += 1
+    if deal.valid_days:
+        score += 1
+    if deal.valid_start_time:
+        score += 1
+    if deal.valid_end_time:
+        score += 1
+    score += min(sub_deal_count, 3) * 2
+
+    if combined_text and _SPECIFICITY_PRICE_SIGNAL_RE.search(combined_text):
+        score += 2
+    if name and not _GENERIC_SUMMARY_NAME_RE.match(name):
+        score += 1
+    if _GENERIC_SUMMARY_NAME_RE.match(name) and deal.price is None and deal.discount_percentage is None and sub_deal_count == 0:
+        score -= 3
+    return score
+
+
+def _materialization_order_key(deal: DealMaterialization) -> tuple[int, float, float, float, int]:
+    return (
+        _materialization_specificity_score(deal),
+        deal.deal_value_score or 0.0,
+        deal.signal_quality or 0.0,
+        deal.verified_at.timestamp() if deal.verified_at else 0.0,
+        deal.id or 0,
+    )
+
+
+def _sort_materialized_deals(deals: list[DealMaterialization]) -> list[DealMaterialization]:
+    return sorted(deals, key=_materialization_order_key, reverse=True)
 
 
 def _deal_signature(deal: MealDeal) -> tuple:
@@ -215,10 +271,11 @@ def _load_materialized_deals(
             DealMaterialization.lng.between(lng - lng_delta, lng + lng_delta),
         )
 
-    return q.order_by(
+    deals = q.order_by(
         DealMaterialization.verified_at.desc(),
         DealMaterialization.id.desc(),
     ).all()
+    return _sort_materialized_deals(deals)
 
 
 def _load_site_review_queue(

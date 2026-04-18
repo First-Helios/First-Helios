@@ -17,6 +17,7 @@ from core.database import (
 from core.normalizer import make_fingerprint
 from scripts.audit_url_identity import audit_name_mismatch_urls, _url_match_score
 from scripts.repair_restaurant_url_mismatches import (
+    audit_non_first_party_restaurant_urls,
     audit_site_identity_mismatches,
     purge_restaurant_url_mismatches,
     recollect_cleaned_employers,
@@ -204,6 +205,54 @@ def test_audit_site_identity_mismatches_skips_location_label_employer(engine, mo
         )
 
     assert mismatches == []
+
+
+def test_audit_non_first_party_restaurant_urls_flags_skip_family_hosts(engine):
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_brand_group(1, "Hotel Bar"),
+                _build_brand_group(2, "Circle K Kitchen"),
+                _build_employer(1, "Hotel Bar", brand_group_id=1),
+                _build_employer(2, "Circle K Kitchen", brand_group_id=2),
+                RestaurantURL(
+                    id=1,
+                    local_employer_id=1,
+                    brand_group_id=1,
+                    url="https://www.marriott.com/en-us/hotels/ausdt/dining/",
+                    source="google_places",
+                    is_active=True,
+                ),
+                RestaurantURL(
+                    id=2,
+                    local_employer_id=2,
+                    brand_group_id=2,
+                    url="https://www.circlek.com/store-locator/us/tx/austin/store-1234",
+                    source="osm",
+                    is_active=True,
+                ),
+                RestaurantURL(
+                    id=3,
+                    local_employer_id=2,
+                    brand_group_id=2,
+                    url="https://www.kitchenbycircle.example.com/menu",
+                    source="manual",
+                    is_active=True,
+                ),
+            ]
+        )
+        session.commit()
+
+        mismatches = audit_non_first_party_restaurant_urls(
+            session,
+            region="austin_tx",
+        )
+
+    assert [(mismatch["rurl_id"], mismatch["domain_family"]) for mismatch in mismatches] == [
+        (1, "hotel"),
+        (2, "other_nonrestaurant"),
+    ]
+    assert all(mismatch["mismatch_reason"].startswith("non-first-party") for mismatch in mismatches)
 
 
 def test_purge_restaurant_url_mismatches_deletes_bad_url_and_scrape_rows(engine):

@@ -15,6 +15,8 @@ def test_classify_domain_family_covers_known_families():
     assert classify_domain_family("https://m.facebook.com/roadhouse") == "social"
     assert classify_domain_family("https://locations.whataburger.com/tx/austin/store") == "locator"
     assert classify_domain_family("https://www.hilton.com/en/hotels/auscvhh-hilton-austin/dining/") == "hotel"
+    assert classify_domain_family("https://www.circlek.com/store-locator/US/austin/9433-parkfield-dr/2742141") == "other_nonrestaurant"
+    assert classify_domain_family("https://www.greatwater360autocare.com/shops/austins-automotive-specialists-round-rock") == "other_nonrestaurant"
     assert classify_domain_family("https://thundercloud-100219.square.site/") == "vendor_menu_host"
     assert classify_domain_family("https://www.austintexas.org/listings/the-cloak-room/2762/") == "directory"
     assert classify_domain_family("http://www.huttotx.gov") == "government"
@@ -197,6 +199,35 @@ def test_scrape_restaurant_website_skips_obvious_non_first_party_targets(tmp_pat
     bundle = website_scraper_module._load_site_debug_bundle("https://www.facebook.com/RoadhouseRR/")
     assert bundle is not None
     assert bundle["domain_family"] == "social"
+    assert bundle["skip_reason"] == "non_first_party_target"
+
+
+def test_scrape_restaurant_website_skips_hotel_targets(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        tmp_path,
+    )
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("network fetch should not run for suppressed hotel targets")
+
+    monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", _no_network)
+
+    signals = website_scraper_module.scrape_restaurant_website(
+        url="https://www.hilton.com/en/hotels/auscvhh-hilton-austin/dining/",
+        restaurant_name="Hotel Dining Placeholder",
+        local_employer_id=1,
+        brand_group_id=None,
+        region="austin_tx",
+    )
+
+    assert signals == []
+
+    bundle = website_scraper_module._load_site_debug_bundle(
+        "https://www.hilton.com/en/hotels/auscvhh-hilton-austin/dining/"
+    )
+    assert bundle is not None
+    assert bundle["domain_family"] == "hotel"
     assert bundle["skip_reason"] == "non_first_party_target"
 
 

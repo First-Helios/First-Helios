@@ -576,6 +576,7 @@ _SKIP_DOMAIN_FAMILIES = frozenset({
     "social",
     "government",
     "directory",
+    "hotel",
     "other_nonrestaurant",
 })
 
@@ -2674,10 +2675,146 @@ def _evaluate_render_decision(
     }
 
 
+_SOURCE_FETCH_TYPE_RANK = {
+    "pdf": 4,
+    "embedded_action": 3,
+    "discovered": 3,
+    "locator_hint": 2,
+    "hardcoded": 1,
+}
+
+_URL_MDY_RE = re.compile(r"(?<!\d)(?P<month>\d{1,2})[._-](?P<day>\d{1,2})[._-](?P<year>20\d{2})(?!\d)")
+_URL_YMD_RE = re.compile(r"(?<!\d)(?P<year>20\d{2})[._-](?P<month>\d{1,2})[._-](?P<day>\d{1,2})(?!\d)")
+_URL_YEAR_MONTH_RE = re.compile(r"/(?P<year>20\d{2})/(?P<month>0?[1-9]|1[0-2])(?:/|$)")
+_URL_YEAR_ONLY_RE = re.compile(r"(?<!\d)(?P<year>20\d{2})(?!\d)")
+
+
+def _normalize_utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _infer_document_date_from_url(url: str | None) -> datetime | None:
+    text = (url or "").lower()
+    if not text:
+        return None
+
+    for pattern in (_URL_YMD_RE, _URL_MDY_RE):
+        match = pattern.search(text)
+        if not match:
+            continue
+        try:
+            return datetime(
+                int(match.group("year")),
+                int(match.group("month")),
+                int(match.group("day")),
+                tzinfo=timezone.utc,
+            )
+        except ValueError:
+            continue
+
+    match = _URL_YEAR_MONTH_RE.search(text)
+    if match:
+        try:
+            return datetime(
+                int(match.group("year")),
+                int(match.group("month")),
+                1,
+                tzinfo=timezone.utc,
+            )
+        except ValueError:
+            pass
+
+    match = _URL_YEAR_ONLY_RE.search(text)
+    if match:
+        try:
+            return datetime(int(match.group("year")), 1, 1, tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _extract_page_source_metadata(
+    soup: BeautifulSoup,
+    *,
+    page_url: str,
+    fetch_type: str | None,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"source_content_type": "html"}
+    if fetch_type:
+        metadata["source_fetch_type"] = fetch_type
+
+    published_at: datetime | None = None
+    modified_at: datetime | None = None
+    meta_specs = [
+        ("published", {"property": "article:published_time"}),
+        ("published", {"property": "og:published_time"}),
+        ("published", {"name": "article:published_time"}),
+        ("published", {"itemprop": "datePublished"}),
+        ("modified", {"property": "article:modified_time"}),
+        ("modified", {"property": "og:updated_time"}),
+        ("modified", {"name": "lastmod"}),
+        ("modified", {"itemprop": "dateModified"}),
+    ]
+    for kind, attrs in meta_specs:
+        tag = soup.find("meta", attrs=attrs)
+        parsed = _normalize_utc_datetime(_jsonld_parse_datetime(tag.get("content") if tag else None))
+        if parsed is None:
+            continue
+        if kind == "published" and published_at is None:
+            published_at = parsed
+        if kind == "modified" and modified_at is None:
+            modified_at = parsed
+
+    for tag in soup.find_all(attrs={"datetime": True}):
+        parsed = _normalize_utc_datetime(_jsonld_parse_datetime(tag.get("datetime")))
+        if parsed is None:
+            continue
+        class_blob = " ".join(tag.get("class", [])).lower()
+        itemprop = str(tag.get("itemprop") or "").lower()
+        if "updated" in class_blob or "modified" in class_blob or itemprop == "datemodified":
+            if modified_at is None:
+                modified_at = parsed
+            continue
+        if published_at is None:
+            published_at = parsed
+
+    for tag in soup.find_all(attrs={"title": True}):
+        class_blob = " ".join(tag.get("class", [])).lower()
+        itemprop = str(tag.get("itemprop") or "").lower()
+        if itemprop not in {"datepublished", "datemodified"} and not any(
+            token in class_blob for token in ("published", "updated", "modified", "date")
+        ):
+            continue
+        parsed = _normalize_utc_datetime(_jsonld_parse_datetime(tag.get("title")))
+        if parsed is None:
+            continue
+        if "updated" in class_blob or "modified" in class_blob or itemprop == "datemodified":
+            if modified_at is None:
+                modified_at = parsed
+            continue
+        if published_at is None:
+            published_at = parsed
+
+    if published_at is not None:
+        metadata["source_page_published_at"] = published_at.isoformat()
+    if modified_at is not None:
+        metadata["source_page_modified_at"] = modified_at.isoformat()
+
+    document_date = _infer_document_date_from_url(page_url)
+    if document_date is not None:
+        metadata["source_document_date"] = document_date.isoformat()
+    return metadata
+
+
 def _extract_page_artifacts(
     html: str,
     *,
     page_url: str,
+    fetch_type: str | None,
     restaurant_name: str,
     local_employer_id: int,
     brand_group_id: int | None,
@@ -2721,6 +2858,15 @@ def _extract_page_artifacts(
         seen_deals=seen_deals,
     ))
 
+    _annotate_signals(
+        page_signals,
+        _extract_page_source_metadata(
+            soup,
+            page_url=page_url,
+            fetch_type=fetch_type,
+        ),
+    )
+
     if sidecar is not None:
         _populate_sidecar_for_page(sidecar, html=html, soup=soup, page_url=page_url)
         _link_signals_to_sidecar(sidecar, page_signals, page_url=page_url)
@@ -2744,6 +2890,44 @@ def _signal_cta_url(signal: DealSignal) -> str | None:
     if isinstance(cta_url, str) and cta_url:
         return cta_url.rstrip("/")
     return None
+
+
+def _signal_evidence_datetime(signal: DealSignal) -> datetime | None:
+    metadata = signal.metadata or {}
+    for key in ("source_page_modified_at", "source_document_date", "source_page_published_at"):
+        parsed = _normalize_utc_datetime(_jsonld_parse_datetime(metadata.get(key)))
+        if parsed is not None:
+            return parsed
+    return _infer_document_date_from_url(signal.source_url)
+
+
+def _signal_source_rank(signal: DealSignal) -> int:
+    metadata = signal.metadata or {}
+    fetch_type = metadata.get("source_fetch_type")
+    if not isinstance(fetch_type, str) or not fetch_type:
+        fetch_type = "pdf" if str(signal.source_url or "").lower().endswith(".pdf") else None
+
+    rank = _SOURCE_FETCH_TYPE_RANK.get(fetch_type, 0)
+    evidence_dt = _signal_evidence_datetime(signal)
+    if fetch_type == "hardcoded" and evidence_dt is not None:
+        age_days = max((datetime.now(timezone.utc) - evidence_dt).days, 0)
+        if age_days >= 365 * 5:
+            rank -= 2
+        elif age_days >= 365 * 3:
+            rank -= 1
+    return rank
+
+
+def _signal_selection_score(signal: DealSignal) -> tuple[int, float, int, int]:
+    raw_text = signal.raw_scraped_text or signal.deal_description or ""
+    evidence_dt = _signal_evidence_datetime(signal)
+    recency_score = evidence_dt.timestamp() if evidence_dt is not None else 0.0
+    return (
+        _signal_source_rank(signal),
+        recency_score,
+        _signal_detail_score(signal),
+        _signal_name_score(signal.deal_name, raw_text=raw_text),
+    )
 
 
 def _signal_detail_score(signal: DealSignal) -> int:
@@ -2844,8 +3028,8 @@ def _can_absorb_weak_variant(primary: DealSignal, weak: DealSignal) -> bool:
 
 
 def _merge_signal_pair(left: DealSignal, right: DealSignal) -> DealSignal:
-    left_score = (_signal_detail_score(left), _signal_name_score(left.deal_name, raw_text=left.raw_scraped_text))
-    right_score = (_signal_detail_score(right), _signal_name_score(right.deal_name, raw_text=right.raw_scraped_text))
+    left_score = _signal_selection_score(left)
+    right_score = _signal_selection_score(right)
     primary = left if left_score >= right_score else right
     secondary = right if primary is left else left
     merged = deepcopy(primary)
@@ -2854,6 +3038,7 @@ def _merge_signal_pair(left: DealSignal, right: DealSignal) -> DealSignal:
         (left, right),
         key=lambda signal: (
             _signal_name_score(signal.deal_name, raw_text=signal.raw_scraped_text),
+            _signal_selection_score(signal),
             _signal_detail_score(signal),
             -len(_trim_name(signal.deal_name or "")),
         ),
@@ -2863,6 +3048,7 @@ def _merge_signal_pair(left: DealSignal, right: DealSignal) -> DealSignal:
     richest_signal = max(
         (left, right),
         key=lambda signal: (
+            _signal_selection_score(signal),
             _signal_detail_score(signal),
             len(signal.raw_scraped_text or signal.deal_description or ""),
         ),
@@ -2930,10 +3116,10 @@ def _consolidate_site_signals(signals: list[DealSignal]) -> list[DealSignal]:
     ordered = sorted(
         merged_by_identity,
         key=lambda signal: (
-            _is_weak_promotional_variant(signal),
-            -_signal_detail_score(signal),
-            -_signal_name_score(signal.deal_name, raw_text=signal.raw_scraped_text),
+            int(not _is_weak_promotional_variant(signal)),
+            *_signal_selection_score(signal),
         ),
+        reverse=True,
     )
 
     consolidated: list[DealSignal] = []
@@ -2945,6 +3131,7 @@ def _consolidate_site_signals(signals: list[DealSignal]) -> list[DealSignal]:
                 if not _can_absorb_weak_variant(existing, signal):
                     continue
                 score = (
+                    _signal_selection_score(existing),
                     _signal_detail_score(existing),
                     _signal_name_score(existing.deal_name, raw_text=existing.raw_scraped_text),
                 )
@@ -2977,7 +3164,14 @@ def _consolidate_site_signals(signals: list[DealSignal]) -> list[DealSignal]:
         else:
             final_signals.append(signal)
 
-    return final_signals
+    return sorted(
+        final_signals,
+        key=lambda signal: (
+            int(not _is_weak_promotional_variant(signal)),
+            *_signal_selection_score(signal),
+        ),
+        reverse=True,
+    )
 
 
 def _populate_sidecar_for_page(
@@ -3202,7 +3396,7 @@ def _parse_pdf_for_deals(
     if not full_text:
         return []
 
-    return _pdf_text_to_signals(
+    signals = _pdf_text_to_signals(
         full_text,
         pdf_url=pdf_url,
         restaurant_name=restaurant_name,
@@ -3211,6 +3405,15 @@ def _parse_pdf_for_deals(
         region=region,
         seen_deals=seen_deals,
     )
+    metadata: dict[str, Any] = {
+        "source_fetch_type": "pdf",
+        "source_content_type": "pdf",
+    }
+    document_date = _infer_document_date_from_url(pdf_url)
+    if document_date is not None:
+        metadata["source_document_date"] = document_date.isoformat()
+    _annotate_signals(signals, metadata)
+    return signals
 
 
 def _pdf_section_hint(pdf_url: str) -> str | None:
@@ -3332,6 +3535,7 @@ def scrape_restaurant_website(
         soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
             html,
             page_url=full_url,
+            fetch_type="hardcoded",
             restaurant_name=restaurant_name,
             local_employer_id=local_employer_id,
             brand_group_id=brand_group_id,
@@ -3401,6 +3605,7 @@ def scrape_restaurant_website(
             _soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
                 html,
                 page_url=hint_url,
+                fetch_type="locator_hint",
                 restaurant_name=restaurant_name,
                 local_employer_id=local_employer_id,
                 brand_group_id=brand_group_id,
@@ -3464,6 +3669,7 @@ def scrape_restaurant_website(
             _soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
                 html,
                 page_url=disc_url,
+                fetch_type=discovered_page_sources.get(disc_url, "discovered"),
                 restaurant_name=restaurant_name,
                 local_employer_id=local_employer_id,
                 brand_group_id=brand_group_id,

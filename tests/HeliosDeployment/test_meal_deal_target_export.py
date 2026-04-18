@@ -82,8 +82,10 @@ def test_load_website_scrape_target_groups_filters_non_first_party_before_limit(
         session.add_all(
             [
                 _build_employer(1, "Social Lead"),
-                _build_employer(2, "Real Restaurant"),
-                _build_employer(3, "Another Restaurant"),
+                _build_employer(2, "Hotel Lead"),
+                _build_employer(3, "Circle K Lead"),
+                _build_employer(4, "Real Restaurant"),
+                _build_employer(5, "Another Restaurant"),
             ]
         )
         session.add_all(
@@ -97,13 +99,27 @@ def test_load_website_scrape_target_groups_filters_non_first_party_before_limit(
                 ),
                 RestaurantURL(
                     local_employer_id=2,
+                    url="https://www.hilton.com/en/hotels/auscvhh-hilton-austin/dining/",
+                    source="manual",
+                    is_active=True,
+                    last_checked=None,
+                ),
+                RestaurantURL(
+                    local_employer_id=3,
+                    url="https://www.circlek.com/store-locator/US/austin/9433-parkfield-dr/2742141",
+                    source="google_places",
+                    is_active=True,
+                    last_checked=None,
+                ),
+                RestaurantURL(
+                    local_employer_id=4,
                     url="https://real.example.com",
                     source="manual",
                     is_active=True,
                     last_checked=datetime(2026, 4, 1, tzinfo=timezone.utc),
                 ),
                 RestaurantURL(
-                    local_employer_id=3,
+                    local_employer_id=5,
                     url="https://another.example.com",
                     source="manual",
                     is_active=True,
