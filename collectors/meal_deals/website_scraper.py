@@ -80,6 +80,7 @@ DEAL_PATHS = [
     "/deals",
     "/lunch",
     "/happy-hour",
+    "/promos",
     "/promotions",
     "/offers",
 ]
@@ -128,6 +129,11 @@ _BOILERPLATE_PHRASES = [
     "open menu close menu",
     "locations specials jobs",
 ]
+
+_SOFT_BOILERPLATE_PHRASES = frozenset([
+    "rewards", "sign in", "log in", "sign up",
+    "download the app", "mobile app",
+])
 
 # Spam / ad content blocklist — gambling, pharma, unrelated marketing.
 _SPAM_PHRASES = [
@@ -381,6 +387,7 @@ _JSONLD_RE = re.compile(
     r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
     re.DOTALL,
 )
+_NEXT_DATA_SCRIPT_ID = "__NEXT_DATA__"
 
 _JSONLD_INLINE_PRICE_RE = re.compile(r"(?<![\d$])(\d{1,3}\.\d{2})(?!\d)")
 _JSONLD_CONTEXT_NOISE_RE = re.compile(r"\bno\s+substitutions?\b", re.IGNORECASE)
@@ -1276,8 +1283,15 @@ def _extract_text_blocks(soup: BeautifulSoup) -> list[str]:
 def _is_boilerplate(text: str) -> bool:
     """Return True if the text is navigation, footer, or ad/spam content."""
     lower = text.lower()
+    strong_offer_evidence = (
+        bool(_PRICE_RE.search(text))
+        or bool(_PERCENTAGE_RE.search(text))
+        or any(kw in lower for kw in _SELF_VALIDATING_KEYWORDS)
+    )
     # Boilerplate nav/footer phrases
-    if any(bp in lower for bp in _BOILERPLATE_PHRASES):
+    if any(bp in lower for bp in _BOILERPLATE_PHRASES if bp not in _SOFT_BOILERPLATE_PHRASES):
+        return True
+    if any(bp in lower for bp in _SOFT_BOILERPLATE_PHRASES) and not strong_offer_evidence:
         return True
     # Spam / ad injection (casino sites injecting into restaurant pages)
     if any(sp in lower for sp in _SPAM_PHRASES):
@@ -1397,10 +1411,33 @@ _DEAL_LABEL_PATTERNS = [
     re.compile(r"\b(?:taco|wing|burger|pizza|pasta|steak|seafood|sushi|margarita)\s+(?:tuesday|wednesday|thursday|monday|night|special|day)\b", re.IGNORECASE),
     re.compile(r"\bbogo\b", re.IGNORECASE),
     re.compile(r"\bbuy\s+one\s*,?\s*get\s+one(?:\s+free)?\b", re.IGNORECASE),
+    re.compile(
+        r"\bfree\s+(?:burger|wings?|boneless\s+wings?|bone-?in\s+wings?|appetizers?|apps?|entrees?|meals?|combos?|desserts?|drinks?|pizza|tacos?|sandwich(?:es)?|sliders?)\s+with\s+(?:your\s+)?\$\d+(?:\.\d{2})?\+?\s+order\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bfree\s+(?:burger|wings?|boneless\s+wings?|bone-?in\s+wings?|appetizers?|apps?|entrees?|meals?|combos?|desserts?|drinks?|pizza|tacos?|sandwich(?:es)?|sliders?)\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"(?<!\w)\$\d+(?:\.\d{2})?\s+(?:combo|meal|special|deal|lunch|dinner|burger|pizza|plate|platter|box|bucket|basket|taco|wings?)\b", re.IGNORECASE),
     re.compile(r"\b2\s+for\s+\$\d+\b", re.IGNORECASE),
     re.compile(r"\b(?:half|½)\s+(?:off|price)\s+(?:appetizers?|apps?|drinks?|wine|pizza|burgers?)\b", re.IGNORECASE),
 ]
+
+_DEAL_NAME_SIGNAL_RE = re.compile(
+    r"\b(?:happy\s*hour|kids\s+eat\s+free|bogo|buy\s+one|get\s+one|free\b|special|deal|combo|discount|half\s+(?:off|price)|\$\d)",
+    re.IGNORECASE,
+)
+
+_GENERIC_PROMO_HEADING_RE = re.compile(
+    r"\b(?:rewards?|offers?|promotions?|download(?:\s+the)?\s+app|join(?:\s+now|\s+today)?|sign\s*(?:in|up)|log\s*in|learn\s+more)\b",
+    re.IGNORECASE,
+)
+
+_PRICE_LADDER_NAME_RE = re.compile(
+    r"^(?=.*\$\d)(?=.*\b(?:am|pm)\b)[a-z0-9$:+\-\s]{4,80}$",
+    re.IGNORECASE,
+)
 
 # Leading / trailing filler to strip from candidate names
 _NAME_STOPWORDS_PREFIX_RE = re.compile(
@@ -1425,6 +1462,50 @@ def _trim_name(snippet: str) -> str:
     return re.sub(r"\s+", " ", snippet).strip(_NAME_TRIM_CHARS)
 
 
+def _is_generic_fallback_heading(heading: str, block: str) -> bool:
+    """Reject promo-card headings that are less informative than the body text."""
+    cleaned = _trim_name(heading)
+    if not cleaned:
+        return False
+    if _GENERIC_PROMO_HEADING_RE.search(cleaned) and not _DEAL_NAME_SIGNAL_RE.search(cleaned):
+        return True
+    if _PRICE_LADDER_NAME_RE.search(cleaned) and "happy hour" in block.lower():
+        return True
+    return False
+
+
+def _signal_name_score(name: str | None, *, raw_text: str | None = None) -> int:
+    """Score a name for merge-time quality comparisons."""
+    cleaned = _trim_name(name or "")
+    if not cleaned:
+        return -100
+
+    score = 0
+    if any(pattern.search(cleaned) for pattern in _DEAL_LABEL_PATTERNS):
+        score += 8
+    if _DEAL_NAME_SIGNAL_RE.search(cleaned):
+        score += 4
+
+    length = len(cleaned)
+    if 4 <= length <= 28:
+        score += 4
+    elif length <= 48:
+        score += 2
+    elif length > 60:
+        score -= 4
+
+    lowered = cleaned.lower()
+    if _GENERIC_PROMO_HEADING_RE.search(cleaned) and not _DEAL_NAME_SIGNAL_RE.search(cleaned):
+        score -= 8
+    if _PRICE_LADDER_NAME_RE.search(cleaned):
+        score -= 6
+    if "happy hour at" in lowered:
+        score -= 2
+    if raw_text and _PRICE_LADDER_NAME_RE.search(cleaned) and "happy hour" in raw_text.lower():
+        score -= 2
+    return score
+
+
 def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str | None:
     """Produce a concise, label-like deal name from a text block.
 
@@ -1447,7 +1528,7 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
     if fallback_heading:
         h = _trim_name(fallback_heading)
         h = _NAME_STOPWORDS_PREFIX_RE.sub("", h)
-        if 3 <= len(h) <= 80 and not _FRAGMENT_MARKERS_RE.search(h):
+        if 3 <= len(h) <= 80 and not _FRAGMENT_MARKERS_RE.search(h) and not _is_generic_fallback_heading(h, block):
             return h[:80]
 
     # 2. Label-pattern search — expand match to nearest clause boundary.
@@ -1459,7 +1540,7 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
         # fall back to 70 chars past the match start.
         start = m.start()
         stop_search = re.search(
-            r"[.!?\n]|\s(?:featuring|including|with|served)\s",
+            r"[.!?\n]|\s(?:featuring|including|with|served|after|when|valid|available|starting)\s",
             block[m.end():m.end() + 80],
             re.IGNORECASE,
         )
@@ -1483,7 +1564,7 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
         lower = c.lower()
         if any(kw in lower for kw in (
             "special", "deal", "combo", "happy hour", "bogo",
-            "kids eat", "lunch", "dinner", "discount", " off",
+            "kids eat", "lunch", "dinner", "discount", "free", " off",
         )):
             return c[:80]
 
@@ -1493,6 +1574,323 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
         return first[:80]
 
     return None
+
+
+_EMBEDDED_APP_CONTENT_KEYS = frozenset([
+    "title", "description", "topText", "mainText", "bottomText",
+    "legalMessage", "descriptionCTA", "internalTitle",
+])
+_EMBEDDED_APP_SHAPE_KEYS = frozenset([
+    "primaryCTAText", "primaryCTAAction", "mainLinkText", "mainLinkHref",
+    "descriptionCTA", "showViewMore", "type",
+])
+_EMBEDDED_APP_URL_KEYS = ("action", "nameInUrl", "url", "href", "name")
+
+
+def _load_next_data_payload(html: str) -> Any | None:
+    """Return parsed Next.js page data when present."""
+    soup = BeautifulSoup(html, "html.parser")
+    script = soup.find("script", id=_NEXT_DATA_SCRIPT_ID)
+    if script is None:
+        return None
+
+    raw = script.string or script.get_text(strip=False)
+    if not raw:
+        return None
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        logger.debug("[WebScraper] Failed to parse %s payload", _NEXT_DATA_SCRIPT_ID)
+        return None
+
+
+def _clean_embedded_internal_title(value: str) -> str:
+    """Remove campaign tokens from CMS internal titles before using them."""
+    cleaned = re.sub(r"[_-]+", " ", value)
+    cleaned = re.sub(r"\b(?:page[_ ]type\d+|type\d+|aw\d+)\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b20\d{2}\b", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -–—:,")
+    return cleaned
+
+
+def _embedded_app_text(value: Any, *, clean_internal_title: bool = False) -> str:
+    """Extract human-readable text from Next.js / CMS-style nested JSON values."""
+    parts: list[str] = []
+    seen: set[str] = set()
+
+    def _append(raw: Any, *, internal_title: bool = False) -> None:
+        if raw is None:
+            return
+        if isinstance(raw, (int, float)):
+            text = str(raw)
+        elif isinstance(raw, str):
+            text = unescape(raw)
+        else:
+            return
+        if internal_title or clean_internal_title:
+            text = _clean_embedded_internal_title(text)
+        text = re.sub(r"\s+", " ", text).strip(" -–—:,\n\t")
+        if not text:
+            return
+        key = text.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        parts.append(text)
+
+    def _walk(obj: Any, *, allow_internal_title: bool = False) -> None:
+        if obj is None:
+            return
+        if isinstance(obj, (str, int, float)):
+            _append(obj, internal_title=allow_internal_title)
+            return
+        if isinstance(obj, list):
+            for item in obj:
+                _walk(item, allow_internal_title=allow_internal_title)
+            return
+        if not isinstance(obj, dict):
+            return
+
+        fields = obj.get("fields")
+        if isinstance(fields, dict):
+            if "text" in fields:
+                _walk(fields.get("text"))
+            for key in (
+                "title", "topText", "mainText", "bottomText", "description",
+                "message", "termsApplyTitle", "viewDetailsTitle", "legalMessage",
+                "descriptionCTA",
+            ):
+                if key in fields:
+                    _walk(fields.get(key))
+            if "internalTitle" in fields:
+                _walk(fields.get("internalTitle"), allow_internal_title=True)
+
+        if "content" in obj and isinstance(obj["content"], list):
+            for item in obj["content"]:
+                _walk(item)
+        if "value" in obj:
+            _walk(obj["value"])
+        if "text" in obj:
+            _walk(obj["text"])
+        for key in (
+            "title", "topText", "mainText", "bottomText", "description",
+            "message", "termsApplyTitle", "viewDetailsTitle", "legalMessage",
+            "descriptionCTA",
+        ):
+            if key in obj:
+                _walk(obj[key])
+        if "internalTitle" in obj:
+            _walk(obj["internalTitle"], allow_internal_title=True)
+
+    _walk(value)
+    return " ".join(parts)
+
+
+def _embedded_app_heading(fields: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Pick the best user-facing heading plus a cleaned internal fallback."""
+    title = _embedded_app_text(fields.get("title"))
+    main_text = _embedded_app_text(fields.get("mainText"))
+    internal_title = _embedded_app_text(fields.get("internalTitle"), clean_internal_title=True)
+    heading = title or main_text or internal_title or None
+    return heading, internal_title or None
+
+
+def _embedded_app_candidate_block(fields: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Build a promo-like text block from a structured app-data card."""
+    heading, internal_title = _embedded_app_heading(fields)
+
+    parts: list[str] = []
+    seen: set[str] = set()
+    for raw in (
+        _embedded_app_text(fields.get("topText")),
+        _embedded_app_text(fields.get("mainText")),
+        _embedded_app_text(fields.get("title")),
+        _embedded_app_text(fields.get("description")),
+        _embedded_app_text(fields.get("bottomText")),
+        _embedded_app_text(fields.get("legalMessage")),
+        _embedded_app_text(fields.get("descriptionCTA")),
+    ):
+        if not raw:
+            continue
+        key = raw.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(raw)
+
+    block = re.sub(r"\s+", " ", " ".join(parts)).strip()
+    if internal_title and not _is_valid_deal_block(block):
+        block = re.sub(r"\s+", " ", f"{internal_title}. {block}").strip(" .")
+
+    if not block or not _is_valid_deal_block(block):
+        return None, heading
+    return block, heading
+
+
+def _embedded_app_candidate_url(value: Any, *, page_url: str) -> str | None:
+    """Extract a same-domain detail or menu URL from structured app data."""
+    page_host = urlparse(page_url).netloc.lower()
+    candidates: list[str] = []
+
+    def _walk(obj: Any) -> None:
+        if obj is None:
+            return
+        if isinstance(obj, str):
+            candidates.append(obj)
+            return
+        if isinstance(obj, list):
+            for item in obj:
+                _walk(item)
+            return
+        if not isinstance(obj, dict):
+            return
+
+        fields = obj.get("fields")
+        if isinstance(fields, dict):
+            for key in _EMBEDDED_APP_URL_KEYS:
+                if key in fields:
+                    _walk(fields[key])
+        for key in _EMBEDDED_APP_URL_KEYS:
+            if key in obj:
+                _walk(obj[key])
+
+    _walk(value)
+
+    for raw in candidates:
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        if "/" not in candidate and not candidate.startswith(("http://", "https://", "?")):
+            continue
+        normalized = urljoin(page_url, candidate)
+        parsed = urlparse(normalized)
+        if parsed.scheme not in ("http", "https"):
+            continue
+        if parsed.netloc.lower() != page_host:
+            continue
+        if any(parsed.path.lower().endswith(ext) for ext in (".jpg", ".png", ".gif", ".svg", ".pdf", ".zip", ".js", ".css")):
+            continue
+        return normalized
+    return None
+
+
+def _iter_embedded_app_candidates(node: Any, *, page_url: str, path: str = "root") -> Iterable[dict[str, Any]]:
+    """Yield promo-card candidates from embedded Next.js app data."""
+    if isinstance(node, dict):
+        fields = node.get("fields")
+        if isinstance(fields, dict):
+            has_content = any(key in fields for key in _EMBEDDED_APP_CONTENT_KEYS)
+            has_shape = any(key in fields for key in _EMBEDDED_APP_SHAPE_KEYS)
+            if has_content and has_shape:
+                block, heading = _embedded_app_candidate_block(fields)
+                if block:
+                    cta_url = None
+                    for key in ("mainLinkHref", "primaryCTAAction", "descriptionCTA"):
+                        if key not in fields:
+                            continue
+                        cta_url = _embedded_app_candidate_url(fields.get(key), page_url=page_url)
+                        if cta_url:
+                            break
+                    yield {
+                        "block": block,
+                        "heading": heading,
+                        "cta_url": cta_url,
+                        "candidate_path": f"{path}.fields",
+                    }
+
+        for key, value in node.items():
+            yield from _iter_embedded_app_candidates(value, page_url=page_url, path=f"{path}.{key}")
+        return
+
+    if isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _iter_embedded_app_candidates(value, page_url=page_url, path=f"{path}[{index}]")
+
+
+def _extract_embedded_app_deals(
+    html: str,
+    *,
+    restaurant_name: str,
+    local_employer_id: int,
+    brand_group_id: int | None,
+    page_url: str,
+    region: str,
+    seen_deals: set[str],
+) -> list[DealSignal]:
+    """Extract deal signals from structured app data such as Next.js page props."""
+    payload = _load_next_data_payload(html)
+    if payload is None:
+        return []
+
+    signals: list[DealSignal] = []
+    seen_blocks: set[str] = set()
+    local_seen_deals: set[str] = set()
+    for candidate in _iter_embedded_app_candidates(payload, page_url=page_url):
+        block = candidate.get("block")
+        if not isinstance(block, str):
+            continue
+        key = block.lower()
+        if key in seen_blocks:
+            continue
+        seen_blocks.add(key)
+
+        candidate_signals = _text_block_to_signals(
+            block,
+            restaurant_name=restaurant_name,
+            local_employer_id=local_employer_id,
+            brand_group_id=brand_group_id,
+            source_url=page_url,
+            region=region,
+            seen_deals=local_seen_deals,
+            fallback_heading=candidate.get("heading") if isinstance(candidate.get("heading"), str) else None,
+        )
+        _annotate_signals(candidate_signals, {
+            "embedded_app_source": _NEXT_DATA_SCRIPT_ID,
+            "embedded_app_path": candidate.get("candidate_path"),
+            "embedded_app_heading": candidate.get("heading"),
+            "embedded_app_cta_url": candidate.get("cta_url"),
+        })
+        signals.extend(candidate_signals)
+        for signal in candidate_signals:
+            if signal.deal_name:
+                seen_deals.add(signal.deal_name.lower())
+
+    return signals
+
+
+def _discover_embedded_app_pages(html: str, *, page_url: str) -> list[str]:
+    """Discover bounded same-domain pages referenced by embedded app promo cards."""
+    payload = _load_next_data_payload(html)
+    if payload is None:
+        return []
+
+    existing_paths = {p.rstrip("/").lower() for p in DEAL_PATHS}
+    current_host = urlparse(page_url).netloc.lower()
+    discovered: list[str] = []
+    seen: set[str] = set()
+
+    for candidate in _iter_embedded_app_candidates(payload, page_url=page_url):
+        cta_url = candidate.get("cta_url")
+        if not isinstance(cta_url, str) or not cta_url:
+            continue
+        parsed = urlparse(cta_url)
+        if parsed.netloc.lower() != current_host:
+            continue
+        path = parsed.path.rstrip("/").lower()
+        if not path or path in existing_paths:
+            continue
+        if any(part in _NON_DEAL_URL_KEYWORDS for part in path.strip("/").split("/")):
+            continue
+        if not any(token in path for token in _RENDER_CRITICAL_PATH_TOKENS):
+            continue
+        normalized = cta_url.rstrip("/") or cta_url
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        discovered.append(cta_url)
+
+    return discovered[:4]
 
 
 def _extract_jsonld_deals(
@@ -2123,6 +2521,7 @@ def _text_block_to_signals(
     source_url: str,
     region: str,
     seen_deals: set[str],
+    fallback_heading: str | None = None,
 ) -> list[DealSignal]:
     """Convert a single text block into 0-or-more DealSignals.
 
@@ -2135,7 +2534,7 @@ def _text_block_to_signals(
         return results
 
     for sub in _split_multi_promo(block):
-        deal_name = _extract_deal_name(sub)
+        deal_name = _extract_deal_name(sub, fallback_heading=fallback_heading)
         if not deal_name or len(deal_name) < 5:
             continue
 
@@ -2312,12 +2711,273 @@ def _extract_page_artifacts(
         seen_deals,
     ))
 
+    page_signals.extend(_extract_embedded_app_deals(
+        html,
+        restaurant_name=restaurant_name,
+        local_employer_id=local_employer_id,
+        brand_group_id=brand_group_id,
+        page_url=page_url,
+        region=region,
+        seen_deals=seen_deals,
+    ))
+
     if sidecar is not None:
         _populate_sidecar_for_page(sidecar, html=html, soup=soup, page_url=page_url)
         _link_signals_to_sidecar(sidecar, page_signals, page_url=page_url)
 
     pdf_links = _discover_pdf_links(soup, page_url)
     return soup, page_signals, page_prices, pdf_links
+
+
+def _normalized_signal_text(value: str | None) -> str:
+    cleaned = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", value or "")
+    return re.sub(r"\s+", " ", cleaned).strip().lower()
+
+
+def _normalized_signal_url(value: str | None) -> str:
+    return (value or "").rstrip("/").lower()
+
+
+def _signal_cta_url(signal: DealSignal) -> str | None:
+    metadata = signal.metadata or {}
+    cta_url = metadata.get("embedded_app_cta_url")
+    if isinstance(cta_url, str) and cta_url:
+        return cta_url.rstrip("/")
+    return None
+
+
+def _signal_detail_score(signal: DealSignal) -> int:
+    score = 0
+    if signal.price is not None:
+        score += 4
+    if signal.price_type:
+        score += 2
+    if signal.discount_percentage is not None:
+        score += 2
+    if signal.valid_days:
+        score += 2
+    if signal.valid_start_time:
+        score += 1
+    if signal.valid_end_time:
+        score += 1
+    if signal.start_date is not None:
+        score += 1
+    if signal.end_date is not None:
+        score += 1
+    if _signal_cta_url(signal):
+        score += 1
+    score += min(len(signal.raw_scraped_text or ""), 240) // 60
+    return score
+
+
+def _signal_has_text_overlap(left: DealSignal, right: DealSignal) -> bool:
+    left_text = _normalized_signal_text(left.raw_scraped_text or left.deal_description or left.deal_name)
+    right_text = _normalized_signal_text(right.raw_scraped_text or right.deal_description or right.deal_name)
+    if not left_text or not right_text:
+        return False
+    return left_text == right_text or left_text in right_text or right_text in left_text
+
+
+def _maybe_refine_signal_name(signal: DealSignal) -> DealSignal:
+    raw_text = signal.raw_scraped_text or signal.deal_description or ""
+    if not raw_text:
+        return signal
+
+    current_score = _signal_name_score(signal.deal_name, raw_text=raw_text)
+    if current_score > 3:
+        return signal
+
+    candidate = _extract_deal_name(raw_text, fallback_heading=None)
+    if candidate and _signal_name_score(candidate, raw_text=raw_text) > current_score:
+        signal.deal_name = candidate
+    return signal
+
+
+def _can_merge_by_identity(left: DealSignal, right: DealSignal) -> bool:
+    if left.deal_type != right.deal_type:
+        return False
+
+    same_page = _normalized_signal_url(left.source_url) == _normalized_signal_url(right.source_url)
+    left_name = _normalized_signal_text(left.deal_name)
+    right_name = _normalized_signal_text(right.deal_name)
+    if same_page and left_name and left_name == right_name:
+        return True
+
+    left_cta = _signal_cta_url(left)
+    right_cta = _signal_cta_url(right)
+    if left_cta and left_cta == right_cta:
+        return True
+
+    return _signal_has_text_overlap(left, right)
+
+
+def _is_weak_promotional_variant(signal: DealSignal) -> bool:
+    raw_text = signal.raw_scraped_text or signal.deal_description or ""
+    if _signal_name_score(signal.deal_name, raw_text=raw_text) <= 2:
+        return True
+    return (
+        signal.price is None
+        and signal.discount_percentage is None
+        and not signal.valid_days
+        and not signal.valid_start_time
+        and not signal.valid_end_time
+        and len(raw_text) <= 100
+    )
+
+
+def _can_absorb_weak_variant(primary: DealSignal, weak: DealSignal) -> bool:
+    if _normalized_signal_url(primary.source_url) != _normalized_signal_url(weak.source_url):
+        return False
+    if primary.deal_type != weak.deal_type:
+        return False
+    if _signal_cta_url(primary) and _signal_cta_url(primary) == _signal_cta_url(weak):
+        return True
+
+    primary_text = _normalized_signal_text(primary.raw_scraped_text or primary.deal_description or primary.deal_name)
+    weak_name = _normalized_signal_text(weak.deal_name)
+    weak_text = _normalized_signal_text(weak.raw_scraped_text or weak.deal_description or weak.deal_name)
+    if weak_name and weak_name in primary_text:
+        return True
+    if weak.deal_type == "happy_hour" and "happy hour" in primary_text and "happy hour" in weak_text:
+        return _signal_detail_score(primary) >= _signal_detail_score(weak)
+    return False
+
+
+def _merge_signal_pair(left: DealSignal, right: DealSignal) -> DealSignal:
+    left_score = (_signal_detail_score(left), _signal_name_score(left.deal_name, raw_text=left.raw_scraped_text))
+    right_score = (_signal_detail_score(right), _signal_name_score(right.deal_name, raw_text=right.raw_scraped_text))
+    primary = left if left_score >= right_score else right
+    secondary = right if primary is left else left
+    merged = deepcopy(primary)
+
+    best_name_signal = max(
+        (left, right),
+        key=lambda signal: (
+            _signal_name_score(signal.deal_name, raw_text=signal.raw_scraped_text),
+            _signal_detail_score(signal),
+            -len(_trim_name(signal.deal_name or "")),
+        ),
+    )
+    merged.deal_name = best_name_signal.deal_name
+
+    richest_signal = max(
+        (left, right),
+        key=lambda signal: (
+            _signal_detail_score(signal),
+            len(signal.raw_scraped_text or signal.deal_description or ""),
+        ),
+    )
+    if richest_signal.raw_scraped_text:
+        merged.raw_scraped_text = richest_signal.raw_scraped_text
+    if richest_signal.deal_description:
+        merged.deal_description = richest_signal.deal_description
+    elif richest_signal.raw_scraped_text:
+        merged.deal_description = richest_signal.raw_scraped_text[:500]
+
+    for attr in (
+        "price",
+        "price_type",
+        "discount_percentage",
+        "original_price",
+        "menu_avg_price",
+        "calories",
+        "calorie_price_ratio",
+        "valid_days",
+        "valid_start_time",
+        "valid_end_time",
+        "start_date",
+        "end_date",
+    ):
+        if getattr(merged, attr) is None and getattr(secondary, attr) is not None:
+            setattr(merged, attr, getattr(secondary, attr))
+
+    if merged.price is not None and merged.price_type is None and secondary.price_type:
+        merged.price_type = secondary.price_type
+
+    if secondary.metadata:
+        if merged.metadata is None:
+            merged.metadata = {}
+        for key, value in secondary.metadata.items():
+            merged.metadata.setdefault(key, deepcopy(value))
+        primary_target = merged.metadata.get("offer_target")
+        secondary_target = secondary.metadata.get("offer_target")
+        if (
+            isinstance(primary_target, dict)
+            and isinstance(secondary_target, dict)
+            and primary_target.get("disposition") == "discard"
+            and secondary_target.get("disposition") != "discard"
+        ):
+            merged.metadata["offer_target"] = deepcopy(secondary_target)
+
+    return _maybe_refine_signal_name(merged)
+
+
+def _consolidate_site_signals(signals: list[DealSignal]) -> list[DealSignal]:
+    """Collapse low-quality same-page variants without losing richer facts."""
+    if len(signals) < 2:
+        return [_maybe_refine_signal_name(signal) for signal in signals]
+
+    merged_by_identity: list[DealSignal] = []
+    for signal in signals:
+        signal = _maybe_refine_signal_name(signal)
+        for index, existing in enumerate(merged_by_identity):
+            if _can_merge_by_identity(existing, signal):
+                merged_by_identity[index] = _merge_signal_pair(existing, signal)
+                break
+        else:
+            merged_by_identity.append(signal)
+
+    ordered = sorted(
+        merged_by_identity,
+        key=lambda signal: (
+            _is_weak_promotional_variant(signal),
+            -_signal_detail_score(signal),
+            -_signal_name_score(signal.deal_name, raw_text=signal.raw_scraped_text),
+        ),
+    )
+
+    consolidated: list[DealSignal] = []
+    for signal in ordered:
+        if _is_weak_promotional_variant(signal):
+            best_index: int | None = None
+            best_score: tuple[int, int] | None = None
+            for index, existing in enumerate(consolidated):
+                if not _can_absorb_weak_variant(existing, signal):
+                    continue
+                score = (
+                    _signal_detail_score(existing),
+                    _signal_name_score(existing.deal_name, raw_text=existing.raw_scraped_text),
+                )
+                if best_score is None or score > best_score:
+                    best_index = index
+                    best_score = score
+            if best_index is not None:
+                consolidated[best_index] = _merge_signal_pair(consolidated[best_index], signal)
+                continue
+        consolidated.append(signal)
+
+    final_signals: list[DealSignal] = []
+    for signal in consolidated:
+        signal_text = _normalized_signal_text(signal.raw_scraped_text or signal.deal_description or signal.deal_name)
+        signal_name = _normalized_signal_text(signal.deal_name)
+        for index, existing in enumerate(final_signals):
+            if existing.deal_type != signal.deal_type:
+                continue
+            if _normalized_signal_url(existing.source_url) != _normalized_signal_url(signal.source_url):
+                continue
+            existing_text = _normalized_signal_text(existing.raw_scraped_text or existing.deal_description or existing.deal_name)
+            existing_name = _normalized_signal_text(existing.deal_name)
+            if (
+                _signal_has_text_overlap(existing, signal)
+                or (signal_name and signal_name in existing_text)
+                or (existing_name and existing_name in signal_text)
+            ):
+                final_signals[index] = _merge_signal_pair(existing, signal)
+                break
+        else:
+            final_signals.append(signal)
+
+    return final_signals
 
 
 def _populate_sidecar_for_page(
@@ -2621,6 +3281,9 @@ def scrape_restaurant_website(
     all_pdf_links: list[str] = []  # collect PDF links across all pages
     discovered_pages: list[str] = []  # track link-discovered pages
     hinted_pages: list[dict[str, Any]] = []  # track locator-to-corporate hint probes
+    discovered_page_sources: dict[str, str] = {}
+    discovered_page_seen: set[str] = set()
+    fetched_page_urls: set[str] = set()
     pages_fetched = 0
     sidecar = MenuSidecar()  # STRUCT-01: structured menu artifacts for replay
 
@@ -2658,6 +3321,7 @@ def scrape_restaurant_website(
         html = _get_replay_page(debug_bundle, full_url) if replay_debug_cache else _fetch_page(full_url, user_agent)
         if not html:
             continue
+        fetched_page_urls.add(full_url.rstrip("/"))
         if not replay_debug_cache and debug_bundle is not None:
             _record_debug_page(debug_bundle, full_url, html=html, fetch_type="hardcoded")
 
@@ -2686,6 +3350,14 @@ def scrape_restaurant_website(
             price_points_delta=len(sidecar.price_points) - pp_before,
             budget=render_budget,
         ))
+
+        for embedded_url in _discover_embedded_app_pages(html, page_url=full_url):
+            normalized = embedded_url.rstrip("/")
+            if normalized in fetched_page_urls or normalized in discovered_page_seen:
+                continue
+            discovered_page_seen.add(normalized)
+            discovered_pages.append(embedded_url)
+            discovered_page_sources[embedded_url] = "embedded_action"
 
         # Save homepage soup for link discovery
         if path == "/":
@@ -2761,7 +3433,13 @@ def scrape_restaurant_website(
 
     # --- Phase 2b: Discover additional same-domain deal pages from homepage links ---
     if homepage_soup and pages_fetched < MAX_PAGES_PER_SITE:
-        discovered_pages = _discover_deal_pages(homepage_soup, base_url)
+        for disc_url in _discover_deal_pages(homepage_soup, base_url):
+            normalized = disc_url.rstrip("/")
+            if normalized in fetched_page_urls or normalized in discovered_page_seen:
+                continue
+            discovered_page_seen.add(normalized)
+            discovered_pages.append(disc_url)
+            discovered_page_sources[disc_url] = "discovered"
 
         for disc_url in discovered_pages:
             if pages_fetched >= MAX_PAGES_PER_SITE:
@@ -2770,8 +3448,14 @@ def scrape_restaurant_website(
             html = _get_replay_page(debug_bundle, disc_url) if replay_debug_cache else _fetch_page(disc_url, user_agent)
             if not html:
                 continue
+            fetched_page_urls.add(disc_url.rstrip("/"))
             if not replay_debug_cache and debug_bundle is not None:
-                _record_debug_page(debug_bundle, disc_url, html=html, fetch_type="discovered")
+                _record_debug_page(
+                    debug_bundle,
+                    disc_url,
+                    html=html,
+                    fetch_type=discovered_page_sources.get(disc_url, "discovered"),
+                )
 
             pages_fetched += 1
             sections_before = len(sidecar.sections)
@@ -2822,6 +3506,8 @@ def scrape_restaurant_website(
         signals.extend(pdf_signals)
         if not replay_debug_cache:
             time.sleep(1.0)
+
+    signals = _consolidate_site_signals(signals)
 
     # Compute menu average price and attach to each signal
     menu_avg_price = None

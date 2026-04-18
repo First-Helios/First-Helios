@@ -1,4 +1,8 @@
 import json
+import shutil
+from pathlib import Path
+
+import pytest
 
 from collectors.meal_deals.models import DealSignal
 from collectors.meal_deals.website_scraper import (
@@ -8,6 +12,15 @@ from collectors.meal_deals.website_scraper import (
     run_website_scraper,
     scrape_restaurant_website,
 )
+
+
+_BUNDLE_DIR = Path("data/cache/website_scrape_debug")
+_BWW_REPLAY_BUNDLE = _BUNDLE_DIR / "buffalowildwings_com_en_locations_detail_621__9af1c34bd10b.json"
+
+
+def _skip_if_missing(bundle: Path) -> None:
+    if not bundle.exists():
+        pytest.skip(f"Replay bundle not synced locally: {bundle}")
 
 
 def test_website_scrape_debug_cache_replays_without_network(tmp_path, monkeypatch):
@@ -138,3 +151,167 @@ def test_run_website_scraper_reports_inline_ingest_stats(monkeypatch):
     assert stats["skipped"] == 3
     assert stats["sites_scanned"] == 6
     assert stats["chunk_size"] == 5
+
+
+def test_website_scrape_extracts_next_data_promos(tmp_path, monkeypatch):
+    next_data = {
+        "props": {
+            "pageProps": {
+                "page": {
+                    "fields": {
+                        "section": [
+                            {
+                                "fields": {
+                                    "cards": [
+                                        {
+                                            "fields": {
+                                                "internalTitle": "BOGO Wing Tuesday - AW3 - 2024 - Type3",
+                                                "title": [
+                                                    {
+                                                        "fields": {
+                                                            "text": "BOGO Wing Tuesday",
+                                                        }
+                                                    }
+                                                ],
+                                                "description": "Rewards Members score BOGO 100% off bone-in wings.",
+                                                "showViewMore": True,
+                                                "type": "type3",
+                                                "primaryCTAText": "FIND YOUR SPORTS BAR",
+                                                "primaryCTAAction": {
+                                                    "fields": {
+                                                        "action": "locations",
+                                                        "name": "/sports-bar",
+                                                    }
+                                                },
+                                                "descriptionCTA": {
+                                                    "fields": {
+                                                        "message": "Buy one 6-, 10- or 15-count bone-in wings and get one of equal value free on Tuesdays.",
+                                                    }
+                                                },
+                                            }
+                                        },
+                                        {
+                                            "fields": {
+                                                "internalTitle": "BOGO Thursday_AW4_2025_type3",
+                                                "title": [
+                                                    {
+                                                        "fields": {
+                                                            "text": "Get Free Boneless Wings",
+                                                        }
+                                                    }
+                                                ],
+                                                "description": "Every Thursday with takeout & delivery from Buffalo Wild Wings GO.",
+                                                "showViewMore": True,
+                                                "type": "type3",
+                                                "primaryCTAText": "ORDER NOW",
+                                                "primaryCTAAction": {
+                                                    "fields": {
+                                                        "action": "menu/categories/wings/bogo-boneless-wings/",
+                                                        "name": "menu/categories/value-bundles/free-boneless-thursday",
+                                                    }
+                                                },
+                                                "descriptionCTA": {
+                                                    "fields": {
+                                                        "message": "Buy one order of boneless wings and get another free every Thursday.",
+                                                    }
+                                                },
+                                            }
+                                        },
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    html = (
+        "<html><body>"
+        "<main>Promotions</main>"
+        f"<script id=\"__NEXT_DATA__\" type=\"application/json\">{json.dumps(next_data)}</script>"
+        "</body></html>"
+    )
+
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        tmp_path,
+    )
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.DEAL_PATHS", ["/promotions"])
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.MAX_PAGES_PER_SITE", 1)
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper._fetch_page",
+        lambda _url, _ua: html,
+    )
+
+    signals = scrape_restaurant_website(
+        url="https://www.buffalowildwings.com/en/locations/detail/621",
+        restaurant_name="Buffalo Wild Wings",
+        local_employer_id=33621,
+        brand_group_id=14279,
+        region="austin_tx",
+    )
+
+    assert len(signals) == 2
+    assert {signal.deal_type for signal in signals} == {"bogo"}
+    assert {signal.valid_days for signal in signals} == {"Thu", "Tue"}
+    assert {signal.deal_name for signal in signals} == {
+        "BOGO Wing Tuesday",
+        "Get Free Boneless Wings",
+    }
+    assert all(signal.source_url == "https://www.buffalowildwings.com/promotions" for signal in signals)
+    assert all(signal.metadata.get("embedded_app_source") == "__NEXT_DATA__" for signal in signals)
+    assert any(
+        signal.metadata.get("embedded_app_cta_url")
+        == "https://www.buffalowildwings.com/menu/categories/wings/bogo-boneless-wings/"
+        for signal in signals
+    )
+
+
+def test_website_scrape_bww_replay_consolidates_promo_variants(tmp_path, monkeypatch):
+    _skip_if_missing(_BWW_REPLAY_BUNDLE)
+
+    staging = tmp_path / "website_scrape_debug"
+    staging.mkdir()
+    shutil.copy(_BWW_REPLAY_BUNDLE, staging / _BWW_REPLAY_BUNDLE.name)
+
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        staging,
+    )
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda _seconds: None)
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("network fetch should not run in replay mode")
+
+    monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", _no_network)
+
+    signals = scrape_restaurant_website(
+        url="https://www.buffalowildwings.com/en/locations/detail/621",
+        restaurant_name="Buffalo Wild Wings",
+        local_employer_id=33621,
+        brand_group_id=14279,
+        region="austin_tx",
+        replay_debug_cache=True,
+    )
+
+    happy_hour_signals = [
+        signal for signal in signals
+        if signal.source_url == "https://www.buffalowildwings.com/happy-hour"
+    ]
+    assert len(happy_hour_signals) == 1
+    happy_hour = happy_hour_signals[0]
+    assert happy_hour.deal_name == "Happy Hour"
+    assert happy_hour.price == 3.0
+    assert happy_hour.valid_days == "Mon-Fri"
+    assert happy_hour.valid_start_time == "3:00 PM"
+    assert happy_hour.valid_end_time == "6:00 PM"
+
+    names = {signal.deal_name for signal in signals}
+    reward_signals = [signal for signal in signals if "burger" in (signal.deal_name or "").lower()]
+    assert "BOGO Wing Tuesday" in names
+    assert "Get Free Boneless Wings" in names
+    assert len(reward_signals) == 1
+    assert "BUFFALO WILD WINGS REWARDS" not in names
+    assert "$3-6 FROM 3-6 PM" not in names
