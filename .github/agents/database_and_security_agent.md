@@ -9,11 +9,12 @@ Read this file completely before writing any test. Then read the codebase files 
 ## 0. Read These First
 
 ```bash
-cat .github/agents/AGENT.md                # system architecture
+cat AGENT.md                               # workflow contract (the loop below)
 cat RUNBOOK.md                             # how to start the server
 cat core/ingest_layer.py                   # employer write path
 cat postings/ingest.py                     # job posting write path
 cat postings/spiritpool_routes.py          # browser extension ingest endpoint
+cat postings/spiritpool_dev_capture.py     # signed dev-mode whole-page capture
 cat server.py                              # Flask routes + CORS config
 cat core/normalizer.py                     # text normalization (key sanitization point)
 ```
@@ -33,6 +34,111 @@ grep -rn "request\." server.py postings/spiritpool_routes.py events/routes.py
 # What external data flows in?
 find collectors/ -name "*.py" | xargs grep -l "requests.get\|httpx"
 ```
+
+---
+
+## 0.5 Development & Deployment Workflow (MANDATORY)
+
+Every change you propose, test, or ship must pass through this loop in order.
+Skipping a gate is the single most common cause of "works locally, broken in
+prod" stalemates on this project.
+
+### The three repos
+
+| Repo | Path | Role |
+|---|---|---|
+| First-Helios | `/home/fortune/CodeProjects/First-Helios` | Flask API, collectors, scheduler, DB |
+| SpiritPool | `/home/fortune/CodeProjects/SpiritPool` (origin: `ChainStaffingTracker`) | Browser extension — LOCAL ONLY, never deployed to the Pi |
+| Spiritpool_User | `/home/fortune/CodeProjects/Spiritpool_User` | LOCAL test harness (isolated Firefox profile, Selenium runner) |
+
+Production host: `orangepi@192.168.1.191`. Pulls First-Helios from GitHub
+every 5 min via `helios-update.timer`.
+
+### The gates
+
+1. **Develop in the current workspace.** Work only inside the repo the change
+   belongs to. For Python, always `source .venv/bin/activate` first.
+
+2. **Successfully develop and test locally.** Run the relevant test suite to
+   exit code 0 before the code leaves the workstation. Security-critical paths
+   (HTML ingest, signatures, tokens, raw URLs) require a passing test in
+   `tests/HeliosDeployment/` before push.
+
+3. **Push to GitHub.** Commit with a subsystem-scoped message. Push to
+   `origin/main`.
+
+4. **Pull to Orange Pi.** `helios-update.timer` handles First-Helios every
+   5 min automatically. To force immediate deploy:
+   ```bash
+   ssh orangepi@192.168.1.191 "cd ~/First-Helios && git pull && \
+       sudo systemctl restart helios helios-collector"
+   ```
+   Always verify the Pi's commit hash equals what you just pushed:
+   ```bash
+   ssh orangepi@192.168.1.191 "cd ~/First-Helios && git log -1 --oneline"
+   ```
+
+5. **SSH all needed commands** for anything that isn't checked into git
+   (systemd drop-ins, env vars, dev-key issuance, migrations, one-off data
+   fixes). Document them in the feature's session note. Common commands:
+   ```bash
+   ssh orangepi@192.168.1.191 "systemctl is-active helios helios-collector"
+   ssh orangepi@192.168.1.191 "journalctl -u helios -n 100 --no-pager"
+   ssh orangepi@192.168.1.191 "sudo systemctl restart helios helios-collector"
+   ```
+
+6. **Validate working status from the workstation** (not just from the Pi).
+   A response confirmed on `localhost` inside the Pi doesn't prove remote
+   reachability. For HTTP routes:
+   ```bash
+   curl -sS -o /dev/null -w "%{http_code}\n" \
+       http://192.168.1.191/api/ref/summary?region=austin_tx
+   ```
+   For DB changes, run a remote read query:
+   ```bash
+   ssh orangepi@192.168.1.191 'PGPASSWORD=helios psql -U helios -h localhost \
+       -d helios -c "SELECT COUNT(*) FROM job_postings;"'
+   ```
+
+7. **Pull current DB / data from Orange Pi back to the workstation** so local
+   analysis reflects production state. Update this list as new data
+   directories are added:
+   ```bash
+   # Spirit Pool dev captures
+   rsync -avz orangepi@192.168.1.191:~/First-Helios/data/cache/spiritpool_dev/page_captures/ \
+       /home/fortune/CodeProjects/First-Helios/data/cache/spiritpool_dev/page_captures/
+
+   # Meal-deal debug sidecars (when auditing scraper behavior)
+   rsync -avz orangepi@192.168.1.191:~/First-Helios/data/cache/website_scrape_debug/ \
+       /home/fortune/CodeProjects/First-Helios/data/cache/website_scrape_debug/
+
+   # Full DB dump (when a schema change lands)
+   ssh orangepi@192.168.1.191 "PGPASSWORD=helios pg_dump -U helios -h localhost -d helios" \
+       | PGPASSWORD=helios psql -U helios -h localhost -d helios
+   ```
+
+### Secrets split (security-critical)
+
+For the dev-capture route specifically, the secret is **split by design**:
+
+- `keys.json` on the Pi (verifies signatures) → stored at
+  `~/First-Helios/data/cache/spiritpool_dev/keys.json`, chmod 0600, gitignored.
+- The matching `secret_hex` → only in the **local workstation's Firefox
+  `browser.storage.local`** for the enrolled extension. Never committed.
+  Never pasted into a file in the repo.
+
+If you need to re-issue, revoke the old token via
+`scripts/issue_spiritpool_dev_key.py --revoke <token>` and enroll a new one.
+
+### Non-negotiables
+
+- Never commit `.env`, `keys.json`, or any dev secret.
+- Never run the Spiritpool_User launcher or Selenium harness on the Pi. The
+  whole point is a real user-style browser session running locally.
+- Never enable `SPIRITPOOL_DEV_SIGNING_KEY` on a public-internet host without
+  re-reading the threat model in `postings/spiritpool_dev_capture.py`.
+- Never skip Gate 6. A push that lands on the Pi but doesn't answer a
+  workstation curl is not deployed.
 
 ---
 
