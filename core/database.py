@@ -1496,6 +1496,175 @@ class DealMaterialization(Base):
         }
 
 
+class MenuPage(Base):
+    """Persistent menu-source page discovered during website scraping."""
+
+    __tablename__ = "menu_pages"
+
+    id = Column(String, primary_key=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    url = Column(String, nullable=False)
+    source = Column(String, nullable=False)
+    renderer = Column(String, nullable=True)
+    source_bundle = Column(String, nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "restaurant_id": self.restaurant_id,
+            "url": self.url,
+            "source": self.source,
+            "renderer": self.renderer,
+            "source_bundle": self.source_bundle,
+            "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
+            "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
+        }
+
+
+class MenuSection(Base):
+    """Logical menu sections and sub-sections under a menu page."""
+
+    __tablename__ = "menu_sections"
+
+    id = Column(String, primary_key=True)
+    page_id = Column(String, ForeignKey("menu_pages.id"), nullable=False, index=True)
+    parent_section_id = Column(String, ForeignKey("menu_sections.id"), nullable=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    path = Column(JSON, nullable=False)
+    service_period = Column(String, nullable=True, index=True)
+    course = Column(String, nullable=True)
+    source = Column(String, nullable=False)
+    first_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_menu_sections_restaurant_service_period", "restaurant_id", "service_period"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "page_id": self.page_id,
+            "parent_section_id": self.parent_section_id,
+            "restaurant_id": self.restaurant_id,
+            "name": self.name,
+            "path": self.path,
+            "service_period": self.service_period,
+            "course": self.course,
+            "source": self.source,
+            "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
+            "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
+        }
+
+
+class MenuItem(Base):
+    """Persistent baseline menu item rows used by the Food Price Index."""
+
+    __tablename__ = "menu_items"
+
+    id = Column(String, primary_key=True)
+    section_id = Column(String, ForeignKey("menu_sections.id"), nullable=False, index=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    course = Column(String, nullable=True, index=True)
+    calories = Column(Integer, nullable=True)
+    dietary_tags = Column(JSON, nullable=False)
+    source = Column(String, nullable=False)
+    first_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_menu_items_restaurant_course", "restaurant_id", "course"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "section_id": self.section_id,
+            "restaurant_id": self.restaurant_id,
+            "name": self.name,
+            "description": self.description,
+            "course": self.course,
+            "calories": self.calories,
+            "dietary_tags": self.dietary_tags,
+            "source": self.source,
+            "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
+            "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
+        }
+
+
+class MenuPricePoint(Base):
+    """Absolute price evidence tied to a menu item or section."""
+
+    __tablename__ = "menu_price_points"
+
+    id = Column(String, primary_key=True)
+    item_id = Column(String, ForeignKey("menu_items.id"), nullable=True, index=True)
+    section_id = Column(String, ForeignKey("menu_sections.id"), nullable=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    price = Column(Float, nullable=False, index=True)
+    currency = Column(String, nullable=True)
+    variant = Column(String, nullable=True)
+    confidence = Column(Float, nullable=True)
+    source = Column(String, nullable=False)
+    evidence = Column(Text, nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_menu_price_points_restaurant_price", "restaurant_id", "price"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "item_id": self.item_id,
+            "section_id": self.section_id,
+            "restaurant_id": self.restaurant_id,
+            "price": self.price,
+            "currency": self.currency,
+            "variant": self.variant,
+            "confidence": self.confidence,
+            "source": self.source,
+            "evidence": self.evidence,
+            "observed_at": self.observed_at.isoformat() if self.observed_at else None,
+        }
+
+
+class MenuModifier(Base):
+    """Optional modifier or add-on rows associated with menu items."""
+
+    __tablename__ = "menu_modifiers"
+
+    id = Column(String, primary_key=True)
+    item_id = Column(String, ForeignKey("menu_items.id"), nullable=True)
+    section_id = Column(String, ForeignKey("menu_sections.id"), nullable=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=False, index=True)
+    label = Column(String, nullable=False)
+    price_delta = Column(Float, nullable=True)
+    required = Column(Boolean, default=False, nullable=False)
+    source = Column(String, nullable=False)
+    first_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "item_id": self.item_id,
+            "section_id": self.section_id,
+            "restaurant_id": self.restaurant_id,
+            "label": self.label,
+            "price_delta": self.price_delta,
+            "required": self.required,
+            "source": self.source,
+            "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
+            "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
+        }
+
+
 class MealDeal(Base):
     """A meal deal / special offered by a restaurant in local_employers.
 

@@ -212,6 +212,13 @@ try:
 except Exception as exc:
     logger.warning("Meal Deals blueprint NOT registered: %s: %s", type(exc).__name__, exc)
 
+try:
+    from collectors.meal_deals.price_index_routes import price_index_bp
+    app.register_blueprint(price_index_bp)
+    logger.info("Price Index blueprint registered at /api/price-index")
+except Exception as exc:
+    logger.warning("Price Index blueprint NOT registered: %s: %s", type(exc).__name__, exc)
+
 
 # ── Security: suppress exception details from API responses ──────────────────
 

@@ -40,6 +40,7 @@ from collectors.meal_deals.hint_registry import (
     find_hints,
     load_hints,
 )
+from collectors.meal_deals.menu_db_writer import upsert_menu_shape
 from collectors.meal_deals.menu_persistence_schema import (
     serialize_sidecar,
     summarize_shape,
@@ -62,6 +63,7 @@ from collectors.meal_deals.website_scrape_audit_utils import classify_domain_fam
 from collectors.meal_deals.temporal import extract_days, extract_times
 from collectors.rotation import _load as _load_rotation
 from config.paths import CACHE_DIR, WEBSITE_SCRAPE_DEBUG_DIR
+from core.database import get_engine, get_session
 from core.venue_identity import cluster_likely_same_venues, normalize_url_for_identity, pick_canonical_item
 
 try:
@@ -3740,6 +3742,18 @@ def scrape_restaurant_website(
         restaurant_id=str(local_employer_id) if local_employer_id is not None else None,
         source_url=base_url,
     )
+
+    try:
+        shape = debug_bundle.get("menu_persistence_shape")
+        if shape and local_employer_id is not None:
+            session = get_session(get_engine())
+            try:
+                upsert_menu_shape(session, shape)
+                session.commit()
+            finally:
+                session.close()
+    except Exception as exc:
+        logger.warning("menu_db_upsert failed for %s: %s", base_url, exc)
 
     return signals
 

@@ -394,6 +394,197 @@ def test_ingest_dual_writes_chain_observation_and_brand_applicability(engine, mo
     assert deal.is_chain_template is True
 
 
+def test_ingest_inherits_valid_days_from_same_page_parent_signal(engine, monkeypatch):
+    _patch_ingest(monkeypatch, engine)
+    source_url = "https://wingsnmore-austin.com/specials"
+
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_employer(
+                    41201,
+                    name="Wings N More",
+                    address="1200 West Howard Lane, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.424131,
+                    lng=-97.6696961,
+                ),
+                _build_site_identity(3005, source_url),
+            ]
+        )
+        session.commit()
+
+    stats = ingest_deal_signals(
+        [
+            DealSignal(
+                restaurant_name="Wings N More",
+                local_employer_id=41201,
+                deal_name="Happy Hour 02:00 PM - 07:00 PM All Wings Buy One G",
+                deal_description="Tuesday April 21st Tecate $2.50 11:30 AM - 11:00 PM Happy Hour 02:00 PM - 07:00 PM All Wings Buy One Get One Free | Dine-In Only 04:00 PM - 11:00 PM",
+                deal_type="happy_hour",
+                price=2.5,
+                price_type="absolute",
+                valid_days="Tue",
+                valid_start_time="11:30 AM",
+                valid_end_time="11:00 PM",
+                source="website_scrape",
+                source_url=source_url,
+                collector_run_id=91,
+                region="austin_tx",
+                raw_scraped_text="Tuesday April 21st Tecate $2.50 11:30 AM - 11:00 PM Happy Hour 02:00 PM - 07:00 PM All Wings Buy One Get One Free | Dine-In Only 04:00 PM - 11:00 PM",
+                observed_at=datetime(2026, 4, 17, 6, 42, 36, tzinfo=timezone.utc),
+            ),
+            DealSignal(
+                restaurant_name="Wings N More",
+                local_employer_id=41201,
+                deal_name="Buy One Get One Free | Dine-In Only 04:00 PM - 11:00 PM",
+                deal_description="All Wings Buy One Get One Free | Dine-In Only 04:00 PM - 11:00 PM",
+                deal_type="bogo",
+                valid_start_time="4:00 PM",
+                valid_end_time="11:00 PM",
+                source="website_scrape",
+                source_url=source_url,
+                collector_run_id=91,
+                region="austin_tx",
+                raw_scraped_text="All Wings Buy One Get One Free | Dine-In Only 04:00 PM - 11:00 PM",
+                observed_at=datetime(2026, 4, 17, 6, 42, 36, tzinfo=timezone.utc),
+            ),
+        ],
+        region="austin_tx",
+    )
+
+    assert stats["total_rows"] == 2
+    assert stats["quality_rejected"] == 0
+
+    with Session(engine) as session:
+        bogo_observation = session.query(DealObservation).filter(
+            DealObservation.deal_type == "bogo"
+        ).one()
+        bogo_deal = session.query(MealDeal).filter(
+            MealDeal.deal_type == "bogo"
+        ).one()
+
+    assert bogo_observation.valid_days == "Tue"
+    assert bogo_deal.valid_days == "Tue"
+
+
+def test_ingest_rejects_plain_menu_combo_from_food_menu_page(engine, monkeypatch):
+    _patch_ingest(monkeypatch, engine)
+    source_url = "https://wingsnmore-austin.com/austin-pflugerville-wings-n-more-food-menu"
+
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_employer(
+                    41201,
+                    name="Wings N More",
+                    address="1200 West Howard Lane, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.424131,
+                    lng=-97.6696961,
+                ),
+                _build_site_identity(3006, source_url),
+            ]
+        )
+        session.commit()
+
+    stats = ingest_deal_signals(
+        [
+            DealSignal(
+                restaurant_name="Wings N More",
+                local_employer_id=41201,
+                deal_name="French Toast Oui",
+                deal_description="French Toast Oui! Oui! Only the French could creat this egg and toast combo. French Toast $8.95 With hash browns and your choice of Bacon or Sausage.",
+                deal_type="combo",
+                price=8.95,
+                price_type="absolute",
+                source="website_scrape",
+                source_url=source_url,
+                collector_run_id=92,
+                region="austin_tx",
+                raw_scraped_text="French Toast Oui! Oui! Only the French could creat this egg and toast combo. French Toast $8.95 With hash browns and your choice of Bacon or Sausage.",
+                observed_at=datetime(2026, 4, 17, 6, 42, 41, tzinfo=timezone.utc),
+            )
+        ],
+        region="austin_tx",
+    )
+
+    assert stats["total_rows"] == 0
+    assert stats["quality_rejected"] == 1
+    assert stats["observation_rows"] == 1
+
+    with Session(engine) as session:
+        observation = session.query(DealObservation).one()
+        deals = session.query(MealDeal).all()
+
+    assert observation.review_state == "rejected"
+    assert observation.signal_quality == 0.19
+    assert deals == []
+
+
+def test_sqlite_upsert_preserves_temporal_fields_for_thinner_duplicate(engine, monkeypatch):
+    _patch_ingest(monkeypatch, engine)
+    source_url = "https://wingsnmore-austin.com/specials"
+
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _build_employer(
+                    41201,
+                    name="Wings N More",
+                    address="1200 West Howard Lane, Austin, TX",
+                    brand_group_id=None,
+                    lat=30.424131,
+                    lng=-97.6696961,
+                ),
+                _build_site_identity(3007, source_url),
+            ]
+        )
+        session.commit()
+
+    ingest_deal_signals(
+        [
+            DealSignal(
+                restaurant_name="Wings N More",
+                local_employer_id=41201,
+                deal_name="Buy One Get One Free | Dine-In Only",
+                deal_description="All Wings Buy One Get One Free | Dine-In Only",
+                deal_type="bogo",
+                valid_days="Tue",
+                valid_start_time="4:00 PM",
+                valid_end_time="11:00 PM",
+                source="website_scrape",
+                source_url=source_url,
+                collector_run_id=93,
+                region="austin_tx",
+                raw_scraped_text="All Wings Buy One Get One Free | Dine-In Only",
+                observed_at=datetime(2026, 4, 17, 6, 42, 36, tzinfo=timezone.utc),
+            ),
+            DealSignal(
+                restaurant_name="Wings N More",
+                local_employer_id=41201,
+                deal_name="Buy One Get One Free | Dine-In Only",
+                deal_description="All Wings Buy One Get One Free | Dine-In Only",
+                deal_type="bogo",
+                source="website_scrape",
+                source_url=source_url,
+                collector_run_id=93,
+                region="austin_tx",
+                raw_scraped_text="All Wings Buy One Get One Free | Dine-In Only",
+                observed_at=datetime(2026, 4, 17, 6, 42, 37, tzinfo=timezone.utc),
+            ),
+        ],
+        region="austin_tx",
+    )
+
+    with Session(engine) as session:
+        deal = session.query(MealDeal).one()
+
+    assert deal.valid_days == "Tue"
+    assert deal.valid_start_time == "4:00 PM"
+    assert deal.valid_end_time == "11:00 PM"
+
+
 def test_rejected_signals_still_persist_as_observations(engine, monkeypatch):
     _patch_ingest(monkeypatch, engine)
     source_url = "https://example.com/thin-signal"

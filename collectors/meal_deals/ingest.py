@@ -15,9 +15,12 @@ Called by: collectors/meal_deals/chain_deals.py, future collectors
 
 import hashlib
 import logging
+import re
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
+from sqlalchemy import func as _sa_func
 from sqlalchemy import text as _sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -75,6 +78,59 @@ _JUNK_SUBSTRINGS = [
     "copyright",
 ]
 
+_SIGNAL_TOKEN_RE = re.compile(r"[a-z0-9$%]+", re.IGNORECASE)
+_PROMO_TEXT_RE = re.compile(
+    r"\b(?:"
+    r"happy\s*hour"
+    r"|special(?:s)?"
+    r"|deal(?:s)?"
+    r"|offer(?:s)?"
+    r"|promo(?:tion)?s?"
+    r"|bogo"
+    r"|buy\s+one\s+get\s+one"
+    r"|buy\s+1\s+get\s+1"
+    r"|kids\s+eat\s+free"
+    r"|half\s+(?:off|price)"
+    r"|\d{1,3}\s*%\s*off"
+    r"|free\s+with"
+    r"|late\s+night"
+    r"|early\s+bird"
+    r"|weekday(?:s)?"
+    r"|weekend(?:s)?"
+    r"|daily"
+    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+    r"|mon|tue|wed|thu|fri|sat|sun"
+    r")\b",
+    re.IGNORECASE,
+)
+_MENU_PAGE_MARKERS = (
+    "food-menu",
+    "drink-menu",
+    "drinks-menu",
+    "bar-menu",
+    "cocktail-menu",
+    "dessert-menu",
+    "desserts-menu",
+    "breakfast-menu",
+    "brunch-menu",
+    "dinner-menu",
+)
+_PROMO_PATH_HINTS = (
+    "special",
+    "deal",
+    "offer",
+    "promo",
+    "promotion",
+    "happy-hour",
+    "happy_hour",
+    "happyhours",
+    "lunch",
+    "daily",
+    "brunch",
+    "dinner",
+)
+_TEMPORAL_FIELDS = {"valid_days", "valid_start_time", "valid_end_time"}
+
 
 def _is_junk_deal_name(name: str) -> bool:
     """Return True if the deal name is clearly not a real deal."""
@@ -84,6 +140,132 @@ def _is_junk_deal_name(name: str) -> bool:
     if lower in _JUNK_DEAL_NAMES:
         return True
     return any(sub in lower for sub in _JUNK_SUBSTRINGS)
+
+
+def _normalized_signal_text(text: str | None) -> str:
+    if not text:
+        return ""
+    return " ".join(_SIGNAL_TOKEN_RE.findall(text.casefold()))
+
+
+def _signal_match_text(signal: DealSignal) -> str:
+    return _normalized_signal_text(
+        signal.raw_scraped_text or signal.deal_description or signal.deal_name
+    )
+
+
+def _signal_temporal_detail_score(signal: DealSignal) -> int:
+    score = 0
+    if signal.valid_days:
+        score += 4
+    if signal.valid_start_time:
+        score += 1
+    if signal.valid_end_time:
+        score += 1
+    return score
+
+
+def _is_obvious_menu_page_url(source_url: str | None) -> bool:
+    if not source_url:
+        return False
+
+    path = urlparse(source_url).path.casefold().strip("/")
+    if not path:
+        return False
+
+    normalized_path = path.replace("_", "-")
+    has_menu_marker = any(marker in normalized_path for marker in _MENU_PAGE_MARKERS)
+    if not has_menu_marker:
+        has_menu_marker = re.search(r"(?:^|/)menu(?:/|$)", normalized_path) is not None
+    if not has_menu_marker:
+        return False
+
+    return not any(hint in normalized_path for hint in _PROMO_PATH_HINTS)
+
+
+def _has_promotional_evidence(signal: DealSignal) -> bool:
+    if signal.valid_days or signal.valid_start_time or signal.valid_end_time:
+        return True
+    if signal.discount_percentage is not None:
+        return True
+    if signal.price_type in ("discount_amount", "percentage_off"):
+        return True
+
+    combined = " ".join(
+        part for part in (signal.deal_name, signal.deal_description, signal.raw_scraped_text) if part
+    )
+    return bool(_PROMO_TEXT_RE.search(combined))
+
+
+def _should_reject_plain_menu_combo(signal: DealSignal) -> bool:
+    return (
+        signal.source == "website_scrape"
+        and signal.deal_type == "combo"
+        and _is_obvious_menu_page_url(signal.source_url)
+        and not _has_promotional_evidence(signal)
+    )
+
+
+def _inherit_same_page_valid_days(signals: list[DealSignal]) -> None:
+    grouped: dict[str, list[DealSignal]] = {}
+
+    for signal in signals:
+        if signal.source != "website_scrape":
+            continue
+        normalized_url = normalize_url_for_identity(signal.source_url) or (signal.source_url or "").strip().casefold()
+        if not normalized_url:
+            continue
+        grouped.setdefault(normalized_url, []).append(signal)
+
+    for group in grouped.values():
+        candidates = [
+            (signal, _signal_match_text(signal))
+            for signal in group
+            if signal.valid_days and _signal_match_text(signal)
+        ]
+        if not candidates:
+            continue
+
+        for signal in group:
+            if signal.valid_days:
+                continue
+
+            child_text = _signal_match_text(signal)
+            if len(child_text) < 12:
+                continue
+
+            matches = [
+                (candidate, candidate_text)
+                for candidate, candidate_text in candidates
+                if candidate is not signal and child_text in candidate_text
+            ]
+            if not matches:
+                continue
+
+            best_match = min(
+                matches,
+                key=lambda item: (
+                    len(item[1]),
+                    -_signal_temporal_detail_score(item[0]),
+                    -len(item[0].raw_scraped_text or item[0].deal_description or item[0].deal_name),
+                ),
+            )[0]
+
+            signal.valid_days = best_match.valid_days
+            signal.metadata.setdefault("ingest_context", {})
+            signal.metadata["ingest_context"].setdefault("inherited_fields", {})
+            signal.metadata["ingest_context"]["inherited_fields"]["valid_days"] = best_match.valid_days
+            signal.metadata["ingest_context"]["valid_days_source_url"] = best_match.source_url
+
+
+def _prepare_signals_for_ingest(signals: list[DealSignal]) -> list[DealSignal]:
+    prepared = [deepcopy(signal) for signal in signals]
+    _inherit_same_page_valid_days(prepared)
+    return prepared
+
+
+def _prefer_existing_text_value(excluded_value, existing_value):
+    return _sa_func.coalesce(_sa_func.nullif(excluded_value, ""), existing_value)
 
 
 def _is_postgres(session: Session) -> bool:
@@ -473,9 +655,9 @@ def _upsert_deal_pg(session: Session, deal_data: dict) -> None:
             "menu_avg_price": stmt.excluded.menu_avg_price,
             "calories": stmt.excluded.calories,
             "calorie_price_ratio": stmt.excluded.calorie_price_ratio,
-            "valid_days": stmt.excluded.valid_days,
-            "valid_start_time": stmt.excluded.valid_start_time,
-            "valid_end_time": stmt.excluded.valid_end_time,
+            "valid_days": _prefer_existing_text_value(stmt.excluded.valid_days, MealDeal.valid_days),
+            "valid_start_time": _prefer_existing_text_value(stmt.excluded.valid_start_time, MealDeal.valid_start_time),
+            "valid_end_time": _prefer_existing_text_value(stmt.excluded.valid_end_time, MealDeal.valid_end_time),
             "source_url": stmt.excluded.source_url,
             "verified_at": stmt.excluded.verified_at,
             "raw_scraped_text": stmt.excluded.raw_scraped_text,
@@ -506,9 +688,9 @@ def _upsert_chain_template_pg(session: Session, deal_data: dict) -> None:
             "menu_avg_price": stmt.excluded.menu_avg_price,
             "calories": stmt.excluded.calories,
             "calorie_price_ratio": stmt.excluded.calorie_price_ratio,
-            "valid_days": stmt.excluded.valid_days,
-            "valid_start_time": stmt.excluded.valid_start_time,
-            "valid_end_time": stmt.excluded.valid_end_time,
+            "valid_days": _prefer_existing_text_value(stmt.excluded.valid_days, MealDeal.valid_days),
+            "valid_start_time": _prefer_existing_text_value(stmt.excluded.valid_start_time, MealDeal.valid_start_time),
+            "valid_end_time": _prefer_existing_text_value(stmt.excluded.valid_end_time, MealDeal.valid_end_time),
             "source_url": stmt.excluded.source_url,
             "verified_at": stmt.excluded.verified_at,
             "raw_scraped_text": stmt.excluded.raw_scraped_text,
@@ -533,6 +715,8 @@ def _upsert_deal_sqlite(session: Session, deal_data: dict) -> None:
     if existing:
         for key, val in deal_data.items():
             if key not in ("id", "created_at"):
+                if key in _TEMPORAL_FIELDS and (val is None or val == ""):
+                    continue
                 setattr(existing, key, val)
         existing.updated_at = datetime.now(timezone.utc)
     else:
@@ -564,9 +748,10 @@ def ingest_deal_signals(
     canonical_venue_cache: dict[int, int | None] = {}
     observation_ids: dict[str, int] = {}
     desired_applicability: dict[int, dict[tuple, dict]] = {}
+    prepared_signals = _prepare_signals_for_ingest(signals)
 
     try:
-        for signal in signals:
+        for signal in prepared_signals:
             # Skip junk deal names (nav elements, slogans, etc.)
             if _is_junk_deal_name(signal.deal_name):
                 logger.debug("[DealIngest] Skipping junk deal name: %r", signal.deal_name)
@@ -595,6 +780,11 @@ def ingest_deal_signals(
                 restaurant_name=signal.restaurant_name,
                 raw_scraped_text=signal.raw_scraped_text,
             )
+            if _should_reject_plain_menu_combo(signal):
+                qscore.total = min(qscore.total, 0.19)
+                qscore.reasons.append("ingest: plain menu combo on menu page")
+                signal.metadata.setdefault("ingest_context", {})
+                signal.metadata["ingest_context"]["menu_combo_rejected"] = True
             decision, is_active_flag = gate_decision(qscore.total)
             signal.signal_quality = qscore.total
             signal.deal_value_score = compute_deal_value_score(
@@ -738,7 +928,7 @@ def ingest_deal_signals(
             "(skipped %d, quality_rejected %d, quality_review %d)",
             stats["total_rows"],
             stats["observation_rows"],
-            len(signals),
+            len(prepared_signals),
             stats["skipped"],
             stats["quality_rejected"],
             stats["quality_review"],
