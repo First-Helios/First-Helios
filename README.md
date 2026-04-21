@@ -244,6 +244,14 @@ python collector_main.py                      # start persistent scheduler
 
 Deal types: `breakfast`, `lunch_special`, `happy_hour`, `combo`, `bogo`, `kids_eat_free`, `daily_special`.
 
+### Food Price Index
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/price-index?region=austin_tx&limit=50` | Baseline menu item search sorted by price |
+| `GET /api/price-index?q=taco&region=austin_tx` | Keyword search across scraped menu items |
+| `GET /api/price-index?sort=price_per_calorie&region=austin_tx` | Sort by price-per-calorie when calorie data exists |
+| `GET /api/price-index/facets?region=austin_tx` | Facets for cuisine, course, brand, and price bands |
+
 ### Operations
 | Endpoint | Description |
 |----------|-------------|

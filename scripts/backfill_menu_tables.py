@@ -5,8 +5,14 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from pathlib import Path
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from collectors.meal_deals.menu_db_writer import upsert_menu_shape
+from collectors.meal_deals.menu_persistence_schema import check_foreign_keys
 from collectors.meal_deals.website_scrape_audit_utils import DEFAULT_DEBUG_DIR, load_debug_bundles
 from core.database import get_engine, get_session
 
@@ -36,12 +42,13 @@ def main() -> int:
     if args.limit is not None:
         bundle_items = bundle_items[: args.limit]
 
-    engine = get_engine()
     totals = _empty_totals()
     skip_reasons: Counter[str] = Counter()
     processed = 0
     failures = 0
     shapes_found = 0
+
+    engine = None if args.dry_run else get_engine()
 
     for site_key, bundle in bundle_items:
         processed += 1
@@ -51,6 +58,21 @@ def main() -> int:
             continue
 
         shapes_found += 1
+        if args.dry_run:
+            fk_violations = check_foreign_keys(shape)
+            if fk_violations:
+                failures += 1
+                skip_reasons["shape_fk_violations"] += 1
+                print(f"[backfill_menu_tables] fk violations for {site_key}: {len(fk_violations)}")
+                continue
+
+            totals["pages"]["inserted"] += len(shape.get("pages", []))
+            totals["sections"]["inserted"] += len(shape.get("sections", []))
+            totals["items"]["inserted"] += len(shape.get("items", []))
+            totals["price_points"]["inserted"] += len(shape.get("price_points", []))
+            totals["modifiers"]["inserted"] += len(shape.get("modifiers", []))
+            continue
+
         session = get_session(engine)
         try:
             result = upsert_menu_shape(session, shape)

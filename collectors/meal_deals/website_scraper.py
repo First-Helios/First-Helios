@@ -1233,6 +1233,7 @@ _SKIP_CLASS_ID_TOKENS = frozenset([
     "pagination", "sidebar", "toolbar", "cookie",
     "consent", "banner", "popup", "modal",
 ])
+_HEADING_TAG_NAMES = ("h1", "h2", "h3", "h4", "h5", "h6")
 
 
 def _should_skip_tag(tag: Tag) -> bool:
@@ -1243,6 +1244,26 @@ def _should_skip_tag(tag: Tag) -> bool:
     id_str = (tag.get("id") or "").lower()
     combined = f"{class_str} {id_str}"
     return any(tok in combined for tok in _SKIP_CLASS_ID_TOKENS)
+
+
+def _prefix_day_heading_context(tag: Tag, text: str) -> str:
+    """Carry nearby day headings into row blocks that lost temporal context."""
+    if not text or _extract_days(text):
+        return text
+
+    current: Tag | None = tag
+    while isinstance(current, Tag):
+        heading = current.find_previous_sibling(_HEADING_TAG_NAMES)
+        if heading is not None:
+            heading_text = re.sub(r"\s+", " ", heading.get_text(separator=" ", strip=True)).strip()
+            if heading_text and _extract_days(heading_text):
+                lower_heading = heading_text.lower()
+                if lower_heading not in text.lower():
+                    return f"{heading_text} {text}".strip()
+        parent = current.parent
+        current = parent if isinstance(parent, Tag) else None
+
+    return text
 
 
 def _extract_text_blocks(soup: BeautifulSoup) -> list[str]:
@@ -1265,6 +1286,7 @@ def _extract_text_blocks(soup: BeautifulSoup) -> list[str]:
         text = tag.get_text(separator=" ", strip=True)
         if not text:
             continue
+        text = _prefix_day_heading_context(tag, text)
 
         # Apply tag-appropriate length bounds
         if tag.name in _STRUCTURAL_TAGS:

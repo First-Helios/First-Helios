@@ -16,6 +16,7 @@ from collectors.meal_deals.website_scraper import (
 
 _BUNDLE_DIR = Path("data/cache/website_scrape_debug")
 _BWW_REPLAY_BUNDLE = _BUNDLE_DIR / "buffalowildwings_com_en_locations_detail_621__9af1c34bd10b.json"
+_WINGS_REPLAY_BUNDLE = _BUNDLE_DIR / "wingsnmore_austin_com__4c0b10dd23c9.json"
 
 
 def _skip_if_missing(bundle: Path) -> None:
@@ -315,3 +316,40 @@ def test_website_scrape_bww_replay_consolidates_promo_variants(tmp_path, monkeyp
     assert len(reward_signals) == 1
     assert "BUFFALO WILD WINGS REWARDS" not in names
     assert "$3-6 FROM 3-6 PM" not in names
+
+
+def test_website_scrape_wings_replay_preserves_day_headings_on_child_specials(tmp_path, monkeypatch):
+    _skip_if_missing(_WINGS_REPLAY_BUNDLE)
+
+    staging = tmp_path / "website_scrape_debug"
+    staging.mkdir()
+    shutil.copy(_WINGS_REPLAY_BUNDLE, staging / _WINGS_REPLAY_BUNDLE.name)
+
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        staging,
+    )
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda _seconds: None)
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("network fetch should not run in replay mode")
+
+    monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", _no_network)
+
+    signals = scrape_restaurant_website(
+        url="http://wingsnmore-austin.com",
+        restaurant_name="Wings N More",
+        local_employer_id=36352,
+        brand_group_id=36352,
+        region="austin_tx",
+        replay_debug_cache=True,
+    )
+
+    bogo_signals = [
+        signal for signal in signals
+        if signal.deal_type == "bogo" and "wingsnmore-austin.com/specials" in (signal.source_url or "")
+    ]
+
+    assert bogo_signals
+    assert {signal.valid_days for signal in bogo_signals} == {"Tue"}
+    assert any("Buy One Get One Free" in (signal.deal_name or "") for signal in bogo_signals)

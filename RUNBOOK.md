@@ -70,6 +70,49 @@ tail -f /var/log/helios-update.log
 
 To deploy a change: push to GitHub and wait up to 5 minutes, or `sudo systemctl restart helios` to pick up immediately after a confirmed pull.
 
+### Food Price Index rollout
+
+The Price Index feature needs three deployment pieces to be live on the Orange Pi:
+
+1. Backend migration + API deploy from `First-Helios`
+2. Collector restart so live scrapes persist menu graph rows
+3. Frontend deploy from `First-Helios_Frontend`
+
+The Orange Pi host updater should restart both `helios` and `helios-collector` on backend changes. That collector restart is required because menu persistence is wired into the website scraper runtime, not only the API server.
+
+One-time rollout after the backend code lands:
+
+```bash
+ssh orangepi@192.168.1.191
+cd ~/First-Helios
+
+# Apply the new menu graph tables.
+.venv/bin/alembic upgrade head
+
+# Estimate replay volume before writing.
+.venv/bin/python scripts/backfill_menu_tables.py --dry-run
+
+# Backfill from cached website scrape bundles.
+.venv/bin/python scripts/backfill_menu_tables.py
+```
+
+If the dry-run reports very few bundles with shapes, most cached bundles predate menu persistence. In that case, run a fresh website scraper pass after deploy so live scrapes populate the new menu tables:
+
+```bash
+cd ~/First-Helios
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25
+```
+
+Post-deploy checks:
+
+```bash
+curl -k "https://127.0.0.1/api/price-index?region=austin_tx&limit=5"
+curl -k "https://127.0.0.1/api/price-index/facets?region=austin_tx"
+sudo journalctl -u helios -n 50
+sudo journalctl -u helios-collector -n 50
+sudo journalctl -u helios-frontend -n 50
+```
+
 ---
 
 ## Collector Entry Point
