@@ -110,7 +110,7 @@ Interpretation:
 1. Use replay bundles first. Do not make live crawl breadth the default debugging tool.
 2. Improve discovery before broad renderer escalation.
 3. Fully exploit schema.org structure before adding more regex complexity.
-4. Preserve menu structure in sidecar artifacts before committing to persistent menu tables.
+4. Preserve menu structure in sidecar artifacts and replay bundles even though persistent menu tables now exist; replay provenance must stay richer than the read model.
 5. Every extraction change should come with replay-based tests or at least replay-based before/after metrics.
 6. Low-power agents should work from a bounded task ID, target files, and acceptance criteria, not from open-ended HTML interpretation.
 
@@ -176,9 +176,9 @@ These tasks should go to a high-reasoning agent. They involve ambiguous structur
 
 These decisions are now complete locally as policy and schema layers. The remaining work is to adopt them in runtime code paths such as renderer escalation and hint-driven discovery, not to reopen the Tier 4 deliberation itself.
 
-- `ARCH-01` Decide whether the menu graph stays in sidecar artifacts or gets persistent tables. Best agent: Tier 4. Complexity: very high. Recommendation: defer persistent tables until the sidecar has been replay-tested across a larger corpus.
-Status: complete locally in `collectors/meal_deals/menu_persistence_schema.py` with TypedDict row shapes, deterministic sidecar-key IDs, restaurant scoping, provenance timestamps, and FK validation helpers.
-Recommended decision: stay sidecar-first until replay coverage is larger, but define the target persistent shape now so the sidecar stays compatible with a future schema.
+- `ARCH-01` Decide whether the menu graph stays in sidecar artifacts or gets persistent tables. Best agent: Tier 4. Complexity: very high.
+Status: complete locally and adopted in the current stack through `collectors/meal_deals/menu_persistence_schema.py`, `collectors/meal_deals/menu_db_writer.py`, `core/database.py`, and `scripts/backfill_menu_tables.py`.
+Recommended decision: keep replay bundles and sidecar artifacts as the authoritative upstream evidence layer, but use persistent menu tables for query surfaces such as `/api/price-index`.
 
 - `ARCH-02` Set confidence and review policy for offer-target links. Best agent: Tier 4. Complexity: very high. This defines when an item-level link is accepted, review-only, or discarded.
 Status: complete locally in `collectors/meal_deals/menu_sidecar.py` with confidence, disposition, and `match_method` carried on `OfferTarget` and exercised in replay tests.

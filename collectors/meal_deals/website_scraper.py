@@ -2672,6 +2672,93 @@ def _jsonld_traverse_node(
         )
 
 
+def _iter_jsonld_objects(value: Any) -> Iterable[dict[str, Any]]:
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _iter_jsonld_objects(child)
+        return
+    if isinstance(value, list):
+        for child in value:
+            yield from _iter_jsonld_objects(child)
+
+
+def _discover_structured_menu_pages(
+    html: str,
+    base_url: str,
+    *,
+    allow_broad_menu_links: bool,
+) -> list[str]:
+    """Promote structured menu URLs into the page-discovery queue.
+
+    Some sites expose the real first-party menu page only through schema.org
+    `Menu.url` or `hasMenu` references rather than visible navigation. Treat
+    those URLs as high-confidence discovery candidates so low-coverage sites
+    can reach the actual menu page before falling back to renderer-only paths.
+    """
+    parsed_base = urlparse(base_url)
+    base_domain = parsed_base.netloc.lower()
+    existing_paths = {p.rstrip("/").lower() for p in DEAL_PATHS}
+    scored: dict[str, int] = {}
+
+    def _add_candidate(raw_url: str | None, *, score: int) -> None:
+        if not isinstance(raw_url, str):
+            return
+        cleaned_url = raw_url.strip()
+        if not cleaned_url:
+            return
+
+        full_url = urljoin(base_url, cleaned_url)
+        parsed = urlparse(full_url)
+        if parsed.scheme not in ("http", "https"):
+            return
+        if not _hosts_share_brand_domain(base_domain, parsed.netloc.lower()):
+            return
+
+        same_host = _normalized_discovery_host(parsed.netloc) == _normalized_discovery_host(base_domain)
+        path = parsed.path.rstrip("/").lower()
+        path_parts = [part for part in path.strip("/").split("/") if part]
+
+        if same_host and (path in existing_paths or path == ""):
+            return
+        if not same_host and not allow_broad_menu_links and path == "":
+            return
+        if any(path.endswith(ext) for ext in (".jpg", ".png", ".gif", ".svg", ".zip", ".css", ".js")):
+            return
+
+        if path_parts and any(part in _NON_DEAL_URL_KEYWORDS for part in path_parts):
+            if not any(token in path for token in ("menu", "food", "drink", "beer", "cocktail", "tap")):
+                return
+
+        existing_score = scored.get(full_url)
+        adjusted_score = score + (0 if same_host else 1)
+        if existing_score is None or adjusted_score > existing_score:
+            scored[full_url] = adjusted_score
+
+    for match in _JSONLD_RE.finditer(html):
+        try:
+            payload = json.loads(match.group(1))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+
+        for node in _iter_jsonld_objects(payload):
+            node_types = _jsonld_node_types(node)
+            if "Menu" in node_types:
+                _add_candidate(node.get("url"), score=6)
+            elif "MenuSection" in node_types:
+                _add_candidate(node.get("url"), score=4)
+
+            if node_types.intersection({"Restaurant", "FoodEstablishment", "LocalBusiness"}):
+                has_menu = node.get("hasMenu")
+                if isinstance(has_menu, str):
+                    _add_candidate(has_menu, score=5)
+                elif isinstance(has_menu, dict):
+                    _add_candidate(has_menu.get("url"), score=5)
+                    _add_candidate(has_menu.get("@id"), score=2)
+
+    return [url for url, _score in sorted(scored.items(), key=lambda item: (-item[1], item[0]))[:5]]
+
+
 def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
     """Discover deal-related subpages by scanning homepage links.
 
@@ -2831,10 +2918,10 @@ def _discover_pdf_links(soup: BeautifulSoup, base_url: str) -> list[str]:
 
     for a_tag in soup.find_all("a", href=True):
         href = a_tag["href"]
-        if not href.lower().endswith(".pdf"):
+        full_url = urljoin(base_url, href)
+        if not urlparse(full_url).path.lower().endswith(".pdf"):
             continue
 
-        full_url = urljoin(base_url, href)
         if full_url in seen:
             continue
         seen.add(full_url)
@@ -3942,6 +4029,7 @@ def scrape_restaurant_website(
 
     # --- Phase 1: Hardcoded paths ---
     homepage_soup = None
+    homepage_html: str | None = None
 
     for path in DEAL_PATHS:
         if pages_fetched >= MAX_PAGES_PER_SITE:
@@ -3994,6 +4082,7 @@ def scrape_restaurant_website(
         # Save homepage soup for link discovery
         if path == "/":
             homepage_soup = soup
+            homepage_html = html
 
         # Rate limit: 1 req/sec between pages
         if not replay_debug_cache:
@@ -4066,13 +4155,27 @@ def scrape_restaurant_website(
 
     # --- Phase 2b: Discover additional same-domain deal pages from homepage links ---
     if homepage_soup and pages_fetched < MAX_PAGES_PER_SITE:
-        for disc_url in _discover_deal_pages(homepage_soup, base_url):
+        structured_candidates = (
+            _discover_structured_menu_pages(
+                homepage_html or "",
+                base_url,
+                allow_broad_menu_links=False,
+            )
+            if homepage_html
+            else []
+        )
+
+        for disc_url in structured_candidates + _discover_deal_pages(homepage_soup, base_url):
             normalized = disc_url.rstrip("/")
             if normalized in fetched_page_urls or normalized in discovered_page_seen:
                 continue
             discovered_page_seen.add(normalized)
             discovered_pages.append(disc_url)
-            discovered_page_sources[disc_url] = "discovered"
+            discovered_page_sources[disc_url] = (
+                "structured_menu"
+                if disc_url in structured_candidates
+                else "discovered"
+            )
 
         for disc_url in discovered_pages:
             if pages_fetched >= MAX_PAGES_PER_SITE:
@@ -4130,7 +4233,17 @@ def scrape_restaurant_website(
         )
     ):
         low_coverage_pages: list[str] = []
-        for disc_url in _discover_candidate_pages(
+        structured_low_coverage_candidates = (
+            _discover_structured_menu_pages(
+                homepage_html or "",
+                base_url,
+                allow_broad_menu_links=True,
+            )
+            if homepage_html
+            else []
+        )
+
+        for disc_url in structured_low_coverage_candidates + _discover_candidate_pages(
             homepage_soup,
             base_url,
             allow_broad_menu_links=True,
@@ -4140,7 +4253,11 @@ def scrape_restaurant_website(
                 continue
             discovered_page_seen.add(normalized)
             discovered_pages.append(disc_url)
-            discovered_page_sources[disc_url] = "low_coverage_menu"
+            discovered_page_sources[disc_url] = (
+                "structured_low_coverage_menu"
+                if disc_url in structured_low_coverage_candidates
+                else "low_coverage_menu"
+            )
             low_coverage_pages.append(disc_url)
 
         for disc_url in low_coverage_pages:

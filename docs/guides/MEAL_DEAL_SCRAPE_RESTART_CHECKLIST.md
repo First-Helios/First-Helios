@@ -1,6 +1,6 @@
 # Meal Deal Scrape Restart Checklist
 
-Updated: 2026-04-17
+Updated: 2026-04-21
 Scope: short operator-only checklist for resuming or restarting website scraper runs after code, schema, or policy changes
 
 Use this when you need the shortest safe path back to scraping. For the fuller context, use [MEAL_DEAL_SCRAPERS_RUNBOOK.md](MEAL_DEAL_SCRAPERS_RUNBOOK.md), [MEAL_DEAL_REPLAY_WORKFLOW.md](MEAL_DEAL_REPLAY_WORKFLOW.md), and [../data/ingestion/MEAL_DEAL_INGESTION.md](../data/ingestion/MEAL_DEAL_INGESTION.md).
@@ -62,27 +62,50 @@ Conditional checks:
 - if hint-driven exploration was used, confirm `hint_audit` is present
 - if a known menu-rich canary still lacks structure, treat that as a follow-up before widening the run
 
-6. Re-audit canonical observations only if quality rules or gating logic changed.
+6. Prefer a replay-backed full run before a fresh live crawl when cache coverage is already sufficient.
 
 ```bash
 cd /home/fortune/CodeProjects/First-Helios
-PYTHONPATH=. .venv/bin/python scripts/reaudit_deal_observations.py --source website_scrape --backfill-source meal_deals --region austin_tx --apply
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-debug-cache --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
 ```
 
-7. Start the live scrape only after the canary is clean.
-
-Local live run:
+7. Only fall back to a fresh live scrape if replay coverage is too sparse.
 
 ```bash
 cd /home/fortune/CodeProjects/First-Helios
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
 ```
 
-8. Verify the run after it starts or completes.
+8. Re-audit canonical observations only if quality rules or gating logic changed.
 
-- inspect the newest `data/cache/website_scrape_debug/*.json` bundles
-- inspect `data/cache/website_scrape_audit.json`
-- verify `/api/deals`, `/api/deals/stats`, and `/api/deals/brands`
+```bash
+cd /home/fortune/CodeProjects/First-Helios
+PYTHONPATH=. .venv/bin/python scripts/reaudit_deal_observations.py --source website_scrape --backfill-source meal_deals --region austin_tx --apply
+```
+
+9. Backfill menu tables and audit the menu read path when Price Index or other menu consumers are in scope.
+
+```bash
+cd /home/fortune/CodeProjects/First-Helios
+PYTHONPATH=. .venv/bin/python scripts/backfill_menu_tables.py
+PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
+```
+
+10. Verify the run after it starts or completes.
+
+```bash
+curl -k "https://127.0.0.1/api/deals?region=austin_tx&limit=5"
+curl -k "https://127.0.0.1/api/deals/stats?region=austin_tx"
+curl -k "https://127.0.0.1/api/price-index?region=austin_tx&limit=5"
+curl -k "https://127.0.0.1/api/price-index/facets?region=austin_tx"
+```
+
+Also inspect:
+
+- the newest `data/cache/website_scrape_debug/*.json` bundles
+- `data/cache/website_scrape_audit.json`
+- `/api/deals`, `/api/deals/stats`, and `/api/deals/brands`
+- `/api/price-index` and `/api/price-index/facets`
 - if deployed code changed on Orange Pi, restart both `helios` and `helios-collector`
 
 ## Go / No-Go Rules
@@ -90,6 +113,7 @@ PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --s
 - Go only if the pre-flight gate has no blocking failures.
 - Go only if the canary bundles show `render_decisions` and `render_budget` on fetched first-party pages.
 - Go only if any present `menu_persistence_summary` has `fk_violations == []`.
+- Go only if `scripts/backfill_menu_tables.py` completes without failures when menu tables are part of the rerun goal.
 - No-go if remote code parity is uncertain.
 - No-go if the target queue is dominated by wrong-target domains and scrape budget is tight.
 

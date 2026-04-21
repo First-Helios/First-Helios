@@ -1,6 +1,6 @@
 # Meal Deal Scrapers — Runbook & Operations Guide
 
-Updated: 2026-04-17
+Updated: 2026-04-21
 
 > Audience: developers/operators who run, tune, or debug the meal deal collection pipeline.
 
@@ -121,7 +121,9 @@ Recommended operator order before a broad live run:
 2. Apply migrations: `.venv/bin/alembic upgrade head`
 3. Run the pre-flight gate
 4. Run a 5-site dry-run canary
-5. Inspect the newest bundles before starting any wider live scrape
+5. Inspect the newest bundles before starting any wider scrape
+6. Prefer a replay-backed full pass before live crawling when cache coverage is already good
+7. Backfill menu tables and audit the Price Index path when menu structure is in scope
 
 For the short version, use [MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md](MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md).
 
@@ -181,6 +183,39 @@ PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-
 | `--region` | str | `austin_tx` | Geographic region scope |
 | `--skip-checked-days` | int | 3 | Skip sites checked within N days. Use `0` to force re-scrape all |
 | `--replay-debug-cache` | flag | false | Replay locally saved site bundles instead of live fetching |
+
+#### Full-scan rerun sequence
+
+Use this order after scraper heuristics, quality gates, or menu extraction logic change:
+
+```bash
+# 1) Sync production-like state and migrate.
+bash dev/sync_from_opi.sh
+.venv/bin/alembic upgrade head
+
+# 2) Clear pre-flight blockers and inspect a canary first.
+PYTHONPATH=. .venv/bin/python scripts/check_website_scrape_preflight.py --region austin_tx --skip-checked-days 0
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 5 --skip-checked-days 0 --dry-run --region austin_tx
+
+# 3) If replay coverage is good, repopulate canonical deal layers from replay first.
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-debug-cache --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
+
+# 4) Only fall back to a fresh live crawl if replay coverage is too sparse.
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
+
+# 5) Re-audit only if scoring or gating changed.
+PYTHONPATH=. .venv/bin/python scripts/reaudit_deal_observations.py --source website_scrape --backfill-source meal_deals --region austin_tx --apply
+
+# 6) Materialize menu tables and audit the menu read path.
+PYTHONPATH=. .venv/bin/python scripts/backfill_menu_tables.py
+PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
+```
+
+Important integration note:
+
+- `website_scraper.py` writes through canonical ingest during the run, chunk by chunk
+- `scripts/backfill_menu_tables.py` is the separate step that materializes `menu_persistence_shape` into the persistent menu tables used by `/api/price-index`
+- a full rerun is not complete until both the deal APIs and the menu APIs are revalidated
 
 #### What it does per site
 

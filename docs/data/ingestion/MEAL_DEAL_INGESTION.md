@@ -1,7 +1,7 @@
 # Meal Deal Ingestion
 
-Updated: 2026-04-18
-Status: canonical identity, observation/applicability, and semantic read-layer are live; website scraper sidecar, persistence-shape, hint-registry, replay, and pre-flight tooling are in place; active remediation now focuses on target hygiene, current-source precedence, canonical-row selection, and modeled gated offers; runtime renderer escalation is still pending
+Updated: 2026-04-21
+Status: canonical identity, observation/applicability, semantic read-layer, replay bundles, menu-table backfill, and pre-flight tooling are live; active remediation now focuses on target hygiene, current-source precedence, canonical-row selection, and modeled gated offers; runtime renderer escalation is still pending
 
 ## Purpose
 
@@ -41,7 +41,7 @@ Use `docs/guides/MEAL_DEAL_REMEDIATION_TRACKER.md` for the live fix checklist an
 
 1. The API reads `deal_materializations`, not `meal_deals`.
 2. Every collector still emits `DealSignal`; canonical ingest is the shared write contract.
-3. The website scraper now preserves structured menu evidence in replay bundles via `menu_sidecar` and `menu_persistence_shape`, but that menu graph is not yet stored in database tables.
+3. The website scraper preserves structured menu evidence in replay bundles via `menu_sidecar` and `menu_persistence_shape`, and that shape can now be backfilled into persistent menu tables for query surfaces such as `/api/price-index`.
 4. Replay-first debugging is the default operating mode. Sync cached bundles, run pre-flight, run a small canary, then widen the scrape.
 5. `/api/deals/review-queue/actions` now has real write-back behavior for contested sites and venue-alias decisions, and those actions refresh affected canonical rows.
 
@@ -82,6 +82,8 @@ website_scraper.py also writes replay artifacts:
   page html + pdf text/tables + extracted signals + menu_sidecar
   + menu_persistence_shape + menu_persistence_summary
   + render_decisions + render_budget + hint provenance
+  -> scripts/backfill_menu_tables.py -> menu_pages/menu_sections/menu_items/menu_price_points/menu_modifiers
+  -> /api/price-index and /api/price-index/facets
 ```
 
 The most important architectural split is this:
@@ -101,7 +103,7 @@ Use the right layer for the question you are asking.
 | Which physical venue is canonical? | `canonical_venues` and `canonical_venue_aliases` | `local_employers` is still a source layer, not the meal-deal authority. |
 | Which website owns a URL? | `site_identities` and `site_assignments` | Review queue actions write back here. |
 | What page or PDF produced a website scrape signal? | `data/cache/website_scrape_debug/*.json` | Replay bundles are the authoritative upstream evidence store. |
-| What structured menu graph did the scraper infer? | `menu_sidecar` and `menu_persistence_shape` in debug bundles | Not yet persisted as DB tables. |
+| What structured menu graph did the scraper infer? | `menu_sidecar` and `menu_persistence_shape` in debug bundles for replay provenance; `menu_pages`, `menu_sections`, `menu_items`, `menu_price_points`, and `menu_modifiers` for persisted queryable menu data | Replay bundles remain the upstream evidence store; menu tables are the read path. |
 | What still exists for compatibility only? | `meal_deals` | Still dual-written, but no longer the primary semantic source. |
 
 ## Core Runtime Objects
@@ -125,7 +127,7 @@ Important implementation detail:
 - `signal.metadata` is carried into `deal_observations.extraction_payload["metadata"]`
 - `signal.sub_deals` is carried into `deal_observations.extraction_payload["sub_deals_hint"]`
 
-That means scraper-side metadata such as offer-target linking, value-profile hints, or hint provenance survives canonical ingest even though the full menu graph does not yet have DB tables.
+That means scraper-side metadata such as offer-target linking, value-profile hints, or hint provenance survives canonical ingest even though the menu graph also has a separate persistent-table path for Price Index and related menu queries.
 
 ### `MenuSidecar`
 
@@ -151,7 +153,19 @@ It also derives:
 
 Defined in `collectors/meal_deals/menu_persistence_schema.py`.
 
-This is the target row shape for a future persistent menu graph. It is not a SQLAlchemy model. It exists so replay bundles can lock in a forward-compatible schema now and let the team validate structure before committing to migrations.
+This is the row shape used by `menu_db_writer.py` and `scripts/backfill_menu_tables.py` to populate the persistent menu graph. It is not a SQLAlchemy model. It also lets replay bundles lock in a stable schema between scraper extraction and DB writes.
+
+### Persistent menu tables
+
+The menu graph now has a persistent read path alongside the replay corpus:
+
+- `menu_pages`
+- `menu_sections`
+- `menu_items`
+- `menu_price_points`
+- `menu_modifiers`
+
+These tables are populated from `menu_persistence_shape` through `collectors/meal_deals/menu_db_writer.py`, either during targeted write paths or via `scripts/backfill_menu_tables.py` when replay bundles need to be materialized after a scraper change.
 
 ### `RenderDecision`
 
@@ -519,6 +533,13 @@ When a sidecar actually contains structure, `_finalize_site_debug_bundle()` also
 - `fk_violations`
 
 Treat any non-empty `fk_violations` list as a bug in sidecar or serializer behavior.
+
+When the scraper or menu extraction logic changes, the standard persistence follow-up is:
+
+1. rerun the website scraper in replay or live mode
+2. run `scripts/backfill_menu_tables.py`
+3. run `scripts/audit_menu_price_index.py`
+4. verify `/api/price-index` and `/api/price-index/facets`
 
 ### Render policy
 
@@ -933,7 +954,7 @@ These are the current meaningful caveats, not historical ones.
 1. `RENDER-01` is still open. Render policy exists, but runtime Playwright escalation is not wired into `website_scraper.py` yet.
 2. Wrong-target ingress is still not fully blocked. Hotel-family hosts, clearly unrelated businesses, and isolated bad URL assignments can still survive into the website scrape queue unless they are purged or filtered earlier.
 3. Stale-source precedence and canonical row ranking still need work. Older HTML or broad summary rows can beat newer PDFs or more specific sibling offers because read-path ranking still leans too heavily on `signal_quality` and recency.
-4. The menu graph is sidecar-first, not DB-backed. Structured menu artifacts live in replay bundles and signal metadata today, not persistent tables.
+4. The menu graph is replay-first, not table-first. Persistent menu tables now exist, but replay bundles remain the authoritative upstream evidence and the place where full sidecar provenance lives.
 5. Remaining open Tier 2 scraper tasks still matter: `DISC-03`, `DOM-01`, `NAME-01`, `PRICE-01`, `PDF-01`, and `TEST-02`.
 6. Rewards, birthday, loyalty, and app-gated offers are not explicitly modeled yet. Current boilerplate and non-deal filters suppress much of that family by design.
 7. Remote Orange Pi parity is still maintained manually. That is workable, but brittle.
@@ -956,16 +977,20 @@ collectors/meal_deals/
 ├── website_scraper.py                # first-party website scraping + replay bundle writing
 ├── menu_sidecar.py                   # structured menu graph extraction and offer-target linking
 ├── menu_persistence_schema.py        # forward-compatible row shape + FK checks
+├── menu_db_writer.py                 # persistent menu-table upsert from menu_persistence_shape
 ├── render_policy.py                  # audit-only render escalation policy
 ├── hint_registry.py                  # exploration-only hidden-page hint layer
 ├── chain_deals.py                    # chain collector
 ├── gbp_offers.py                     # Google Business Profile collector
 ├── manual_ingest.py                  # human-entered input path
-└── routes.py                         # /api/deals read APIs + review queue actions
+├── routes.py                         # /api/deals read APIs + review queue actions
+└── price_index_routes.py             # /api/price-index read APIs over persisted menu tables
 
 scripts/
 ├── check_website_scrape_preflight.py # scrape-readiness gate
 ├── reaudit_deal_observations.py      # canonical quality re-audit
+├── backfill_menu_tables.py           # materialize persistent menu tables from replay bundles
+├── audit_menu_price_index.py         # audit persisted menu quality before or after a rerun
 ├── backfill_meal_deal_identity.py    # rebuild canonical venue/site identity
 ├── backfill_deal_observation_history.py
 └── reset_meal_deal_dataset.py

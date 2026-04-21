@@ -64,6 +64,25 @@ def _article_links(soup: BeautifulSoup, base: str, aggregator_host: str) -> list
     return out
 
 
+def parse_article_html(
+    html: str, article_url: str, aggregator_name: str, aggregator_host: str, industry: str,
+) -> AggregatorRecord | None:
+    """Public entry point for parsing a single aggregator article/listing HTML.
+
+    Used by both the live listing walker and by offline replay paths (e.g.
+    Spirit Pool dev-capture bundles) that want to extract the same
+    AggregatorRecord shape without re-fetching the web.
+    """
+    return _parse_article(html, article_url, aggregator_name, aggregator_host, industry)
+
+
+def derive_proposals_from_record(
+    record: AggregatorRecord,
+) -> tuple[HintProposal | None, ExpectationProposal | None]:
+    """Public entry point to derive registry proposals from an AggregatorRecord."""
+    return _derive_proposals(record)
+
+
 def _parse_article(
     html: str, article_url: str, aggregator_name: str, aggregator_host: str, industry: str,
 ) -> AggregatorRecord | None:

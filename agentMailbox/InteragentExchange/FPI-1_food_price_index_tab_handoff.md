@@ -1,7 +1,7 @@
 # FPI-1: Food Price Index Tab — Implementation Handoff
 
 > **Date:** 2026-04-20
-> **Status:** Plan approved, ready to implement
+> **Status:** Backend and first frontend pass landed; refinement handoff now focuses on data-quality rollout and frontend adoption of newer menu fields
 > **Author:** Claude session (Fortune_3840)
 > **Prerequisites:** FH-3 (meal deal map layer) and FH-4 (meal deal data upgrade) — this is an offshoot tab, not a replacement
 > **Related docs:** `docs/data/ingestion/MENU_SIDECAR.md`
@@ -81,13 +81,74 @@ For the Price Index, treat these as hard audit failures until proven otherwise:
 - size-only item names such as `8 Oz`, `Small`, or `Regular`
 - promo fragments like `$1 off drafts` persisted as menu items
 
+## April 21, 2026 Addendum — Frontend Adaptation After Backend Hardening
+
+The frontend is no longer starting from zero. The current `priceindex.js` already consumes these backend fields successfully:
+
+- `dietary_tags`
+- `variant`
+- `section_name`
+- `service_period`
+- `distance_mi`
+
+The current `mealdeals.js` already consumes these deal-quality fields:
+
+- `deal_value_score`
+- `signal_quality`
+- `sub_deals`
+
+That means the next frontend work is not “wire the tab up at all.” It is “use more of the structure intentionally.”
+
+### Backend integration correction
+
+Menu data is no longer bundle-only. The current backend now has persistent menu tables in `core/database.py`, populated from `menu_persistence_shape` through `collectors/meal_deals/menu_db_writer.py` and `scripts/backfill_menu_tables.py`.
+
+Use this mental model:
+
+- replay bundles are still the authoritative provenance and re-extraction layer
+- persistent `menu_*` tables are now the query layer for `/api/price-index`
+
+### Frontend changes needed next
+
+1. Add a brand filter to the Price Index tab.
+    The backend already returns `brands` from `/api/price-index/facets` and accepts `brand` on `/api/price-index`, but the UI currently has no control for it.
+    Target files: `First-Helios_Frontend/index.html`, `First-Helios_Frontend/js/priceindex.js`
+
+2. Add a service-period filter control.
+    The backend already accepts `service_period`, and the result cards already render it as a badge, but users cannot filter directly to lunch, brunch, dinner, or similar section scope.
+    Target files: `First-Helios_Frontend/index.html`, `First-Helios_Frontend/js/priceindex.js`
+
+3. Make restaurant groups section-aware instead of only flat item lists.
+    The UI currently groups by restaurant, but it does not really take advantage of `section_name` plus `variant`. A better next step is nested grouping such as `Restaurant -> Section -> Items`, with `variant` rendered as secondary detail rather than duplicated badge noise.
+    Target files: `First-Helios_Frontend/js/priceindex.js`, `First-Helios_Frontend/css/style.css`
+
+4. Surface richer savings context in Meal Deals.
+    The deal cards currently show formatted price, value badge, and sub-deals, but they do not use `menu_avg_price` or `original_price` to explain why a deal is strong. Add a secondary savings line such as “vs. $12.50 menu average” or “50% off regular price” when the data exists.
+    Target files: `First-Helios_Frontend/js/mealdeals.js`, `First-Helios_Frontend/css/style.css`
+
+5. Decide whether Meal Deals should show item or section targets.
+    The scraper now links many offers to structured targets in metadata, but `/api/deals` currently serializes `DealMaterialization.to_dict()` only. If the frontend should show chips like “targets appetizers” or “happy-hour drinks”, the backend route must expose a normalized `offer_target` summary first.
+    Target files: `collectors/meal_deals/routes.py`, `First-Helios_Frontend/js/mealdeals.js`
+
+6. Add a stronger explanation layer for dietary tags.
+    The Price Index already shows dietary chips and filters, but it still truncates tags visually and treats them as generic badges. If dietary search is part of the product story, filtered tags should be visually promoted in the item card and summary line.
+    Target files: `First-Helios_Frontend/js/priceindex.js`, `First-Helios_Frontend/css/style.css`
+
+### Practical priority order
+
+1. Brand filter for Price Index
+2. Service-period filter for Price Index
+3. Section-aware result grouping
+4. Meal Deal savings explanation using existing numeric fields
+5. Backend exposure of normalized `offer_target` for frontend use
+
 ---
 
 ## What We're Building and Why
 
 A new **Food Price Index** tab — separate from Meal Deals. It surfaces **every scraped menu item** (not just discounted ones) so a user can search by keyword, cuisine/brand, course, or price-per-calorie to find the cheapest food nearby.
 
-**Hard gate:** a restaurant only appears in results if its menu has been scraped into the sidecar. No menu scraped = not listed.
+**Hard gate:** a restaurant only appears in results if its menu has been scraped into a sidecar and then materialized into the persistent menu tables. No menu persistence = not listed.
 
 ### Why this is its own tab (not merged into Meal Deals)
 - Meal Deals is about *discounts and offers* (DealMaterialization)
@@ -110,6 +171,7 @@ First-Helios_Frontend/
 │   ├── app.js           ← mode-switcher lives here
 │   ├── config.js
 │   ├── mealdeals.js     ← meal deals tab already implemented
+│   ├── priceindex.js    ← first pass of the Price Index tab already implemented
 │   ├── eventfinder.js
 │   ├── h3map.js
 │   ├── jobfinder.js
@@ -120,10 +182,10 @@ First-Helios_Frontend/
 
 > **Do not be misled:** `server.py` in First-Helios still references `static_folder="frontend"` and commit `c2a4225` is titled "deleted frontend". That commit *moved* the frontend to its own repo — it was not deleted. The backend's `static_folder` reference is stale and irrelevant to where frontend changes actually go.
 
-**All frontend changes in this plan target `/home/fortune/CodeProjects/First-Helios_Frontend/`.** There is already a `mealdeals.js` — study it for the existing tab pattern before writing `priceindex.js`.
+**All frontend changes in this plan target `/home/fortune/CodeProjects/First-Helios_Frontend/`.** Study both `mealdeals.js` and the current `priceindex.js` before extending the tab further.
 
-### 2. **Menu data exists in bundles, NOT in the DB yet**
-`bundle["menu_persistence_shape"]` is already populated on every scrape (see `website_scraper.py:777` — assigned inside `_finalize_site_debug_bundle`). It follows the `PersistentShape` TypedDict from `collectors/meal_deals/menu_persistence_schema.py`. There are **zero** menu-related tables in the database. This plan creates them.
+### 2. **Menu data exists in both replay bundles and persistent tables**
+`bundle["menu_persistence_shape"]` is populated on scraper output and remains the replay/debug authority. That shape is now materialized into persistent `menu_pages`, `menu_sections`, `menu_items`, `menu_price_points`, and `menu_modifiers` tables through `collectors/meal_deals/menu_db_writer.py` and `scripts/backfill_menu_tables.py`.
 
 ### 3. **Latest alembic head is `c6f1e2a7b934`**
 (`alembic/versions/c6f1e2a7b934_merge_meal_deal_heads.py`). Your new migration's `down_revision` must be `"c6f1e2a7b934"`.

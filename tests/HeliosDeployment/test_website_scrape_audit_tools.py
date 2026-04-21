@@ -301,6 +301,52 @@ def test_discover_candidate_pages_allows_same_brand_subdomain_menu_host_for_low_
     assert "https://order.example.com/" in discovered
 
 
+def test_discover_structured_menu_pages_promotes_jsonld_menu_url():
+    html = """
+    <html><body>
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "Restaurant",
+                    "name": "Wholly Cow Burgers",
+                    "hasMenu": {"@id": "https://whollycowburgers.com/#main-menu"}
+                },
+                {
+                    "@type": "Menu",
+                    "@id": "https://whollycowburgers.com/#main-menu",
+                    "name": "Main Menu",
+                    "url": "https://whollycowburgers.com/menu.html"
+                }
+            ]
+        }
+        </script>
+    </body></html>
+    """
+
+    discovered = website_scraper_module._discover_structured_menu_pages(
+        html,
+        "https://whollycowburgers.com",
+        allow_broad_menu_links=False,
+    )
+
+    assert discovered == ["https://whollycowburgers.com/menu.html"]
+
+
+def test_discover_pdf_links_accepts_querystring_pdf_urls():
+    html = """
+    <html><body>
+        <a href="https://files.example.com/menu.pdf?dm=1774998567">Download Menu</a>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    discovered = website_scraper_module._discover_pdf_links(soup, "https://example.com/menu")
+
+    assert discovered == ["https://files.example.com/menu.pdf?dm=1774998567"]
+
+
 def test_extract_jsonld_deals_uses_special_menu_context_and_inherited_price():
         html = """
         <html><body>

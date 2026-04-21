@@ -1,6 +1,6 @@
 # Meal Deal Replay Workflow
 
-Updated: 2026-04-17
+Updated: 2026-04-21
 Scope: replay-first workflow for website scraper audit, manifest generation, and targeted parser iteration
 
 ## Purpose
@@ -74,6 +74,33 @@ Inspect the newest debug bundles for:
 If `menu_persistence_summary` is present, confirm `fk_violations == 0`. If a known menu-rich canary site still lacks it, treat that as a structure-coverage follow-up before widening the run.
 
 Only begin a full live scrape after the canary bundles look correct.
+
+## Step 3A: Use Replay As The Full Refresh Driver When Possible
+
+Replay mode is not only for parser debugging. If the local debug corpus already covers the sites you care about, use replay to repopulate the canonical deal layers before you spend live crawl budget.
+
+```bash
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-debug-cache --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
+```
+
+Important behavior:
+
+- replay mode still writes through `ingest_deal_signals()` chunk by chunk
+- this refreshes `deal_observations`, `deal_applicability`, and `deal_materializations` under current scraper logic
+- this does not materialize the persistent menu tables by itself
+
+If the rerun also needs the menu read path refreshed, follow the replay-backed scrape with:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/backfill_menu_tables.py
+PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
+```
+
+If signal scoring or gate policy changed, also run:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/reaudit_deal_observations.py --source website_scrape --backfill-source meal_deals --region austin_tx --apply
+```
 
 ## Step 4: Build A Baseline Audit Summary
 
