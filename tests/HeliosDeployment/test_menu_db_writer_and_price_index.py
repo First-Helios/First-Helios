@@ -147,6 +147,35 @@ def test_upsert_menu_shape_filters_non_positive_price_points():
     session.close()
 
 
+def test_upsert_menu_shape_prunes_stale_price_points_for_replayed_scope():
+    engine = _setup_engine()
+    Session = sessionmaker(bind=engine)
+
+    session = Session()
+    shape = _build_shape()
+    first_result = upsert_menu_shape(session, shape)
+    session.commit()
+
+    assert first_result.skipped is False
+    assert session.query(MenuPricePoint).count() == 2
+
+    updated_shape = _build_shape()
+    updated_shape["price_points"][0]["id"] = "pp_repriced"
+    updated_shape["price_points"][0]["price"] = 96.99
+    updated_shape["price_points"][0]["evidence"] = "updated replay"
+
+    second_result = upsert_menu_shape(session, updated_shape)
+    session.commit()
+
+    assert second_result.skipped is False
+    assert session.query(MenuPricePoint).count() == 2
+    assert session.query(MenuPricePoint).filter(MenuPricePoint.price == 95.99).count() == 0
+    repriced = session.query(MenuPricePoint).filter(MenuPricePoint.id == "pp_repriced").one()
+    assert repriced.price == 96.99
+    assert repriced.evidence == "updated replay"
+    session.close()
+
+
 def test_price_index_endpoint_returns_filtered_menu_rows(monkeypatch):
     engine = _setup_engine()
     Session = sessionmaker(bind=engine)

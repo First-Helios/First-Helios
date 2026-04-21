@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -209,6 +209,139 @@ def _upsert_rows(
     return inserted, updated
 
 
+def _select_scoped_ids(
+    session: Session,
+    model: Any,
+    *,
+    restaurant_id: int,
+    filters: list[Any],
+) -> set[str]:
+    if not filters:
+        return set()
+    stmt = select(model.id).where(model.restaurant_id == restaurant_id, *filters)
+    return set(session.scalars(stmt).all())
+
+
+def _delete_stale_rows(
+    session: Session,
+    model: Any,
+    *,
+    restaurant_id: int,
+    filters: list[Any],
+    keep_ids: set[str],
+) -> None:
+    if not filters:
+        return
+    stmt = delete(model).where(model.restaurant_id == restaurant_id, *filters)
+    if keep_ids:
+        stmt = stmt.where(model.id.not_in(keep_ids))
+    session.execute(stmt)
+
+
+def _prune_stale_menu_scope(
+    session: Session,
+    *,
+    restaurant_id: int,
+    rows_by_table: dict[str, list[dict[str, Any]]],
+) -> None:
+    page_rows = rows_by_table["pages"]
+    section_rows = rows_by_table["sections"]
+    item_rows = rows_by_table["items"]
+    price_rows = rows_by_table["price_points"]
+    modifier_rows = rows_by_table["modifiers"]
+
+    current_page_ids = {row["id"] for row in page_rows}
+    current_section_ids = {row["id"] for row in section_rows}
+    current_item_ids = {row["id"] for row in item_rows}
+    current_price_ids = {row["id"] for row in price_rows}
+    current_modifier_ids = {row["id"] for row in modifier_rows}
+
+    source_bundles = {row.get("source_bundle") for row in page_rows if row.get("source_bundle")}
+    if len(source_bundles) == 1:
+        existing_page_ids = _select_scoped_ids(
+            session,
+            MenuPage,
+            restaurant_id=restaurant_id,
+            filters=[MenuPage.source_bundle == next(iter(source_bundles))],
+        )
+    else:
+        existing_page_ids = set(current_page_ids)
+
+    relevant_page_ids = existing_page_ids | current_page_ids
+    if not relevant_page_ids:
+        return
+
+    existing_section_ids = _select_scoped_ids(
+        session,
+        MenuSection,
+        restaurant_id=restaurant_id,
+        filters=[MenuSection.page_id.in_(relevant_page_ids)],
+    )
+    relevant_section_ids = existing_section_ids | current_section_ids
+
+    existing_item_ids = _select_scoped_ids(
+        session,
+        MenuItem,
+        restaurant_id=restaurant_id,
+        filters=[MenuItem.section_id.in_(relevant_section_ids)] if relevant_section_ids else [],
+    )
+    relevant_item_ids = existing_item_ids | current_item_ids
+
+    modifier_filters: list[Any] = []
+    if relevant_item_ids:
+        modifier_filters.append(MenuModifier.item_id.in_(relevant_item_ids))
+    if relevant_section_ids:
+        modifier_filters.append(MenuModifier.section_id.in_(relevant_section_ids))
+    if modifier_filters:
+        _delete_stale_rows(
+            session,
+            MenuModifier,
+            restaurant_id=restaurant_id,
+            filters=[or_(*modifier_filters)],
+            keep_ids=current_modifier_ids,
+        )
+
+    price_filters: list[Any] = []
+    if relevant_item_ids:
+        price_filters.append(MenuPricePoint.item_id.in_(relevant_item_ids))
+    if relevant_section_ids:
+        price_filters.append(MenuPricePoint.section_id.in_(relevant_section_ids))
+    if price_filters:
+        _delete_stale_rows(
+            session,
+            MenuPricePoint,
+            restaurant_id=restaurant_id,
+            filters=[or_(*price_filters)],
+            keep_ids=current_price_ids,
+        )
+
+    if relevant_section_ids:
+        _delete_stale_rows(
+            session,
+            MenuItem,
+            restaurant_id=restaurant_id,
+            filters=[MenuItem.section_id.in_(relevant_section_ids)],
+            keep_ids=current_item_ids,
+        )
+
+    _delete_stale_rows(
+        session,
+        MenuSection,
+        restaurant_id=restaurant_id,
+        filters=[MenuSection.page_id.in_(relevant_page_ids)],
+        keep_ids=current_section_ids,
+    )
+
+    if len(source_bundles) == 1:
+        _delete_stale_rows(
+            session,
+            MenuPage,
+            restaurant_id=restaurant_id,
+            filters=[MenuPage.source_bundle == next(iter(source_bundles))],
+            keep_ids=current_page_ids,
+        )
+
+
 def upsert_menu_shape(session: Session, shape: PersistentShape) -> UpsertResult:
     """Idempotent upsert from a PersistentShape into menu graph tables."""
     restaurant_id = _coerce_restaurant_id(shape.get("restaurant_id"))
@@ -240,6 +373,12 @@ def upsert_menu_shape(session: Session, shape: PersistentShape) -> UpsertResult:
     }
 
     with session.begin_nested():
+        _prune_stale_menu_scope(
+            session,
+            restaurant_id=restaurant_id,
+            rows_by_table=rows_by_table,
+        )
+
         inserted, updated = _upsert_rows(
             session,
             MenuPage,
