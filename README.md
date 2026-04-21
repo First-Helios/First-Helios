@@ -6,6 +6,7 @@ A broad-scope data intelligence platform for Austin, TX — ingesting, documenti
 - **Career Pathfinder** — shows workers realistic lateral and upward moves with wage data and nearby employers
 - **Job Finder** — maps active job postings by H3 hex cell across Austin
 - **Events Hub** — aggregates local events from 6+ sources (Ticketmaster, Eventbrite, Meetup, Do512, City of Austin, Visit Austin) with venue mapping and social-density scoring
+- **Meal Deals** — scrapes restaurant menus, GBP posts, and chain deal pages to surface active specials (happy hour, breakfast, lunch, BOGO, kids-eat-free) with temporal and pricing structure
 - **Business Intelligence** — 45K+ employer locations with brand clustering, industry classification, and mobility scoring
 
 Data enters from two paths: **50+ automated API collectors** (BLS, job boards, event aggregators, Overture Maps) running on schedules, and the **SpiritPool browser extension** where real people contribute signals under explicit consent.
@@ -92,6 +93,10 @@ First-Helios/
 │   ├── events/                  # ticketmaster, eventbrite, meetup, do512,
 │   │                            #   austin_city_calendar, austintexas_org
 │   │                            #   + registry.py (decorator-based plugin system)
+│   ├── meal_deals/              # website_scraper, chain_deals, gbp_offers,
+│   │                            #   render_policy (ARCH-03), hint_registry (ARCH-04),
+│   │                            #   menu_sidecar, menu_persistence_schema (ARCH-01),
+│   │                            #   ingest.py, routes.py
 │   └── sentiment/               # reddit, reviews adapters
 │
 ├── core/                        # Core pipeline + scoring
@@ -229,6 +234,16 @@ python collector_main.py                      # start persistent scheduler
 | `GET /api/events/categories?region=austin_tx` | Event categories with counts |
 | `GET /api/events/venues?region=austin_tx` | Venue directory |
 
+### Meal Deals
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/deals?deal_type=breakfast&region=austin_tx` | Paginated deals with geo/type/brand filters |
+| `GET /api/deals/stats?region=austin_tx` | Deal counts by type / source / brand |
+| `GET /api/deals/brands?region=austin_tx` | Brands with active deals and counts |
+| `GET /api/deals/review-queue?region=austin_tx` | Contested-site + ambiguous-alias review queue |
+
+Deal types: `breakfast`, `lunch_special`, `happy_hour`, `combo`, `bogo`, `kids_eat_free`, `daily_special`.
+
 ### Operations
 | Endpoint | Description |
 |----------|-------------|
@@ -264,6 +279,7 @@ Destinations ranked by: `transition_order` → `wage_direction` → `avg_skill_g
 - **Never write directly to `local_employers` or `brand_groups`** — all employer data flows through `core/ingest_layer.py`
 - **Never write directly to `job_postings`** — all posting data flows through `postings/ingest.py`
 - **Never write directly to `events` or `venues`** — all event data flows through `events/ingest.py`
+- **Never write directly to `meal_deals` or `deal_materializations`** — all deal data flows through `collectors/meal_deals/ingest.py` and the semantic-layer materializer
 - **Never call external APIs without rate manager** — always `rate_manager.can_request()` + `rate_manager.log_request()`
 - **New event collectors must use `@event_collector` decorator** — auto-discovered by the scheduler
 - **H3 cells are pre-computed at ingest** — never compute at query time
