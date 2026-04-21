@@ -255,7 +255,10 @@ def harvest(bundle_dir: Path, *, strict_brand: bool = True) -> tuple[HarvestRepo
 
         report.records.append(rec)
         brand_matches.append(match)
-        projections.append(_aggregator_to_dealsignal_shape(rec))
+        projection = _aggregator_to_dealsignal_shape(rec)
+        projection["brand_canonical"] = match.canonical_name if match else None
+        projection["brand_industry_vocab"] = match.industry if match else None
+        projections.append(projection)
 
         hint, expectation = derive_proposals_from_record(rec)
         if hint:
