@@ -104,6 +104,7 @@ _DEAL_KEYWORDS = [
 # Keep this set VERY tight: only phrases that are unambiguously a deal.
 _SELF_VALIDATING_KEYWORDS = {
     "bogo", "buy one get one", "buy one, get one",
+    "2 for 1", "two for one",
     "kids eat free", "happy hour",
     "half off", "half price", "% off",
 }
@@ -375,6 +376,8 @@ _DEAL_TYPE_MAP = {
     "bogo": "bogo",
     "buy one get one": "bogo",
     "buy one, get one": "bogo",
+    "2 for 1": "bogo",
+    "two for one": "bogo",
     "kids eat free": "kids_eat_free",
     "kids meal": "kids_eat_free",
     "daily special": "daily_special",
@@ -1234,6 +1237,12 @@ _SKIP_CLASS_ID_TOKENS = frozenset([
     "consent", "banner", "popup", "modal",
 ])
 _HEADING_TAG_NAMES = ("h1", "h2", "h3", "h4", "h5", "h6")
+_CORE_TAG_NAMES = frozenset(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td"])
+_STRUCTURAL_TAG_NAMES = frozenset(["div", "span", "article", "section"])
+_PROMO_SECTION_HEADING_RE = re.compile(
+    r"^\s*(?:specials?|deals?|offers?|promotions?|daily\s+specials?|happy\s*hour)\s*$",
+    re.IGNORECASE,
+)
 
 
 def _should_skip_tag(tag: Tag) -> bool:
@@ -1251,6 +1260,25 @@ def _prefix_day_heading_context(tag: Tag, text: str) -> str:
     if not text or _extract_days(text):
         return text
 
+    def _maybe_prefix(candidate: Tag | None) -> str | None:
+        if candidate is None:
+            return None
+        candidate_text = re.sub(r"\s+", " ", candidate.get_text(separator=" ", strip=True)).strip()
+        if not candidate_text:
+            return None
+        if not _extract_days(candidate_text):
+            return None
+        if len(candidate_text) > 48:
+            return None
+        if _PRICE_RE.search(candidate_text):
+            return None
+        if _has_deal_keywords(candidate_text):
+            return None
+        lower_candidate = candidate_text.lower()
+        if lower_candidate in text.lower():
+            return None
+        return f"{candidate_text} {text}".strip()
+
     current: Tag | None = tag
     while isinstance(current, Tag):
         heading = current.find_previous_sibling(_HEADING_TAG_NAMES)
@@ -1260,10 +1288,80 @@ def _prefix_day_heading_context(tag: Tag, text: str) -> str:
                 lower_heading = heading_text.lower()
                 if lower_heading not in text.lower():
                     return f"{heading_text} {text}".strip()
+        sibling = current.find_previous_sibling()
+        checks = 0
+        while isinstance(sibling, Tag) and checks < 3:
+            prefixed = _maybe_prefix(sibling)
+            if prefixed is not None:
+                return prefixed
+            sibling = sibling.find_previous_sibling()
+            checks += 1
         parent = current.parent
         current = parent if isinstance(parent, Tag) else None
 
     return text
+
+
+def _prefix_promotional_heading_context(tag: Tag, text: str) -> str:
+    """Carry nearby promo headings like 'Specials' into child offer rows."""
+    if not text or _has_deal_keywords(text):
+        return text
+
+    heading = tag.find_previous(_HEADING_TAG_NAMES)
+    checks = 0
+    while heading is not None and checks < 4:
+        heading_text = re.sub(r"\s+", " ", heading.get_text(separator=" ", strip=True)).strip()
+        if heading_text and _PROMO_SECTION_HEADING_RE.match(heading_text):
+            if heading_text.lower() not in text.lower():
+                return f"{heading_text} {text}".strip()
+            break
+        heading = heading.find_previous(_HEADING_TAG_NAMES)
+        checks += 1
+
+    return text
+
+
+def _text_block_has_offer_evidence(text: str) -> bool:
+    """Return True when a block contains substantive offer content."""
+    if not text:
+        return False
+    return _is_valid_deal_block(text)
+
+
+def _has_nested_offerish_descendants(tag: Tag, text: str) -> bool:
+    """Skip aggregate wrappers when child blocks already preserve the offers."""
+    normalized_parent = re.sub(r"\s+", " ", text).strip()
+    descendant_blocks: set[str] = set()
+
+    for child in tag.find_all(list(_CORE_TAG_NAMES | _STRUCTURAL_TAG_NAMES)):
+        if child is tag or _should_skip_tag(child):
+            continue
+
+        child_text = child.get_text(separator=" ", strip=True)
+        if not child_text:
+            continue
+
+        child_text = _prefix_day_heading_context(child, child_text)
+        child_text = _prefix_promotional_heading_context(child, child_text)
+        child_text = re.sub(r"\s+", " ", child_text).strip()
+        if not child_text or child_text == normalized_parent or len(child_text) >= len(normalized_parent):
+            continue
+
+        if child.name in _STRUCTURAL_TAG_NAMES:
+            if not (25 < len(child_text) < 300):
+                continue
+        else:
+            if not (15 < len(child_text) < 400):
+                continue
+
+        if not _text_block_has_offer_evidence(child_text):
+            continue
+
+        descendant_blocks.add(child_text)
+        if len(descendant_blocks) >= 2:
+            return True
+
+    return False
 
 
 def _extract_text_blocks(soup: BeautifulSoup) -> list[str]:
@@ -1272,25 +1370,23 @@ def _extract_text_blocks(soup: BeautifulSoup) -> list[str]:
     for bad in soup.find_all(_SKIP_TAG_NAMES):
         bad.decompose()
 
-    # Original tags with established length thresholds
-    _CORE_TAGS = frozenset(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td"])
-    # Structural tags — often wrap large text, so use tighter length bounds
-    _STRUCTURAL_TAGS = frozenset(["div", "span", "article", "section"])
-
     blocks = []
     seen_text: set[str] = set()  # avoid duplicate blocks from nested tags
 
-    for tag in soup.find_all(list(_CORE_TAGS | _STRUCTURAL_TAGS)):
+    for tag in soup.find_all(list(_CORE_TAG_NAMES | _STRUCTURAL_TAG_NAMES)):
         if _should_skip_tag(tag):
             continue
         text = tag.get_text(separator=" ", strip=True)
         if not text:
             continue
         text = _prefix_day_heading_context(tag, text)
+        text = _prefix_promotional_heading_context(tag, text)
 
         # Apply tag-appropriate length bounds
-        if tag.name in _STRUCTURAL_TAGS:
+        if tag.name in _STRUCTURAL_TAG_NAMES:
             if not (25 < len(text) < 300):
+                continue
+            if _has_nested_offerish_descendants(tag, text):
                 continue
         else:
             if not (15 < len(text) < 400):
@@ -1477,6 +1573,26 @@ _FRAGMENT_MARKERS_RE = re.compile(
     r"|\b(?:includ(?:ed|es|ing)?|comes?\s+with|topped\s+with)\b)",
     re.IGNORECASE,
 )
+_MONTH_NAME_RE = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+)
+_LEADING_PROMO_PREFIX_RE = re.compile(
+    r"^(?:specials?|deals?|offers?|promotions?)\s+",
+    re.IGNORECASE,
+)
+_LEADING_DAY_DATE_RE = re.compile(
+    rf"^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed(?:s|nesday)?|thu(?:r|rs)?|fri|sat|sun)\b(?:\s+{_MONTH_NAME_RE})?\s+\d{{1,2}}(?:st|nd|rd|th)?(?:,\s*\d{{4}})?\s+",
+    re.IGNORECASE,
+)
+_TRAILING_TIME_RANGE_RE = re.compile(
+    r"\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)\s*(?:-|–|—|to|til|till|until)\s*(?:\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|close|closing)\s*$",
+    re.IGNORECASE,
+)
+_TRAILING_PARTIAL_TIME_RE = re.compile(
+    r"\s+\d{1,2}(?::\d{2})?\s*[AP](?:\.?M?)?\.?\s*$",
+    re.IGNORECASE,
+)
 
 # Only trim these from the ends of a snippet (no periods — they're part of prices)
 _NAME_TRIM_CHARS = " -–—:,\n\t"
@@ -1485,6 +1601,20 @@ _NAME_TRIM_CHARS = " -–—:,\n\t"
 def _trim_name(snippet: str) -> str:
     """Collapse whitespace and strip trim chars from both ends."""
     return re.sub(r"\s+", " ", snippet).strip(_NAME_TRIM_CHARS)
+
+
+def _clean_candidate_deal_name(candidate: str) -> str:
+    """Normalize extracted names by dropping date/time scaffolding and clipping noise."""
+    cleaned = _trim_name(candidate)
+    cleaned = _NAME_STOPWORDS_PREFIX_RE.sub("", cleaned)
+    cleaned = _LEADING_PROMO_PREFIX_RE.sub("", cleaned)
+    cleaned = _LEADING_DAY_DATE_RE.sub("", cleaned)
+    cleaned = _TRAILING_TIME_RANGE_RE.sub("", cleaned)
+    cleaned = _TRAILING_PARTIAL_TIME_RE.sub("", cleaned)
+    cleaned = _trim_name(cleaned).rstrip("|").strip()
+    if cleaned.isupper() and any(char.isalpha() for char in cleaned):
+        cleaned = cleaned.title()
+    return cleaned[:80]
 
 
 def _is_generic_fallback_heading(heading: str, block: str) -> bool:
@@ -1551,10 +1681,9 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
 
     # 1. Heading preference
     if fallback_heading:
-        h = _trim_name(fallback_heading)
-        h = _NAME_STOPWORDS_PREFIX_RE.sub("", h)
+        h = _clean_candidate_deal_name(fallback_heading)
         if 3 <= len(h) <= 80 and not _FRAGMENT_MARKERS_RE.search(h) and not _is_generic_fallback_heading(h, block):
-            return h[:80]
+            return h
 
     # 2. Label-pattern search — expand match to nearest clause boundary.
     for pat in _DEAL_LABEL_PATTERNS:
@@ -1571,17 +1700,17 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
         )
         end = m.end() + (stop_search.start() if stop_search else min(40, len(block) - m.end()))
         end = min(len(block), end)
-        snippet = _trim_name(block[start:end])
+        snippet = _clean_candidate_deal_name(block[start:end])
         if 3 <= len(snippet) <= 80:
             return snippet
         # Very long — just return the bare match
-        bare = _trim_name(m.group(0))
+        bare = _clean_candidate_deal_name(m.group(0))
         if bare:
-            return bare[:80]
+            return bare
 
     # 3. Short-clause scan
     for clause in re.split(r"[.!?\n]", block):
-        c = _trim_name(clause)
+        c = _clean_candidate_deal_name(clause)
         if not (5 <= len(c) <= 70):
             continue
         if _FRAGMENT_MARKERS_RE.search(c):
@@ -1594,9 +1723,9 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
             return c[:80]
 
     # 4. Last resort: first short clause if it doesn't look like a fragment
-    first = _trim_name(re.split(r"[.!?\n]", block, maxsplit=1)[0])
+    first = _clean_candidate_deal_name(re.split(r"[.!?\n]", block, maxsplit=1)[0])
     if 5 <= len(first) <= 70 and not _FRAGMENT_MARKERS_RE.search(first):
-        return first[:80]
+        return first
 
     return None
 
@@ -1879,7 +2008,7 @@ def _extract_embedded_app_deals(
         signals.extend(candidate_signals)
         for signal in candidate_signals:
             if signal.deal_name:
-                seen_deals.add(signal.deal_name.lower())
+                seen_deals.add(_signal_seen_key(signal))
 
     return signals
 
@@ -1990,17 +2119,11 @@ def _jsonld_append_signal(
     if not deal_name or len(deal_name) < 5:
         return
 
-    name_key = deal_name.lower()
-    if name_key in seen_deals:
-        return
-
     pricing = _extract_deal_pricing(text)
     if pricing.is_non_food:
         return
     if structured_price is None and pricing.is_addon:
         return
-
-    seen_deals.add(name_key)
 
     price = structured_price if structured_price is not None else pricing.price
     price_type = pricing.price_type
@@ -2013,6 +2136,18 @@ def _jsonld_append_signal(
 
     valid_days = _extract_days(text)
     start_time, end_time = _extract_times(text)
+    name_key = _deal_seen_key(
+        deal_name=deal_name,
+        source_url=source_url,
+        valid_days=valid_days,
+        valid_start_time=start_time,
+        valid_end_time=end_time,
+        price=price,
+    )
+    if name_key in seen_deals:
+        return
+
+    seen_deals.add(name_key)
 
     signal_metadata = deepcopy(metadata)
     if price_currency:
@@ -2563,11 +2698,6 @@ def _text_block_to_signals(
         if not deal_name or len(deal_name) < 5:
             continue
 
-        name_key = deal_name.lower()
-        if name_key in seen_deals:
-            continue
-        seen_deals.add(name_key)
-
         pricing = _extract_deal_pricing(sub)
         if pricing.is_addon or pricing.is_non_food:
             continue
@@ -2575,6 +2705,18 @@ def _text_block_to_signals(
         deal_type = _classify_deal_type(sub)
         valid_days = _extract_days(sub)
         start_time, end_time = _extract_times(sub)
+        name_key = _deal_seen_key(
+            deal_name=deal_name,
+            source_url=source_url,
+            valid_days=valid_days,
+            valid_start_time=start_time,
+            valid_end_time=end_time,
+            price=pricing.price,
+        )
+        if name_key in seen_deals:
+            continue
+        seen_deals.add(name_key)
+
         calories = _extract_calories(sub)
 
         calorie_price_ratio = None
@@ -2916,6 +3058,39 @@ def _signal_cta_url(signal: DealSignal) -> str | None:
     return None
 
 
+def _deal_seen_key(
+    *,
+    deal_name: str | None,
+    source_url: str | None,
+    valid_days: str | None,
+    valid_start_time: str | None,
+    valid_end_time: str | None,
+    price: float | None,
+) -> str:
+    price_key = "" if price is None else f"{price:.2f}"
+    return "|".join(
+        [
+            _normalized_signal_text(deal_name),
+            _normalized_signal_url(source_url),
+            valid_days or "",
+            valid_start_time or "",
+            valid_end_time or "",
+            price_key,
+        ]
+    )
+
+
+def _signal_seen_key(signal: DealSignal) -> str:
+    return _deal_seen_key(
+        deal_name=signal.deal_name,
+        source_url=signal.source_url,
+        valid_days=signal.valid_days,
+        valid_start_time=signal.valid_start_time,
+        valid_end_time=signal.valid_end_time,
+        price=signal.price,
+    )
+
+
 def _signal_evidence_datetime(signal: DealSignal) -> datetime | None:
     metadata = signal.metadata or {}
     for key in ("source_page_modified_at", "source_document_date", "source_page_published_at"):
@@ -2986,6 +3161,15 @@ def _signal_has_text_overlap(left: DealSignal, right: DealSignal) -> bool:
     return left_text == right_text or left_text in right_text or right_text in left_text
 
 
+def _signals_temporally_compatible(left: DealSignal, right: DealSignal) -> bool:
+    for attr in ("valid_days", "valid_start_time", "valid_end_time", "start_date", "end_date"):
+        left_value = getattr(left, attr)
+        right_value = getattr(right, attr)
+        if left_value is not None and right_value is not None and left_value != right_value:
+            return False
+    return True
+
+
 def _maybe_refine_signal_name(signal: DealSignal) -> DealSignal:
     raw_text = signal.raw_scraped_text or signal.deal_description or ""
     if not raw_text:
@@ -3009,13 +3193,25 @@ def _can_merge_by_identity(left: DealSignal, right: DealSignal) -> bool:
     left_name = _normalized_signal_text(left.deal_name)
     right_name = _normalized_signal_text(right.deal_name)
     if same_page and left_name and left_name == right_name:
+        if not _signals_temporally_compatible(left, right):
+            return False
         return True
+
+    if same_page and left.deal_type == "happy_hour" and _signals_temporally_compatible(left, right):
+        left_text = _normalized_signal_text(left.raw_scraped_text or left.deal_description or left.deal_name)
+        right_text = _normalized_signal_text(right.raw_scraped_text or right.deal_description or right.deal_name)
+        if "happy hour" in left_text and "happy hour" in right_text:
+            return True
 
     left_cta = _signal_cta_url(left)
     right_cta = _signal_cta_url(right)
     if left_cta and left_cta == right_cta:
+        if not _signals_temporally_compatible(left, right):
+            return False
         return True
 
+    if not _signals_temporally_compatible(left, right):
+        return False
     return _signal_has_text_overlap(left, right)
 
 
@@ -3037,6 +3233,8 @@ def _can_absorb_weak_variant(primary: DealSignal, weak: DealSignal) -> bool:
     if _normalized_signal_url(primary.source_url) != _normalized_signal_url(weak.source_url):
         return False
     if primary.deal_type != weak.deal_type:
+        return False
+    if not _signals_temporally_compatible(primary, weak):
         return False
     if _signal_cta_url(primary) and _signal_cta_url(primary) == _signal_cta_url(weak):
         return True
@@ -3175,6 +3373,8 @@ def _consolidate_site_signals(signals: list[DealSignal]) -> list[DealSignal]:
             if existing.deal_type != signal.deal_type:
                 continue
             if _normalized_signal_url(existing.source_url) != _normalized_signal_url(signal.source_url):
+                continue
+            if not _signals_temporally_compatible(existing, signal):
                 continue
             existing_text = _normalized_signal_text(existing.raw_scraped_text or existing.deal_description or existing.deal_name)
             existing_name = _normalized_signal_text(existing.deal_name)

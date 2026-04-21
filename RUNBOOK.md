@@ -96,7 +96,16 @@ cd ~/First-Helios
 .venv/bin/python scripts/backfill_menu_tables.py
 ```
 
-If the dry-run reports very few bundles with shapes, most cached bundles predate menu persistence. In that case, run a fresh website scraper pass after deploy so live scrapes populate the new menu tables:
+If the dry-run reports very few bundles with shapes, that does not automatically mean the replay cache is useless. Many older bundles still contain saved page HTML even if they predate `menu_persistence_shape`.
+
+Prefer a replay-based pass first when the debug cache already contains page snapshots:
+
+```bash
+cd ~/First-Helios
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-debug-cache --all --skip-checked-days 0 --chunk-size 25
+```
+
+Only fall back to a fresh live website scraper pass if replay coverage is still too sparse after that:
 
 ```bash
 cd ~/First-Helios

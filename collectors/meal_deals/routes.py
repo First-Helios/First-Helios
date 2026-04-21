@@ -15,6 +15,7 @@ from collections import Counter, defaultdict
 from flask import Blueprint, jsonify, request
 
 from collectors.meal_deals.semantic_layer import refresh_deal_materializations
+from collectors.meal_deals.temporal import extract_days
 from core.database import (
     BrandGroup,
     CanonicalVenue,
@@ -71,6 +72,81 @@ _GENERIC_SUMMARY_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 _SPECIFICITY_PRICE_SIGNAL_RE = re.compile(r"(?:\$\d|\d+%\s*off|half\s+(?:off|price)|bogo)", re.IGNORECASE)
+_DAY_ORDER = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_DAY_TOKEN_MAP = {
+    "monday": "Mon",
+    "mon": "Mon",
+    "tuesday": "Tue",
+    "tue": "Tue",
+    "tues": "Tue",
+    "wednesday": "Wed",
+    "wed": "Wed",
+    "weds": "Wed",
+    "thursday": "Thu",
+    "thu": "Thu",
+    "thur": "Thu",
+    "thurs": "Thu",
+    "friday": "Fri",
+    "fri": "Fri",
+    "saturday": "Sat",
+    "sat": "Sat",
+    "sunday": "Sun",
+    "sun": "Sun",
+}
+
+
+def _normalize_day_filter(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    normalized = extract_days(cleaned)
+    if normalized in _DAY_ORDER:
+        return normalized
+    return _DAY_TOKEN_MAP.get(cleaned.lower())
+
+
+def _expand_valid_days(valid_days: str | None) -> set[str]:
+    if not valid_days:
+        return set()
+
+    cleaned = valid_days.strip()
+    if not cleaned:
+        return set()
+
+    normalized = extract_days(cleaned) or cleaned
+    if normalized == "Daily":
+        return set(_DAY_ORDER)
+    if normalized == "Mon-Fri":
+        return set(_DAY_ORDER[:5])
+    if normalized == "Sat-Sun":
+        return {"Sat", "Sun"}
+    if normalized in _DAY_ORDER:
+        return {normalized}
+    if "-" in normalized:
+        start, end = [part.strip() for part in normalized.split("-", 1)]
+        if start in _DAY_ORDER and end in _DAY_ORDER:
+            start_index = _DAY_ORDER.index(start)
+            end_index = _DAY_ORDER.index(end)
+            if start_index <= end_index:
+                return set(_DAY_ORDER[start_index:end_index + 1])
+
+    expanded: set[str] = set()
+    for token in re.split(r",|/|&|\band\b", cleaned, flags=re.IGNORECASE):
+        normalized_token = _normalize_day_filter(token)
+        if normalized_token is not None:
+            expanded.add(normalized_token)
+    return expanded
+
+
+def _materialization_matches_day_filter(deal: DealMaterialization, requested_day: str | None) -> bool:
+    if requested_day is None:
+        return True
+    if not deal.valid_days:
+        return False
+    return requested_day in _expand_valid_days(deal.valid_days)
 
 
 def _sub_deal_count(value) -> int:
@@ -244,6 +320,7 @@ def _load_materialized_deals(
     region: str,
     active_only: bool = True,
     deal_type: str | None = None,
+    day: str | None = None,
     brand: str | None = None,
     lat: float | None = None,
     lng: float | None = None,
@@ -275,6 +352,8 @@ def _load_materialized_deals(
         DealMaterialization.verified_at.desc(),
         DealMaterialization.id.desc(),
     ).all()
+    if day is not None:
+        deals = [deal for deal in deals if _materialization_matches_day_filter(deal, day)]
     return _sort_materialized_deals(deals)
 
 
@@ -687,6 +766,8 @@ def list_deals():
     """
     region = request.args.get("region", "austin_tx")
     deal_type = request.args.get("deal_type")
+    day_param = request.args.get("day")
+    day = _normalize_day_filter(day_param)
     brand = request.args.get("brand")
     active_only = request.args.get("active_only", "true").lower() != "false"
     limit = min(request.args.get("limit", 50, type=int), 200)
@@ -697,6 +778,9 @@ def list_deals():
     lng = request.args.get("lng", type=float)
     radius_mi = request.args.get("radius_mi", 10.0, type=float)
 
+    if day_param is not None and day is None:
+        return _bad_request("day must be a weekday like Mon or Tuesday")
+
     session = _get_db_session()
     try:
         deals = _load_materialized_deals(
@@ -704,6 +788,7 @@ def list_deals():
             region=region,
             active_only=active_only,
             deal_type=deal_type,
+            day=day,
             brand=brand,
             lat=lat,
             lng=lng,
@@ -734,6 +819,7 @@ def deal_stats():
     Query params:
         region      (str, default austin_tx)
         deal_type   (str, optional)
+        day         (str, optional)  filter deals valid on this day
         brand       (str, optional)
         active_only (bool, default true)
         lat         (float, optional)
@@ -742,11 +828,17 @@ def deal_stats():
     """
     region = request.args.get("region", "austin_tx")
     deal_type = request.args.get("deal_type")
+    day_param = request.args.get("day")
+    day = _normalize_day_filter(day_param)
     brand = request.args.get("brand")
     active_only = request.args.get("active_only", "true").lower() != "false"
     lat = request.args.get("lat", type=float)
     lng = request.args.get("lng", type=float)
     radius_mi = request.args.get("radius_mi", 10.0, type=float)
+
+    if day_param is not None and day is None:
+        return _bad_request("day must be a weekday like Mon or Tuesday")
+
     session = _get_db_session()
     try:
         deals = _load_materialized_deals(
@@ -754,6 +846,7 @@ def deal_stats():
             region=region,
             active_only=active_only,
             deal_type=deal_type,
+            day=day,
             brand=brand,
             lat=lat,
             lng=lng,
@@ -788,6 +881,7 @@ def deal_brands():
     Query params:
         region      (str, default austin_tx)
         deal_type   (str, optional)
+        day         (str, optional)  filter deals valid on this day
         active_only (bool, default true)
         lat         (float, optional)
         lng         (float, optional)
@@ -795,10 +889,16 @@ def deal_brands():
     """
     region = request.args.get("region", "austin_tx")
     deal_type = request.args.get("deal_type")
+    day_param = request.args.get("day")
+    day = _normalize_day_filter(day_param)
     active_only = request.args.get("active_only", "true").lower() != "false"
     lat = request.args.get("lat", type=float)
     lng = request.args.get("lng", type=float)
     radius_mi = request.args.get("radius_mi", 10.0, type=float)
+
+    if day_param is not None and day is None:
+        return _bad_request("day must be a weekday like Mon or Tuesday")
+
     session = _get_db_session()
     try:
         deals = _load_materialized_deals(
@@ -806,6 +906,7 @@ def deal_brands():
             region=region,
             active_only=active_only,
             deal_type=deal_type,
+            day=day,
             lat=lat,
             lng=lng,
             radius_mi=radius_mi,

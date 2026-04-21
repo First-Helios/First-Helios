@@ -451,6 +451,142 @@ def test_reset_meal_deal_dataset_clears_canonical_and_legacy_rows(engine, monkey
         assert url.deals_page_url is None
 
 
+def test_deal_routes_honor_day_filter(client, engine):
+    def _seed_materialization(
+        session: Session,
+        *,
+        row_id: int,
+        venue_id: int,
+        name: str,
+        deal_type: str,
+        valid_days: str | None,
+    ) -> None:
+        observation_key = f"obs-{row_id}"
+        session.add(
+            _build_canonical_venue(
+                venue_id,
+                name=name,
+                address=f"{venue_id} Test Ln, Austin, TX",
+                brand_group_id=None,
+                lat=30.40 + row_id / 1000,
+                lng=-97.70 - row_id / 1000,
+            )
+        )
+        session.add(
+            DealObservation(
+                id=row_id,
+                source="website_scrape",
+                source_observation_key=observation_key,
+                observed_at=datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc),
+                deal_name=name,
+                deal_type=deal_type,
+                valid_days=valid_days,
+                review_state="accepted",
+            )
+        )
+        session.flush()
+        session.add(
+            DealApplicability(
+                id=row_id,
+                observation_id=row_id,
+                applicability_scope="venue",
+                canonical_venue_id=venue_id,
+                brand_group_id=None,
+                resolver_method="test",
+                is_active=True,
+            )
+        )
+        session.add(
+            DealMaterialization(
+                id=row_id,
+                observation_id=row_id,
+                applicability_id=row_id,
+                canonical_venue_id=venue_id,
+                local_employer_id=None,
+                brand_group_id=None,
+                restaurant_name=name,
+                address=None,
+                lat=None,
+                lng=None,
+                region="austin_tx",
+                applicability_scope="venue",
+                is_chain_template=False,
+                deal_name=name,
+                deal_description=None,
+                deal_type=deal_type,
+                valid_days=valid_days,
+                source="website_scrape",
+                source_url=f"https://example.com/{row_id}",
+                source_observation_key=observation_key,
+                resolver_method="test",
+                review_state="accepted",
+                is_active=True,
+            )
+        )
+
+    with Session(engine) as session:
+        _seed_materialization(
+            session,
+            row_id=101,
+            venue_id=9101,
+            name="Tuesday Taco",
+            deal_type="combo",
+            valid_days="Tue",
+        )
+        _seed_materialization(
+            session,
+            row_id=102,
+            venue_id=9102,
+            name="Monday Burger",
+            deal_type="combo",
+            valid_days="Mon",
+        )
+        _seed_materialization(
+            session,
+            row_id=103,
+            venue_id=9103,
+            name="Weekday Lunch",
+            deal_type="combo",
+            valid_days="Mon-Fri",
+        )
+        _seed_materialization(
+            session,
+            row_id=104,
+            venue_id=9104,
+            name="Daily Happy Hour",
+            deal_type="happy_hour",
+            valid_days="Daily",
+        )
+        _seed_materialization(
+            session,
+            row_id=105,
+            venue_id=9105,
+            name="Unknown Day Deal",
+            deal_type="combo",
+            valid_days=None,
+        )
+        session.commit()
+
+    response = client.get("/api/deals?region=austin_tx&day=Tue")
+    assert response.status_code == 200
+    payload = response.get_json()
+
+    assert payload["count"] == 3
+    assert {deal["deal_name"] for deal in payload["deals"]} == {
+        "Tuesday Taco",
+        "Weekday Lunch",
+        "Daily Happy Hour",
+    }
+    assert {deal["valid_days"] for deal in payload["deals"]} == {"Tue", "Mon-Fri", "Daily"}
+
+    stats_response = client.get("/api/deals/stats?region=austin_tx&day=Tue")
+    assert stats_response.status_code == 200
+    stats_payload = stats_response.get_json()
+
+    assert stats_payload["total_deals"] == 3
+    assert stats_payload["by_type"] == {"combo": 2, "happy_hour": 1}
+
+
 def test_review_queue_lists_contested_sites_and_medium_confidence_aliases(client, engine):
     with Session(engine) as session:
         session.add_all(

@@ -17,6 +17,7 @@ from collectors.meal_deals.website_scraper import (
 _BUNDLE_DIR = Path("data/cache/website_scrape_debug")
 _BWW_REPLAY_BUNDLE = _BUNDLE_DIR / "buffalowildwings_com_en_locations_detail_621__9af1c34bd10b.json"
 _WINGS_REPLAY_BUNDLE = _BUNDLE_DIR / "wingsnmore_austin_com__4c0b10dd23c9.json"
+_FRESNO_REPLAY_BUNDLE = _BUNDLE_DIR / "fresnogrills_com__87d7daaa6800.json"
 
 
 def _skip_if_missing(bundle: Path) -> None:
@@ -347,9 +348,108 @@ def test_website_scrape_wings_replay_preserves_day_headings_on_child_specials(tm
 
     bogo_signals = [
         signal for signal in signals
-        if signal.deal_type == "bogo" and "wingsnmore-austin.com/specials" in (signal.source_url or "")
+        if signal.deal_type == "bogo" and "wingsnmore-austin.com" in (signal.source_url or "")
     ]
 
     assert bogo_signals
     assert {signal.valid_days for signal in bogo_signals} == {"Tue"}
     assert any("Buy One Get One Free" in (signal.deal_name or "") for signal in bogo_signals)
+
+
+def test_website_scrape_wings_replay_drops_wrapper_happy_hour_contamination(tmp_path, monkeypatch):
+    _skip_if_missing(_WINGS_REPLAY_BUNDLE)
+
+    staging = tmp_path / "website_scrape_debug"
+    staging.mkdir()
+    shutil.copy(_WINGS_REPLAY_BUNDLE, staging / _WINGS_REPLAY_BUNDLE.name)
+
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        staging,
+    )
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda _seconds: None)
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("network fetch should not run in replay mode")
+
+    monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", _no_network)
+
+    signals = scrape_restaurant_website(
+        url="http://wingsnmore-austin.com",
+        restaurant_name="Wings N More",
+        local_employer_id=36352,
+        brand_group_id=36352,
+        region="austin_tx",
+        replay_debug_cache=True,
+    )
+
+    tuesday_happy_hour = [
+        signal for signal in signals
+        if signal.deal_type == "happy_hour"
+        and signal.valid_days == "Tue"
+        and "wingsnmore-austin.com" in (signal.source_url or "")
+    ]
+
+    assert tuesday_happy_hour
+    assert all(signal.valid_start_time == "2:00 PM" for signal in tuesday_happy_hour)
+    assert all(signal.valid_end_time == "7:00 PM" for signal in tuesday_happy_hour)
+    assert all(signal.price is None for signal in tuesday_happy_hour)
+    assert all("Tecate" not in (signal.raw_scraped_text or "") for signal in tuesday_happy_hour)
+    assert all("All Wings Buy One Get One Free" not in (signal.raw_scraped_text or "") for signal in tuesday_happy_hour)
+
+
+def test_website_scrape_fresno_replay_keeps_day_scoped_specials_separate(tmp_path, monkeypatch):
+    _skip_if_missing(_FRESNO_REPLAY_BUNDLE)
+
+    staging = tmp_path / "website_scrape_debug"
+    staging.mkdir()
+    shutil.copy(_FRESNO_REPLAY_BUNDLE, staging / _FRESNO_REPLAY_BUNDLE.name)
+
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        staging,
+    )
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda _seconds: None)
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("network fetch should not run in replay mode")
+
+    monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", _no_network)
+
+    signals = scrape_restaurant_website(
+        url="https://fresnogrills.com",
+        restaurant_name="Fresno Grill",
+        local_employer_id=40307,
+        brand_group_id=5020,
+        region="austin_tx",
+        replay_debug_cache=True,
+    )
+
+    specials_signals = [
+        signal for signal in signals
+        if signal.source_url == "https://fresnogrills.com/specials"
+    ]
+    sunday_signals = [
+        signal for signal in specials_signals
+        if signal.valid_days == "Sun" and "Sunday Funday" in (signal.deal_name or "")
+    ]
+    tuesday_taco_signals = [
+        signal for signal in specials_signals
+        if signal.valid_days == "Tue" and "Taco Tuesday" in (signal.deal_name or "")
+    ]
+
+    assert specials_signals
+    assert sunday_signals
+    assert tuesday_taco_signals
+    assert all(signal.valid_start_time == "10:30 AM" for signal in tuesday_taco_signals)
+    assert all(signal.valid_end_time == "9:00 PM" for signal in tuesday_taco_signals)
+    assert all("Sunday April 19th" not in (signal.raw_scraped_text or "") for signal in tuesday_taco_signals)
+    assert all("10:30 A" not in (signal.deal_name or "") for signal in tuesday_taco_signals)
+    assert all("09:00 PM" not in (signal.deal_name or "") for signal in tuesday_taco_signals)
+    assert all(
+        not (
+            "Sunday April 19th" in (signal.raw_scraped_text or "")
+            and "Tuesday April 21st" in (signal.raw_scraped_text or "")
+        )
+        for signal in specials_signals
+    )
