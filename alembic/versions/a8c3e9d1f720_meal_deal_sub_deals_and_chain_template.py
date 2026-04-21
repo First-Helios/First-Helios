@@ -5,11 +5,11 @@ Phase 4 of the meal deal signal quality overhaul.
 - sub_deals (JSONB): structured decomposition of multi-promo deals, e.g.
     [{"item": "appetizers", "discount_type": "percentage_off", "discount_value": 50},
      {"item": "cocktails", "discount_type": "discount_amount", "discount_value": 1.00}]
-  Populated by scripts/populate_sub_deals.py and by the ingest pipeline when
+  Populated by scripts/one_shot/populate_sub_deals.py and by the ingest pipeline when
   a text block contains multiple offers.
 
 - is_chain_template (Boolean): column was introduced during Phase 3 dedupe
-  (scripts/dedupe_chain_deals.py) but never got its own migration.
+  (scripts/one_shot/dedupe_chain_deals.py) but never got its own migration.
   ADD IF NOT EXISTS so this migration is idempotent against DBs where the
   column already exists.
 

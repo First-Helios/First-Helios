@@ -14,10 +14,10 @@ Comprehensive project documentation — platform overview, data architecture, pr
 ## Architecture
 How the system is designed and why.
 
-- [Database Design](architecture/DATABASE_DESIGN_BEST_PRACTICES.md) — 6-layer DB architecture, metadata contracts, audit trail patterns
-- [Data Streams](architecture/DATA_STREAMS.md) — Every data source, collection method, DB table, and downstream consumer
 - [PII Filter Guide](architecture/PII_FILTER_GUIDE.md) — How to view quarantined data, why fields are filtered, and how to add exemptions or dead-weight rules
 - [Dev Capture Mode ADR](architecture/ADR_DEV_MODE.md) — Decision record for raw signal A/B comparison in dev schema
+
+> Database design and data-stream overviews now live inside the tiered [HeliosDeployment/02_DATA_ARCHITECTURE.md](HeliosDeployment/02_DATA_ARCHITECTURE.md).
 
 ## Events Hub
 Multi-source event aggregation for Austin.
@@ -43,13 +43,17 @@ Multi-source event aggregation for Austin.
 ## Guides
 How-to docs for contributors.
 
+- **[Meal Deal Navigator](guides/MEAL_DEAL_INDEX.md)** — role-based entry point into all meal-deal docs (runbook, replay, refinement, remediation tracker)
+- **[SpiritPool Navigator](guides/SPIRITPOOL_INDEX.md)** — role-based entry point into SpiritPool intake, dev capture, and integration docs
 - [Geocoding Guide](guides/GEOCODING_AGENT.md) — Rules for extracting geocodable locations from job APIs; checklist for new adapters
-- [Meal Deal Scrape Restart Checklist](guides/MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md) — Short operator-only go/no-go checklist before resuming website scraper runs
-- [Meal Deal Replay Workflow](guides/MEAL_DEAL_REPLAY_WORKFLOW.md) — How to sync, summarize, manifest, and replay website scrape bundles locally
-- [Meal Deal Scrapers Runbook](guides/MEAL_DEAL_SCRAPERS_RUNBOOK.md) — Broader scraper operations guide covering collectors, scheduling, audits, and troubleshooting
-- [Meal Deal Scraper Signal Refinement Roadmap](guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md) — Open website scraper tasks grouped by complexity and recommended agent power
-- [SpiritPool Dev Capture Pipeline](guides/SPIRITPOOL_DEV_CAPTURE_PIPELINE.md) — Staging gate (validate → harvest → compare) for signed dev-user page captures, plus the first-party scrape-denial worklist
-- [Spirit Pool Integration](guides/SPIRIT_POOL_INTEGRATION.md) — Browser extension integration: what's built, what remains, signal format
+- [Missed Schedule Recovery](guides/MISSED_SCHEDULE_RECOVERY.md) — How to recover from missed scheduler jobs
+
+## Archive
+Historical reference; not current guidance.
+
+- [docs/archive/handoffs/](archive/handoffs/) — Completed FH-0..FH-4 handoffs and the 2026-04-05 SpiritPool alpha-gap memo
+- [docs/archive/strategy-docs/](archive/strategy-docs/) — Completed integration and meal-deal roadmaps
+- [docs/archive/plans/](archive/plans/) — Ephemeral plan documents whose findings landed in active trackers
 
 ---
 
@@ -60,7 +64,7 @@ How-to docs for contributors.
 |---|---|
 | Understand the database schema | [Data Dictionary](data/dictionary/DATA_DICTIONARY_README.md) |
 | Set up the backend server | [RUNBOOK.md](../RUNBOOK.md) |
-| Add a new data collector | [PLAYBOOK.md](../PLAYBOOK.md) + [Data Streams](architecture/DATA_STREAMS.md) |
+| Add a new data collector | [PLAYBOOK.md](../PLAYBOOK.md) + [Data Architecture](HeliosDeployment/02_DATA_ARCHITECTURE.md) |
 | Add a new event collector | [PLAYBOOK.md](../PLAYBOOK.md) § "Adding a New Event Collector" + [Event Sources](../config/event_sources.yaml) |
 | Understand the scoring system | [README.md](../README.md) → Scoring Model |
 | Add a scheduled job | `config/scheduler.yaml` + `core/scheduler.py` |

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/backfill_signal_quality.py — Compute signal_quality + apply
+scripts/backfills/backfill_signal_quality.py — Compute signal_quality + apply
 is_active gating to existing meal_deal rows.
 
 Safe to run repeatedly.  Dry-run by default.  Uses the same scoring logic
@@ -8,9 +8,9 @@ as the ingest pipeline (collectors/meal_deals/quality.py) so row scores
 stay consistent with new data.
 
 Usage:
-  PYTHONPATH=. python scripts/backfill_signal_quality.py             # dry-run
-  PYTHONPATH=. python scripts/backfill_signal_quality.py --apply     # commit
-  PYTHONPATH=. python scripts/backfill_signal_quality.py --apply \\
+  PYTHONPATH=. python scripts/backfills/backfill_signal_quality.py             # dry-run
+  PYTHONPATH=. python scripts/backfills/backfill_signal_quality.py --apply     # commit
+  PYTHONPATH=. python scripts/backfills/backfill_signal_quality.py --apply \\
       --deactivate-review                    # also set is_active=False
                                              # for rows in the review band
 """

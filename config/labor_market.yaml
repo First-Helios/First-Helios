@@ -1,4 +1,4 @@
-_comment: "AUTO-GENERATED from OEWS data by scripts/generate_config_from_oews.py\n\
+_comment: "AUTO-GENERATED from OEWS data by scripts/one_shot/generate_config_from_oews.py\n\
   Source: Austin-Round Rock-San Marcos, TX MSA OEWS data (area code 12420) ONLY.\n\
   Do not edit manually \u2014 regenerate from data using the script.\nGenerated: 2026-03-22T21:56:58.652599"
 regions:

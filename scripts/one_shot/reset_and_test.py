@@ -10,7 +10,7 @@ This script:
 5. Prepares for fresh data ingestion
 
 Usage:
-    python scripts/reset_and_test.py
+    python scripts/one_shot/reset_and_test.py
 """
 
 import logging
@@ -97,7 +97,7 @@ def main():
     try:
         # Run the script via subprocess to avoid import issues
         result = subprocess.run(
-            ["python", "scripts/generate_config_from_oews.py"],
+            ["python", "scripts/one_shot/generate_config_from_oews.py"],
             capture_output=True,
             text=True,
             timeout=30

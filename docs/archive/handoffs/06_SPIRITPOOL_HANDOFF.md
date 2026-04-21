@@ -1,3 +1,4 @@
+> **ARCHIVED 2026-04-21.** Alpha-readiness gaps from 2026-04-05; most items resolved. Re-triage before acting on anything here.
 
 > **Date:** 2026-04-05
 > **Scope:** Changes needed in the SpiritPool extension repo (`/home/fortune/CodeProjects/SpiritPool/`) to reach alpha readiness with First-Helios backend.

@@ -162,7 +162,7 @@ Migration chain: `b6326fcb7067` → `28fbdf2816df` → `ed6b655457e5` → `ae445
 
 ```bash
 # Register all tables, columns, and lineage (idempotent)
-python scripts/populate_metadata.py
+python scripts/one_shot/populate_metadata.py
 ```
 
 ### System Health

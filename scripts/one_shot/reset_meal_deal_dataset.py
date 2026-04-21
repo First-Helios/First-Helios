@@ -4,9 +4,9 @@ Deletes canonical and compatibility meal-deal rows in the correct order, with
 optional resets for restaurant URL scrape state and website scrape debug cache.
 
 Usage:
-  PYTHONPATH=. python scripts/reset_meal_deal_dataset.py
-  PYTHONPATH=. python scripts/reset_meal_deal_dataset.py --apply
-  PYTHONPATH=. python scripts/reset_meal_deal_dataset.py --apply --reset-url-state --clear-debug-cache
+  PYTHONPATH=. python scripts/one_shot/reset_meal_deal_dataset.py
+  PYTHONPATH=. python scripts/one_shot/reset_meal_deal_dataset.py --apply
+  PYTHONPATH=. python scripts/one_shot/reset_meal_deal_dataset.py --apply --reset-url-state --clear-debug-cache
 """
 
 from __future__ import annotations

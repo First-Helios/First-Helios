@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-04-21.** Phase complete and audited in [../../SECURITY_FINDINGS.md](../../SECURITY_FINDINGS.md). Canonical replacement: [../../architecture/HeliosDeployment/04_PRIVACY_AND_GOVERNANCE.md](../../architecture/HeliosDeployment/04_PRIVACY_AND_GOVERNANCE.md).
+
 # FH-1: Backend Hardening / M6
 
 > **Trigger:** SpiritPool Phase 2 complete (security controls active on extension side)

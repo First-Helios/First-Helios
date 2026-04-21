@@ -1,5 +1,5 @@
 """
-scripts/backfill_theirstack_serpapi.py — Re-ingest cached TheirStack and SerpAPI
+scripts/backfills/backfill_theirstack_serpapi.py — Re-ingest cached TheirStack and SerpAPI
 data using the fixed adapters so that lat/lng, H3 cells, and address fields
 are populated for existing rows.
 
@@ -7,8 +7,8 @@ Safe to run repeatedly — uses the same upsert logic as normal ingest
 (ON CONFLICT DO UPDATE), so rows are updated in place.
 
 Usage:
-    python scripts/backfill_theirstack_serpapi.py
-    python scripts/backfill_theirstack_serpapi.py --dry-run   # preview only
+    python scripts/backfills/backfill_theirstack_serpapi.py
+    python scripts/backfills/backfill_theirstack_serpapi.py --dry-run   # preview only
 """
 
 import argparse

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-scripts/populate_sub_deals.py — Populate meal_deals.sub_deals from raw text.
+scripts/one_shot/populate_sub_deals.py — Populate meal_deals.sub_deals from raw text.
 
 For every active row with non-empty raw_scraped_text OR deal_description,
 run `extract_sub_deals()` and persist the result.  Rows whose text doesn't
 decompose into ≥2 offers are skipped (sub_deals stays NULL).
 
 Usage:
-  PYTHONPATH=. python scripts/populate_sub_deals.py            # dry-run
-  PYTHONPATH=. python scripts/populate_sub_deals.py --apply    # commit
-  PYTHONPATH=. python scripts/populate_sub_deals.py --apply --all  # include inactive rows too
+  PYTHONPATH=. python scripts/one_shot/populate_sub_deals.py            # dry-run
+  PYTHONPATH=. python scripts/one_shot/populate_sub_deals.py --apply    # commit
+  PYTHONPATH=. python scripts/one_shot/populate_sub_deals.py --apply --all  # include inactive rows too
 """
 
 from __future__ import annotations

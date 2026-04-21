@@ -299,7 +299,7 @@ guaranteeing complete isolation.
 | test_schema_storage.py | `core/models/spiritpool.py` (SpEvent, SessionEpoch, Quarantine, BurnPool, Contributor) |
 | test_privacy_security.py | `core/privacy.py` (strip_forbidden_fields, scan_pii), `server.py` (_IPSuppressedRequest, _IPFreeFormatter) |
 | test_api_contract.py | `core/contribute_routes.py` (contribute, burn), `core/privacy.py`, `core/models/spiritpool.py` |
-| test_metadata_quality.py | `scripts/populate_metadata.py` (populate_table_catalog, populate_column_catalog, populate_data_lineage) |
+| test_metadata_quality.py | `scripts/one_shot/populate_metadata.py` (populate_table_catalog, populate_column_catalog, populate_data_lineage) |
 | test_observability.py | `core/models/spiritpool.py`, `core/scheduler.py` (_run_burn_pool_cleanup), `config/scheduler.yaml` |
 | test_dashboard_spiritpool.py | `scripts/system_health_dashboard.py` (check_spiritpool_events_freshness, check_quarantine_health, check_session_epochs, check_burn_pool, check_contributor_volume) |
 | test_legacy_compat.py | `postings/spiritpool_routes.py` (contribute, _dual_write_to_sp_events), `core/privacy.py` (strip_forbidden_fields, scan_pii) |

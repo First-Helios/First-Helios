@@ -14,7 +14,7 @@ Tables:
     ref_texaswages        — Texas MSA hourly wages by SOC (TWC / texaswages.com)
 
 Depends on: backend.database.Base
-Called by: scripts/populate_reference_data.py, server.py /api/ref/*, revelio_ingest.py,
+Called by: scripts/one_shot/populate_reference_data.py, server.py /api/ref/*, revelio_ingest.py,
            scrapers/texaswages_ingest.py
 """
 
@@ -339,7 +339,7 @@ class MobOccupation(Base):
 
     Source files: Emsi-dataset.dta, Dashboard-transitions-dataset.dta,
                   Dashboard-trajectories-dataset.dta
-    Populated by: scripts/populate_mobility_data.py
+    Populated by: scripts/one_shot/populate_mobility_data.py
     """
 
     __tablename__ = "mob_occupation"
@@ -411,7 +411,7 @@ class MobTransition(Base):
         → filter/rank by wage_direction, avg_skill_gap, same_cluster
 
     Source files: Emsi-dataset.dta, Dashboard-transitions-dataset.dta
-    Populated by: scripts/populate_mobility_data.py
+    Populated by: scripts/one_shot/populate_mobility_data.py
     """
 
     __tablename__ = "mob_transition"
@@ -453,7 +453,7 @@ class MobTransition(Base):
 class OccupationAlias(Base):
     """Census Alphabetical Index of Occupations — job title aliases → SOC code.
 
-    Loaded by scripts/load_occupation_aliases.py from the Census Bureau's
+    Loaded by scripts/one_shot/load_occupation_aliases.py from the Census Bureau's
     December 2019 edition (~18,981 rows covering 647 SOC codes).
     Enables the Career Pathfinder autocomplete to match common job titles
     like 'barista' or 'personal trainer' to their official SOC codes.

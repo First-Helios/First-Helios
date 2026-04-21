@@ -708,7 +708,7 @@ These tables are primarily lookup tables that rarely change. They are the "maste
 
 **Purpose:** Census job-title aliases → SOC code crosswalk. Enables the Career Pathfinder autocomplete to resolve everyday job titles (e.g., "barista", "cashier at Walmart", "data entry clerk") to the correct SOC code for mobility graph lookups.
 
-**Source:** Census Occupation Classification crosswalk file, loaded by `scripts/load_occupation_aliases.py`
+**Source:** Census Occupation Classification crosswalk file, loaded by `scripts/one_shot/load_occupation_aliases.py`
 
 **Refresh Cadence:** Static (re-run script if Census updates the crosswalk)
 
@@ -931,7 +931,7 @@ A: See `backend/scoring/engine.py`. It's a weighted sum of 4 sub-scores, with fa
 
 **Purpose:** Occupation reference nodes for the Career Pathfinder mobility graph. One row per unique SOC code observed in the Emsi/CTOT transition dataset.
 
-**Source:** `Emsi-dataset.dta` (wages, occ_family), `Dashboard-transitions-dataset.dta` (cluster), `Dashboard-trajectories-dataset.dta` (3/5/10yr outcomes). Populated by `scripts/populate_mobility_data.py`.
+**Source:** `Emsi-dataset.dta` (wages, occ_family), `Dashboard-transitions-dataset.dta` (cluster), `Dashboard-trajectories-dataset.dta` (3/5/10yr outcomes). Populated by `scripts/one_shot/populate_mobility_data.py`.
 
 **Refresh:** Static. Re-run populate script when CTOT dataset is updated.
 
@@ -971,7 +971,7 @@ A: See `backend/scoring/engine.py`. It's a weighted sum of 4 sub-scores, with fa
 
 **Purpose:** Directed edges in the Career Pathfinder mobility graph. Each row represents a possible career move from one occupation to another, scored by frequency, wage impact, and skill transferability.
 
-**Source:** `Emsi-dataset.dta` (wages, 12 ISA skill deltas, license flag, wage direction), `Dashboard-transitions-dataset.dta` (transition frequency rank). Populated by `scripts/populate_mobility_data.py`.
+**Source:** `Emsi-dataset.dta` (wages, 12 ISA skill deltas, license flag, wage direction), `Dashboard-transitions-dataset.dta` (transition frequency rank). Populated by `scripts/one_shot/populate_mobility_data.py`.
 
 **Refresh:** Static. Re-run populate script when CTOT dataset is updated.
 
@@ -1015,4 +1015,4 @@ LIMIT 10;
 - **Data Model:** `backend/database.py` — SQLAlchemy table definitions
 - **Scoring Logic:** `backend/scoring/engine.py` — How scores are computed
 - **Ingestion:** `backend/ingest.py` — How signals become scores
-- **Mobility Populate:** `scripts/populate_mobility_data.py` — How mob_* tables are built
+- **Mobility Populate:** `scripts/one_shot/populate_mobility_data.py` — How mob_* tables are built

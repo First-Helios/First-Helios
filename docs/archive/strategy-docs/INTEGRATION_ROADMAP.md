@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-04-21.** Completed sequencing strategy. Current work trackers: [../../guides/MEAL_DEAL_REMEDIATION_TRACKER.md](../../guides/MEAL_DEAL_REMEDIATION_TRACKER.md), [../../guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md](../../guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md).
+
 # Integration Roadmap — Context Window Complexity Ranking
 
 > **Date:** 2026-04-05
@@ -47,7 +49,7 @@ These tasks are self-contained. Each can be completed by reading 1–3 files.
 **Risk:** Low — additive migration, no changes to existing tables
 
 ### T1.2 — Register New Tables in Metadata
-**Files needed:** `scripts/populate_metadata.py`, `core/metadata.py`
+**Files needed:** `scripts/one_shot/populate_metadata.py`, `core/metadata.py`
 **Deliverable:** Metadata entries (meta_table_catalog, meta_column_catalog) for all 5 new tables.
 **Why now:** Policy rule #11 — tables must be registered before data is written.
 **Estimate:** ~25K tokens
@@ -65,7 +67,7 @@ These tasks are self-contained. Each can be completed by reading 1–3 files.
 **Risk:** None — documentation only
 
 ### T1.4 — Register Data Lineage for New Tables
-**Files needed:** `scripts/populate_metadata.py`, `core/metadata.py`
+**Files needed:** `scripts/one_shot/populate_metadata.py`, `core/metadata.py`
 **Deliverable:** `meta_data_lineage` entries documenting:
 - SpiritPool POST → events
 - SpiritPool POST → quarantine (PII path)

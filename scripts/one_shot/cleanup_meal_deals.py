@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/cleanup_meal_deals.py — One-time data cleanup for meal_deals.
+scripts/one_shot/cleanup_meal_deals.py — One-time data cleanup for meal_deals.
 
 Implements plan item L:
   1. Delete $0.00 deals.
@@ -14,8 +14,8 @@ Implements plan item L:
 Safe to run repeatedly.  Dry-run by default.
 
 Usage:
-  PYTHONPATH=. python scripts/cleanup_meal_deals.py           # dry-run
-  PYTHONPATH=. python scripts/cleanup_meal_deals.py --apply   # commit
+  PYTHONPATH=. python scripts/one_shot/cleanup_meal_deals.py           # dry-run
+  PYTHONPATH=. python scripts/one_shot/cleanup_meal_deals.py --apply   # commit
 """
 
 from __future__ import annotations

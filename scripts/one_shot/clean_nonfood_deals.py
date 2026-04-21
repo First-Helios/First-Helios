@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/clean_nonfood_deals.py — Deactivate non-food / off-topic meal deals.
+scripts/one_shot/clean_nonfood_deals.py — Deactivate non-food / off-topic meal deals.
 
 Targets deals that clearly don't belong in a restaurant deal feed:
   - Hotel/travel deals (stay discounts, per-night rates)
@@ -15,9 +15,9 @@ Also handles ISSUE-001 (price_type=None despite price set):
   pattern is detectable → classified as price_type='absolute'.
 
 Usage:
-  PYTHONPATH=. python scripts/clean_nonfood_deals.py            # dry-run
-  PYTHONPATH=. python scripts/clean_nonfood_deals.py --apply    # commit
-  PYTHONPATH=. python scripts/clean_nonfood_deals.py --apply --fix-price-type
+  PYTHONPATH=. python scripts/one_shot/clean_nonfood_deals.py            # dry-run
+  PYTHONPATH=. python scripts/one_shot/clean_nonfood_deals.py --apply    # commit
+  PYTHONPATH=. python scripts/one_shot/clean_nonfood_deals.py --apply --fix-price-type
 """
 
 from __future__ import annotations

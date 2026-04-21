@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/purge_junk_deals.py — Remove low-quality meal deal rows from the database.
+scripts/one_shot/purge_junk_deals.py — Remove low-quality meal deal rows from the database.
 
 Applies the same quality filters now enforced at collection time to
 retroactively clean rows that were ingested before the filters existed.
@@ -11,8 +11,8 @@ Categories of junk removed:
   3. Deals with no semantic content (no price, no time/day, just a keyword echo)
 
 Usage:
-  PYTHONPATH=. python scripts/purge_junk_deals.py              # dry-run
-  PYTHONPATH=. python scripts/purge_junk_deals.py --apply       # actually delete
+  PYTHONPATH=. python scripts/one_shot/purge_junk_deals.py              # dry-run
+  PYTHONPATH=. python scripts/one_shot/purge_junk_deals.py --apply       # actually delete
 """
 
 import argparse

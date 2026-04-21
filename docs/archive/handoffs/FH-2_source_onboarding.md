@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-04-21.** Template is still valid reference for onboarding new sources; linked from the SpiritPool navigator. No active work pending.
+
 # FH-2: New Source Onboarding
 
 > **Trigger:** Each new SpiritPool Phase 3 content script that ships

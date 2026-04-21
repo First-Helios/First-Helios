@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-04-21.** Phase complete. Canonical replacement: [../../architecture/HeliosDeployment/03_SPIRITPOOL_INTAKE_PIPELINE.md](../../architecture/HeliosDeployment/03_SPIRITPOOL_INTAKE_PIPELINE.md). Kept for schema/DDL history.
+
 # FH-0: Intake Foundation
 
 > **Trigger:** SpiritPool Phase 0 complete (M7 — session token & consent active)

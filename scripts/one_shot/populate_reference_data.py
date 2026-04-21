@@ -1,5 +1,5 @@
 """
-scripts/populate_reference_data.py
+scripts/one_shot/populate_reference_data.py
 
 Downloads and loads reference / taxonomy data from public sources.
 Run ONCE on initial setup, then quarterly to refresh.
@@ -11,9 +11,9 @@ Sources:
   - Category mappings: hand-curated crosswalk
 
 Usage:
-    python scripts/populate_reference_data.py --all
-    python scripts/populate_reference_data.py --brands-only
-    python scripts/populate_reference_data.py --regions-only
+    python scripts/one_shot/populate_reference_data.py --all
+    python scripts/one_shot/populate_reference_data.py --brands-only
+    python scripts/one_shot/populate_reference_data.py --regions-only
 """
 
 import json

@@ -30,7 +30,7 @@ This draft separates those concerns into stable contracts.
 - Canonical identity scaffolding now exists in the codebase:
 	- ORM models in `core/database.py`
 	- Alembic migration `d4c7e2a91f31_add_canonical_meal_deal_identity_tables.py`
-	- rebuild script `scripts/backfill_meal_deal_identity.py`
+	- rebuild script `scripts/backfills/backfill_meal_deal_identity.py`
 - Observation/applicability dual-write is now implemented in the current ingest path:
 	- ORM models in `core/database.py`
 	- Alembic migration `e82fa4b1c3d9_add_deal_observations_and_applicability.py`

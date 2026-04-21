@@ -2,7 +2,7 @@
 Populate the metadata catalog with descriptions of all existing tables.
 
 Run this once to seed the metadata system:
-  python scripts/populate_metadata.py
+  python scripts/one_shot/populate_metadata.py
 
 This creates entries in:
   - meta_table_catalog (what tables exist?)

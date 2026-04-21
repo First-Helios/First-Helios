@@ -17,8 +17,8 @@ Ground-truth economic tables are UNTOUCHED:
   qcew_data, jolts_data, oews_data, laus_data, cbp_data,
   labor_market_baseline, api_request_log, api_sources, rate_budgets.
 
-Run:  python scripts/migrate_v2_chain_locations.py
-      python scripts/migrate_v2_chain_locations.py --dry-run   (preview only)
+Run:  python scripts/backfills/migrate_v2_chain_locations.py
+      python scripts/backfills/migrate_v2_chain_locations.py --dry-run   (preview only)
 
 Prereq: All model changes in backend/database.py must be applied first.
 """

@@ -5,8 +5,8 @@ Processes rows in batches of 2000. Safe to re-run: skips rows where h3_r7
 is already populated (use --force to recompute everything).
 
 Usage:
-  python scripts/backfill_h3_cells.py           # skip already-filled rows
-  python scripts/backfill_h3_cells.py --force   # recompute all rows
+  python scripts/backfills/backfill_h3_cells.py           # skip already-filled rows
+  python scripts/backfills/backfill_h3_cells.py --force   # recompute all rows
 """
 
 import os

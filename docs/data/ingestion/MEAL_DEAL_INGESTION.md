@@ -836,8 +836,8 @@ Use this when extractor behavior or canonical meal-deal semantics changed enough
 ```bash
 cd /home/fortune/CodeProjects/First-Helios
 
-PYTHONPATH=. .venv/bin/python scripts/reset_meal_deal_dataset.py --apply --reset-url-state --clear-debug-cache
-PYTHONPATH=. .venv/bin/python scripts/backfill_meal_deal_identity.py --region austin_tx
+PYTHONPATH=. .venv/bin/python scripts/one_shot/reset_meal_deal_dataset.py --apply --reset-url-state --clear-debug-cache
+PYTHONPATH=. .venv/bin/python scripts/backfills/backfill_meal_deal_identity.py --region austin_tx
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/chain_deals.py --region austin_tx
 PYTHONPATH=. .venv/bin/python -m collectors.meal_deals.gbp_offers --region austin_tx
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25 --region austin_tx

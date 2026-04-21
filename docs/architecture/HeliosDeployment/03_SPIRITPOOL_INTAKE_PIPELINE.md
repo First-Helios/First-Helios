@@ -283,5 +283,5 @@ The pipeline is designed to survive across Helios eras without schema changes:
 | `config/scheduler.yaml` | `burn_pool_cleanup` job schedule |
 | `core/scheduler.py` | `_run_burn_pool_cleanup()` function |
 | `alembic/versions/ae445d02acad_*.py` | Migration creating 5 tables |
-| `scripts/populate_metadata.py` | Metadata registration for all 5 tables |
+| `scripts/one_shot/populate_metadata.py` | Metadata registration for all 5 tables |
 | `docs/contracts/` | SLA contracts for sp_events, quarantine, session_epochs, burn_pool |

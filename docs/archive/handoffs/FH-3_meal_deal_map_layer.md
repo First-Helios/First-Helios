@@ -1,4 +1,6 @@
-1# FH-3: Meal Deal Map Layer Integration
+1> **ARCHIVED 2026-04-21.** Backend APIs shipped; awaiting frontend adoption in `First-Helios_Frontend`. Superseded operationally by [FPI-1](../../../agentMailbox/InteragentExchange/FPI-1_food_price_index_tab_handoff.md).
+
+# FH-3: Meal Deal Map Layer Integration
 
 > **Date:** 2026-04-13
 > **Status:** Backend ready — frontend integration pending

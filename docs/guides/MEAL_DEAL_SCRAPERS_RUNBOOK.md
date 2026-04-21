@@ -384,10 +384,10 @@ The one-shot script runs the entire pipeline end-to-end with before/after snapsh
 
 ```bash
 # Standard test (dry-run + live, conservative limits)
-bash scripts/run_meal_deal_full_test.sh
+bash scripts/one_shot/run_meal_deal_full_test.sh
 
 # Full production run (unlimited, skip already-checked sites)
-bash scripts/run_meal_deal_full_test.sh --full
+bash scripts/one_shot/run_meal_deal_full_test.sh --full
 ```
 
 ### Environment Variable Overrides
@@ -404,7 +404,7 @@ bash scripts/run_meal_deal_full_test.sh --full
 Example with custom limits:
 
 ```bash
-LIVE_MAX_SITES=50 LIVE_GOOGLE_CALLS=100 bash scripts/run_meal_deal_full_test.sh
+LIVE_MAX_SITES=50 LIVE_GOOGLE_CALLS=100 bash scripts/one_shot/run_meal_deal_full_test.sh
 ```
 
 ### Steps executed
@@ -422,7 +422,7 @@ LIVE_MAX_SITES=50 LIVE_GOOGLE_CALLS=100 bash scripts/run_meal_deal_full_test.sh
 ```bash
 sshpass -p 'orangepi' ssh -o StrictHostKeyChecking=no orangepi@192.168.1.191 \
   'cd ~/First-Helios && source .venv/bin/activate && set -a && source .env && set +a && \
-   bash scripts/run_meal_deal_full_test.sh'
+   bash scripts/one_shot/run_meal_deal_full_test.sh'
 ```
 
 ---
@@ -435,10 +435,10 @@ Retroactively removes junk deals from the database using the same quality filter
 
 ```bash
 # Dry run — see what would be deleted, with breakdown by reason
-PYTHONPATH=. .venv/bin/python scripts/purge_junk_deals.py
+PYTHONPATH=. .venv/bin/python scripts/one_shot/purge_junk_deals.py
 
 # Actually delete junk rows
-PYTHONPATH=. .venv/bin/python scripts/purge_junk_deals.py --apply
+PYTHONPATH=. .venv/bin/python scripts/one_shot/purge_junk_deals.py --apply
 ```
 
 #### What it filters
@@ -549,7 +549,7 @@ Deactivates deals not re-verified within a configurable window (default: 14 days
 
 ```bash
 # Via the full test script (runs automatically at end)
-RUN_STALE_SWEEP=1 bash scripts/run_meal_deal_full_test.sh
+RUN_STALE_SWEEP=1 bash scripts/one_shot/run_meal_deal_full_test.sh
 
 # Inline Python (as used by the test script)
 PYTHONPATH=. .venv/bin/python -c "

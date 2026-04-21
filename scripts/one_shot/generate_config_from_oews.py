@@ -22,8 +22,8 @@ Environment variables required:
     BLS_API_KEY — BLS v2 API key for QCEW/JOLTS/OEWS/LAUS
 
 Usage:
-    python scripts/generate_config_from_oews.py
-    python scripts/generate_config_from_oews.py --output config/labor_market.yaml
+    python scripts/one_shot/generate_config_from_oews.py
+    python scripts/one_shot/generate_config_from_oews.py --output config/labor_market.yaml
 
 Output: config/labor_market.yaml — DO NOT EDIT manually. Chain definitions stay in config/chains.yaml.
 """
@@ -321,7 +321,7 @@ def generate_full_config(oews_industries: dict) -> dict:
 
     config = {
         "_comment": (
-            "AUTO-GENERATED from OEWS data by scripts/generate_config_from_oews.py\n"
+            "AUTO-GENERATED from OEWS data by scripts/one_shot/generate_config_from_oews.py\n"
             "Source: Austin-Round Rock-San Marcos, TX MSA OEWS data (area code 12420) ONLY.\n"
             "Do not edit manually — regenerate from data using the script.\n"
             "Chain definitions are in config/chains.yaml (manually maintained).\n"

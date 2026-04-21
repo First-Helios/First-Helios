@@ -17,7 +17,7 @@ but that loses the relationship between offers.
     ]
 
 Used by:
-  - scripts/populate_sub_deals.py   (backfill existing rows)
+  - scripts/one_shot/populate_sub_deals.py   (backfill existing rows)
   - collectors/meal_deals/ingest.py  (attach to new signals at ingest)
 
 Heuristic, not perfect.  We only emit sub_deals when the block clearly

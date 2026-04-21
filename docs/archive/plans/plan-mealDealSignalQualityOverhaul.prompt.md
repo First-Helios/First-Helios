@@ -1,3 +1,9 @@
+> **ARCHIVED 2026-04-21.** Findings from this plan were absorbed into the
+> active tracker at [../../guides/MEAL_DEAL_REMEDIATION_TRACKER.md](../../guides/MEAL_DEAL_REMEDIATION_TRACKER.md)
+> and the canonical architecture doc at
+> [../../data/ingestion/MEAL_DEAL_INGESTION.md](../../data/ingestion/MEAL_DEAL_INGESTION.md).
+> Kept as historical reference for the 2026-04-15 quality audit.
+
 # Meal Deal Signal Quality Overhaul — Plan
 
 ## Current State (2026-04-15)
@@ -256,7 +262,7 @@ Write a one-time script that re-parses `deal_description` for all existing rows 
 
 ### Phase 2 — Recover lost signals ✅ COMPLETE (2026-04-15)
 6. ✅ Temporal extraction fix (J) — new shared module [collectors/meal_deals/temporal.py](collectors/meal_deals/temporal.py) handles day ranges ("Mon-Fri", "Monday through Friday", "weekdays"), time ranges ("3-6pm", "11:00 AM – 2:00 PM"), "Close" sentinel, and is wired into both [website_scraper.py](collectors/meal_deals/website_scraper.py) and [chain_deals.py](collectors/meal_deals/chain_deals.py). Also passes `raw_scraped_text` to DealSignal from chain_deals.
-7. ✅ Temporal backfill (M) — [scripts/backfill_deal_temporal.py](scripts/backfill_deal_temporal.py) re-parses existing rows. Applied to live DB: 1,220 row updates committed.
+7. ✅ Temporal backfill (M) — [scripts/backfills/backfill_deal_temporal.py](scripts/backfills/backfill_deal_temporal.py) re-parses existing rows. Applied to live DB: 1,220 row updates committed.
 8. ✅ Percentage/half-off capture — already covered by Phase 1 `_extract_deal_pricing` (`_PERCENTAGE_RE` captures "half off", "½ off", "X% off").
 9. ✅ Multi-promo splitter (H) — `_split_multi_promo` in website_scraper.py splits text blocks with 3+ `$X` amounts into sub-deals, each becoming its own DealSignal with its own name, price, and price_type. Wrapped in helper `_text_block_to_signals`.
 10. ✅ Deal name extraction overhaul (I) — `_extract_deal_name` replaces `block.split(".")[0][:80]` in all 3 extraction sites (Phase 1 hardcoded paths, Phase 2 discovered pages, PDF parser). Uses label-pattern matching (Happy Hour, Kids Eat Free, $5 Combo, BOGO, Lunch Special, …) with heading override and fragment-marker rejection.
@@ -277,9 +283,9 @@ Write a one-time script that re-parses `deal_description` for all existing rows 
 | Rows with valid_end_time | ~20 (0.6%) | 795 (18.4%) |
 
 ### Phase 3 — Structural cleanup ✅ COMPLETE (2026-04-16)
-10. ✅ Signal quality scoring (K) — [collectors/meal_deals/quality.py](collectors/meal_deals/quality.py) computes 0.0–1.0 score from 6 factors (price, temporal, description, name, restaurant match, not-addon). Wired into ingest: reject <0.20, review 0.20–0.40 (stored inactive), active ≥0.40. Backfilled all rows via [scripts/backfill_signal_quality.py](scripts/backfill_signal_quality.py).
-11. ✅ Chain deal dedup (F) — `is_chain_template` column + nullable `local_employer_id`. [scripts/dedupe_chain_deals.py](scripts/dedupe_chain_deals.py) collapsed 882 fan-out duplicates into 21 templates. New ingest writes chain deals once as templates; query layer joins on `brand_group_id`.
-12. ✅ One-time cleanup (L) — [scripts/cleanup_meal_deals.py](scripts/cleanup_meal_deals.py): 43 deletions (4 × $0.00, 9 sub-$1 non-food, 19 nav/boilerplate, 10 TCBY retail leak, 1 event spam); 751 `price_type` reclassifications.
+10. ✅ Signal quality scoring (K) — [collectors/meal_deals/quality.py](collectors/meal_deals/quality.py) computes 0.0–1.0 score from 6 factors (price, temporal, description, name, restaurant match, not-addon). Wired into ingest: reject <0.20, review 0.20–0.40 (stored inactive), active ≥0.40. Backfilled all rows via [scripts/backfills/backfill_signal_quality.py](scripts/backfills/backfill_signal_quality.py).
+11. ✅ Chain deal dedup (F) — `is_chain_template` column + nullable `local_employer_id`. [scripts/one_shot/dedupe_chain_deals.py](scripts/one_shot/dedupe_chain_deals.py) collapsed 882 fan-out duplicates into 21 templates. New ingest writes chain deals once as templates; query layer joins on `brand_group_id`.
+12. ✅ One-time cleanup (L) — [scripts/one_shot/cleanup_meal_deals.py](scripts/one_shot/cleanup_meal_deals.py): 43 deletions (4 × $0.00, 9 sub-$1 non-food, 19 nav/boilerplate, 10 TCBY retail leak, 1 event spam); 751 `price_type` reclassifications.
 13. ✅ Cross-employer leak detection (L.8) — [scripts/detect_cross_employer_leaks.py](scripts/detect_cross_employer_leaks.py): checks against employers-with-deals name index (669 employers, 286 phrases), deactivated 8 confirmed leaks (Barton BBQ → Green Mesquite content, etc.).
 
 **Metric impact (live DB, 3,392 rows after cleanup):**
@@ -294,7 +300,7 @@ Write a one-time script that re-parses `deal_description` for all existing rows 
 
 ### Phase 4 — Prevention ✅ COMPLETE (2026-04-16)
 14. ✅ `raw_scraped_text` preservation — delivered in Phase 1 migration `f7a1b2c3d4e5`.  Live scrapers populate it; legacy rows remain NULL and the populator/audit fall back to `deal_description`.
-15. ✅ `sub_deals` JSONB for multi-promo representation (E) — migration `a8c3e9d1f720`. [collectors/meal_deals/sub_deals.py](collectors/meal_deals/sub_deals.py) provides the extractor (≥2-offer floor, 3-word trailing-form cap). [scripts/populate_sub_deals.py](scripts/populate_sub_deals.py) backfilled 112 rows. Wired into ingest so new signals auto-decompose when the collector doesn't supply it.
+15. ✅ `sub_deals` JSONB for multi-promo representation (E) — migration `a8c3e9d1f720`. [collectors/meal_deals/sub_deals.py](collectors/meal_deals/sub_deals.py) provides the extractor (≥2-offer floor, 3-word trailing-form cap). [scripts/one_shot/populate_sub_deals.py](scripts/one_shot/populate_sub_deals.py) backfilled 112 rows. Wired into ingest so new signals auto-decompose when the collector doesn't supply it.
 16. ✅ Automated quality dashboards / alerts — [scripts/meal_deal_quality_dashboard.py](scripts/meal_deal_quality_dashboard.py) emits per-source mean quality, field completeness, distribution percentiles, and fires alerts when any source drops below configurable thresholds (default: mean quality 0.50, active ratio 0.40). Supports `--json --exit-on-alert` for cron/CI.
 17. ✅ Re-audit sampler (new in Phase 4) — [scripts/reaudit_meal_deals.py](scripts/reaudit_meal_deals.py) runs a stratified random shuffle (default 3 per `(source, deal_type, is_active)` stratum) and replays today's rules. Surfaces drift, missing sub_deals, unclassified price_types, and stale add-on/nav rows. Deterministic with `--seed`.
 18. ✅ Process guide — [docs/guides/MEAL_DEAL_SIGNAL_REFINEMENT.md](docs/guides/MEAL_DEAL_SIGNAL_REFINEMENT.md) documents the full refinement pipeline, tool reference, recommended cadence, and audit flag interpretation.

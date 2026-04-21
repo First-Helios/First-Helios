@@ -1,5 +1,5 @@
 """
-scripts/load_occupation_aliases.py
+scripts/one_shot/load_occupation_aliases.py
 
 Loads the Census Bureau "Alphabetical Index of Occupations" (2018 SOC edition)
 into the ref_occupation_aliases table.
@@ -15,8 +15,8 @@ This enables fuzzy autocomplete in the Career Pathfinder:
   ... (18,981 aliases that overlap with mob_occupation SOCs)
 
 Usage:
-    python scripts/load_occupation_aliases.py
-    python scripts/load_occupation_aliases.py --data-dir /path/to/data --dry-run
+    python scripts/one_shot/load_occupation_aliases.py
+    python scripts/one_shot/load_occupation_aliases.py --data-dir /path/to/data --dry-run
 """
 
 import argparse

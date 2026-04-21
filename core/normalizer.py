@@ -291,5 +291,5 @@ def map_industry(category: str, name: str = "") -> str | None:
 
 # UPWARD_MOBILITY_CATEGORIES removed.
 # Mobility is now a scored float (0.0-1.0) computed from OEWS wage data in
-# IndustryTaxonomy.baseline_wage_hr. See scripts/populate_industry_taxonomy.py
+# IndustryTaxonomy.baseline_wage_hr. See scripts/one_shot/populate_industry_taxonomy.py
 # and backend/ingest_layer.py (_calc_mobility_score).

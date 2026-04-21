@@ -163,7 +163,7 @@ Audit trail for every ingest job: `job_id`, `run_timestamp`, `rows_processed`, `
 
 ### How to populate metadata
 ```bash
-python scripts/populate_metadata.py
+python scripts/one_shot/populate_metadata.py
 ```
 This is idempotent — safe to run repeatedly. New entries are inserted, existing entries are updated.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/backfill_deal_value_score.py — Compute deal_value_score for all rows.
+scripts/backfills/backfill_deal_value_score.py — Compute deal_value_score for all rows.
 
 Sets the deal_value_score column (0.0–1.0 offer strength) on every meal_deal
 row that doesn't already have one, or on all rows when --all is passed.
@@ -9,9 +9,9 @@ row that doesn't already have one, or on all rows when --all is passed.
   signal_quality    measures *data completeness* of the record
 
 Usage:
-  PYTHONPATH=. python scripts/backfill_deal_value_score.py           # dry-run
-  PYTHONPATH=. python scripts/backfill_deal_value_score.py --apply   # commit changes
-  PYTHONPATH=. python scripts/backfill_deal_value_score.py --all --apply
+  PYTHONPATH=. python scripts/backfills/backfill_deal_value_score.py           # dry-run
+  PYTHONPATH=. python scripts/backfills/backfill_deal_value_score.py --apply   # commit changes
+  PYTHONPATH=. python scripts/backfills/backfill_deal_value_score.py --all --apply
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """
-scripts/add_h3_to_job_postings.py
+scripts/backfills/add_h3_to_job_postings.py
 
 Migration: add h3_r7 and h3_r8 columns to job_postings, then backfill
 existing rows from their lat/lng coordinates.
@@ -8,9 +8,9 @@ Safe to re-run — uses IF NOT EXISTS for column additions and skips rows
 that already have h3 values (unless --force is passed).
 
 Usage:
-    python scripts/add_h3_to_job_postings.py             # add columns + backfill
-    python scripts/add_h3_to_job_postings.py --dry-run   # preview only
-    python scripts/add_h3_to_job_postings.py --force     # recompute all rows
+    python scripts/backfills/add_h3_to_job_postings.py             # add columns + backfill
+    python scripts/backfills/add_h3_to_job_postings.py --dry-run   # preview only
+    python scripts/backfills/add_h3_to_job_postings.py --force     # recompute all rows
 """
 
 import argparse

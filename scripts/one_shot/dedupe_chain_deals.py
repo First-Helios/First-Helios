@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/dedupe_chain_deals.py — Collapse chain-deal fan-out duplicates.
+scripts/one_shot/dedupe_chain_deals.py — Collapse chain-deal fan-out duplicates.
 
 For every distinct (brand_group_id, deal_name, source) where source is a
 chain source and multiple rows exist (one per location), we:
@@ -23,8 +23,8 @@ Safe to run repeatedly (re-selects template of already-deduped groups).
 Dry-run by default; --apply commits.
 
 Usage:
-  PYTHONPATH=. python scripts/dedupe_chain_deals.py           # dry-run
-  PYTHONPATH=. python scripts/dedupe_chain_deals.py --apply   # commit
+  PYTHONPATH=. python scripts/one_shot/dedupe_chain_deals.py           # dry-run
+  PYTHONPATH=. python scripts/one_shot/dedupe_chain_deals.py --apply   # commit
 """
 
 from __future__ import annotations

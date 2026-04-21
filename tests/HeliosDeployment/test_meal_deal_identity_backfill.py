@@ -10,7 +10,7 @@ from core.database import (
     SiteIdentity,
 )
 from core.normalizer import make_fingerprint
-from scripts.backfill_meal_deal_identity import rebuild_meal_deal_identity
+from scripts.backfills.backfill_meal_deal_identity import rebuild_meal_deal_identity
 
 
 def _build_employer(

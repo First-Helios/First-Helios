@@ -32,7 +32,7 @@ Before any action, read these files in this order:
 1. `docs/architecture/DATABASE_DESIGN_BEST_PRACTICES.md` — 6-layer architecture, metadata contracts
 2. `core/metadata.py` — MetaTableCatalog, MetaColumnCatalog, MetaDataLineage, MetaJobRun models
 3. `core/database.py` — All ORM models, engine setup, Base class
-4. `scripts/populate_metadata.py` — Existing table/column/lineage registrations
+4. `scripts/one_shot/populate_metadata.py` — Existing table/column/lineage registrations
 5. `scripts/system_health_dashboard.py` — SLA monitoring queries
 6. `agentMailbox/SPIRITPOOL_CONTEXT.md` — Privacy contracts that constrain all data handling
 7. `agentMailbox/FH-0_intake_foundation.md` — Forward-compatible schema requirements

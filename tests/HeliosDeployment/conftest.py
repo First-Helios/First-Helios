@@ -89,7 +89,7 @@ def seeded_db(engine):
     """
     session = Session(bind=engine)
 
-    from scripts.populate_metadata import (
+    from scripts.one_shot.populate_metadata import (
         populate_column_catalog,
         populate_data_lineage,
         populate_table_catalog,

@@ -29,9 +29,9 @@ Infrastructure tasks. Each self-contained, reading 1–3 files.
 
 ### T1.2 — Register New Tables in Metadata
 - **Status:** Done
-- **File:** `scripts/populate_metadata.py`
+- **File:** `scripts/one_shot/populate_metadata.py`
 - **What:** 5 `meta_table_catalog` entries + ~28 `meta_column_catalog` entries covering all columns of all 5 new tables.
-- **Verification:** `python scripts/populate_metadata.py` ran successfully.
+- **Verification:** `python scripts/one_shot/populate_metadata.py` ran successfully.
 
 ### T1.3 — Create Data Contracts
 - **Status:** Done
@@ -44,7 +44,7 @@ Infrastructure tasks. Each self-contained, reading 1–3 files.
 
 ### T1.4 — Register Data Lineage
 - **Status:** Done
-- **File:** `scripts/populate_metadata.py`
+- **File:** `scripts/one_shot/populate_metadata.py`
 - **What:** 6 `meta_data_lineage` entries:
   - `spiritpool_post → sp_events`
   - `spiritpool_post → quarantine`
@@ -217,7 +217,7 @@ Cross-module integration tasks. Depend on Tier 1 + 2 infrastructure.
 | `server.py` | Modified | IP suppression middleware + contribute_bp registration |
 | `config/scheduler.yaml` | Modified | Added `burn_pool_cleanup` job entry |
 | `core/scheduler.py` | Modified | Added `_run_burn_pool_cleanup()` function + job registration |
-| `scripts/populate_metadata.py` | Modified | Added 5 table entries, ~28 column entries, 6 lineage entries |
+| `scripts/one_shot/populate_metadata.py` | Modified | Added 5 table entries, ~28 column entries, 6 lineage entries |
 | `alembic/versions/ae445d02acad_*.py` | **Created** | Migration for 5 SpiritPool tables |
 | `docs/contracts/sp_events_contract.md` | **Created** | Data contract |
 | `docs/contracts/quarantine_contract.md` | **Created** | Data contract |

@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-04-21.** Backend fields (`signal_quality`, `deal_value_score`, `sub_deals`) shipped and consumed by the frontend. Superseded by [FPI-1](../../../agentMailbox/InteragentExchange/FPI-1_food_price_index_tab_handoff.md) for current work.
+
 # FH-4: Meal Deal Data Upgrade — Frontend Handoff
 
 > **Date:** 2026-04-16  

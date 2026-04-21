@@ -21,8 +21,8 @@ from core.database import (
 )
 from core.normalizer import make_fingerprint
 from core.venue_identity import normalize_address_for_identity
-from scripts.backfill_deal_observation_history import backfill_deal_observation_history
-from scripts.reset_meal_deal_dataset import reset_meal_deal_dataset
+from scripts.backfills.backfill_deal_observation_history import backfill_deal_observation_history
+from scripts.one_shot.reset_meal_deal_dataset import reset_meal_deal_dataset
 
 
 def _build_employer(
@@ -319,9 +319,9 @@ def test_stats_and_brands_use_deduped_deal_semantics(client, engine):
 
 
 def test_reset_meal_deal_dataset_clears_canonical_and_legacy_rows(engine, monkeypatch, tmp_path):
-    monkeypatch.setattr("scripts.reset_meal_deal_dataset.init_db", lambda: engine)
-    monkeypatch.setattr("scripts.reset_meal_deal_dataset.get_session", lambda eng: Session(bind=eng))
-    monkeypatch.setattr("scripts.reset_meal_deal_dataset.WEBSITE_SCRAPE_DEBUG_DIR", tmp_path)
+    monkeypatch.setattr("scripts.one_shot.reset_meal_deal_dataset.init_db", lambda: engine)
+    monkeypatch.setattr("scripts.one_shot.reset_meal_deal_dataset.get_session", lambda eng: Session(bind=eng))
+    monkeypatch.setattr("scripts.one_shot.reset_meal_deal_dataset.WEBSITE_SCRAPE_DEBUG_DIR", tmp_path)
 
     debug_file = tmp_path / "debug.json"
     debug_file.write_text("{}", encoding="utf-8")

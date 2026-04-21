@@ -44,7 +44,7 @@ Violations are treated as **production incidents**. Not warnings — incidents.
 
 | # | Rule | Implementation |
 |---|------|---------------|
-| 11 | **Every new table registered in `meta_table_catalog` before data is written** | `scripts/populate_metadata.py` registers all tables. Run before any ingest. |
+| 11 | **Every new table registered in `meta_table_catalog` before data is written** | `scripts/one_shot/populate_metadata.py` registers all tables. Run before any ingest. |
 | 12 | **Every external API source registered in `api_sources`** | `core/rate_manager.py` manages registration. |
 | 13 | **Every ingest job logs a `MetaJobRun`** | All collector runners create MetaJobRun entries on start/completion. |
 | 14 | **Dedup keys documented** | See [Data Architecture § Deduplication Keys](02_DATA_ARCHITECTURE.md#deduplication-keys). |

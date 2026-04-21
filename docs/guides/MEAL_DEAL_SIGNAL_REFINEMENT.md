@@ -138,13 +138,13 @@ from sneaking past the default 0.20 threshold.
 
 ```bash
 # Dry-run
-PYTHONPATH=. python scripts/backfill_signal_quality.py
+PYTHONPATH=. python scripts/backfills/backfill_signal_quality.py
 
 # Commit
-PYTHONPATH=. python scripts/backfill_signal_quality.py --apply
+PYTHONPATH=. python scripts/backfills/backfill_signal_quality.py --apply
 
 # Also deactivate the review band (0.20–0.40):
-PYTHONPATH=. python scripts/backfill_signal_quality.py --apply --deactivate-review
+PYTHONPATH=. python scripts/backfills/backfill_signal_quality.py --apply --deactivate-review
 ```
 
 The script is idempotent.  Running it twice in a row writes zero changes.
@@ -156,7 +156,7 @@ The script is idempotent.  Running it twice in a row writes zero changes.
 **Where:**
 [`collectors/meal_deals/sub_deals.py`](../../collectors/meal_deals/sub_deals.py)
 — extractor.
-[`scripts/populate_sub_deals.py`](../../scripts/populate_sub_deals.py)
+[`scripts/one_shot/populate_sub_deals.py`](../../scripts/one_shot/populate_sub_deals.py)
 — backfill.
 
 **What it does.**  When a single text block contains multiple offers
@@ -178,9 +178,9 @@ The extractor is conservative: it only emits `sub_deals` when it finds
 **Backfill existing rows** (one-time or after extractor updates):
 
 ```bash
-PYTHONPATH=. python scripts/populate_sub_deals.py              # dry-run
-PYTHONPATH=. python scripts/populate_sub_deals.py --apply
-PYTHONPATH=. python scripts/populate_sub_deals.py --apply --all  # include inactive rows
+PYTHONPATH=. python scripts/one_shot/populate_sub_deals.py              # dry-run
+PYTHONPATH=. python scripts/one_shot/populate_sub_deals.py --apply
+PYTHONPATH=. python scripts/one_shot/populate_sub_deals.py --apply --all  # include inactive rows
 ```
 
 **At ingest,** `sub_deals` is computed automatically inside
@@ -191,7 +191,7 @@ filled it and the signal has any text to decompose.
 
 ### 3. Temporal backfill
 
-**Where:** [`scripts/backfill_deal_temporal.py`](../../scripts/backfill_deal_temporal.py)
+**Where:** [`scripts/backfills/backfill_deal_temporal.py`](../../scripts/backfills/backfill_deal_temporal.py)
 
 Re-parses `deal_description` / `raw_scraped_text` for existing rows and
 fills in `valid_days`, `valid_start_time`, `valid_end_time` using the
@@ -199,15 +199,15 @@ shared temporal extractor.  Live scrapers already call the same code, so
 this script is only needed to lift pre-Phase-2 rows.
 
 ```bash
-PYTHONPATH=. python scripts/backfill_deal_temporal.py           # dry-run
-PYTHONPATH=. python scripts/backfill_deal_temporal.py --apply
+PYTHONPATH=. python scripts/backfills/backfill_deal_temporal.py           # dry-run
+PYTHONPATH=. python scripts/backfills/backfill_deal_temporal.py --apply
 ```
 
 ---
 
 ### 4. One-time cleanup
 
-**Where:** [`scripts/cleanup_meal_deals.py`](../../scripts/cleanup_meal_deals.py)
+**Where:** [`scripts/one_shot/cleanup_meal_deals.py`](../../scripts/one_shot/cleanup_meal_deals.py)
 
 Removes known-junk rows that slipped past the live filters, and
 reclassifies `price_type` for rows whose text reveals a
@@ -220,8 +220,8 @@ What it does:
   `X% off` → `percentage_off` (setting `discount_percentage`).
 
 ```bash
-PYTHONPATH=. python scripts/cleanup_meal_deals.py           # dry-run
-PYTHONPATH=. python scripts/cleanup_meal_deals.py --apply
+PYTHONPATH=. python scripts/one_shot/cleanup_meal_deals.py           # dry-run
+PYTHONPATH=. python scripts/one_shot/cleanup_meal_deals.py --apply
 ```
 
 Re-run this after any rule update in `_RETAIL_KW_RE` / `_EVENT_SPAM_RE`
@@ -231,7 +231,7 @@ Re-run this after any rule update in `_RETAIL_KW_RE` / `_EVENT_SPAM_RE`
 
 ### 5. Chain dedup
 
-**Where:** [`scripts/dedupe_chain_deals.py`](../../scripts/dedupe_chain_deals.py)
+**Where:** [`scripts/one_shot/dedupe_chain_deals.py`](../../scripts/one_shot/dedupe_chain_deals.py)
 
 Chain deal content (McDonald's, Wendy's, Domino's, …) used to be copied
 to every physical location, producing 58× / 30× / 29× duplicates.  The
@@ -242,8 +242,8 @@ rest.  Downstream queries reconstruct per-location views by joining on
 `brand_group_id`.
 
 ```bash
-PYTHONPATH=. python scripts/dedupe_chain_deals.py           # dry-run
-PYTHONPATH=. python scripts/dedupe_chain_deals.py --apply
+PYTHONPATH=. python scripts/one_shot/dedupe_chain_deals.py           # dry-run
+PYTHONPATH=. python scripts/one_shot/dedupe_chain_deals.py --apply
 ```
 
 The live ingest path also writes chain deals as templates — this script

@@ -11,7 +11,7 @@ Gating rules (applied by caller):
 
 Shared between:
   - collectors/meal_deals/ingest.py  (gate new signals)
-  - scripts/backfill_signal_quality.py  (score existing rows)
+  - scripts/backfills/backfill_signal_quality.py  (score existing rows)
 """
 
 from __future__ import annotations

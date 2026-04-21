@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-04-21.** Phases 1-4 complete. Absorbed into [../../data/ingestion/MEAL_DEAL_INGESTION.md](../../data/ingestion/MEAL_DEAL_INGESTION.md). Active work: [../../guides/MEAL_DEAL_REMEDIATION_TRACKER.md](../../guides/MEAL_DEAL_REMEDIATION_TRACKER.md).
+
 # Meal Deal Collector — Integration Roadmap
 
 > **Objective:** Build a `collectors/meal_deals/` module that discovers meal deals for restaurants already in our `local_employers` table and surfaces them on the Job Faire map alongside employer data.

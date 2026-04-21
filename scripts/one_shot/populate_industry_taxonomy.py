@@ -1,5 +1,5 @@
 """
-scripts/populate_industry_taxonomy.py
+scripts/one_shot/populate_industry_taxonomy.py
 
 Seeds ref_industry_taxonomy with wage baselines from OEWS data and computes
 mobility_score for each internal industry key.
@@ -18,8 +18,8 @@ mobility_score formula:
   mobility_score  = 0.70 * wage_lift + 0.30 * ceiling_factor
 
 Usage:
-    python scripts/populate_industry_taxonomy.py
-    python scripts/populate_industry_taxonomy.py --dry-run
+    python scripts/one_shot/populate_industry_taxonomy.py
+    python scripts/one_shot/populate_industry_taxonomy.py --dry-run
 """
 
 import argparse

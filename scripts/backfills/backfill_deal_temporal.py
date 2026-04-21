@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-scripts/backfill_deal_temporal.py — Re-parse valid_days / valid_start_time /
+scripts/backfills/backfill_deal_temporal.py — Re-parse valid_days / valid_start_time /
 valid_end_time for existing meal_deal rows using the improved temporal extractor.
 
 Safe to run repeatedly.  Only updates rows where the new extractor finds a
 value AND the existing column is empty.  Never overwrites manually-set data.
 
 Usage:
-  PYTHONPATH=. python scripts/backfill_deal_temporal.py          # dry-run
-  PYTHONPATH=. python scripts/backfill_deal_temporal.py --apply  # write changes
+  PYTHONPATH=. python scripts/backfills/backfill_deal_temporal.py          # dry-run
+  PYTHONPATH=. python scripts/backfills/backfill_deal_temporal.py --apply  # write changes
 """
 
 from __future__ import annotations

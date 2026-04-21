@@ -3,7 +3,7 @@ One-time script to geocode all stores in tracker.db that have null coordinates.
 Run once after implementing geocoding. Safe to re-run — skips already-geocoded stores.
 
 Usage:
-    python scripts/backfill_geocoding.py [--dry-run]
+    python scripts/backfills/backfill_geocoding.py [--dry-run]
 """
 
 import argparse

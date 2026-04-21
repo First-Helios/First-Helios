@@ -735,5 +735,5 @@ Each table's column definitions include:
 
 **Unique constraint:** `(alias, soc_code)`
 **Rows:** 18,981
-**Populated by:** `scripts/load_occupation_aliases.py` (Census crosswalk file)
+**Populated by:** `scripts/one_shot/load_occupation_aliases.py` (Census crosswalk file)
 **Used by:** `GET /api/mobility/occupations` → loaded once client-side; filtered via `filterOccupations()` in `pathfinder.js`

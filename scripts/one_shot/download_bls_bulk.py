@@ -22,10 +22,10 @@ BLS API v2 limits (with free registered key):
   Set BLS_API_KEY env var to use v2; falls back to v1 (10yr, 25 series, shared 500/day)
 
 Usage:
-    BLS_API_KEY=your_key python scripts/download_bls_bulk.py
-    BLS_API_KEY=your_key python scripts/download_bls_bulk.py --start 2015 --end 2026
-    BLS_API_KEY=your_key python scripts/download_bls_bulk.py --force   # re-fetch even if cached
-    python scripts/download_bls_bulk.py --db-only   # skip fetch, just (re)import from cache
+    BLS_API_KEY=your_key python scripts/one_shot/download_bls_bulk.py
+    BLS_API_KEY=your_key python scripts/one_shot/download_bls_bulk.py --start 2015 --end 2026
+    BLS_API_KEY=your_key python scripts/one_shot/download_bls_bulk.py --force   # re-fetch even if cached
+    python scripts/one_shot/download_bls_bulk.py --db-only   # skip fetch, just (re)import from cache
 """
 
 import argparse

@@ -1,5 +1,5 @@
 """
-scripts/populate_mobility_data.py
+scripts/one_shot/populate_mobility_data.py
 
 Populates the upward mobility graph tables (mob_occupation, mob_transition)
 from the PublicPoolData Employment Stata files and the CTOT Dashboard.
@@ -25,8 +25,8 @@ dest_industry_keys_json on each mob_occupation:
     store → SOC → mob_transition → dest_soc → dest_industry_keys → nearby employers
 
 Usage:
-  python scripts/populate_mobility_data.py
-  python scripts/populate_mobility_data.py --data-dir /path/to/data --dry-run
+  python scripts/one_shot/populate_mobility_data.py
+  python scripts/one_shot/populate_mobility_data.py --data-dir /path/to/data --dry-run
 """
 
 import argparse
