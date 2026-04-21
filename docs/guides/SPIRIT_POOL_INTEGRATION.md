@@ -1,8 +1,8 @@
 # Spirit Pool → First-Helios Integration Guide
 
 **For:** Claude agents continuing development on this codebase
-**Last updated:** 2026-04-05
-**Status:** Backend fully wired. Extension-side security missions (M3–M7) and forward-compatible intake (`POST /api/contribute`) in progress per FH-0/FH-1.
+**Last updated:** 2026-04-21
+**Status:** Backend fully wired. Extension-side security missions (M3–M7) and forward-compatible intake (`POST /api/contribute`) in progress per FH-0/FH-1. Dev-capture route + staged ingestion pipeline live; see [SPIRITPOOL_DEV_CAPTURE_PIPELINE.md](SPIRITPOOL_DEV_CAPTURE_PIPELINE.md) for the validate → harvest → compare flow and the first-party scrape-denial worklist.
 
 ---
 

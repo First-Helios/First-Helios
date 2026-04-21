@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_HARVEST_PATH = CACHE_DIR / "hintbook" / "spiritpool_runs" / "latest" / "deal_signal_projections.json"
 DEFAULT_OUTPUT_PATH = CACHE_DIR / "hintbook" / "spiritpool_runs" / "latest" / "coverage_report.json"
+DEFAULT_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "config" / "spiritpool_capture_manifest.json"
 
 _PARTIAL_THRESHOLD = 3
 
@@ -226,7 +227,140 @@ def _coverage_status(cov: dict[str, Any]) -> str:
     return "covered"
 
 
-def build_report(projections_path: Path) -> dict[str, Any]:
+def _industry_rollup(conn, brand_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Group coverage by industry and compute match rates at that grain.
+
+    The premise: Austin is a major metro, so every industry the hint book
+    touches should have matching brand_groups with Austin employers. A low
+    brand-level match rate alongside a high industry-level match rate means
+    we're looking at a "brand depth" gap, not a "whole industry is missing"
+    gap.
+    """
+    per_industry: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "hintbook_brand_count": 0,
+            "brands_with_brand_group": 0,
+            "brands_with_any_deal_observation": 0,
+            "brands_with_active_materialization": 0,
+            "total_deal_observations": 0,
+            "total_active_materializations": 0,
+        }
+    )
+    for row in brand_rows:
+        industry = row["industry_from_vocab"] or row["industry_from_adapter"] or "unknown"
+        stat = per_industry[industry]
+        stat["hintbook_brand_count"] += 1
+        if row["collected"]["brand_groups"]:
+            stat["brands_with_brand_group"] += 1
+        if row["collected"]["deal_observations"] > 0:
+            stat["brands_with_any_deal_observation"] += 1
+        if row["collected"]["active_materializations"] > 0:
+            stat["brands_with_active_materialization"] += 1
+        stat["total_deal_observations"] += row["collected"]["deal_observations"]
+        stat["total_active_materializations"] += row["collected"]["active_materializations"]
+
+    # Attach Austin infrastructure sizing per industry as a denominator
+    # (so the "collected deals per 100 Austin employers" ratio is legible).
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT bg.industry,
+                   COUNT(DISTINCT le.id) AS austin_employers,
+                   COUNT(DISTINCT bg.id) AS austin_brands
+            FROM local_employers le
+            JOIN brand_groups bg ON bg.id = le.brand_group_id
+            WHERE le.region = 'austin_tx' AND le.is_active IS TRUE
+            GROUP BY bg.industry
+            """
+        )
+        austin_stats = {r[0] or "unknown": {"austin_employers": r[1], "austin_brands": r[2]} for r in cur.fetchall()}
+
+    rollup: list[dict[str, Any]] = []
+    for industry, stat in sorted(per_industry.items()):
+        row = dict(stat)
+        row["industry"] = industry
+        row.update(austin_stats.get(industry, {"austin_employers": 0, "austin_brands": 0}))
+        hb = row["hintbook_brand_count"] or 1
+        row["industry_match_rate"] = round(row["brands_with_brand_group"] / hb, 3)
+        row["deal_match_rate"] = round(row["brands_with_any_deal_observation"] / hb, 3)
+        rollup.append(row)
+    return {"per_industry": rollup}
+
+
+def _seed_manifest_gap(conn, manifest_path: Path, projections: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compare the seed capture manifest to what the hint-book harvest covered.
+
+    For every brand listed in config/spiritpool_capture_manifest.json, check
+    whether the hint-book currently has records for it. This is the
+    "what should I capture next?" to-do for the Spirit Pool dev operator.
+    """
+    if not manifest_path.exists():
+        return {"available": False, "manifest_path": str(manifest_path)}
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    covered_canonical = {
+        (p.get("brand_canonical") or "").strip().lower()
+        for p in projections
+        if p.get("brand_canonical")
+    }
+
+    industries: list[dict[str, Any]] = []
+    with conn.cursor() as cur:
+        for category in manifest.get("categories", []):
+            industry = category.get("industry")
+            entries: list[dict[str, Any]] = []
+            for target in category.get("targets", []):
+                brand = target["brand"]
+                # Tolerant match: exact first, then prefix (e.g. "Dunkin'" -> "Dunkin' Donuts",
+                # "CVS" -> "CVS Pharmacy"). Only fall back to prefix when exact misses.
+                cur.execute(
+                    "SELECT id, canonical_name, industry, location_count FROM brand_groups "
+                    "WHERE canonical_name ILIKE %s ORDER BY location_count DESC LIMIT 1",
+                    (brand,),
+                )
+                bg = cur.fetchone()
+                if not bg:
+                    cur.execute(
+                        "SELECT id, canonical_name, industry, location_count FROM brand_groups "
+                        "WHERE canonical_name ILIKE %s ORDER BY location_count DESC LIMIT 1",
+                        (brand + "%",),
+                    )
+                    bg = cur.fetchone()
+                covered = brand.strip().lower() in covered_canonical
+                entries.append({
+                    "brand": brand,
+                    "brand_group_present": bg is not None,
+                    "matched_canonical_name": bg[1] if bg else None,
+                    "brand_group_industry": bg[2] if bg else None,
+                    "brand_group_location_count": bg[3] if bg else 0,
+                    "hintbook_covered": covered,
+                    "capture_urls": target["urls"],
+                    "status": "covered" if covered else ("brand_onboarded_awaiting_capture" if bg else "brand_not_onboarded"),
+                })
+            industries.append({
+                "industry": industry,
+                "priority": category.get("priority"),
+                "reason": category.get("reason"),
+                "brands": entries,
+                "covered_count": sum(1 for e in entries if e["hintbook_covered"]),
+                "total_count": len(entries),
+            })
+
+    total_targets = sum(ind["total_count"] for ind in industries)
+    total_covered = sum(ind["covered_count"] for ind in industries)
+    return {
+        "available": True,
+        "manifest_path": str(manifest_path),
+        "industries": industries,
+        "summary": {
+            "total_targets": total_targets,
+            "covered": total_covered,
+            "remaining": total_targets - total_covered,
+        },
+    }
+
+
+def build_report(projections_path: Path, manifest_path: Path | None = None) -> dict[str, Any]:
     projections = _load_projections(projections_path)
     grouped = _group_by_brand(projections)
 
@@ -259,18 +393,31 @@ def build_report(projections_path: Path) -> dict[str, Any]:
                 "coverage_status": status,
             })
 
+        industry = _industry_rollup(conn, brand_rows)
+        seed_gap = _seed_manifest_gap(conn, manifest_path or DEFAULT_MANIFEST_PATH, projections)
+
     status_counter = Counter(row["coverage_status"] for row in brand_rows)
     industry_counter = Counter(
         row["industry_from_vocab"] or row["industry_from_adapter"] or "unknown"
         for row in brand_rows
     )
+
+    industry_match_overall = None
+    if brand_rows:
+        industry_match_overall = round(
+            sum(1 for r in brand_rows if r["collected"]["brand_groups"]) / len(brand_rows), 3
+        )
+
     return {
         "summary": {
             "hint_book_projections": len(projections),
             "brands_in_hint_book": len(brand_rows),
             "coverage_status_counts": dict(status_counter),
             "industry_counts": dict(industry_counter),
+            "industry_match_rate_overall": industry_match_overall,
         },
+        "industry_rollup": industry,
+        "seed_manifest_gap": seed_gap,
         "brands": brand_rows,
     }
 
@@ -280,12 +427,48 @@ def _print_human_report(report: dict[str, Any]) -> None:
     logger.info("=" * 72)
     logger.info("HINTBOOK COVERAGE vs COLLECTED DEALS")
     logger.info("=" * 72)
-    logger.info("Hint-book projections: %d", s["hint_book_projections"])
-    logger.info("Brands in hint book  : %d", s["brands_in_hint_book"])
-    logger.info("Status counts        : %s", s["coverage_status_counts"])
-    logger.info("Industries           : %s", s["industry_counts"])
+    logger.info("Hint-book projections     : %d", s["hint_book_projections"])
+    logger.info("Brands in hint book       : %d", s["brands_in_hint_book"])
+    logger.info("Industry match rate (ind) : %s   (share of hint-book brands with a brand_group)",
+                s.get("industry_match_rate_overall"))
+    logger.info("Status counts             : %s", s["coverage_status_counts"])
+    logger.info("Industries touched        : %s", s["industry_counts"])
+
     logger.info("")
-    logger.info("Per-brand:")
+    logger.info("Industry rollup:")
+    logger.info("  %-22s %4s %4s %7s %7s %11s %11s",
+                "industry", "hb", "bg", "obs_brd", "mat_brd", "ind_match", "deal_match")
+    for row in report["industry_rollup"]["per_industry"]:
+        logger.info(
+            "  %-22s %4d %4d %7d %7d %11s %11s",
+            row["industry"][:22],
+            row["hintbook_brand_count"],
+            row["brands_with_brand_group"],
+            row["brands_with_any_deal_observation"],
+            row["brands_with_active_materialization"],
+            f"{row['industry_match_rate']:.0%}",
+            f"{row['deal_match_rate']:.0%}",
+        )
+
+    gap = report.get("seed_manifest_gap", {})
+    if gap.get("available"):
+        g = gap["summary"]
+        logger.info("")
+        logger.info("Seed manifest gap: %d / %d targets covered; %d remaining",
+                    g["covered"], g["total_targets"], g["remaining"])
+        for ind in gap["industries"]:
+            logger.info("  [%s] %-22s covered=%d/%d",
+                        ind.get("priority") or "--",
+                        (ind.get("industry") or "")[:22],
+                        ind["covered_count"], ind["total_count"])
+            for b in ind["brands"]:
+                mark = "OK" if b["hintbook_covered"] else ("QUEUED" if b["brand_group_present"] else "NO_BRAND")
+                logger.info("      %-8s %-28s bg_loc=%-4d urls=%d  status=%s",
+                            mark, b["brand"][:28], b["brand_group_location_count"],
+                            len(b["capture_urls"]), b["status"])
+
+    logger.info("")
+    logger.info("Per-brand (hint-book present):")
     for row in sorted(
         report["brands"],
         key=lambda r: (r["coverage_status"], -r["hint_book"]["record_count"]),
@@ -302,21 +485,14 @@ def _print_human_report(report: dict[str, Any]) -> None:
             row["collected"]["linked_sites"],
             len(row["collected"]["brand_groups"]),
         )
-        for sample in row["hint_book"]["sample_headlines"][:1]:
-            logger.info("      hint-book: %s", (sample or "")[:120])
-        for sample in row["collected"]["sample_observations"][:1]:
-            logger.info(
-                "      collected: %s [src=%s review=%s]",
-                (sample.get("deal_name") or "")[:120],
-                sample.get("source"),
-                sample.get("review_state"),
-            )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--projections", type=Path, default=DEFAULT_HARVEST_PATH)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH)
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH,
+                        help="Seed capture manifest. Default: config/spiritpool_capture_manifest.json")
     parser.add_argument("--json", action="store_true", help="Print full JSON report to stdout")
     args = parser.parse_args()
 
@@ -325,7 +501,7 @@ def main() -> int:
         logger.error("Run scripts/harvest_hintbook_from_spiritpool.py first.")
         return 2
 
-    report = build_report(args.projections)
+    report = build_report(args.projections, manifest_path=args.manifest)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True, default=str), encoding="utf-8")
 

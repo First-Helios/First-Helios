@@ -34,6 +34,29 @@ This document covers the open website-scraper work after the already-completed p
 - [x] Completed `ARCH-03` in `collectors/meal_deals/render_policy.py` by defining bounded renderer escalation gates, budget categories, reason codes, and deterministic exploration sampling.
 - [x] Completed `ARCH-04` in `collectors/meal_deals/hint_registry.py` and `config/meal_deal_hint_registry.json` by defining an exploration-only hint registry with provenance, expiry, schema validation, and audit annotation.
 - [x] Verified the Tier 3 + Tier 4 + canonical regression suites locally; current combined matrix passes 61/61 tests.
+- [x] (2026-04-21) Wired the SpiritPool dev-capture staging gate:
+  `scripts/validate_spiritpool_capture.py` routes raw signed bundles into
+  `validated/` vs `quarantine/<reason>/`, and
+  `scripts/harvest_hintbook_from_spiritpool.py` now reads only from
+  `validated/`. Rendering classifier distinguishes `content_ok` from
+  `empty_body` / `suspected_denial` / `site_error_or_denial`.
+- [x] (2026-04-21) Added `scripts/build_scrape_denial_queue.py` — mines
+  `restaurant_urls` for URLs the scraper couldn't usefully fetch (NULL
+  `last_http_status` after `last_checked`, or non-2xx) and whose brand
+  has zero `deal_observations`, dedups by URL, emits a prioritized
+  capture queue for the Spiritpool_User Firefox profile.
+- [x] (2026-04-21) Comparator reports industry rollup + seed-manifest gap
+  against `config/spiritpool_capture_manifest.json` (21 aggregator
+  targets). First run: 0/21 covered, 19 `brand_onboarded_awaiting_capture`,
+  2 `brand_not_onboarded` (Olive Garden, Red Lobster — see below).
+- [ ] (Brand ingest, separate from scraper work) Olive Garden / Red Lobster
+  and other Darden chains have zero `local_employers` rows in Austin
+  because every active row has `source='overture'` and Darden brands are
+  absent from the Overture extract. Needs a supplemental brand-seed
+  source (Yelp Fusion, Google Places, or a hand-maintained Darden list)
+  before any SpiritPool capture for those brands can attach to a
+  `brand_group`. Full pipeline context in
+  [SPIRITPOOL_DEV_CAPTURE_PIPELINE.md](SPIRITPOOL_DEV_CAPTURE_PIPELINE.md).
 
 ## Completed Work Summary
 

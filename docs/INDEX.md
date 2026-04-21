@@ -48,6 +48,7 @@ How-to docs for contributors.
 - [Meal Deal Replay Workflow](guides/MEAL_DEAL_REPLAY_WORKFLOW.md) — How to sync, summarize, manifest, and replay website scrape bundles locally
 - [Meal Deal Scrapers Runbook](guides/MEAL_DEAL_SCRAPERS_RUNBOOK.md) — Broader scraper operations guide covering collectors, scheduling, audits, and troubleshooting
 - [Meal Deal Scraper Signal Refinement Roadmap](guides/MEAL_DEAL_SCRAPER_SIGNAL_REFINEMENT_ROADMAP.md) — Open website scraper tasks grouped by complexity and recommended agent power
+- [SpiritPool Dev Capture Pipeline](guides/SPIRITPOOL_DEV_CAPTURE_PIPELINE.md) — Staging gate (validate → harvest → compare) for signed dev-user page captures, plus the first-party scrape-denial worklist
 - [Spirit Pool Integration](guides/SPIRIT_POOL_INTEGRATION.md) — Browser extension integration: what's built, what remains, signal format
 
 ---

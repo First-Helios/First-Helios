@@ -60,6 +60,7 @@ Supporting services:
 - **Review queue write-backs** — manual site and venue-alias decisions refresh canonical state
 - **Stale Deal Sweep** — deactivates deals not re-verified in 14 days
 - **Purge Script** — retroactive junk data cleanup
+- **Scrape-denial queue** — `scripts/build_scrape_denial_queue.py` queries `restaurant_urls` for URLs that were `last_checked` but returned NULL or non-2xx status (Cloudflare/anti-bot silent failures) and whose brand has zero `deal_observations`. Output feeds the SpiritPool dev-user capture worklist; full pipeline documented in [SPIRITPOOL_DEV_CAPTURE_PIPELINE.md](SPIRITPOOL_DEV_CAPTURE_PIPELINE.md).
 
 ---
 

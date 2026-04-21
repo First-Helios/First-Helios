@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from collections import Counter, defaultdict
 from dataclasses import replace
@@ -39,6 +40,64 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+from bs4 import BeautifulSoup
+
+# Denial / anti-bot classification. Aggregator pages often include words
+# like "cloudflare" or "captcha" in footers or 3rd-party scripts even when
+# they rendered content fine — so we classify using BOTH title fingerprints
+# and a visible-text length cutoff, not just substring presence in raw HTML.
+_TITLE_DENIAL_RE = re.compile(
+    r"(403\s*forbidden|access\s*denied|attention\s*required|just\s*a\s*moment|"
+    r"are\s*you\s*a\s*human|file\s*not\s*found|page\s*not\s*found|404)",
+    re.I,
+)
+_BODY_DENIAL_RE = re.compile(
+    r"(cloudflare|captcha|please\s*(enable|turn\s*on)\s*javascript|ray\s*id|"
+    r"verify\s*you\s*are\s*human|checking\s*your\s*browser)",
+    re.I,
+)
+
+
+def classify_bundle_rendering(html: str, title: str) -> dict[str, Any]:
+    """Classify whether a bundle rendered usable content or hit a wall.
+
+    Returns a dict with:
+      status: one of
+          'content_ok'               -- enough visible text to parse
+          'empty_body'               -- <500 visible chars; likely SPA that didn't hydrate
+          'suspected_denial'         -- small body + anti-bot markers in source
+          'site_error_or_denial'     -- denial/404 fingerprint in <title>
+      visible_chars: int
+      title_marker / body_marker: booleans for diagnostics
+      needs_spiritpool_dev: True when a real-browser capture is the recommended remediation
+    """
+    title = (title or "").strip()
+    soup = BeautifulSoup(html or "", "html.parser")
+    for t in soup(["script", "style", "noscript"]):
+        t.decompose()
+    visible = soup.get_text(" ", strip=True)
+    vis_len = len(visible)
+    title_hit = bool(_TITLE_DENIAL_RE.search(title))
+    body_hit = bool(_BODY_DENIAL_RE.search((html or "")[:30000]))
+
+    if title_hit:
+        status = "site_error_or_denial"
+    elif vis_len < 1500 and body_hit:
+        status = "suspected_denial"
+    elif vis_len < 500:
+        status = "empty_body"
+    else:
+        status = "content_ok"
+
+    needs_dev = status in {"suspected_denial", "empty_body", "site_error_or_denial"}
+    return {
+        "status": status,
+        "visible_chars": vis_len,
+        "title_marker": title_hit,
+        "body_marker": body_hit,
+        "needs_spiritpool_dev": needs_dev,
+    }
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -81,7 +140,8 @@ from config.paths import CACHE_DIR
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_BUNDLE_DIR = CACHE_DIR / "spiritpool_dev" / "page_captures"
+DEFAULT_BUNDLE_DIR = CACHE_DIR / "spiritpool_dev" / "validated"
+_LEGACY_BUNDLE_DIR = CACHE_DIR / "spiritpool_dev" / "page_captures"
 DEFAULT_OUT_DIR = CACHE_DIR / "hintbook" / "spiritpool_runs"
 
 # Host token → (adapter module, industry). Tokens are matched as substrings
@@ -187,16 +247,19 @@ def _aggregator_to_dealsignal_shape(rec: AggregatorRecord) -> dict[str, Any]:
     }
 
 
-def harvest(bundle_dir: Path, *, strict_brand: bool = True) -> tuple[HarvestReport, list[dict[str, Any]]]:
-    """Parse every bundle; return (report, dealsignal_projections).
+def harvest(bundle_dir: Path, *, strict_brand: bool = True) -> tuple[HarvestReport, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Parse every bundle; return (report, dealsignal_projections, denial_queue).
 
     dealsignal_projections[i] matches report.records[i] one-for-one.
+    denial_queue lists bundles whose rendering looked denied/empty and should
+    be re-captured through a real Spirit Pool dev-user browser session.
     """
     report = HarvestReport(adapters_run=[])
     adapters_seen: set[str] = set()
     skipped: list[dict[str, Any]] = []
     projections: list[dict[str, Any]] = []
     brand_matches: list[BrandMatch | None] = []
+    denial_queue: list[dict[str, Any]] = []
 
     vocab = load_brand_vocab_from_db() if strict_brand else []
     logger.info("Loaded brand vocabulary: %d entries", len(vocab))
@@ -211,9 +274,24 @@ def harvest(bundle_dir: Path, *, strict_brand: bool = True) -> tuple[HarvestRepo
 
         url = bundle.get("canonical_url") or bundle.get("url")
         html = bundle.get("html")
+        title = bundle.get("title") or ""
         if not url or not isinstance(html, str) or not html.strip():
             skipped.append({"bundle": path.name, "reason": "missing_url_or_html"})
             continue
+
+        # Classify rendering BEFORE parse so we can queue denial URLs for
+        # re-capture via a real browser session regardless of parse outcome.
+        render = classify_bundle_rendering(html, title)
+        if render["needs_spiritpool_dev"]:
+            denial_queue.append({
+                "bundle": path.name,
+                "url": url,
+                "host": urlparse(url).netloc,
+                "render_status": render["status"],
+                "visible_chars": render["visible_chars"],
+                "title": title[:120],
+                "recommended_action": "capture_via_spiritpool_dev_browser_session",
+            })
 
         route = _route_for(url)
         if route is None:
@@ -271,7 +349,7 @@ def harvest(bundle_dir: Path, *, strict_brand: bool = True) -> tuple[HarvestRepo
     report.adapters_run = sorted(adapters_seen)
     report.adapters_failed = skipped
     report.finished_at = utcnow()
-    return report, projections
+    return report, projections, denial_queue
 
 
 def build_brand_industry_index(report: HarvestReport) -> dict[str, Any]:
@@ -404,9 +482,15 @@ def main() -> int:
 
     if not args.bundle_dir.exists():
         logger.error("Bundle dir not found: %s", args.bundle_dir)
+        if _LEGACY_BUNDLE_DIR.exists() and args.bundle_dir != _LEGACY_BUNDLE_DIR:
+            logger.error(
+                "Hint: raw captures live in %s. Run scripts/validate_spiritpool_capture.py "
+                "to stage them into validated/ before harvesting.",
+                _LEGACY_BUNDLE_DIR,
+            )
         return 2
 
-    report, projections = harvest(args.bundle_dir, strict_brand=not args.no_strict_brand)
+    report, projections, denial_queue = harvest(args.bundle_dir, strict_brand=not args.no_strict_brand)
     index = build_brand_industry_index(report)
     expectation_rows = build_expectation_rows(report, ttl_days=args.ttl_days)
 
@@ -441,6 +525,19 @@ def main() -> int:
                 ],
             },
         )
+        _write_json(
+            target_dir / "spiritpool_dev_capture_queue.json",
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "note": (
+                    "Bundles whose rendering looked denied, empty, or gated. "
+                    "Re-capture via a real browser session through the Spirit Pool "
+                    "dev-user extension; do NOT auto-retry via HTTP fetchers."
+                ),
+                "entries": denial_queue,
+                "total": len(denial_queue),
+            },
+        )
 
     logger.info("")
     logger.info("=" * 72)
@@ -457,6 +554,11 @@ def main() -> int:
     for skip in report.adapters_failed[:10]:
         tail = f" :: {skip['headline']}" if "headline" in skip else ""
         logger.info("  - %s: %s%s", skip["bundle"], skip["reason"], tail)
+
+    if denial_queue:
+        logger.info("Denial queue    : %d bundles need SpiritPool dev re-capture", len(denial_queue))
+        for entry in denial_queue[:10]:
+            logger.info("  - %s [%s, vis=%d chars]", entry["host"], entry["render_status"], entry["visible_chars"])
 
     if args.print_brands:
         logger.info("")
