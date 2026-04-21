@@ -396,6 +396,34 @@ If new persistent tables are not yet warranted, at least capture these in struct
 10. Replay test every change.
    Every heuristic or parser change should be validated against saved debug bundles and regression tests.
 
+## Orange Pi Deployment Workflow
+
+When a change needs to reach the always-on Orange Pi host, follow this sequence exactly:
+
+1. Do the work in the current workspace first.
+   Do not treat Orange Pi as the primary development environment.
+
+2. Successfully develop and test locally before any remote deployment step.
+   This includes replay-driven checks, targeted regression tests, and any audit commands needed to confirm the fix.
+
+3. Push the validated change to GitHub.
+   Do not rely on ad hoc file copying or remote-only edits as the normal path.
+
+4. Pull the new revision onto Orange Pi.
+   The remote host should receive changes by pulling the committed repository state.
+
+5. SSH into Orange Pi and run all needed deployment commands.
+   This can include migrations, replay or backfill commands, service restarts, cache refreshes, and audit scripts.
+
+6. Validate working status on Orange Pi after the deploy.
+   Check the relevant API responses, service health, logs, and any store-specific regressions that motivated the change.
+
+7. Pull the current database or other needed data from Orange Pi back to the local workstation.
+   Keep the local workstation aligned with the live host when replay, audit, or debugging work depends on current production data.
+
+8. Update the local data-pull workflow as the schema, storage layout, or operational process evolves.
+   If this step changes, update the agent instructions and runbook rather than improvising a one-off process.
+
 ## Guardrails
 
 - Prefer first-party restaurant sources over review aggregators or SEO directories.
@@ -408,6 +436,8 @@ If new persistent tables are not yet warranted, at least capture these in struct
 - Because page bundles are cached, prefer replay-driven iteration when testing deeper discovery or parsing changes for nested menu flows.
 - Use external meal-deal registries only as hint sources for exploration, not as first-party evidence and not as direct ingest inputs.
 - If a registry hint suggests a hidden promo page, verify it on the restaurant's own site or cached first-party pages before treating it as real coverage.
+- Do not make direct Orange Pi edits as the normal workflow; use local workspace development, local validation, GitHub push, and Orange Pi pull.
+- Treat Orange Pi work as incomplete until remote validation succeeds and the needed live database or data snapshot has been pulled back to the local workstation.
 
 ## Expected Deliverables
 
