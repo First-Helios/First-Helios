@@ -4,6 +4,8 @@
 **Auditor:** Security Testing Agent (database_and_security_agent.md)  
 **Scope:** All data exchange points, ingest paths, frontend rendering, DB access
 
+> **Note on paths:** Findings with `frontend/…` paths refer to the frontend code that has since moved to the sibling repo `/home/fortune/CodeProjects/First-Helios_Frontend/` (GitHub: First-Helios_Frontend). This repo is now backend-only. The historical paths are preserved for audit traceability but the files live in the other repo.
+
 ---
 
 ## Summary

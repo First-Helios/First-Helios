@@ -301,15 +301,19 @@ Always return `{"status": "ok", ...}` on success and `{"status": "error", "messa
 
 ## Adding a Map Mode (Frontend)
 
-### Four files to touch
+> **⚠️ Frontend lives in a sibling repo:** `/home/fortune/CodeProjects/First-Helios_Frontend/`
+> (GitHub: [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend))
+> All paths below are **relative to that repo**, NOT this one. This repo is backend-only.
 
-**`frontend/index.html`**
+### Four files to touch (in First-Helios_Frontend)
+
+**`index.html`**
 - Add `<button id="mode-<name>" class="mode-btn">` in `#mode-switcher`
 - Add `<div id="<name>-controls" class="controls-group" style="display:none">` for filters
 - Add `<div id="<name>-sidebar" class="sidebar" style="display:none">` in `#right-panel`
 - Add `<script src="js/<name>.js">` before `app.js`
 
-**`frontend/js/<name>.js`** — IIFE module:
+**`js/<name>.js`** — IIFE module:
 
 ```javascript
 (function () {
@@ -325,13 +329,13 @@ Always return `{"status": "ok", ...}` on success and `{"status": "error", "messa
 })();
 ```
 
-**`frontend/js/app.js`** — add to `switchMode()`:
+**`js/app.js`** — add to `switchMode()`:
 - Toggle controls/sidebar visibility
 - Call `window.myMode.refresh()` on enter
 - Call `window.myMode.clear()` on exit
 - Add `map.on('zoomend')` handler if needed
 
-**`frontend/css/style.css`** — follow the existing card pattern.
+**`css/style.css`** — follow the existing card pattern.
 
 ---
 

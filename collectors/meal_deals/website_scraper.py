@@ -3739,6 +3739,22 @@ def scrape_restaurant_website(
         render_budget=render_budget,
         restaurant_id=str(local_employer_id) if local_employer_id is not None else None,
         source_url=base_url,
+        # FPI-1: persist menu graph to DB (experimental, non-blocking)
+        try:
+            _shape = debug_bundle.get("menu_persistence_shape")
+            if _shape and local_employer_id is not None:
+                from collectors.meal_deals.menu_db_writer import upsert_menu_shape
+                from core.database import get_engine, get_session
+                _fpi_session = get_session(get_engine())
+                try:
+                    upsert_menu_shape(_fpi_session, _shape)
+                    _fpi_session.commit()
+                finally:
+                    _fpi_session.close()
+        except Exception as _fpi_exc:
+            logger.warning("[FPI-1] menu_db_upsert failed for %s: %s", base_url, _fpi_exc)
+            # Never block a scrape on persistence failures
+
     )
 
     return signals

@@ -230,7 +230,9 @@ app.register_blueprint(jobs_bp)
 
 ### Priority 3 — Frontend "Hiring Now" Mode
 
-In `frontend/index.html` and `frontend/js/app.js`:
+> **Frontend lives in a sibling repo:** `/home/fortune/CodeProjects/First-Helios_Frontend/`. Paths below are relative to that repo.
+
+In `index.html` and `js/app.js`:
 - Add a mode toggle: **Job Fair Map** | **Hiring Now**
 - In "Hiring Now" mode: fetch `/api/map-jobs`, plot dots from `job_postings` (not `local_employers`)
 - Each dot = an active posting; click → show job title, pay, apply link

@@ -75,7 +75,9 @@ Key files: `server.py`, `events/routes.py`
 ### Surface 4: Frontend Rendering of Stored Data
 The frontend renders employer names, job titles, and addresses fetched from the API. If stored strings contain HTML or JavaScript, they may execute in the browser.
 
-Key file: `frontend/index.html`, `frontend/app.js`, `frontend/pathfinder.js`
+> **Frontend lives in a sibling repo:** `/home/fortune/CodeProjects/First-Helios_Frontend/`. Paths below are relative to that repo, NOT this one.
+
+Key files (in First-Helios_Frontend): `index.html`, `js/app.js`, `js/pathfinder.js`
 
 ### Surface 5: Database Configuration
 PostgreSQL on localhost:5432. Verify role permissions, credential exposure, and migration hygiene.

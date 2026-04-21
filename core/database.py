@@ -1621,6 +1621,119 @@ class MealDeal(Base):
         }
 
 
+# ── Menu Graph Tables (FPI-1) ────────────────────────────────────────────────
+
+
+class MenuPage(Base):
+    """A scraped menu page for a restaurant.
+
+    One row per URL/renderer combination per restaurant.
+    id = sidecar key (p_...). Idempotent upserts use this PK.
+    """
+
+    __tablename__ = "menu_pages"
+
+    id            = Column(String, primary_key=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=True, index=True)
+    url           = Column(String, nullable=True)
+    source        = Column(String, nullable=True)      # jsonld | dom | pdf_table
+    renderer      = Column(String, nullable=True)
+    source_bundle = Column(String, nullable=True)
+    first_seen_at = Column(DateTime, nullable=True)
+    last_seen_at  = Column(DateTime, nullable=True)
+
+
+class MenuSection(Base):
+    """A section within a scraped menu (e.g. Lunch Specials, Happy Hour, Drinks).
+
+    id = sidecar key (s_...).
+    """
+
+    __tablename__ = "menu_sections"
+
+    id                = Column(String, primary_key=True)
+    page_id           = Column(String, ForeignKey("menu_pages.id"), nullable=True, index=True)
+    parent_section_id = Column(String, ForeignKey("menu_sections.id"), nullable=True)
+    restaurant_id     = Column(Integer, ForeignKey("local_employers.id"), nullable=True, index=True)
+    name              = Column(String, nullable=True)
+    path              = Column(JSON, nullable=True)        # breadcrumb list of section names
+    service_period    = Column(String, nullable=True, index=True)   # lunch | happy_hour | etc.
+    course            = Column(String, nullable=True)
+    source            = Column(String, nullable=True)
+    first_seen_at     = Column(DateTime, nullable=True)
+    last_seen_at      = Column(DateTime, nullable=True)
+
+
+class MenuItem(Base):
+    """A single menu item scraped from a restaurant page.
+
+    id = sidecar key (i_...).
+    """
+
+    __tablename__ = "menu_items"
+
+    id            = Column(String, primary_key=True)
+    section_id    = Column(String, ForeignKey("menu_sections.id"), nullable=True, index=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=True, index=True)
+    name          = Column(String, nullable=True, index=True)
+    description   = Column(Text, nullable=True)
+    course        = Column(String, nullable=True, index=True)
+    calories      = Column(Integer, nullable=True)
+    dietary_tags  = Column(JSON, nullable=True)
+    source        = Column(String, nullable=True)
+    first_seen_at = Column(DateTime, nullable=True)
+    last_seen_at  = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_menu_items_restaurant_course", "restaurant_id", "course"),
+    )
+
+
+class MenuPricePoint(Base):
+    """A price observation for a menu item (or section/venue if item unknown).
+
+    id = sidecar key (pp_...).
+    """
+
+    __tablename__ = "menu_price_points"
+
+    id            = Column(String, primary_key=True)
+    item_id       = Column(String, ForeignKey("menu_items.id"), nullable=True, index=True)
+    section_id    = Column(String, ForeignKey("menu_sections.id"), nullable=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=True, index=True)
+    price         = Column(Float, nullable=True, index=True)
+    currency      = Column(String, nullable=True)
+    variant       = Column(String, nullable=True)
+    confidence    = Column(Float, nullable=True)
+    source        = Column(String, nullable=True)
+    evidence      = Column(Text, nullable=True)
+    observed_at   = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_menu_price_points_restaurant_price", "restaurant_id", "price"),
+    )
+
+
+class MenuModifier(Base):
+    """An addon, upgrade, substitution, or modifier for a menu item.
+
+    id = sidecar key (mod_...).
+    """
+
+    __tablename__ = "menu_modifiers"
+
+    id            = Column(String, primary_key=True)
+    item_id       = Column(String, ForeignKey("menu_items.id"), nullable=True)
+    section_id    = Column(String, ForeignKey("menu_sections.id"), nullable=True)
+    restaurant_id = Column(Integer, ForeignKey("local_employers.id"), nullable=True, index=True)
+    label         = Column(String, nullable=True)
+    price_delta   = Column(Float, nullable=True)
+    required      = Column(Boolean, default=False)
+    source        = Column(String, nullable=True)
+    first_seen_at = Column(DateTime, nullable=True)
+    last_seen_at  = Column(DateTime, nullable=True)
+
+
 class GooglePlacesFailure(Base):
     """Tracks brands/employers that returned no result from Google Places API.
 

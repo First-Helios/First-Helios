@@ -124,6 +124,12 @@ def _get_occupation_data() -> tuple[list, dict]:
 
 app = Flask(
     __name__,
+    # NOTE: This repo is backend-only. The frontend lives in the sibling repo
+    # at /home/fortune/CodeProjects/First-Helios_Frontend/ (see README §Related Repos).
+    # The `static_folder="frontend"` below is legacy — the folder does not exist
+    # here and the static routes below will 404. Kept only to avoid breaking
+    # imports that reference `app.static_folder`. Do NOT conclude from this that
+    # there is an in-repo frontend to edit.
     static_folder="frontend",
     static_url_path="",
 )
@@ -206,6 +212,14 @@ try:
 except Exception as exc:
     logger.warning("Meal Deals blueprint NOT registered: %s: %s", type(exc).__name__, exc)
 
+# ── Food Price Index Blueprint (FPI-1) ────────────────────────────────────────
+try:
+    from collectors.meal_deals.price_index_routes import price_index_bp
+    app.register_blueprint(price_index_bp)
+    logger.info("Price Index blueprint registered at /api/price-index")
+except Exception as exc:
+    logger.warning("Price Index blueprint NOT registered: %s: %s", type(exc).__name__, exc)
+
 
 # ── Security: suppress exception details from API responses ──────────────────
 
@@ -227,17 +241,22 @@ def add_security_headers(response):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     return response
 
-# ── Frontend serving ─────────────────────────────────────────────────────────
+# ── Frontend serving (LEGACY — frontend moved) ───────────────────────────────
+# These routes served the in-repo frontend before it was split into
+# `/home/fortune/CodeProjects/First-Helios_Frontend/` (sibling repo).
+# They will 404 in this repo because the `frontend/` directory no longer exists
+# here. They are kept as harmless stubs — do not rely on them, and do not edit
+# files under `frontend/` in this repo expecting them to render.
 
 @app.route("/")
 def index():
-    """Serve the Leaflet map frontend."""
+    """Legacy route — frontend is served from the First-Helios_Frontend repo."""
     return send_from_directory(app.static_folder, "index.html")
 
 
 @app.route("/<path:path>")
 def static_files(path):
-    """Serve static frontend files."""
+    """Legacy route — frontend is served from the First-Helios_Frontend repo."""
     return send_from_directory(app.static_folder, path)
 
 
