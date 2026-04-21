@@ -78,6 +78,18 @@ The Price Index feature needs three deployment pieces to be live on the Orange P
 2. Collector restart so live scrapes persist menu graph rows
 3. Frontend deploy from `First-Helios_Frontend`
 
+If the live Price Index still shows rows like `Bhel Puri $0.00` after local tests pass, assume the Orange Pi backend is stale before assuming the parser fix failed. A fast drift check is:
+
+```bash
+ssh orangepi@192.168.1.191
+cd ~/First-Helios
+grep -n "def _should_exclude_payload\|def _normalize_jsonld_page_prices" \
+	collectors/meal_deals/price_index_routes.py \
+	collectors/meal_deals/menu_sidecar.py
+```
+
+No matches means the live host does not have the current menu-quality pass.
+
 The Orange Pi host updater should restart both `helios` and `helios-collector` on backend changes. That collector restart is required because menu persistence is wired into the website scraper runtime, not only the API server.
 
 One-time rollout after the backend code lands:
@@ -92,9 +104,17 @@ cd ~/First-Helios
 # Estimate replay volume before writing.
 .venv/bin/python scripts/backfill_menu_tables.py --dry-run
 
+# Audit current menu quality before replay.
+PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
+
 # Backfill from cached website scrape bundles.
 .venv/bin/python scripts/backfill_menu_tables.py
+
+# Re-audit after replay/backfill.
+PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
 ```
+
+The current hardening pass filters non-positive menu prices at persistence time, so replay/backfill should not reinsert `0.00` price points even if an older bundle still contains them.
 
 If the dry-run reports very few bundles with shapes, that does not automatically mean the replay cache is useless. Many older bundles still contain saved page HTML even if they predate `menu_persistence_shape`.
 
@@ -116,11 +136,20 @@ Post-deploy checks:
 
 ```bash
 curl -k "https://127.0.0.1/api/price-index?region=austin_tx&limit=5"
+curl -k "https://127.0.0.1/api/price-index?q=Bhel%20Puri&region=austin_tx&limit=5"
 curl -k "https://127.0.0.1/api/price-index/facets?region=austin_tx"
 sudo journalctl -u helios -n 50
 sudo journalctl -u helios-collector -n 50
 sudo journalctl -u helios-frontend -n 50
 ```
+
+Menu-quality audit heuristics currently flag these classes aggressively because they have been confirmed in production:
+
+- `price <= 0`: treat as broken baseline price data.
+- `0 < price < 1` in large page clusters: likely JSON-LD scale leak.
+- `section_name in {(unnamed), (unsectioned)}`: section-context loss.
+- size-only `item_name` values such as `8 Oz`: variant parsing failure.
+- promo text such as `$1 off drafts`: specials leakage into baseline menu rows.
 
 ---
 

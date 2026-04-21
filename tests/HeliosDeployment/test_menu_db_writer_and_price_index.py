@@ -130,6 +130,23 @@ def test_upsert_menu_shape_is_idempotent_and_updates_existing_rows():
     session.close()
 
 
+def test_upsert_menu_shape_filters_non_positive_price_points():
+    engine = _setup_engine()
+    Session = sessionmaker(bind=engine)
+
+    session = Session()
+    shape = _build_shape()
+    shape["price_points"][0]["price"] = 0.0
+    result = upsert_menu_shape(session, shape)
+    session.commit()
+
+    assert result.skipped is False
+    assert result.filtered["price_points_non_positive"] == 1
+    assert session.query(MenuPricePoint).count() == 1
+    assert session.query(MenuPricePoint).filter(MenuPricePoint.price <= 0).count() == 0
+    session.close()
+
+
 def test_price_index_endpoint_returns_filtered_menu_rows(monkeypatch):
     engine = _setup_engine()
     Session = sessionmaker(bind=engine)
@@ -163,3 +180,191 @@ def test_price_index_endpoint_returns_filtered_menu_rows(monkeypatch):
     taco_payload = taco_resp.get_json()
     assert taco_payload["total"] == 1
     assert taco_payload["items"][0]["item_name"] == "Taco Platter"
+
+
+def test_price_index_endpoint_cleans_dirty_rows_and_supports_zip_and_dietary_filters(monkeypatch):
+    engine = _setup_engine()
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    result = upsert_menu_shape(session, _build_shape())
+    assert result.skipped is False
+
+    timestamp = datetime(2026, 4, 20, 18, 0, 0, tzinfo=timezone.utc)
+    base_page = session.query(MenuPage).filter(MenuPage.url == "https://laposadasouth.com/menu").one()
+
+    taco_item = session.query(MenuItem).filter(MenuItem.name == "Taco Platter").one()
+    taco_item.name = "Taco Platter <vegan>VG</vegan>"
+    taco_item.dietary_tags = []
+
+    session.add(MenuSection(
+        id="section_side",
+        page_id=base_page.id,
+        restaurant_id=123,
+        name="Side of Rice (White or Brown)",
+        path=["Side of Rice (White or Brown)"],
+        service_period=None,
+        course="side",
+        source="dom",
+        first_seen_at=timestamp,
+        last_seen_at=timestamp,
+    ))
+    session.add(MenuItem(
+        id="item_side",
+        section_id="section_side",
+        restaurant_id=123,
+        name="8 Oz",
+        description=None,
+        course="side",
+        calories=None,
+        dietary_tags=[],
+        source="dom",
+        first_seen_at=timestamp,
+        last_seen_at=timestamp,
+    ))
+    session.add(MenuPricePoint(
+        id="pp_side",
+        item_id="item_side",
+        section_id="section_side",
+        restaurant_id=123,
+        price=2.0,
+        currency="USD",
+        variant=None,
+        confidence=0.6,
+        source="dom",
+        evidence="8 Oz",
+        observed_at=timestamp,
+    ))
+
+    session.add(MenuSection(
+        id="section_unnamed",
+        page_id=base_page.id,
+        restaurant_id=123,
+        name="(unnamed)",
+        path=["(unnamed)"],
+        service_period=None,
+        course="appetizer",
+        source="jsonld",
+        first_seen_at=timestamp,
+        last_seen_at=timestamp,
+    ))
+    session.add(MenuItem(
+        id="item_queso",
+        section_id="section_unnamed",
+        restaurant_id=123,
+        name="Chile con Queso",
+        description=None,
+        course="appetizer",
+        calories=None,
+        dietary_tags=[],
+        source="jsonld",
+        first_seen_at=timestamp,
+        last_seen_at=timestamp,
+    ))
+    session.add(MenuPricePoint(
+        id="pp_queso",
+        item_id="item_queso",
+        section_id="section_unnamed",
+        restaurant_id=123,
+        price=5.0,
+        currency="USD",
+        variant=None,
+        confidence=0.9,
+        source="jsonld",
+        evidence="Regular",
+        observed_at=timestamp,
+    ))
+
+    session.add(MenuPage(
+        id="page_specials",
+        restaurant_id=123,
+        url="https://abels.com/specials",
+        source="dom",
+        renderer="static_html",
+        source_bundle="abels_specials.json",
+        first_seen_at=timestamp,
+        last_seen_at=timestamp,
+    ))
+    session.add(MenuSection(
+        id="section_specials",
+        page_id="page_specials",
+        restaurant_id=123,
+        name="Daily Specials",
+        path=["Daily Specials"],
+        service_period="happy_hour",
+        course="drink",
+        source="dom",
+        first_seen_at=timestamp,
+        last_seen_at=timestamp,
+    ))
+    session.add(MenuItem(
+        id="item_specials",
+        section_id="section_specials",
+        restaurant_id=123,
+        name="off drafts",
+        description=None,
+        course="drink",
+        calories=None,
+        dietary_tags=[],
+        source="dom",
+        first_seen_at=timestamp,
+        last_seen_at=timestamp,
+    ))
+    session.add(MenuPricePoint(
+        id="pp_specials",
+        item_id="item_specials",
+        section_id="section_specials",
+        restaurant_id=123,
+        price=1.0,
+        currency="USD",
+        variant=None,
+        confidence=0.6,
+        source="dom",
+        evidence="$1 off drafts",
+        observed_at=timestamp,
+    ))
+
+    session.commit()
+    session.close()
+
+    app = Flask(__name__)
+    app.register_blueprint(price_index_bp)
+    monkeypatch.setattr(price_index_routes, "_engine", engine)
+    monkeypatch.setattr(price_index_routes, "_resolve_zip_coordinates", lambda zip_code: (30.27, -97.74))
+
+    client = app.test_client()
+
+    base_resp = client.get("/api/price-index", query_string={"region": "austin_tx", "limit": 10})
+    assert base_resp.status_code == 200
+    base_payload = base_resp.get_json()
+    assert base_payload["total"] == 4
+    assert all(item["distance_mi"] is None for item in base_payload["items"])
+    assert all(item["item_name"] != "off drafts" for item in base_payload["items"])
+
+    taco_row = next(item for item in base_payload["items"] if item["item_name"] == "Taco Platter")
+    assert taco_row["dietary_tags"] == ["vegan"]
+
+    rice_row = next(item for item in base_payload["items"] if item["item_name"] == "Side of Rice (White or Brown)")
+    assert rice_row["variant"] == "8 Oz"
+
+    queso_row = next(item for item in base_payload["items"] if item["item_name"] == "Chile con Queso")
+    assert queso_row["section_name"] is None
+    assert queso_row["variant"] == "Regular"
+
+    dietary_resp = client.get(
+        "/api/price-index",
+        query_string=[("region", "austin_tx"), ("dietary", "vegan")],
+    )
+    dietary_payload = dietary_resp.get_json()
+    assert dietary_payload["total"] == 1
+    assert dietary_payload["items"][0]["item_name"] == "Taco Platter"
+
+    zip_resp = client.get(
+        "/api/price-index",
+        query_string={"region": "austin_tx", "zip_code": "78701", "limit": 10},
+    )
+    zip_payload = zip_resp.get_json()
+    assert zip_payload["items"][0]["distance_mi"] is not None
+
+    facet_resp = client.get("/api/price-index/facets", query_string={"region": "austin_tx"})
+    facet_payload = facet_resp.get_json()
+    assert any(tag["key"] == "vegan" for tag in facet_payload["dietary_tags"])

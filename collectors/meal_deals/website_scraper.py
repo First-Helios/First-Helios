@@ -131,6 +131,8 @@ _BOILERPLATE_PHRASES = [
     "skip to content", "skip to main",
     "open menu close menu",
     "locations specials jobs",
+    "was this helpful",
+    "thank you for your feedback",
 ]
 
 _SOFT_BOILERPLATE_PHRASES = frozenset([
@@ -190,7 +192,84 @@ _MIN_PRICE_FLOOR = 1.00
 # Event / catering / non-food promo patterns
 _NON_FOOD_PROMO_RE = re.compile(
     r"\b(?:book|event|catering|wedding|venue|party\s+room|banquet|private\s+dining"
-    r"|clearance|sale|apparel|clothing|accessories)\b",
+    r"|clearance|sale|apparel|clothing|accessories|game\s*play|gaming|arcade"
+    r"|all\s+you\s+can\s+play|play\s*points?|fun\s+pass|adventure\s+zone)\b",
+    re.IGNORECASE,
+)
+
+
+_FAQ_BLOCK_RE = re.compile(
+    r"^\s*(?:does|do|what|when|where|which|who|how|can|is|are)\b.{0,180}\?",
+    re.IGNORECASE,
+)
+_INVALID_DEAL_NAME_RE = re.compile(
+    r"^\s*(?:"
+    r"available\s+at\s+participating\s+locations"
+    r"|(?:cannot|can't)\s+be\s+combined\s+with\s+other\s+offers"
+    r"|terms\s+apply"
+    r"|restrictions\s+apply"
+    r"|daily\s+deals?\s*&\s*happy\s+hour"
+    r"|happy\s+hour\s+specials?"
+    r"|happy\s+hour\s+items?\s*&\s*pricing.*"
+    r"|items?\s*&\s*pricing.*"
+    r"|only\s+for\s+dine-?in\s+customers?"
+    r"|was\s+this\s+helpful"
+    r"|thank\s+you\s+for\s+your\s+feedback"
+    r")\s*$",
+    re.IGNORECASE,
+)
+_QUESTION_NAME_RE = re.compile(
+    r"^\s*(?:does|do|what|when|where|which|who|how|can|is|are)\b.{0,180}\?\s*$",
+    re.IGNORECASE,
+)
+_VARIANT_ONLY_NAME_RE = re.compile(
+    r"^\s*(?:"
+    r"choice\s+of\b.{0,60}"
+    r"|combo\s*\([^)]{1,40}\)"
+    r"|(?:beef|chicken|vegetable|veggie|shrimp|fish|pork|tofu|paneer|cheese)"
+    r")\s*$",
+    re.IGNORECASE,
+)
+_MENU_BADGE_PROMO_RE = re.compile(
+    r"\b(?:discount\s+of\s+\d{1,2}%|\d{1,2}%\s*off|orders?\s+above\s+\$\d|offer\s+code|use\s+code)\b",
+    re.IGNORECASE,
+)
+_MENU_UI_NOISE_RE = re.compile(
+    r"\b(?:add\s+to\s+cart|our\s+most\s+popular\s+dishes|popular\s+dishes|explore\s+more|menu\s+categories|creativity\s+is\s+always\s+on\s+our\s+menu|see\s+more)\b",
+    re.IGNORECASE,
+)
+_MENU_PAGE_URL_MARKERS = (
+    "food-menu",
+    "drink-menu",
+    "drinks-menu",
+    "bar-menu",
+    "cocktail-menu",
+    "dessert-menu",
+    "desserts-menu",
+    "breakfast-menu",
+    "brunch-menu",
+    "dinner-menu",
+)
+_PROMOISH_PATH_MARKERS = (
+    "special",
+    "deal",
+    "offer",
+    "promo",
+    "promotion",
+    "happy-hour",
+    "happy_hour",
+    "happyhours",
+    "lunch",
+    "daily",
+    "brunch",
+    "dinner",
+)
+_TRAILING_PERCENT_BADGE_RE = re.compile(
+    r"(?:\d{1,2}%\s*off\s+\$\d{1,3}(?:\.\d{2})?|\$\d{1,3}(?:\.\d{2})?\s+\d{1,2}%\s*off)(?:\s+\d{1,2}%\s*off)?$",
+    re.IGNORECASE,
+)
+_ORDER_THRESHOLD_PROMO_RE = re.compile(
+    r"\b(?:orders?\s+above|minimum\s+order|offer\s+code|use\s+code|read\s+more|free\s+with|buy\s+one|get\s+one)\b",
     re.IGNORECASE,
 )
 
@@ -408,8 +487,6 @@ _JSONLD_PROMO_CONTEXT_KEYWORDS = frozenset([
     "specials",
     "deal",
     "deals",
-    "offer",
-    "offers",
     "promo",
     "promotion",
     "promotions",
@@ -1077,7 +1154,7 @@ def _jsonld_build_metadata(
 
 
 def _jsonld_has_promo_context(text: str, context_path: list[str], source_url: str) -> bool:
-    haystacks = [text.lower(), " ".join(context_path).lower(), source_url.lower()]
+    haystacks = [text.lower(), " ".join(context_path).lower()]
     return any(
         keyword in haystack
         for haystack in haystacks
@@ -1435,6 +1512,8 @@ def _has_deal_keywords(text: str) -> bool:
 
 def _is_negative_context(text: str) -> bool:
     """Return True if text has anti-deal context that overrides keywords."""
+    if _FAQ_BLOCK_RE.search(text):
+        return True
     return any(pat.search(text) for pat in _NEGATIVE_CONTEXT_PATTERNS)
 
 
@@ -1617,6 +1696,69 @@ def _clean_candidate_deal_name(candidate: str) -> str:
     return cleaned[:80]
 
 
+def _is_invalid_deal_name(candidate: str, *, raw_text: str | None = None) -> bool:
+    """Reject headings and fragments that are not stable deal labels."""
+    cleaned = _clean_candidate_deal_name(candidate)
+    if not cleaned:
+        return True
+    if _INVALID_DEAL_NAME_RE.match(cleaned):
+        return True
+    if _QUESTION_NAME_RE.match(cleaned) or _FAQ_BLOCK_RE.match(cleaned):
+        return True
+    if _VARIANT_ONLY_NAME_RE.match(cleaned):
+        return True
+    if raw_text and _MENU_BADGE_PROMO_RE.search(raw_text) and _MENU_UI_NOISE_RE.search(raw_text):
+        return True
+    return False
+
+
+def _finalize_deal_name(candidate: str | None, *, raw_text: str | None = None) -> str | None:
+    """Return a cleaned deal name or None when the candidate is not usable."""
+    if not candidate:
+        return None
+    cleaned = _clean_candidate_deal_name(candidate)
+    if _is_invalid_deal_name(cleaned, raw_text=raw_text):
+        return None
+    return cleaned
+
+
+def _looks_like_menu_badge_noise(text: str) -> bool:
+    """Reject wrapper blocks that blend one promo badge with menu-card UI text."""
+    if not text:
+        return False
+    return bool(_MENU_BADGE_PROMO_RE.search(text) and _MENU_UI_NOISE_RE.search(text))
+
+
+def _is_plain_menu_page_url(source_url: str | None) -> bool:
+    if not source_url:
+        return False
+
+    path = urlparse(source_url).path.casefold().strip("/")
+    if not path:
+        return False
+
+    normalized_path = path.replace("_", "-")
+    has_menu_marker = any(marker in normalized_path for marker in _MENU_PAGE_URL_MARKERS)
+    if not has_menu_marker:
+        has_menu_marker = re.search(r"(?:^|/)menu(?:/|$)", normalized_path) is not None
+    if not has_menu_marker:
+        return False
+
+    return not any(hint in normalized_path for hint in _PROMOISH_PATH_MARKERS)
+
+
+def _looks_like_menu_item_discount_badge_noise(text: str, source_url: str | None) -> bool:
+    """Reject plain menu-item cards that only inherit a sitewide discount badge."""
+    if not text or not _is_plain_menu_page_url(source_url):
+        return False
+
+    normalized = " ".join(text.split())
+    if _ORDER_THRESHOLD_PROMO_RE.search(normalized):
+        return False
+
+    return bool(_TRAILING_PERCENT_BADGE_RE.search(normalized))
+
+
 def _is_generic_fallback_heading(heading: str, block: str) -> bool:
     """Reject promo-card headings that are less informative than the body text."""
     cleaned = _trim_name(heading)
@@ -1681,7 +1823,7 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
 
     # 1. Heading preference
     if fallback_heading:
-        h = _clean_candidate_deal_name(fallback_heading)
+        h = _finalize_deal_name(fallback_heading, raw_text=block)
         if 3 <= len(h) <= 80 and not _FRAGMENT_MARKERS_RE.search(h) and not _is_generic_fallback_heading(h, block):
             return h
 
@@ -1700,18 +1842,18 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
         )
         end = m.end() + (stop_search.start() if stop_search else min(40, len(block) - m.end()))
         end = min(len(block), end)
-        snippet = _clean_candidate_deal_name(block[start:end])
-        if 3 <= len(snippet) <= 80:
+        snippet = _finalize_deal_name(block[start:end], raw_text=block)
+        if snippet and 3 <= len(snippet) <= 80:
             return snippet
         # Very long — just return the bare match
-        bare = _clean_candidate_deal_name(m.group(0))
+        bare = _finalize_deal_name(m.group(0), raw_text=block)
         if bare:
             return bare
 
     # 3. Short-clause scan
     for clause in re.split(r"[.!?\n]", block):
-        c = _clean_candidate_deal_name(clause)
-        if not (5 <= len(c) <= 70):
+        c = _finalize_deal_name(clause, raw_text=block)
+        if not c or not (5 <= len(c) <= 70):
             continue
         if _FRAGMENT_MARKERS_RE.search(c):
             continue
@@ -1723,8 +1865,8 @@ def _extract_deal_name(block: str, fallback_heading: str | None = None) -> str |
             return c[:80]
 
     # 4. Last resort: first short clause if it doesn't look like a fragment
-    first = _clean_candidate_deal_name(re.split(r"[.!?\n]", block, maxsplit=1)[0])
-    if 5 <= len(first) <= 70 and not _FRAGMENT_MARKERS_RE.search(first):
+    first = _finalize_deal_name(re.split(r"[.!?\n]", block, maxsplit=1)[0], raw_text=block)
+    if first and 5 <= len(first) <= 70 and not _FRAGMENT_MARKERS_RE.search(first):
         return first
 
     return None
@@ -2694,6 +2836,10 @@ def _text_block_to_signals(
         return results
 
     for sub in _split_multi_promo(block):
+        if _looks_like_menu_badge_noise(sub):
+            continue
+        if _looks_like_menu_item_discount_badge_noise(sub, source_url):
+            continue
         deal_name = _extract_deal_name(sub, fallback_heading=fallback_heading)
         if not deal_name or len(deal_name) < 5:
             continue
@@ -3408,13 +3554,24 @@ def _populate_sidecar_for_page(
     """Feed a page's JSON-LD (preferred) and DOM (fallback) into the sidecar."""
     sections_before = len(sidecar.sections)
     items_before = len(sidecar.items)
+    price_points_before = len(sidecar.price_points)
     try:
         ingest_jsonld_from_html(html, page_url=page_url, sidecar=sidecar)
     except Exception as exc:  # pragma: no cover — never let sidecar kill the scrape
         logger.debug("[WebScraper] sidecar JSON-LD ingest failed for %s: %s", page_url, exc)
 
-    # Only fall back to DOM heuristics if JSON-LD added nothing new for this page.
-    if len(sidecar.sections) == sections_before and len(sidecar.items) == items_before:
+    page_key = next((key for key, page in sidecar.pages.items() if page.url == page_url), None)
+    has_unnamed_sections = bool(page_key) and any(
+        section.page_key == page_key and section.name in {"(unnamed)", "(unsectioned)"}
+        for section in sidecar.sections.values()
+    )
+    needs_dom_fallback = (
+        (len(sidecar.sections) == sections_before and len(sidecar.items) == items_before)
+        or (len(sidecar.items) > items_before and len(sidecar.price_points) == price_points_before)
+        or has_unnamed_sections
+    )
+
+    if needs_dom_fallback:
         try:
             ingest_dom_fallback(soup, page_url=page_url, sidecar=sidecar)
         except Exception as exc:  # pragma: no cover

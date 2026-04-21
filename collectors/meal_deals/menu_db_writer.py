@@ -23,6 +23,9 @@ class UpsertResult:
     skipped: bool = False
     skip_reason: str | None = None
     fk_violations: list[str] = field(default_factory=list)
+    filtered: dict[str, int] = field(default_factory=lambda: {
+        "price_points_non_positive": 0,
+    })
     tables: dict[str, dict[str, int]] = field(default_factory=lambda: {
         "pages": {"inserted": 0, "updated": 0},
         "sections": {"inserted": 0, "updated": 0},
@@ -115,23 +118,37 @@ def _menu_items(shape: PersistentShape, restaurant_id: int) -> list[dict[str, An
     ]
 
 
-def _menu_price_points(shape: PersistentShape, restaurant_id: int) -> list[dict[str, Any]]:
-    return [
-        {
+def _menu_price_points(
+    shape: PersistentShape,
+    restaurant_id: int,
+    *,
+    result: UpsertResult | None = None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in shape["price_points"]:
+        price = row.get("price")
+        try:
+            price_value = float(price) if price is not None else None
+        except (TypeError, ValueError):
+            price_value = None
+        if price_value is None or price_value <= 0:
+            if result is not None:
+                result.filtered["price_points_non_positive"] = result.filtered.get("price_points_non_positive", 0) + 1
+            continue
+        rows.append({
             "id": row["id"],
             "item_id": row["item_id"],
             "section_id": row["section_id"],
             "restaurant_id": restaurant_id,
-            "price": row["price"],
+            "price": price_value,
             "currency": row["currency"],
             "variant": row["variant"],
             "confidence": row["confidence"],
             "source": row["source"],
             "evidence": row["evidence"],
             "observed_at": _parse_dt(row["observed_at"]),
-        }
-        for row in shape["price_points"]
-    ]
+        })
+    return rows
 
 
 def _menu_modifiers(shape: PersistentShape, restaurant_id: int) -> list[dict[str, Any]]:
@@ -218,7 +235,7 @@ def upsert_menu_shape(session: Session, shape: PersistentShape) -> UpsertResult:
         "pages": _menu_pages(shape, restaurant_id),
         "sections": _menu_sections(shape, restaurant_id),
         "items": _menu_items(shape, restaurant_id),
-        "price_points": _menu_price_points(shape, restaurant_id),
+        "price_points": _menu_price_points(shape, restaurant_id, result=result),
         "modifiers": _menu_modifiers(shape, restaurant_id),
     }
 

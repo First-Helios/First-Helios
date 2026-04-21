@@ -35,6 +35,12 @@ def _empty_totals() -> dict[str, dict[str, int]]:
     }
 
 
+def _empty_filtered_totals() -> dict[str, int]:
+    return {
+        "price_points_non_positive": 0,
+    }
+
+
 def main() -> int:
     args = _parse_args()
     bundles, invalid_json = load_debug_bundles(args.debug_dir)
@@ -43,6 +49,7 @@ def main() -> int:
         bundle_items = bundle_items[: args.limit]
 
     totals = _empty_totals()
+    filtered_totals = _empty_filtered_totals()
     skip_reasons: Counter[str] = Counter()
     processed = 0
     failures = 0
@@ -84,6 +91,8 @@ def main() -> int:
             for table_name, counts in result.tables.items():
                 totals[table_name]["inserted"] += counts["inserted"]
                 totals[table_name]["updated"] += counts["updated"]
+            for key, count in result.filtered.items():
+                filtered_totals[key] = filtered_totals.get(key, 0) + count
 
             if args.dry_run:
                 session.rollback()
@@ -105,6 +114,10 @@ def main() -> int:
         print(
             f"{table_name}: inserted={counts['inserted']} updated={counts['updated']}"
         )
+    if any(filtered_totals.values()):
+        print("filtered:")
+        for key, count in sorted(filtered_totals.items()):
+            print(f"  {key}={count}")
     if skip_reasons:
         print("skip_reasons:")
         for reason, count in sorted(skip_reasons.items()):

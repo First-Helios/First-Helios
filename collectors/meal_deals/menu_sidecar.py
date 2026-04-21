@@ -54,7 +54,7 @@ _COURSE_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bappetizer|starter|small\s*plate|shareable|snack", re.IGNORECASE), "appetizer"),
     (re.compile(r"\bsoup|salad\b", re.IGNORECASE), "salad_soup"),
     (re.compile(r"\bentr[eé]e|main|specialt|burger|sandwich|pasta|pizza|taco|plate|platter", re.IGNORECASE), "entree"),
-    (re.compile(r"\bside|add\s*on|upgrade", re.IGNORECASE), "side"),
+    (re.compile(r"\bside|add\s*on|upgrade|rice|beans|fries|chips|salsa|guacamole", re.IGNORECASE), "side"),
     (re.compile(r"\bdessert|sweet", re.IGNORECASE), "dessert"),
     (re.compile(r"\bdrink|beverage|cocktail|beer|wine|margarita|bar", re.IGNORECASE), "drink"),
     (re.compile(r"\bkids?\s*menu|kids?\s*meal", re.IGNORECASE), "kids"),
@@ -76,6 +76,68 @@ _DOM_PRICE_RE = re.compile(r"\$\s*(\d{1,3}(?:\.\d{1,2})?)")
 _DOM_MODIFIER_RE = re.compile(
     r"(?:\b(?:add|extra|upgrade|substitute|sub)\b[^$]{0,30})(\+?\$\s*\d{1,3}(?:\.\d{1,2})?)",
     re.IGNORECASE,
+)
+_INLINE_DIETARY_BLOCK_RE = re.compile(
+    r"<\s*([a-z][a-z0-9_-]*)\b[^>]*>(.*?)<\s*/\s*\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_INLINE_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_PROMOTIONAL_DOM_SECTION_RE = re.compile(
+    r"\b(?:happy\s*hour|daily\s+specials?|deals?|offers?|promotions?)\b",
+    re.IGNORECASE,
+)
+_MEAL_PERIOD_SECTION_RE = re.compile(r"\b(?:breakfast|brunch|lunch|dinner)\b", re.IGNORECASE)
+_PROMOTIONAL_DOM_ROW_RE = re.compile(
+    r"\b(?:\d{1,2}\s*%\s*off|half\s+off|bogo|buy\s+one|get\s+one|"
+    r"\$\s*\d{1,3}(?:\.\d{1,2})?\s*off|all\s+day|open\s+to\s+close|"
+    r"until\s+\d|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+    re.IGNORECASE,
+)
+_SIZE_LABEL_RE = re.compile(
+    r"^\s*(?:"
+    r"\d+(?:\.\d+)?\s*(?:oz|ounce|ounces|lb|lbs|gal|gallon|qt|quart|pt|pint|cup|cups|liter|liters|l|ml)"
+    r"|small|regular|large|x-large|xl|double|triple|single"
+    r")\.?\s*$",
+    re.IGNORECASE,
+)
+_DIETARY_TOKEN_MAP: dict[str, str] = {
+    "v": "vegetarian",
+    "veg": "vegetarian",
+    "veggie": "vegetarian",
+    "vegetarian": "vegetarian",
+    "vegeterian": "vegetarian",
+    "vegetariandiet": "vegetarian",
+    "vg": "vegan",
+    "vegan": "vegan",
+    "vegandiet": "vegan",
+    "gluten": "gluten_free",
+    "glutenfree": "gluten_free",
+    "gluten-free": "gluten_free",
+    "gf": "gluten_free",
+    "glutenfreediet": "gluten_free",
+    "halal": "halal",
+    "halaldiet": "halal",
+    "kosher": "kosher",
+    "kosherstyle": "kosher",
+    "kosherdiet": "kosher",
+    "df": "dairy_free",
+    "dairyfree": "dairy_free",
+    "dairy-free": "dairy_free",
+    "dairyfreediet": "dairy_free",
+    "n": "contains_nuts",
+    "nut": "contains_nuts",
+    "nuts": "contains_nuts",
+    "seed": "contains_nuts",
+    "seeds": "contains_nuts",
+}
+_TEXTUAL_DIETARY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bvegan\b|\bvg\b", re.IGNORECASE), "vegan"),
+    (re.compile(r"\bvegetarian\b|\bveggie\b", re.IGNORECASE), "vegetarian"),
+    (re.compile(r"\bgluten[\s-]*free\b|\bgf\b", re.IGNORECASE), "gluten_free"),
+    (re.compile(r"\bhalal\b", re.IGNORECASE), "halal"),
+    (re.compile(r"\bkosher\b", re.IGNORECASE), "kosher"),
+    (re.compile(r"\bdairy[\s-]*free\b|\bdf\b", re.IGNORECASE), "dairy_free"),
+    (re.compile(r"\bcontains?\s+nuts?(?:/seeds?)?\b|\bnuts?/seeds?\b", re.IGNORECASE), "contains_nuts"),
 )
 
 
@@ -402,6 +464,116 @@ def classify_course(*texts: str | None) -> str | None:
     return None
 
 
+def _dedupe_tags(tags: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for tag in tags:
+        cleaned = (tag or "").strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+    return out
+
+
+def _canonicalize_dietary_token(token: str | None) -> str | None:
+    if not token:
+        return None
+    token = token.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    cleaned = re.sub(r"[^a-z]+", "", token.casefold())
+    if not cleaned:
+        return None
+    return _DIETARY_TOKEN_MAP.get(cleaned)
+
+
+def _extract_inline_dietary_tags_from_text(value: Any) -> list[str]:
+    if not isinstance(value, str) or not value:
+        return []
+
+    text = unescape(value)
+    tags: list[str] = []
+    for match in _INLINE_DIETARY_BLOCK_RE.finditer(text):
+        for raw in (match.group(1), match.group(2)):
+            tag = _canonicalize_dietary_token(raw)
+            if tag:
+                tags.append(tag)
+
+    cleaned = re.sub(r"\s+", " ", _INLINE_HTML_TAG_RE.sub(" ", text)).strip()
+    for pattern, label in _TEXTUAL_DIETARY_PATTERNS:
+        if pattern.search(cleaned):
+            tags.append(label)
+    return _dedupe_tags(tags)
+
+
+def _looks_like_variant_label(value: str | None) -> bool:
+    if not value:
+        return False
+    return _SIZE_LABEL_RE.match(value.strip()) is not None
+
+
+def _normalize_variant_label(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = re.sub(r"\s+", " ", value).strip(" .-–—")
+    if not cleaned or not _looks_like_variant_label(cleaned):
+        return None
+    return cleaned
+
+
+def _price_point_page_matches(sidecar: MenuSidecar, pp: PricePoint, page_key: str) -> bool:
+    section_key = pp.section_key
+    if not section_key and pp.item_key and pp.item_key in sidecar.items:
+        section_key = sidecar.items[pp.item_key].section_key
+    if not section_key or section_key not in sidecar.sections:
+        return False
+    return sidecar.sections[section_key].page_key == page_key
+
+
+def _normalize_jsonld_page_prices(sidecar: MenuSidecar, *, page_key: str) -> None:
+    page_price_keys = [
+        key for key, pp in list(sidecar.price_points.items())
+        if pp.source == "jsonld" and _price_point_page_matches(sidecar, pp, page_key)
+    ]
+    if not page_price_keys:
+        return
+
+    positive_prices: list[float] = []
+    for key in page_price_keys:
+        pp = sidecar.price_points.get(key)
+        if pp is None:
+            continue
+        if pp.price is None or pp.price <= 0:
+            sidecar.price_points.pop(key, None)
+            continue
+        positive_prices.append(pp.price)
+
+    if len(positive_prices) < 6:
+        return
+
+    subunit_prices = [price for price in positive_prices if 0 < price < 1]
+    if not subunit_prices:
+        return
+    if max(positive_prices) > 1:
+        return
+    if len(subunit_prices) < max(4, int(len(positive_prices) * 0.6)):
+        return
+
+    replacements: dict[str, PricePoint] = {}
+    for key in list(sidecar.price_points.keys()):
+        pp = sidecar.price_points.get(key)
+        if pp is None or pp.source != "jsonld" or not _price_point_page_matches(sidecar, pp, page_key):
+            continue
+        if pp.price is None or pp.price <= 0:
+            sidecar.price_points.pop(key, None)
+            continue
+        sidecar.price_points.pop(key, None)
+        pp.price = round(pp.price * 100.0, 2)
+        pp.key = _price_point_key(pp.item_key, pp.section_key, pp.price, pp.variant)
+        replacements.setdefault(pp.key, pp)
+
+    sidecar.price_points.update(replacements)
+
+
 # ── JSON-LD builder ─────────────────────────────────────────────────────────
 
 
@@ -412,7 +584,10 @@ def _clean(value: Any) -> str:
         return str(value)
     if not isinstance(value, str):
         return ""
-    return re.sub(r"\s+", " ", unescape(value)).strip()
+    text = unescape(value)
+    text = _INLINE_DIETARY_BLOCK_RE.sub(" ", text)
+    text = _INLINE_HTML_TAG_RE.sub(" ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -545,7 +720,9 @@ def _extract_dietary_tags(item: dict[str, Any]) -> list[str]:
         cleaned = _clean(raw)
         if cleaned:
             tags.append(cleaned.split("/")[-1])
-    return tags
+    tags.extend(_extract_inline_dietary_tags_from_text(item.get("name")))
+    tags.extend(_extract_inline_dietary_tags_from_text(item.get("description")))
+    return _dedupe_tags(tags)
 
 
 def _traverse_menu(
@@ -706,7 +883,7 @@ def _record_menu_item(
         price, currency = _extract_price_from_offer(offer, idx)
         if price is None:
             continue
-        variant = _clean(offer.get("name")) or None
+        variant = _clean(offer.get("name")) or _normalize_variant_label(_clean(offer.get("description")))
         pp_key = _price_point_key(ikey, section_key, price, variant)
         sidecar.add_price_point(PricePoint(
             key=pp_key,
@@ -763,6 +940,7 @@ def ingest_jsonld_payload(
             idx=idx,
             lineage=set(),
         )
+    _normalize_jsonld_page_prices(sidecar, page_key=page_key)
 
 
 def ingest_jsonld_from_html(html: str, *, page_url: str, sidecar: MenuSidecar) -> None:
@@ -810,12 +988,14 @@ def ingest_dom_fallback(soup: BeautifulSoup, *, page_url: str, sidecar: MenuSide
             continue
         if not _MENU_HEADING_HINT_RE.search(heading_text):
             continue
+        if _PROMOTIONAL_DOM_SECTION_RE.search(heading_text) and not _MEAL_PERIOD_SECTION_RE.search(heading_text):
+            continue
 
         items_container = _next_items_container(heading)
         if items_container is None:
             continue
 
-        pairs = _extract_pairs_from_container(items_container)
+        pairs = _extract_pairs_from_container(items_container, section_name=heading_text)
         if not pairs:
             continue
 
@@ -836,7 +1016,7 @@ def ingest_dom_fallback(soup: BeautifulSoup, *, page_url: str, sidecar: MenuSide
             source="dom",
         ))
 
-        for name, price, evidence in pairs:
+        for name, price, evidence, variant in pairs:
             ikey = _item_key(skey, name)
             sidecar.add_item(MenuItem(
                 key=ikey,
@@ -847,12 +1027,12 @@ def ingest_dom_fallback(soup: BeautifulSoup, *, page_url: str, sidecar: MenuSide
                 source="dom",
             ))
             sidecar.add_price_point(PricePoint(
-                key=_price_point_key(ikey, skey, price, None),
+                key=_price_point_key(ikey, skey, price, variant),
                 item_key=ikey,
                 section_key=skey,
                 price=price,
                 currency="USD",
-                variant=None,
+                variant=variant,
                 confidence=0.55,
                 source="dom",
                 evidence=_clip(evidence),
@@ -888,13 +1068,15 @@ def _next_items_container(heading: Tag) -> Tag | None:
     return None
 
 
-def _extract_pairs_from_container(container: Tag) -> list[tuple[str, float, str]]:
-    """Pull (name, price, evidence) tuples from li/tr rows in the container."""
-    pairs: list[tuple[str, float, str]] = []
+def _extract_pairs_from_container(container: Tag, *, section_name: str | None = None) -> list[tuple[str, float, str, str | None]]:
+    """Pull (name, price, evidence, variant) tuples from li/tr rows in the container."""
+    pairs: list[tuple[str, float, str, str | None]] = []
     rows = container.find_all(["li", "tr"])
     for row in rows:
         text = row.get_text(" ", strip=True)
         if not text or len(text) < 4 or len(text) > 250:
+            continue
+        if _PROMOTIONAL_DOM_ROW_RE.search(text):
             continue
         price_match = _DOM_PRICE_RE.search(text)
         if not price_match:
@@ -905,7 +1087,10 @@ def _extract_pairs_from_container(container: Tag) -> list[tuple[str, float, str]
         name = _DOM_PRICE_RE.sub("", text).strip(" -–—.·•\t")
         if not name or len(name) < 2 or len(name) > 120:
             continue
-        pairs.append((name, price, text))
+        variant = _normalize_variant_label(name)
+        if variant and section_name and section_name not in {"(unnamed)", "(unsectioned)"}:
+            name = section_name
+        pairs.append((name, price, text, variant))
         if len(pairs) >= 40:
             break
     return pairs

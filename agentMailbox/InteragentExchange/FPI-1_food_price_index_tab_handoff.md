@@ -8,6 +8,81 @@
 
 ---
 
+## April 21, 2026 Addendum — Quality Hardening and Orange Pi Drift
+
+The first implementation pass is not the current bottleneck. The active issue is menu-quality drift between local fixes and the Orange Pi deployment.
+
+### Current verified production pattern
+
+- `Chaat Ka Chaskaaa` is the primary severe price-scale failure on the live host.
+    - 52 persisted price rows.
+    - 7 rows at `0.00`.
+    - 45 rows between `0.02` and `0.46`.
+    - This is the JSON-LD scale leak the local parser fix now normalizes.
+- `La Posada Mexican Restaurant` still has heavy unnamed-section loss.
+- `The Rebublic of Sandwich` still has size-label item names instead of variants.
+
+### Important operational conclusion
+
+If the live Price Index still shows `Bhel Puri $0.00`, do not assume the local parser fix failed. First verify whether Orange Pi has the current backend code. The live host was confirmed missing the local `menu_sidecar.py` and `price_index_routes.py` hardening functions during this session.
+
+Fast check:
+
+```bash
+ssh orangepi@192.168.1.191
+cd ~/First-Helios
+grep -n "def _should_exclude_payload\|def _normalize_jsonld_page_prices" \
+    collectors/meal_deals/price_index_routes.py \
+    collectors/meal_deals/menu_sidecar.py
+```
+
+No matches means the live backend is stale.
+
+### New quality controls added after the original handoff
+
+- `collectors/meal_deals/menu_sidecar.py`
+    - strips inline pseudo-tags from names
+    - extracts dietary tags from inline legend markers
+    - rescales obvious subunit JSON-LD menus
+    - drops zero/negative JSON-LD price points
+    - skips promo-only DOM rows and promo sections
+    - keeps size labels as variants instead of item names
+- `collectors/meal_deals/price_index_routes.py`
+    - excludes non-positive rows at query time
+    - rescales suspicious all-subunit bundles on read
+    - hides promo leakage from live results
+    - normalizes unnamed sections and size/evidence variants for display
+    - adds ZIP-driven distance and dietary filters
+- `collectors/meal_deals/menu_db_writer.py`
+    - now filters non-positive menu price points before persistence so replay/backfill does not reinsert `0.00` rows
+- `scripts/audit_menu_price_index.py`
+    - audits stores by row count, min/median/max price, zero-price rows, subunit-price clusters, unnamed sections, size-only item names, and promo leakage
+
+### Required rollout after backend deploy
+
+```bash
+ssh orangepi@192.168.1.191
+cd ~/First-Helios
+
+.venv/bin/alembic upgrade head
+PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
+PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-debug-cache --all --skip-checked-days 0 --chunk-size 25
+PYTHONPATH=. .venv/bin/python scripts/backfill_menu_tables.py
+PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
+```
+
+### Practical review standard
+
+For the Price Index, treat these as hard audit failures until proven otherwise:
+
+- any baseline menu row with `price <= 0`
+- any store where most prices are between `0.01` and `0.99`
+- unnamed sections dominating a store
+- size-only item names such as `8 Oz`, `Small`, or `Regular`
+- promo fragments like `$1 off drafts` persisted as menu items
+
+---
+
 ## What We're Building and Why
 
 A new **Food Price Index** tab — separate from Meal Deals. It surfaces **every scraped menu item** (not just discounted ones) so a user can search by keyword, cuisine/brand, course, or price-per-calorie to find the cheapest food nearby.

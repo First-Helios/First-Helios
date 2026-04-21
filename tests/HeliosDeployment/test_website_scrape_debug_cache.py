@@ -15,7 +15,9 @@ from collectors.meal_deals.website_scraper import (
 
 
 _BUNDLE_DIR = Path("data/cache/website_scrape_debug")
+_BABY_REPLAY_BUNDLE = _BUNDLE_DIR / "babyacapulco_com__4e9c97548311.json"
 _BWW_REPLAY_BUNDLE = _BUNDLE_DIR / "buffalowildwings_com_en_locations_detail_621__9af1c34bd10b.json"
+_CHAAT_REPLAY_BUNDLE = _BUNDLE_DIR / "chaatkachaskaa_com__77e60cbab32e.json"
 _WINGS_REPLAY_BUNDLE = _BUNDLE_DIR / "wingsnmore_austin_com__4c0b10dd23c9.json"
 _FRESNO_REPLAY_BUNDLE = _BUNDLE_DIR / "fresnogrills_com__87d7daaa6800.json"
 
@@ -453,3 +455,81 @@ def test_website_scrape_fresno_replay_keeps_day_scoped_specials_separate(tmp_pat
         )
         for signal in specials_signals
     )
+
+
+def test_website_scrape_chaat_replay_keeps_sitewide_offer_without_menu_item_fanout(tmp_path, monkeypatch):
+    _skip_if_missing(_CHAAT_REPLAY_BUNDLE)
+
+    staging = tmp_path / "website_scrape_debug"
+    staging.mkdir()
+    shutil.copy(_CHAAT_REPLAY_BUNDLE, staging / _CHAAT_REPLAY_BUNDLE.name)
+
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        staging,
+    )
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda _seconds: None)
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("network fetch should not run in replay mode")
+
+    monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", _no_network)
+
+    signals = scrape_restaurant_website(
+        url="http://www.chaatkachaskaa.com",
+        restaurant_name="Chaat Ka Chaskaaa",
+        local_employer_id=1976,
+        brand_group_id=None,
+        region="austin_tx",
+        replay_debug_cache=True,
+    )
+
+    names = {signal.deal_name for signal in signals}
+
+    assert len(signals) == 2
+    assert all("orders above $10" in (signal.deal_name or "").lower() for signal in signals)
+    assert all("10% off $" not in (signal.deal_name or "").lower() for signal in signals)
+    assert not any(name.lower().startswith("sev ") for name in names)
+    assert not any("rasmalai" in name.lower() for name in names)
+    assert not any("gulab jamun" in name.lower() for name in names)
+    assert not any("vada pav" in name.lower() for name in names)
+    assert not any("paneer tikka kathi roll" in name.lower() for name in names)
+
+
+def test_website_scrape_baby_replay_drops_invalid_wrapper_and_variant_names(tmp_path, monkeypatch):
+    _skip_if_missing(_BABY_REPLAY_BUNDLE)
+
+    staging = tmp_path / "website_scrape_debug"
+    staging.mkdir()
+    shutil.copy(_BABY_REPLAY_BUNDLE, staging / _BABY_REPLAY_BUNDLE.name)
+
+    monkeypatch.setattr(
+        "collectors.meal_deals.website_scraper.WEBSITE_SCRAPE_DEBUG_DIR",
+        staging,
+    )
+    monkeypatch.setattr("collectors.meal_deals.website_scraper.time.sleep", lambda _seconds: None)
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("network fetch should not run in replay mode")
+
+    monkeypatch.setattr("collectors.meal_deals.website_scraper._fetch_page", _no_network)
+
+    signals = scrape_restaurant_website(
+        url="http://www.babyacapulco.com",
+        restaurant_name="Baby Acapulco",
+        local_employer_id=15406,
+        brand_group_id=15406,
+        region="austin_tx",
+        replay_debug_cache=True,
+    )
+
+    names = {signal.deal_name for signal in signals}
+
+    assert "Happy Hour" in names
+    assert "Lunch Specials - Sarita's Combo" in names
+    assert "Daily Deals & Happy Hour" not in names
+    assert "Happy Hour Specials" not in names
+    assert "Choice of Chicken or Beef" not in names
+    assert "Combo (Chicken & Beef)" not in names
+    assert "Vegetable" not in names
+    assert not any("items & pricing" in (signal.deal_name or "").lower() for signal in signals)

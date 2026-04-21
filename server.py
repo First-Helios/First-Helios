@@ -193,6 +193,14 @@ try:
 except Exception as exc:
     logger.warning("Spirit Pool blueprint NOT registered: %s: %s", type(exc).__name__, exc)
 
+# ── Spirit Pool Dev Capture Blueprint (gated by SPIRITPOOL_DEV_SIGNING_KEY) ──
+try:
+    from postings.spiritpool_dev_capture import spiritpool_dev_bp
+    app.register_blueprint(spiritpool_dev_bp)
+    logger.info("Spirit Pool dev-capture blueprint registered at /api/spiritpool/dev")
+except Exception as exc:
+    logger.warning("Spirit Pool dev-capture blueprint NOT registered: %s: %s", type(exc).__name__, exc)
+
 # ── Events Blueprint ──────────────────────────────────────────────────────────
 try:
     from events.routes import events_bp

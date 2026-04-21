@@ -136,6 +136,99 @@ def test_dom_fallback_pairs_heading_with_item_list():
     assert all(s.name == "Lunch Specials" for s in sidecar.sections.values())
 
 
+def test_jsonld_ingest_extracts_inline_dietary_tags_and_variant_descriptions():
+    payload = {
+        "@context": "https://schema.org",
+        "@type": "Menu",
+        "name": "Sides",
+        "hasMenuItem": [
+            {
+                "@type": "MenuItem",
+                "name": "TWICE COOKED FRENCH FRIES <gluten>GF</gluten> <vegan>VG</vegan>",
+                "offers": [
+                    {"@type": "Offer", "description": "Small", "price": "4.99", "priceCurrency": "USD"},
+                    {"@type": "Offer", "description": "Regular", "price": "6.99", "priceCurrency": "USD"},
+                ],
+            },
+        ],
+    }
+
+    sidecar = MenuSidecar()
+    ingest_jsonld_payload(payload, page_url="https://example.com/menu", sidecar=sidecar)
+
+    fries = next(iter(sidecar.items.values()))
+    assert fries.name == "TWICE COOKED FRENCH FRIES"
+    assert set(fries.dietary_tags) == {"gluten_free", "vegan"}
+    variants = sorted(pp.variant for pp in sidecar.price_points.values())
+    assert variants == ["Regular", "Small"]
+
+
+def test_jsonld_ingest_scales_subunit_prices_and_drops_zeroes():
+    payload = {
+        "@context": "https://schema.org",
+        "@type": "Menu",
+        "name": "Chaat Menu",
+        "hasMenuItem": [
+            {"@type": "MenuItem", "name": "A", "offers": {"@type": "Offer", "price": "0.45"}},
+            {"@type": "MenuItem", "name": "B", "offers": {"@type": "Offer", "price": "0.89"}},
+            {"@type": "MenuItem", "name": "C", "offers": {"@type": "Offer", "price": "0.12"}},
+            {"@type": "MenuItem", "name": "D", "offers": {"@type": "Offer", "price": "0.25"}},
+            {"@type": "MenuItem", "name": "E", "offers": {"@type": "Offer", "price": "0.37"}},
+            {"@type": "MenuItem", "name": "F", "offers": {"@type": "Offer", "price": "0.46"}},
+            {"@type": "MenuItem", "name": "G", "offers": {"@type": "Offer", "price": "0.00"}},
+        ],
+    }
+
+    sidecar = MenuSidecar()
+    ingest_jsonld_payload(payload, page_url="https://example.com/menu", sidecar=sidecar)
+
+    prices = sorted(pp.price for pp in sidecar.price_points.values())
+    assert prices == [12.0, 25.0, 37.0, 45.0, 46.0, 89.0]
+
+
+def test_dom_fallback_skips_promotional_sections_and_rows():
+    html = """
+    <html><body>
+        <h2>Daily Specials</h2>
+        <ul>
+            <li>$1 off drafts</li>
+            <li>Wells $4.00</li>
+        </ul>
+        <h2>Sides</h2>
+        <ul>
+            <li>Fries $3.00</li>
+        </ul>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    sidecar = MenuSidecar()
+    ingest_dom_fallback(soup, page_url="https://example.com/menu", sidecar=sidecar)
+
+    assert {section.name for section in sidecar.sections.values()} == {"Sides"}
+    assert {item.name for item in sidecar.items.values()} == {"Fries"}
+
+
+def test_dom_fallback_uses_section_name_for_size_only_rows():
+    html = """
+    <html><body>
+        <h2>Side of Rice (White or Brown)</h2>
+        <ul>
+            <li>8 Oz. - $2.00</li>
+            <li>16 Oz. - $4.00</li>
+        </ul>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    sidecar = MenuSidecar()
+    ingest_dom_fallback(soup, page_url="https://example.com/menu", sidecar=sidecar)
+
+    items = list(sidecar.items.values())
+    assert len(items) == 1
+    assert items[0].name == "Side of Rice (White or Brown)"
+    variants = sorted(pp.variant for pp in sidecar.price_points.values())
+    assert variants == ["16 Oz", "8 Oz"]
+
+
 def test_link_signal_to_target_resolves_by_path_and_name():
     sidecar = MenuSidecar()
     ingest_jsonld_payload(LAPOSADA_MENU_PAYLOAD, page_url="https://laposadasouth.com/menu", sidecar=sidecar)
