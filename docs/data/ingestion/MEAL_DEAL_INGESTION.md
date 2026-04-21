@@ -409,8 +409,8 @@ For one site, `scrape_restaurant_website()` currently does this:
 2. Load or reset the site's debug bundle.
 3. Probe hardcoded first-party paths such as `/`, `/menu`, `/specials`, `/deals`, `/lunch`, `/happy-hour`, `/promotions`, and `/offers`.
 4. If the site is a locator host, try locator-to-corporate hint routing.
-5. Discover additional same-domain deal pages from homepage links.
-6. Discover and parse a bounded number of PDFs.
+5. Discover additional same-domain deal and menu pages from homepage links plus structured menu URLs promoted from JSON-LD `Menu.url`, `MenuSection.url`, and `Restaurant.hasMenu` references.
+6. Discover and parse a bounded number of PDFs, including menu PDFs whose `.pdf` suffix only appears in the parsed URL path such as `menu.pdf?dm=1774998567`.
 7. Extract both flat signals and structured menu artifacts.
 8. Attach offer-target and value-profile metadata to signals when possible.
 9. Record render-policy decisions for structurally empty but menu-critical pages.
@@ -422,9 +422,10 @@ Current discovery sources:
 
 - hardcoded deal paths
 - same-domain homepage links
+- structured menu URLs promoted from schema.org `Menu.url`, `MenuSection.url`, and `Restaurant.hasMenu` references
 - locator-host rules that jump from location subdomains to corporate pages
 - exploration-only registry hints from `config/meal_deal_hint_registry.json`
-- PDF discovery from fetched pages
+- PDF discovery from fetched pages, including query-string PDF URLs after path normalization
 
 Guardrails:
 
@@ -955,7 +956,7 @@ These are the current meaningful caveats, not historical ones.
 2. Wrong-target ingress is still not fully blocked. Hotel-family hosts, clearly unrelated businesses, and isolated bad URL assignments can still survive into the website scrape queue unless they are purged or filtered earlier.
 3. Stale-source precedence and canonical row ranking still need work. Older HTML or broad summary rows can beat newer PDFs or more specific sibling offers because read-path ranking still leans too heavily on `signal_quality` and recency.
 4. The menu graph is replay-first, not table-first. Persistent menu tables now exist, but replay bundles remain the authoritative upstream evidence and the place where full sidecar provenance lives.
-5. Remaining open Tier 2 scraper tasks still matter: `DISC-03`, `DOM-01`, `NAME-01`, `PRICE-01`, `PDF-01`, and `TEST-02`.
+5. Remaining open Tier 2 scraper tasks still matter: `DISC-03` scoped slug and sitemap probing, `DOM-01`, `NAME-01`, `PRICE-01`, `PDF-01` scoring/classification, and `TEST-02`. Basic structured-menu discovery and query-string PDF detection landed on 2026-04-21 and are no longer the blocker.
 6. Rewards, birthday, loyalty, and app-gated offers are not explicitly modeled yet. Current boilerplate and non-deal filters suppress much of that family by design.
 7. Remote Orange Pi parity is still maintained manually. That is workable, but brittle.
 8. `meal_deals` is still dual-written and still contains legacy semantics. Do not use it as the primary read model.

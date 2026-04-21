@@ -49,7 +49,16 @@ cd /home/fortune/CodeProjects/First-Helios
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 5 --skip-checked-days 0 --dry-run --region austin_tx
 ```
 
-5. Inspect the newest bundles before any broad live run.
+5. Run a small targeted refresh when the change is discovery- or parser-only.
+
+```bash
+cd /home/fortune/CodeProjects/First-Helios
+PYTHONPATH=. .venv/bin/python scripts/refresh_targeted_sites.py --ids 18354 7047 26123 3570 3063
+```
+
+Proceed only if the slice is net-positive on item and price-point coverage and shows no genuine regression on a known restaurant.
+
+6. Inspect the newest bundles before any broad live run.
 
 Required on fetched first-party pages:
 
@@ -62,28 +71,28 @@ Conditional checks:
 - if hint-driven exploration was used, confirm `hint_audit` is present
 - if a known menu-rich canary still lacks structure, treat that as a follow-up before widening the run
 
-6. Prefer a replay-backed full run before a fresh live crawl when cache coverage is already sufficient.
+7. Prefer a replay-backed full run before a fresh live crawl when cache coverage is already sufficient.
 
 ```bash
 cd /home/fortune/CodeProjects/First-Helios
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --replay-debug-cache --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
 ```
 
-7. Only fall back to a fresh live scrape if replay coverage is too sparse.
+8. Only fall back to a fresh live scrape if replay coverage is too sparse.
 
 ```bash
 cd /home/fortune/CodeProjects/First-Helios
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --all --skip-checked-days 0 --chunk-size 25 --region austin_tx
 ```
 
-8. Re-audit canonical observations only if quality rules or gating logic changed.
+9. Re-audit canonical observations only if quality rules or gating logic changed.
 
 ```bash
 cd /home/fortune/CodeProjects/First-Helios
 PYTHONPATH=. .venv/bin/python scripts/reaudit_deal_observations.py --source website_scrape --backfill-source meal_deals --region austin_tx --apply
 ```
 
-9. Backfill menu tables and audit the menu read path when Price Index or other menu consumers are in scope.
+10. Backfill menu tables and audit the menu read path when Price Index or other menu consumers are in scope.
 
 ```bash
 cd /home/fortune/CodeProjects/First-Helios
@@ -91,7 +100,7 @@ PYTHONPATH=. .venv/bin/python scripts/backfill_menu_tables.py
 PYTHONPATH=. .venv/bin/python scripts/audit_menu_price_index.py --region austin_tx --limit 20 --show-rows 5
 ```
 
-10. Verify the run after it starts or completes.
+11. Verify the run after it starts or completes.
 
 ```bash
 curl -k "https://127.0.0.1/api/deals?region=austin_tx&limit=5"

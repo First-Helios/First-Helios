@@ -39,7 +39,7 @@ The meal-deal system has three collectors feeding into a shared canonical ingest
 
 | Component | Targets | Schedule | Collector tag | `DealSignal.source` |
 |---|---|---|---|---|
-| **website_scraper** | Individual restaurant websites (non-chain) | Mon/Wed/Fri 2 AM | `website_scraper` | `website_scrape` |
+| **website_scraper** | First-party restaurant websites queued from `restaurant_urls` for active `food_full_service`, `fast_food`, and `bar_nightlife` employers | Mon/Wed/Fri 2 AM | `website_scraper` | `website_scrape` |
 | **chain_deals** | National chain deal pages (McDonald's, etc.) | Monday 6 AM | `chain_deals` | `chain_website` |
 | **gbp_offers** | Google Business Profile offer posts via SerpApi | Tue/Fri 3 AM | `gbp_offers` | `gbp_offer` |
 
@@ -112,7 +112,7 @@ Supporting services:
 
 ### Website Scraper (local restaurants)
 
-Scrapes non-chain first-party restaurant websites by probing common deal paths such as `/`, `/menu`, `/specials`, `/deals`, `/lunch`, `/happy-hour`, `/promotions`, and `/offers`, plus dynamically discovered same-domain pages and bounded locator-to-corporate hint routes.
+Scrapes first-party restaurant websites queued from `restaurant_urls` for active `food_full_service`, `fast_food`, and `bar_nightlife` employers by probing common deal paths such as `/`, `/menu`, `/specials`, `/deals`, `/lunch`, `/happy-hour`, `/promotions`, and `/offers`, plus dynamically discovered same-domain pages, structured menu URLs promoted from JSON-LD, and bounded locator-to-corporate hint routes.
 
 > **Note:** robots.txt is intentionally ignored — we are promoting restaurants' own deals to drive them traffic and customers. Rate limiting (1 req/sec) and the `skip-checked-days` default (3 days) keep server load minimal.
 
@@ -122,9 +122,10 @@ Recommended operator order before a broad live run:
 2. Apply migrations: `.venv/bin/alembic upgrade head`
 3. Run the pre-flight gate
 4. Run a 5-site dry-run canary
-5. Inspect the newest bundles before starting any wider scrape
-6. Prefer a replay-backed full pass before live crawling when cache coverage is already good
-7. Backfill menu tables and audit the Price Index path when menu structure is in scope
+5. Run a small targeted refresh when the change is discovery- or parser-only
+6. Inspect the newest bundles before starting any wider scrape
+7. Prefer a replay-backed full pass before live crawling when cache coverage is already good
+8. Backfill menu tables and audit the Price Index path when menu structure is in scope
 
 For the short version, use [MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md](MEAL_DEAL_SCRAPE_RESTART_CHECKLIST.md).
 
@@ -144,6 +145,9 @@ PYTHONPATH=. .venv/bin/python scripts/check_website_scrape_preflight.py --region
 
 # Dry-run canary
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --max-sites 5 --skip-checked-days 0 --dry-run --region austin_tx
+
+# Targeted refresh of under-covered sites before a broad live run
+PYTHONPATH=. .venv/bin/python scripts/refresh_targeted_sites.py --ids 18354 7047 26123 3570 3063
 
 # Dry run — see what would be found, no DB writes
 PYTHONPATH=. .venv/bin/python collectors/meal_deals/website_scraper.py --dry-run
@@ -706,6 +710,7 @@ alembic stamp head && alembic upgrade head
 3. If `total_blocks: 0` → page is JS-rendered, may need Playwright
 4. If `needs_pdf_reader: true` → deals are in PDF menu files
 5. If the site returns HTTP 403/503 → may need Playwright or manual entry via SpiritPool
+6. If discovered pages or sections increase but items stay at 0, discovery improved but extraction is still blocked by a price-less item list or JS-rendered menu. Treat that as `DOM-01` or `RENDER-01`, not a target-selection failure.
 
 ### Chain scraper returns empty for a specific chain
 

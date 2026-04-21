@@ -200,6 +200,17 @@ signals = scrape_restaurant_website(
 
 This lets you iterate on parsing logic without re-hitting the live site.
 
+## Optional: Targeted Live Refresh
+
+After replay validation, run a small live refresh when the change only affects discovery or extraction recall.
+
+```bash
+cd /home/fortune/CodeProjects/First-Helios
+PYTHONPATH=. .venv/bin/python scripts/refresh_targeted_sites.py --ids 18354 7047 26123 3570 3063
+```
+
+This utility snapshots current menu-table counts, runs `scrape_restaurant_website()` on each active URL, ingests any produced `DealSignal`s, and prints before/after deltas for pages, sections, items, and price points.
+
 ## Step 8: Compare Before And After
 
 After parser or discovery changes:

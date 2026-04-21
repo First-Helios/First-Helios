@@ -43,6 +43,8 @@ Three ingesters are used in priority order. The scraper tries JSON-LD first; if 
 | `ingest_dom_fallback` | Heading → nearest list/table item+price pairs | 0.55 | Fallback when JSON-LD yields nothing |
 | `ingest_pdf_tables` | pdfplumber-style cell tables | 0.75 | PDF menus |
 
+Current DOM limitation: `ingest_dom_fallback` only preserves item-price pairs. If a site exposes section headings and item names without reliable inline prices, replay bundles may show extra pages or sections but still no items or price points. That remains open DOM or renderer follow-up work, not a discovery failure.
+
 ### Service period tagging
 
 Section names are matched against rules to set `service_period`:

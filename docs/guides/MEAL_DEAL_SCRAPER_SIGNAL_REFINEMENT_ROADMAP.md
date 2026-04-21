@@ -49,6 +49,11 @@ This document covers the open website-scraper work after the already-completed p
   against `config/spiritpool_capture_manifest.json` (21 aggregator
   targets). First run: 0/21 covered, 19 `brand_onboarded_awaiting_capture`,
   2 `brand_not_onboarded` (Olive Garden, Red Lobster — see below).
+- [x] (2026-04-21) Raised website-scraper recall on under-covered menu
+  sites: discovery now promotes schema.org `Menu.url`, `MenuSection.url`,
+  and `Restaurant.hasMenu` targets, `_discover_pdf_links()` accepts
+  query-string menu PDFs, and a targeted 10-site refresh produced net
+  `delta items=+13` and `delta prices=+13` with 5 of 10 sites improving.
 - [ ] (Brand ingest, separate from scraper work) Olive Garden / Red Lobster
   and other Darden chains have zero `local_employers` rows in Austin
   because every active row has `source='overture'` and Darden brands are
@@ -175,13 +180,13 @@ These tasks still use heuristics, but they touch scraper behavior and require ca
 
 - `DISC-01` Expand `_discover_deal_pages` to score footer links, promotions clusters, learn-more clusters, and likely first-party promo slugs. Best agent: Tier 2. Complexity: medium. Targets the `discovery found candidates but no signal` bucket and the hidden-promo-page problem described in the audit instructions. Status: initial heuristic pass implemented locally for promo-card and footer-link patterns; more replay validation still warranted.
 - `DISC-02` Add locator-to-corporate promo hint routing for common chain patterns. Best agent: Tier 2. Complexity: medium. Deliverable: rules that recognize pages such as `locations.brand.com/...` and probe stable corporate promo pages when appropriate. This directly targets sites like Tropical Smoothie Cafe and Denny's where the location page itself is not the real promo source. Status: implemented locally for bounded locator subdomain patterns with recorded `hinted_pages`; replay validation for off-domain corporate hints still depends on syncing or capturing those corporate bundles.
-- `DISC-03` Add scoped sitemap and known-slug probing for first-party deal paths. Best agent: Tier 2. Complexity: medium. Deliverable: a narrow, first-party-only discovery layer for paths like `/promotions`, `/offers`, `/bogo-days`, `/happy-hour`, and sitemap-derived candidates. Guardrail: do not broaden into general crawling.
+- `DISC-03` Add scoped sitemap and known-slug probing for first-party deal paths. Best agent: Tier 2. Complexity: medium. Deliverable: a narrow, first-party-only discovery layer for paths like `/promotions`, `/offers`, `/bogo-days`, `/happy-hour`, and sitemap-derived candidates. Guardrail: do not broaden into general crawling. Status: partial. Structured menu URL promotion from JSON-LD `Menu.url`, `MenuSection.url`, and `Restaurant.hasMenu` references is implemented with focused tests; remaining work is bounded slug and sitemap probing.
 - `DISC-04` Add first-party scope enforcement and obvious wrong-target suppression in the scraper pipeline. Best agent: Tier 2. Complexity: medium. Deliverable: rules that reduce wasted work on social pages, unrelated domains, and clearly non-restaurant pages before extraction spends effort on them. Status: implemented locally for social, government, directory, and clearly unrelated families using the shared classifier.
 - `DOM-01` Improve `_extract_text_blocks` so heading, sibling, list, and table relationships survive extraction. Best agent: Tier 2. Complexity: medium. Targets the largest current bucket: `content seen but extraction failed`.
 - `NAME-01` Improve `_extract_deal_name` so it preserves the menu target or promo label instead of returning a sentence fragment. Best agent: Tier 2. Complexity: medium. Deliverable: replay-tested improvements that reduce description-like names without regressing short labels such as Happy Hour or Lunch Special.
 - `PRICE-01` Tighten `_extract_all_prices` so page-level baseline pricing excludes obvious modifiers, addons, and unrelated numbers. Best agent: Tier 2. Complexity: medium. This is not the full item-aware pricing problem; it is the bounded cleanup needed to make `menu_avg_price` less noisy.
-- `PDF-01` Improve `_discover_pdf_links` scoring and classify menu PDFs versus special-offer PDFs. Best agent: Tier 2. Complexity: medium. Deliverable: better PDF prioritization so the scraper spends its small PDF budget on the most relevant assets.
-- `TEST-02` Build replay regression tests for discovery and DOM extraction changes. Best agent: Tier 2. Complexity: medium. Deliverable: tests in `tests/HeliosDeployment/` that use synced bundles and lock in the intended before/after behavior.
+- `PDF-01` Improve `_discover_pdf_links` scoring and classify menu PDFs versus special-offer PDFs. Best agent: Tier 2. Complexity: medium. Deliverable: better PDF prioritization so the scraper spends its small PDF budget on the most relevant assets. Status: partial. Basic recall now includes query-string PDF URLs such as `menu.pdf?dm=...`; remaining work is scoring and menu-vs-special classification.
+- `TEST-02` Build replay regression tests for discovery and DOM extraction changes. Best agent: Tier 2. Complexity: medium. Deliverable: tests in `tests/HeliosDeployment/` that use synced bundles and lock in the intended before/after behavior. Status: partial. Discovery regressions now cover structured menu URL promotion and query-string PDF detection in `tests/HeliosDeployment/test_website_scrape_audit_tools.py`; broader replay-bundle coverage is still open.
 
 ## Tier 3 Tasks
 
