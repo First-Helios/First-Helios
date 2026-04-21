@@ -265,6 +265,42 @@ def test_discover_deal_pages_rejects_generic_learn_more_link_without_promo_conte
         assert discovered == []
 
 
+def test_discover_deal_pages_picks_beer_and_drink_menu_links():
+    html = """
+    <html><body>
+        <nav>
+            <a href="/beer">Beer</a>
+            <a href="/drinks">Drinks</a>
+        </nav>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    discovered = website_scraper_module._discover_deal_pages(soup, "https://example.com")
+
+    assert "https://example.com/beer" in discovered
+    assert "https://example.com/drinks" in discovered
+
+
+def test_discover_candidate_pages_allows_same_brand_subdomain_menu_host_for_low_coverage():
+    html = """
+    <html><body>
+        <section>
+            <a href="https://order.example.com/">Order Online</a>
+        </section>
+    </body></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    discovered = website_scraper_module._discover_candidate_pages(
+        soup,
+        "https://example.com",
+        allow_broad_menu_links=True,
+    )
+
+    assert "https://order.example.com/" in discovered
+
+
 def test_extract_jsonld_deals_uses_special_menu_context_and_inherited_price():
         html = """
         <html><body>

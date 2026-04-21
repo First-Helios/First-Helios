@@ -510,8 +510,15 @@ _DISCOVERY_CONTEXT_KEYWORDS = frozenset([
     "special", "specials", "deal", "deals", "offer", "offers",
     "promo", "promotion", "promotions", "happy hour", "coupon",
     "discount", "save", "limited time", "bogo", "buy one get one",
-    "lunch", "dinner", "daily", "weekly",
+    "lunch", "dinner", "daily", "weekly", "menu", "menus",
+    "food", "drink", "drinks", "beer", "wine", "cocktail", "cocktails",
 ])
+
+_BROAD_MENU_DISCOVERY_CONTEXT_KEYWORDS = frozenset(
+    set(_DISCOVERY_CONTEXT_KEYWORDS) | {
+        "order", "order online", "view menu", "beers on tap", "beer on tap",
+    }
+)
 
 _DISCOVERY_SOFT_LABELS = frozenset([
     "learn more",
@@ -578,6 +585,8 @@ MAX_PAGE_SIZE = 500_000  # 500KB
 
 # Request timeout
 REQUEST_TIMEOUT = 15
+
+_LOW_MENU_COVERAGE_THRESHOLD = 15
 
 
 _SCRAPE_AUDIT_PATH = CACHE_DIR / "website_scrape_audit.json"
@@ -2669,8 +2678,22 @@ def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
     Scores each link by URL path keywords and anchor text keywords.
     Returns up to 5 discovered URLs, excluding those already in DEAL_PATHS.
     """
+    return _discover_candidate_pages(soup, base_url, allow_broad_menu_links=False)
+
+
+def _discover_candidate_pages(
+    soup: BeautifulSoup,
+    base_url: str,
+    *,
+    allow_broad_menu_links: bool,
+) -> list[str]:
     parsed_base = urlparse(base_url)
     base_domain = parsed_base.netloc.lower()
+    context_keywords = (
+        _BROAD_MENU_DISCOVERY_CONTEXT_KEYWORDS
+        if allow_broad_menu_links
+        else _DISCOVERY_CONTEXT_KEYWORDS
+    )
 
     # Normalize hardcoded paths for dedup
     existing_paths = {p.rstrip("/").lower() for p in DEAL_PATHS}
@@ -2712,9 +2735,10 @@ def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
         full_url = urljoin(base_url, href)
         parsed = urlparse(full_url)
 
-        # Same-domain only
-        if parsed.netloc.lower() != base_domain:
+        # Same host by default; low-coverage follow-up may also probe same-brand subdomains.
+        if not _hosts_share_brand_domain(base_domain, parsed.netloc.lower()):
             continue
+        same_host = _normalized_discovery_host(parsed.netloc) == _normalized_discovery_host(base_domain)
 
         # Skip non-HTTP schemes (mailto:, tel:, javascript:)
         if parsed.scheme not in ("http", "https"):
@@ -2722,8 +2746,10 @@ def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
 
         path = parsed.path.rstrip("/").lower()
 
-        # Skip if it's already in our hardcoded paths
-        if path in existing_paths or path == "":
+        # Skip if it's already in our hardcoded paths on the same host.
+        if same_host and (path in existing_paths or path == ""):
+            continue
+        if not same_host and not allow_broad_menu_links and path == "":
             continue
 
         # Skip file downloads (except PDFs which are handled separately)
@@ -2741,11 +2767,14 @@ def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
             if keyword in path:
                 score += 2
 
+        if allow_broad_menu_links and not same_host:
+            score += 1
+
         context_text = _context_text(a_tag)
         anchor_text = a_tag.get_text(" ", strip=True).lower()
         has_soft_label = anchor_text in _DISCOVERY_SOFT_LABELS
 
-        for keyword in _DISCOVERY_CONTEXT_KEYWORDS:
+        for keyword in context_keywords:
             if keyword in anchor_text:
                 score += 2
             elif keyword in context_text:
@@ -2772,6 +2801,24 @@ def _discover_deal_pages(soup: BeautifulSoup, base_url: str) -> list[str]:
 
     # Return top 5 discovered pages
     return [url for _, url in deduped[:5]]
+
+
+def _normalized_discovery_host(host: str | None) -> str:
+    if not host:
+        return ""
+    return host.casefold().removeprefix("www.")
+
+
+def _hosts_share_brand_domain(base_host: str | None, candidate_host: str | None) -> bool:
+    normalized_base = _normalized_discovery_host(base_host)
+    normalized_candidate = _normalized_discovery_host(candidate_host)
+    if not normalized_base or not normalized_candidate:
+        return False
+    return (
+        normalized_candidate == normalized_base
+        or normalized_candidate.endswith(f".{normalized_base}")
+        or normalized_base.endswith(f".{normalized_candidate}")
+    )
 
 
 def _discover_pdf_links(soup: BeautifulSoup, base_url: str) -> list[str]:
@@ -4051,6 +4098,75 @@ def scrape_restaurant_website(
                 html,
                 page_url=disc_url,
                 fetch_type=discovered_page_sources.get(disc_url, "discovered"),
+                restaurant_name=restaurant_name,
+                local_employer_id=local_employer_id,
+                brand_group_id=brand_group_id,
+                region=region,
+                seen_deals=seen_deals,
+                sidecar=sidecar,
+            )
+            signals.extend(page_signals)
+            all_menu_prices.extend(page_prices)
+            all_pdf_links.extend(page_pdf_links)
+            render_decisions.append(_evaluate_render_decision(
+                page_url=disc_url,
+                page_signals=page_signals,
+                sections_delta=len(sidecar.sections) - sections_before,
+                items_delta=len(sidecar.items) - items_before,
+                price_points_delta=len(sidecar.price_points) - pp_before,
+                budget=render_budget,
+            ))
+
+            if not replay_debug_cache:
+                time.sleep(1.0)
+
+    # --- Phase 2c: Low-coverage menu recovery ---
+    if (
+        homepage_soup
+        and pages_fetched < MAX_PAGES_PER_SITE
+        and (
+            len(sidecar.items) < _LOW_MENU_COVERAGE_THRESHOLD
+            or len(sidecar.price_points) < _LOW_MENU_COVERAGE_THRESHOLD
+        )
+    ):
+        low_coverage_pages: list[str] = []
+        for disc_url in _discover_candidate_pages(
+            homepage_soup,
+            base_url,
+            allow_broad_menu_links=True,
+        ):
+            normalized = disc_url.rstrip("/")
+            if normalized in fetched_page_urls or normalized in discovered_page_seen:
+                continue
+            discovered_page_seen.add(normalized)
+            discovered_pages.append(disc_url)
+            discovered_page_sources[disc_url] = "low_coverage_menu"
+            low_coverage_pages.append(disc_url)
+
+        for disc_url in low_coverage_pages:
+            if pages_fetched >= MAX_PAGES_PER_SITE:
+                break
+
+            html = _get_replay_page(debug_bundle, disc_url) if replay_debug_cache else _fetch_page(disc_url, user_agent)
+            if not html:
+                continue
+            fetched_page_urls.add(disc_url.rstrip("/"))
+            if not replay_debug_cache and debug_bundle is not None:
+                _record_debug_page(
+                    debug_bundle,
+                    disc_url,
+                    html=html,
+                    fetch_type="low_coverage_menu",
+                )
+
+            pages_fetched += 1
+            sections_before = len(sidecar.sections)
+            items_before = len(sidecar.items)
+            pp_before = len(sidecar.price_points)
+            _soup, page_signals, page_prices, page_pdf_links = _extract_page_artifacts(
+                html,
+                page_url=disc_url,
+                fetch_type="low_coverage_menu",
                 restaurant_name=restaurant_name,
                 local_employer_id=local_employer_id,
                 brand_group_id=brand_group_id,

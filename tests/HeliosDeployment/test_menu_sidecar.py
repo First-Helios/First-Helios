@@ -136,6 +136,62 @@ def test_dom_fallback_pairs_heading_with_item_list():
     assert all(s.name == "Lunch Specials" for s in sidecar.sections.values())
 
 
+def test_dom_fallback_extracts_card_rows_with_trailing_bare_prices():
+        html = """
+        <html><body>
+            <h2>Kids</h2>
+            <div class="menu-grid">
+                <div class="menu-item">
+                    <p>KIDS BOL</p>
+                    <p>Black Beans, White Rice, Avocado, Sweet Potato, Queso Monterey</p>
+                    <div>Add Agave-Lime Chicken $4</div>
+                    <div>8</div>
+                </div>
+                <div class="menu-item">
+                    <p>KIDS CHEESE QUESADILLA</p>
+                    <p>Cheese, Flour Tortilla</p>
+                    <div>Add Agave-Lime Chicken $4</div>
+                    <div>6</div>
+                </div>
+            </div>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        sidecar = MenuSidecar()
+        ingest_dom_fallback(soup, page_url="https://example.com/menu", sidecar=sidecar)
+
+        assert {item.name for item in sidecar.items.values()} == {"KIDS BOL", "KIDS CHEESE QUESADILLA"}
+        assert sorted(pp.price for pp in sidecar.price_points.values()) == [6.0, 8.0]
+
+
+def test_dom_fallback_prefers_nested_card_with_final_main_price():
+        html = """
+        <html><body>
+            <h2>Shareables</h2>
+            <section>
+                <div class="menu-item">
+                    <div class="flex flex-col items-start gap-2">
+                        <div>Beer Mates</div>
+                        <div>Garlic bread covered in PHP cheese, with choice of dipping sauce.</div>
+                        <div>No Cheese $5.50</div>
+                    </div>
+                    <div>$ 7.00</div>
+                </div>
+            </section>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        sidecar = MenuSidecar()
+        ingest_dom_fallback(soup, page_url="https://example.com/menu", sidecar=sidecar)
+
+        items = list(sidecar.items.values())
+        assert len(items) == 1
+        assert items[0].name == "Beer Mates"
+        prices = list(sidecar.price_points.values())
+        assert len(prices) == 1
+        assert prices[0].price == 7.0
+
+
 def test_jsonld_ingest_extracts_inline_dietary_tags_and_variant_descriptions():
     payload = {
         "@context": "https://schema.org",

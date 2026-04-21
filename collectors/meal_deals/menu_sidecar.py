@@ -71,10 +71,16 @@ _JSONLD_SCRIPT_RE = re.compile(
 # Compact DOM price pattern — kept local so this module has no circular
 # dependency on website_scraper.
 _DOM_PRICE_RE = re.compile(r"\$\s*(\d{1,3}(?:\.\d{1,2})?)")
+_DOM_TRAILING_PRICE_RE = re.compile(r"(?<![\w$])(\d{1,3}(?:\.\d{1,2})?)(?=\s*$)")
+_DOM_ROW_TAGS = ("li", "tr", "article", "div", "section")
 
 # Modifier patterns in DOM text ("add avocado +$2", "extra protein $3").
 _DOM_MODIFIER_RE = re.compile(
     r"(?:\b(?:add|extra|upgrade|substitute|sub)\b[^$]{0,30})(\+?\$\s*\d{1,3}(?:\.\d{1,2})?)",
+    re.IGNORECASE,
+)
+_DOM_MODIFIER_NAME_RE = re.compile(
+    r"^(?:add|extra|upgrade|substitute|sub|no|without|choice\s+of|choose)\b",
     re.IGNORECASE,
 )
 _INLINE_DIETARY_BLOCK_RE = re.compile(
@@ -960,7 +966,7 @@ def ingest_jsonld_from_html(html: str, *, page_url: str, sidecar: MenuSidecar) -
 
 _MENU_HEADING_TAGS = ("h1", "h2", "h3", "h4")
 _MENU_HEADING_HINT_RE = re.compile(
-    r"\b(menu|appetizer|entr[eé]e|starter|special|dessert|drink|cocktail|happy\s*hour|lunch|dinner|brunch|side|kids)",
+    r"\b(menu|appetizer|entr[eé]e|starter|shareable|snack|special|dessert|drink|cocktail|beer|wine|salad|pizza|burger|sandwich|taco|happy\s*hour|lunch|dinner|brunch|side|kids)",
     re.IGNORECASE,
 )
 
@@ -1061,7 +1067,7 @@ def _next_items_container(heading: Tag) -> Tag | None:
     while sibling is not None and hops < 4:
         if isinstance(sibling, Tag):
             if sibling.name in ("ul", "ol", "table", "div", "section"):
-                if sibling.find(["li", "tr"]) is not None:
+                if _container_has_candidate_rows(sibling):
                     return sibling
         sibling = sibling.find_next_sibling()
         hops += 1
@@ -1071,29 +1077,121 @@ def _next_items_container(heading: Tag) -> Tag | None:
 def _extract_pairs_from_container(container: Tag, *, section_name: str | None = None) -> list[tuple[str, float, str, str | None]]:
     """Pull (name, price, evidence, variant) tuples from li/tr rows in the container."""
     pairs: list[tuple[str, float, str, str | None]] = []
-    rows = container.find_all(["li", "tr"])
-    for row in rows:
-        text = row.get_text(" ", strip=True)
-        if not text or len(text) < 4 or len(text) > 250:
+    best_rows: dict[tuple[str, str | None], dict[str, Any]] = {}
+    for row_index, row in enumerate(_candidate_dom_rows(container)):
+        text = _normalized_dom_text(row)
+        if not text or _PROMOTIONAL_DOM_ROW_RE.search(text):
             continue
-        if _PROMOTIONAL_DOM_ROW_RE.search(text):
+        price_info = _extract_dom_price(text)
+        if price_info is None:
             continue
-        price_match = _DOM_PRICE_RE.search(text)
-        if not price_match:
-            continue
-        price = _parse_price(price_match.group(0))
+        price, price_count = price_info
         if price is None or price <= 0 or price > 500:
             continue
-        name = _DOM_PRICE_RE.sub("", text).strip(" -–—.·•\t")
+        if price_count > 3:
+            continue
+
+        name = _extract_dom_row_name(row, text=text, section_name=section_name)
         if not name or len(name) < 2 or len(name) > 120:
             continue
+
         variant = _normalize_variant_label(name)
         if variant and section_name and section_name not in {"(unnamed)", "(unsectioned)"}:
             name = section_name
-        pairs.append((name, price, text, variant))
+
+        dedupe_key = (name.casefold(), variant)
+        candidate = {
+            "name": name,
+            "price": price,
+            "text": text,
+            "variant": variant,
+            "row_index": row_index,
+            "score": (price_count, len(text)),
+        }
+        existing = best_rows.get(dedupe_key)
+        if existing is None or candidate["score"] > existing["score"]:
+            best_rows[dedupe_key] = candidate
+
+    for candidate in sorted(best_rows.values(), key=lambda row: row["row_index"]):
+        pairs.append((candidate["name"], candidate["price"], candidate["text"], candidate["variant"]))
         if len(pairs) >= 40:
             break
     return pairs
+
+
+def _container_has_candidate_rows(container: Tag) -> bool:
+    if container.find(["li", "tr"]) is not None:
+        return True
+    for row in _candidate_dom_rows(container):
+        text = _normalized_dom_text(row)
+        if text and _extract_dom_price(text) is not None and not _PROMOTIONAL_DOM_ROW_RE.search(text):
+            return True
+    return False
+
+
+def _candidate_dom_rows(container: Tag) -> list[Tag]:
+    candidates: list[Tag] = []
+    for row in container.find_all(_DOM_ROW_TAGS):
+        if row is container:
+            continue
+        text = _normalized_dom_text(row)
+        if not text or len(text) < 4 or len(text) > 260:
+            continue
+        if _extract_dom_price(text) is None:
+            continue
+        candidates.append(row)
+    return candidates
+
+
+def _normalized_dom_text(tag: Tag) -> str:
+    return re.sub(r"\s+", " ", tag.get_text(" ", strip=True)).strip()
+
+
+def _extract_dom_price(text: str) -> tuple[float, int] | None:
+    matches: list[tuple[int, int, float]] = []
+    for match in _DOM_PRICE_RE.finditer(text):
+        price = _parse_price(match.group(0))
+        if price is not None:
+            matches.append((match.start(), match.end(), price))
+
+    trailing = _DOM_TRAILING_PRICE_RE.search(text)
+    if trailing is not None:
+        trailing_price = _parse_price(trailing.group(1))
+        if trailing_price is not None:
+            if not matches or trailing.start(1) >= matches[-1][1]:
+                matches.append((trailing.start(1), trailing.end(1), trailing_price))
+
+    if not matches:
+        return None
+
+    _start, _end, price = matches[-1]
+    return price, len(matches)
+
+
+def _extract_dom_row_name(row: Tag, *, text: str, section_name: str | None) -> str | None:
+    for fragment in row.stripped_strings:
+        candidate = re.sub(r"\s+", " ", fragment).strip(" -–—.·•\t")
+        if not candidate:
+            continue
+        if len(candidate) > 120:
+            continue
+        if _extract_dom_price(candidate) is not None:
+            continue
+        if _DOM_MODIFIER_RE.search(candidate) or _DOM_MODIFIER_NAME_RE.search(candidate):
+            continue
+        if section_name and candidate.casefold() == section_name.casefold():
+            continue
+        if not re.search(r"[A-Za-z]", candidate):
+            continue
+        return candidate
+
+    cleaned = _DOM_PRICE_RE.sub(" ", text)
+    cleaned = _DOM_TRAILING_PRICE_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\badd\b.*$", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -–—.·•\t")
+    if cleaned and re.search(r"[A-Za-z]", cleaned) and not _DOM_MODIFIER_NAME_RE.search(cleaned):
+        return cleaned[:120]
+    return None
 
 
 # ── PDF table ingest (PDF-02) ───────────────────────────────────────────────

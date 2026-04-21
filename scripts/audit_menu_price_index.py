@@ -40,6 +40,7 @@ _ZERO_PRICE_ALLOWLIST_RE = re.compile(
     r"\b(?:water|cup\s+of\s+water|napkin|napkins|utensils?|cutlery|fork|spoon|knife|plate|plates|straw|condiments?)\b",
     re.IGNORECASE,
 )
+_LOW_MENU_COVERAGE_THRESHOLD = 15
 
 
 def _parse_args() -> argparse.Namespace:
@@ -49,6 +50,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=25, help="Number of stores to print")
     parser.add_argument("--show-rows", type=int, default=5, help="Detailed anomaly rows to show per store")
     parser.add_argument("--min-rows", type=int, default=1, help="Minimum persisted price-point rows per store")
+    parser.add_argument(
+        "--low-item-threshold",
+        type=int,
+        default=_LOW_MENU_COVERAGE_THRESHOLD,
+        help="Treat stores with fewer than this many items or price rows as low coverage",
+    )
     parser.add_argument("--include-clean", action="store_true", help="Include stores with zero detected anomalies")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text")
     return parser.parse_args()
@@ -97,7 +104,9 @@ def _bundle_scale_issue(prices: list[float]) -> bool:
 
 def _severity(bucket: dict[str, Any]) -> int:
     return (
-        bucket["zero_suspect_count"] * 100
+        bucket["low_item_store"] * 40
+        + bucket["low_row_store"] * 40
+        + bucket["zero_suspect_count"] * 100
         + bucket["subunit_count"] * 10
         + bucket["unnamed_section_count"] * 4
         + bucket["size_name_count"] * 4
@@ -135,7 +144,7 @@ def _query_rows(region: str, store_filter: str | None):
         session.close()
 
 
-def _build_report(rows, *, min_rows: int, include_clean: bool) -> dict[str, Any]:
+def _build_report(rows, *, min_rows: int, include_clean: bool, low_item_threshold: int) -> dict[str, Any]:
     stores: dict[tuple[int, str], dict[str, Any]] = {}
     bundle_prices: dict[str, list[float]] = defaultdict(list)
     bundle_meta: dict[str, dict[str, Any]] = defaultdict(lambda: {"stores": set(), "urls": set()})
@@ -209,10 +218,23 @@ def _build_report(rows, *, min_rows: int, include_clean: bool) -> dict[str, Any]
         if bucket["row_count"] < min_rows:
             continue
         bucket["item_count"] = len(bucket.pop("item_ids"))
+        bucket["low_item_store"] = int(bucket["item_count"] < low_item_threshold)
+        bucket["low_row_store"] = int(bucket["row_count"] < low_item_threshold)
         prices = bucket.pop("prices")
         bucket["min_price"] = round(min(prices), 2) if prices else None
         bucket["median_price"] = _safe_median(prices)
         bucket["max_price"] = round(max(prices), 2) if prices else None
+        if (bucket["low_item_store"] or bucket["low_row_store"]) and len(bucket["sample_rows"]) < 20:
+            bucket["sample_rows"].insert(0, {
+                "reason": "low_menu_coverage",
+                "item_name": None,
+                "price": None,
+                "section_name": None,
+                "variant": None,
+                "evidence": f"items={bucket['item_count']} rows={bucket['row_count']} threshold={low_item_threshold}",
+                "source_bundle": None,
+                "page_url": None,
+            })
         bucket["severity_score"] = _severity(bucket)
         if include_clean or bucket["severity_score"] > 0:
             store_rows.append(bucket)
@@ -253,6 +275,8 @@ def _build_report(rows, *, min_rows: int, include_clean: bool) -> dict[str, Any]
         "unnamed_section_rows": sum(row["unnamed_section_count"] for row in store_rows),
         "size_name_rows": sum(row["size_name_count"] for row in store_rows),
         "promo_rows": sum(row["promo_row_count"] for row in store_rows),
+        "low_item_stores": sum(row["low_item_store"] for row in store_rows),
+        "low_row_stores": sum(row["low_row_store"] for row in store_rows),
         "bundle_scale_suspects": len(bundle_rows),
     }
     return {
@@ -276,6 +300,8 @@ def _print_text(report: dict[str, Any], *, limit: int, show_rows: int) -> None:
                 str(row["restaurant_id"]),
                 f"rows={row['row_count']}",
                 f"items={row['item_count']}",
+                f"low_items={row['low_item_store']}",
+                f"low_rows={row['low_row_store']}",
                 f"zero={row['zero_suspect_count']}",
                 f"subunit={row['subunit_count']}",
                 f"unnamed={row['unnamed_section_count']}",
@@ -320,7 +346,12 @@ def _print_text(report: dict[str, Any], *, limit: int, show_rows: int) -> None:
 def main() -> int:
     args = _parse_args()
     rows = _query_rows(args.region, args.store)
-    report = _build_report(rows, min_rows=args.min_rows, include_clean=args.include_clean)
+    report = _build_report(
+        rows,
+        min_rows=args.min_rows,
+        include_clean=args.include_clean,
+        low_item_threshold=args.low_item_threshold,
+    )
 
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
