@@ -1,3 +1,31 @@
+# Helios V2
+
+A trustworthy, queryable map of real food deals in Austin — rebuilt from scratch with professional rigor.
+
+**Status:** planning / Phase 0. No feature code yet.
+
+## Start here
+
+- [ROADMAP.md](./ROADMAP.md) — what we're building, in what order, and why.
+- [LEARNING_GUIDE.md](./LEARNING_GUIDE.md) — the twelve-module course that runs alongside the build.
+
+## Day 1
+
+See the [Day-1 Kickoff Checklist](./ROADMAP.md#7-day-1-kickoff-checklist) in the roadmap.
+
+## V1 archive
+
+All legacy V1 code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. `main` is reserved for V2.
+
+```bash
+# browse V1 code without affecting your V2 working copy
+git fetch origin V1-Graveyard
+git worktree add ../helios-v1 V1-Graveyard
+```
+
+## License
+
+TBD (add in Phase 0).
 # First-Helios
 
 A broad-scope data intelligence platform for Austin, TX — ingesting, documenting, and serving structured data across jobs, events, businesses, wages, economic indicators, and career mobility into dashboards people actually use.
