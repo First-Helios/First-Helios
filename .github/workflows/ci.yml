@@ -44,8 +44,8 @@ jobs:
       - run: uv sync --frozen
 
 
-      - name: Mypy non-strict on apps/
-        run: uv run mypy apps/
+      - name: Run mypy
+        run: uv run mypy .
 
   test:
     name: Tests
