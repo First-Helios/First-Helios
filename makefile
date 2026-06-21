@@ -11,7 +11,7 @@ typecheck:
 	uv run mypy .
 
 test:
-	uv run pytest --cov=packages --cov=apps --cov-report=term-missing
+	uv run pytest --cov=. --cov-report=term-missing
 
 # Run everything CI runs, in order
 ci: lint typecheck test
