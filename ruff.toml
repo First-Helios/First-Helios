@@ -1,0 +1,37 @@
+# General settings
+line-length = 100
+target-version = "py312"
+extend-exclude = ["alembic/versions"]  # auto-generated migrations
+
+[lint]
+# Curated rule set: explicit and intentional
+select = [
+    "F",     # Pyflakes — unused imports, undefined names
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "I",     # isort — import ordering
+    "B",     # flake8-bugbear — likely bugs
+    "UP",    # pyupgrade — modernize syntax
+    "SIM",   # flake8-simplify
+    "C4",   # better comprehensions
+    "PTH",   # prefer pathlib over os.path
+    "RET",   # return-statement hygiene
+    "TCH",    # TYPE_CHECKING imports
+    "ICN",   # standard import names (np, pd, etc.)
+    "TID",   # tidy imports
+    "FA",    # require `from __future__ import annotations` where useful
+]
+ignore = [
+    "E501",  # line-too-long — formatter handles this
+    "B008",  # function calls in default args — FastAPI's Depends() needs this
+]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]              # re-exports look like unused imports
+"tests/**/*.py" = ["S101", "PLR2004"] # asserts and magic numbers fine in tests
+"apps/scraper/chains/*.py" = ["E501"] # selectors get long; readability over wrap
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false  # respect trailing commas — they're intentional
