@@ -8,8 +8,7 @@ lint:
 	uv run pre-commit run --all-files
 
 typecheck:
-	uv run mypy packages/
-	uv run mypy apps/
+	uv run mypy .
 
 test:
 	uv run pytest --cov=packages --cov=apps --cov-report=term-missing
