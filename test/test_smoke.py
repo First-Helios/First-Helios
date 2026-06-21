@@ -1,2 +1,2 @@
-def smoketest():
-    assert 1+1 == 2
+def smoketest() -> None:
+    assert 1 + 1 == 2

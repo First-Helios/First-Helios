@@ -155,11 +155,11 @@ First-Helios/
 │   ├── event_sources.yaml       # Event source catalog (6 live, 14 future)
 │   └── search_rotation.yaml     # 20-entry industry rotation for SerpAPI + Jobicy
 │
- 
+
 │
 ├── scripts/                     # One-time data population scripts
 ├── notebooks/                   # Exploration notebooks
- 
+
 ```
 
 ---
