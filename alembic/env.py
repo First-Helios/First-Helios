@@ -48,8 +48,8 @@ def include_object(
     autogenerate would otherwise emit DROP statements for all of them. Ignoring
     any reflected table not in our metadata keeps migrations scoped to Helios.
     """
-    is_unmanaged_table = type_ == "table" and reflected and name not in target_metadata.tables
-    return not is_unmanaged_table
+    is_unmanaged_reflected_object = reflected and compare_to is None
+    return not is_unmanaged_reflected_object
 
 
 def run_migrations_offline() -> None:
