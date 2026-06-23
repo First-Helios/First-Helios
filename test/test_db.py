@@ -52,9 +52,11 @@ def session() -> Iterator[Session]:
     global _migrations_applied
     if not _migrations_applied:
         try:
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             subprocess.run(
-                ["alembic", "upgrade", "head"],
+                ["alembic", "-c", os.path.join(repo_root, "alembic.ini"), "upgrade", "head"],
                 check=True,
+                cwd=repo_root,
                 env={**os.environ, "DATABASE_URL": _DATABASE_URL},
             )
         except Exception:
