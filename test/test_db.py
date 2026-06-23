@@ -8,13 +8,13 @@ never leaves rows behind or drops the migrated schema of a dev database.
 """
 
 import os
+import subprocess
 from collections.abc import Iterator
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from packages.helios_core.db.base import Base
 from packages.helios_core.db.models import Venue
 
 _DATABASE_URL = os.environ.get(
@@ -36,10 +36,13 @@ def session() -> Iterator[Session]:
         engine.dispose()
         pytest.skip(f"database unreachable: {exc}")
 
-    # Ensure the schema exists (no-op against a migrated dev DB; creates the
-    # tables on CI's empty database). Committed so it survives the rollback.
-    Base.metadata.create_all(connection)
-    connection.commit()
+    # Apply all Alembic migrations so the test exercises the real migration
+    # path and CI will catch broken or missing migrations.
+    subprocess.run(
+        ["alembic", "upgrade", "head"],
+        check=True,
+        env={**os.environ, "DATABASE_URL": _DATABASE_URL},
+    )
 
     outer = connection.begin()
     sess = Session(bind=connection, join_transaction_mode="create_savepoint")
