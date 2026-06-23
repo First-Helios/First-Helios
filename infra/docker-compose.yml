@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgis/postgis:16-3.4
-    container_name: helios-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-helios}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helios}
