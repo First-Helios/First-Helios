@@ -40,7 +40,7 @@ _migrations_applied = False
 
 @pytest.fixture
 def session() -> Iterator[Session]:
-    engine = create_engine(_DATABASE_URL, future=True)
+    engine = create_engine(_DATABASE_URL)
     try:
         connection = engine.connect()
     except Exception as exc:  # pragma: no cover - environment dependent
