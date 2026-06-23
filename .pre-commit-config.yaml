@@ -25,14 +25,18 @@ repos:
         args: ["--fix"]
       - id: ruff-format
 
-  # mypy — type-check all Python source files
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+  # mypy — type-check via the project environment so the hook sees the same
+  # installed deps (alembic, pytest, sqlalchemy, ...) and config as CI's
+  # `uv run mypy .`, instead of an isolated env that drifts out of sync.
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - sqlalchemy>=2.0
-          - pydantic>=2.0
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: ["."]
 
   # Conventional Commits — verify commit message format
   - repo: https://github.com/compilerla/conventional-pre-commit
