@@ -27,6 +27,8 @@ if _DATABASE_URL.startswith("postgresql://"):
 elif _DATABASE_URL.startswith("postgres://"):
     _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
+_migrations_applied = False
+
 
 @pytest.fixture
 def session() -> Iterator[Session]:
@@ -39,11 +41,19 @@ def session() -> Iterator[Session]:
 
     # Apply all Alembic migrations so the test exercises the real migration
     # path and CI will catch broken or missing migrations.
-    subprocess.run(
-        ["alembic", "upgrade", "head"],
-        check=True,
-        env={**os.environ, "DATABASE_URL": _DATABASE_URL},
-    )
+    global _migrations_applied
+    if not _migrations_applied:
+        try:
+            subprocess.run(
+                ["alembic", "upgrade", "head"],
+                check=True,
+                env={**os.environ, "DATABASE_URL": _DATABASE_URL},
+            )
+        except Exception:
+            connection.close()
+            engine.dispose()
+            raise
+        _migrations_applied = True
 
     outer = connection.begin()
     sess = Session(bind=connection, join_transaction_mode="create_savepoint")
