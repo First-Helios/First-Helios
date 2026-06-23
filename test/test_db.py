@@ -10,6 +10,7 @@ never leaves rows behind or drops the migrated schema of a dev database.
 import os
 import subprocess
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
@@ -36,6 +37,8 @@ if not (_db_name.endswith("_test") or os.environ.get("HELIOS_ALLOW_NONTEST_DB") 
     )
 
 _migrations_applied = False
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_ALEMBIC_INI = _REPO_ROOT / "alembic.ini"
 
 
 @pytest.fixture
@@ -52,11 +55,10 @@ def session() -> Iterator[Session]:
     global _migrations_applied
     if not _migrations_applied:
         try:
-            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             subprocess.run(
-                ["alembic", "-c", os.path.join(repo_root, "alembic.ini"), "upgrade", "head"],
+                ["alembic", "-c", str(_ALEMBIC_INI), "upgrade", "head"],
                 check=True,
-                cwd=repo_root,
+                cwd=_REPO_ROOT,
                 env={**os.environ, "DATABASE_URL": _DATABASE_URL},
             )
         except Exception:
