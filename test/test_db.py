@@ -17,16 +17,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from packages.helios_core.db.models import Venue
+from packages.helios_core.db.url import normalize_database_url
 
 _DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql+psycopg://helios:helios@localhost:5432/helios"
 )
-# CI passes a bare postgresql:// URL; pin the psycopg (v3) driver explicitly
-# since psycopg2 is not installed.
-if _DATABASE_URL.startswith("postgresql://"):
-    _DATABASE_URL = _DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-elif _DATABASE_URL.startswith("postgres://"):
-    _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+_DATABASE_URL = normalize_database_url(_DATABASE_URL)
 
 _db_name = _DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
 if not (_db_name.endswith("_test") or os.environ.get("HELIOS_ALLOW_NONTEST_DB") == "1"):

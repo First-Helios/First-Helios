@@ -6,6 +6,8 @@ from sqlalchemy.schema import SchemaItem
 
 from alembic import context
 
+from packages.helios_core.db.url import normalize_database_url
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -14,11 +16,7 @@ config = context.config
 # migrations target the same database as the app (CI, docker, future hosts).
 _database_url = os.environ.get("DATABASE_URL")
 if _database_url:
-    # CI may provide a bare postgresql:// URL; pin the psycopg (v3) driver explicitly.
-    if _database_url.startswith("postgresql://"):
-        _database_url = _database_url.replace("postgresql://", "postgresql+psycopg://", 1)
-    elif _database_url.startswith("postgres://"):
-        _database_url = _database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    _database_url = normalize_database_url(_database_url)
     config.set_main_option("sqlalchemy.url", _database_url)
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
