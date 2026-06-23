@@ -21,4 +21,4 @@ elif DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
 engine = create_engine(DATABASE_URL, echo=False, future=True)
-SessionLocal: sessionmaker[Session] = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+SessionLocal: sessionmaker[Session] = sessionmaker(bind=engine, autoflush=False)
