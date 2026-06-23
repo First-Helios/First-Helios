@@ -27,6 +27,14 @@ if _DATABASE_URL.startswith("postgresql://"):
 elif _DATABASE_URL.startswith("postgres://"):
     _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
+_db_name = _DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
+if not (_db_name.endswith("_test") or os.environ.get("HELIOS_ALLOW_NONTEST_DB") == "1"):
+    pytest.skip(
+        "Refusing to run DB tests against a non-test database. "
+        "Use a *_test DB name or set HELIOS_ALLOW_NONTEST_DB=1.",
+        allow_module_level=True,
+    )
+
 _migrations_applied = False
 
 
