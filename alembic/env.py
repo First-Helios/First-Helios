@@ -14,8 +14,12 @@ config = context.config
 # migrations target the same database as the app (CI, docker, future hosts).
 _database_url = os.environ.get("DATABASE_URL")
 if _database_url:
+    # CI may provide a bare postgresql:// URL; pin the psycopg (v3) driver explicitly.
+    if _database_url.startswith("postgresql://"):
+        _database_url = _database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif _database_url.startswith("postgres://"):
+        _database_url = _database_url.replace("postgres://", "postgresql+psycopg://", 1)
     config.set_main_option("sqlalchemy.url", _database_url)
-
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
