@@ -32,6 +32,7 @@ def session() -> Iterator[Session]:
     try:
         connection = engine.connect()
     except Exception as exc:  # pragma: no cover - environment dependent
+        engine.dispose()
         pytest.skip(f"database unreachable: {exc}")
 
     # Ensure the schema exists (no-op against a migrated dev DB; creates the
