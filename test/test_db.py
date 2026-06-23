@@ -1,8 +1,8 @@
 """Database-backed tests for the ORM models.
 
 These exercise the Postgres service that CI spins up. If no database is
-reachable (e.g. a bare local checkout), the tests skip rather than fail.
-
+reachable (or the DB name doesn't end with `_test`, unless
+`HELIOS_ALLOW_NONTEST_DB=1`), the tests skip rather than fail.
 Each test runs inside a transaction that is rolled back on teardown, so it
 never leaves rows behind or drops the migrated schema of a dev database.
 """
