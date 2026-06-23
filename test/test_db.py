@@ -24,7 +24,8 @@ _DATABASE_URL = os.environ.get(
 # since psycopg2 is not installed.
 if _DATABASE_URL.startswith("postgresql://"):
     _DATABASE_URL = _DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-
+elif _DATABASE_URL.startswith("postgres://"):
+    _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
 @pytest.fixture
 def session() -> Iterator[Session]:
