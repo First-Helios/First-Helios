@@ -28,6 +28,7 @@ ignore = [
 
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]              # re-exports look like unused imports
+"alembic/env.py" = ["E402"]           # alembic template imports models after config setup
 "test/**/*.py" = ["S101", "PLR2004"] # asserts and magic numbers fine in tests
 "apps/scraper/chains/*.py" = ["E501"] # selectors get long; readability over wrap
 
