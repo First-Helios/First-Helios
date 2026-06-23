@@ -36,7 +36,7 @@ target_metadata = Base.metadata
 
 
 def include_object(
-    object: SchemaItem,  # noqa: A002
+    _schema_item: SchemaItem,
     name: str | None,
     type_: str,
     reflected: bool,
