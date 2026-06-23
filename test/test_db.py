@@ -91,6 +91,6 @@ def test_venue_round_trip(session: Session) -> None:
     assert venue.created_at is not None
     assert venue.updated_at is not None
 
-    fetched = session.query(Venue).filter_by(name="Torchy's Tacos").one()
+    fetched = session.execute(select(Venue).filter_by(name="Torchy's Tacos")).scalar_one()
     assert fetched.address is not None
     assert fetched.address.endswith("Austin, TX 78704")
