@@ -27,6 +27,7 @@ if _DATABASE_URL.startswith("postgresql://"):
 elif _DATABASE_URL.startswith("postgres://"):
     _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
+
 @pytest.fixture
 def session() -> Iterator[Session]:
     engine = create_engine(_DATABASE_URL, future=True)
