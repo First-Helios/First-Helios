@@ -1,13 +1,41 @@
 # Helios V2 — Learning Guide
 
-> **Purpose.** A twelve-module course that takes you from "knows basics, shipped a hacky V1" to "can build Helios V2 with the rigor of a paid engineer." Each module ends in a **capstone PR** against this repository — study becomes commits, and commits advance the [Roadmap](./ROADMAP.md).
+> **Purpose.** A twelve-module course covering the skills Helios V2 is built on.
 >
-> **How to use this guide.**
+> ### ⚠️ This guide's role changed (2026-07-29)
 >
-> 1. Work the modules in order — later modules assume earlier ones.
-> 2. Give each module 1–2 weeks part-time; don't rush.
-> 3. For every module: read the "Why", hit the curated resources, do the exercises in a **scratchpad repo**, then ship the capstone as a PR here.
-> 4. Before moving on, answer the self-check rubric from memory. If you can't, you haven't learned it — re-read or ask.
+> It was written as a *build* course: you learn a module, then hand-write its
+> capstone PR. The V2 implementation is now
+> [agent-driven](./ROADMAP.md#60-the-agenthuman-split), so that premise no
+> longer holds — you can't learn SQLAlchemy by reviewing an agent's
+> SQLAlchemy.
+>
+> **It is now the reviewer's curriculum.** Same content, different job: read
+> the module *before reviewing* the phase it maps to, so you can judge the
+> work rather than just merge it. You are the human in the loop; this is what
+> makes that role real rather than ceremonial.
+>
+> The **capstone PRs are now optional** — genuinely useful if you want to
+> keep your hands in the code, but no longer gating any roadmap phase.
+> Treat the **self-check rubrics as the actual bar**: if you can't answer
+> them, you can't meaningfully review that phase's PRs.
+>
+> **Which module for which phase:**
+>
+> | Read before reviewing | Modules |
+> |---|---|
+> | Phase 1 — Domain Model & Migrations | M5, M6 |
+> | Phase 2 — First Light (API + staging) | M11, M12 |
+> | Phase 3 — Parsing Library | M4 |
+> | Phase 4 — Venue Identity & Geocoding | M10 |
+> | Phase 5 — Scrapers | M7, M8 |
+> | Phase 6 — Ingest Pipeline | M9 |
+> | Phase 7 — API Surface | M11 |
+> | Phase 8 — Operations | M12 |
+>
+> M1–M3 (project hygiene, git workflow, design docs) map to Phase 0, which is
+> complete — read them if you want to understand why the repo is shaped the
+> way it is.
 >
 > **Free-first rule.** Every module's primary resources are free. Paid resources are listed as *optional deep dives* when the free ones don't cover the topic well.
 
@@ -19,9 +47,11 @@
 - **Prerequisites** — what you should already know (modules or topics).
 - **Core concepts** — the 5–10 ideas you must internalize.
 - **Curated resources** — free first, paid marked `[$]`.
-- **Exercises** — in a throwaway `helios-learning` scratchpad repo.
-- **Capstone PR** — a real change in `helios-v2` that exercises the skill.
-- **Self-check rubric** — questions you should answer from memory before moving on.
+- **Exercises** — in a throwaway `helios-learning` scratchpad repo. *Optional.*
+- **Capstone PR** — a real change that exercises the skill. *Now optional —
+  see the note above; agents handle the roadmap's implementation.*
+- **Self-check rubric** — **the bar that matters.** Answer from memory before
+  reviewing that phase's PRs.
 
 ---
 
