@@ -1,4 +1,4 @@
-"""Venue model — a physical place that can host deals.
+"""Venue model (probe) — a physical place that can host deals.
 
 Minimal version: name and address as text. Geocoding (lat/lon, PostGIS point)
 comes in a later PR.
@@ -31,3 +31,6 @@ class Venue(Base):
 
     def __repr__(self) -> str:
         return f"Venue(id={self.id!r}, name={self.name!r})"
+
+
+# probe: delete me
