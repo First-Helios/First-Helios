@@ -1,22 +1,19 @@
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.schema import SchemaItem
 
 from alembic import context
-from packages.helios_core.db.url import normalize_database_url
+from packages.helios_core.config import get_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# Prefer DATABASE_URL from the environment over the static alembic.ini value so
-# migrations target the same database as the app (CI, docker, future hosts).
-_database_url = os.environ.get("DATABASE_URL")
-if _database_url:
-    _database_url = normalize_database_url(_database_url)
-    config.set_main_option("sqlalchemy.url", _database_url)
+# Use the same DATABASE_URL the app resolves, rather than alembic.ini's
+# static value, so migrations target the same database as the app (CI,
+# docker, future hosts).
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
