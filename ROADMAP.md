@@ -375,14 +375,12 @@ from ADR-0002.
 **Done when:** `git push` to a feature branch opens a PR, CI runs automatically, merge advances main. No exceptions.
 ✅ **Met.** Five required CI checks gate `main`; squash-only; auto-delete branches.
 
-**Known gaps carried forward** (small, fix before or alongside Phase 1):
-
-- `require_code_owner_reviews` is off, so `CODEOWNERS` requests review on
-  migrations/models but does not *block* merge — the gate CLAUDE.md and
-  CONTRIBUTING.md both describe is not yet enforced.
-- The `Docker image` check runs on `main` but is not in the required-checks list.
-- `alembic.ini` still carries a hardcoded dev connection string that nothing reads.
-- `.gitignore` lacks `var/` (`.dockerignore` has it).
+**Post-Phase-0 correction (2026-07-29).** The original branch protection
+required 1 approving review, following this document's "(self-review OK for
+solo dev)" line. GitHub does not support that — you cannot approve your own
+PR — so every merge had to bypass protection, and a bypass skips the CI
+checks too. Corrected to 0 required approvals with all five CI checks
+required, which is strictly stronger in practice. See §6.0.
 
 ---
 
@@ -412,8 +410,9 @@ from ADR-0002.
 
 **Sequencing note.** This is a large phase; split it across several PRs
 (venue/identity models, deal models, menu models, schema split) rather than
-one. `CODEOWNERS` requires human review on every one of them, and a 900-line
-schema PR cannot be meaningfully reviewed in one sitting.
+one. A 900-line schema PR cannot be meaningfully reviewed in one sitting, and
+with no second reviewer (§6.0) your own careful read is the only review this
+gets — so make it a readable one.
 
 **Reviewer's checklist** — what to actually look for, since this is the phase
 where a bad decision is most expensive to undo:
@@ -687,13 +686,35 @@ The implementation is agent-driven; the judgment is not. Where the line sits:
 | Propose ADRs | Accept or reject ADRs |
 | Flag drift between docs and code | What to do about it |
 
-**Mechanized, not remembered.** Good intentions don't scale; the gates are
-enforced by the repo itself:
+**What is actually mechanized — and what isn't.** Good intentions don't
+scale, so it matters to be precise about which gates are real:
 
-- `CODEOWNERS` forces human review on `alembic/versions/**` and
-  `packages/**/db/models/**` — where mistakes are expensive and hard to undo.
-- Five required CI checks; a red build cannot merge.
-- ADRs gate architectural decisions *before* implementation, not after.
+| Gate | Enforced? |
+|------|-----------|
+| Five required CI checks | ✅ Yes — a red build cannot merge |
+| PR required (no direct push to `main`) | ✅ Yes |
+| Conversation resolution | ✅ Yes |
+| ADR before implementing an architectural decision | ⚠️ Convention — see [CLAUDE.md](./CLAUDE.md) |
+| `CODEOWNERS` review on migrations/models | ❌ **Cannot be, solo** — see below |
+
+**The solo-maintainer constraint.** GitHub does not permit approving your own
+pull request, so a required approval count of 1 is *unsatisfiable* for a
+single maintainer — it can only be cleared by an admin bypass, and a bypass
+skips every rule including CI. Branch protection therefore requires **0
+approvals**, which makes the CI checks a real gate rather than a formality
+waived on every merge. A lower nominal bar that actually holds beats a higher
+one that forces a total bypass.
+
+`CODEOWNERS` is kept as a **signal**: it flags PRs touching
+`alembic/versions/**` and `packages/**/db/models/**` in the UI so the
+expensive-to-reverse changes are visible, but it cannot block a merge with
+one human. Copilot's review does not help here either — it leaves
+`COMMENTED`, never `APPROVED`.
+
+**The consequence for Phase 1:** nothing but CI stands between a schema
+mistake and `main`. Since CI cannot tell you a foreign key's cascade
+behavior is wrong, the reviewer's checklist in Phase 1 and small,
+readable PRs are doing the work that a second reviewer would otherwise do.
 
 **An ADR is the checkpoint.** When an agent hits a genuinely new
 architectural choice, the correct move is to write the ADR and stop — not to

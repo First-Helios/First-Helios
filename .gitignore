@@ -1,4 +1,4 @@
-# .gitignore for ChainStaffingTracker
+# .gitignore for Helios V2
 
 # Python
 __pycache__/
@@ -17,6 +17,9 @@ data/*.db
 # Environment
 .env
 .env.local
+
+# Runtime state — replay bundles, caches, local artifacts (Twelve-Factor)
+var/
 
 # Test / coverage / tool caches
 .coverage
