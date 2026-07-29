@@ -53,7 +53,10 @@ jobs:
 
     services:
       postgres:
-        image: postgis/postgis:16-3.4
+        # Same image as infra/docker-compose.yml — CI runs amd64 where the
+        # official postgis image would also work, but keeping them identical
+        # is the point (see docs/adr/0002-containerization.md).
+        image: imresamu/postgis:16-3.4
         env:
           POSTGRES_USER: helios
           POSTGRES_PASSWORD: helios
@@ -88,3 +91,43 @@ jobs:
 
       - name: Verify uv.lock matches pyproject.toml
         run: uv lock --check
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          push: false
+          load: true
+          tags: helios-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Smoke test: the image boots and serves liveness. /readyz is not
+      # checked here — it needs a database, and the Tests job already covers
+      # that path against a real Postgres.
+      - name: Smoke test /healthz
+        run: |
+          docker run -d --name helios-api -p 8000:8000 helios-api:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/healthz; then
+              echo "\nhealthz OK"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "healthz never came up; container logs:"
+          docker logs helios-api
+          exit 1
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs helios-api || true

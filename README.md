@@ -23,27 +23,48 @@ This build is **agent-driven with a human reviewer in the loop**. See
 
 - `packages/helios_core/` — SQLAlchemy 2.0 models and DB session/engine
   setup. One model so far: `Venue` (name, address — geocoding comes later).
+- `apps/api/` — FastAPI service. `/healthz` (liveness) and `/readyz`
+  (checks the database) so far.
 - `alembic/` — migrations. `alembic upgrade head` builds the schema from
   scratch.
-- `infra/docker-compose.yml` — local Postgres (with PostGIS) for dev.
+- `infra/` — `Dockerfile` (multi-stage, non-root) and `docker-compose.yml`
+  (Postgres/PostGIS → one-shot migrate → API).
 - Tooling: `ruff`, `mypy --strict`, `pytest`, `pre-commit`, all wired into
   CI as required status checks on `main`.
 
 Everything else in the roadmap (parsing library, venue identity, scrapers,
-API surface, Docker deploy) is not yet built.
+the real API surface, deployment) is not yet built.
 
 ## Local setup
+
+Run the whole stack in Docker — Postgres, migrations, and the API:
 
 ```bash
 git clone https://github.com/First-Helios/First-Helios.git
 cd First-Helios
 
 cp .env.example .env
-docker compose -f infra/docker-compose.yml up -d   # Postgres
+make dev        # builds + starts postgres -> migrate -> api
 
+curl localhost:8000/healthz   # {"status":"ok"}
+curl localhost:8000/readyz    # {"status":"ok"} once Postgres is up
+```
+
+`make dev-logs` tails the stack, `make dev-down` stops it.
+
+To work on the code directly (tests, linting, type checking):
+
+```bash
 make install   # uv sync + pre-commit hooks
-uv run alembic upgrade head
 make ci        # lint + typecheck + test + lockfile check
+```
+
+`make ci` mirrors CI exactly. Database-backed tests skip unless
+`DATABASE_URL` points at a `*_test` database — with the stack up, use:
+
+```bash
+DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios \
+  HELIOS_ALLOW_NONTEST_DB=1 make test
 ```
 
 ## V1 archive

@@ -1,0 +1,32 @@
+# Build context hygiene. Keep this in sync with .gitignore where it overlaps —
+# a bloated context slows every build and busts the layer cache.
+
+.git
+.github
+
+# Virtualenvs — the image builds its own at /app/.venv
+.venv
+venv
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Tool caches / test output
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local env — never bake secrets into an image
+.env
+.env.local
+
+# Local data / replay bundles
+data/
+var/

@@ -1,6 +1,11 @@
 services:
   postgres:
-    image: postgis/postgis:16-3.4
+    # NOT the official postgis/postgis image: that one is amd64-only by
+    # design, so it fails with `exec format error` on ARM64 hosts like the
+    # Orange Pi staging box. This is a fork of the official build system by
+    # the official image's co-maintainer, publishing multi-arch tags.
+    # See docs/adr/0002-containerization.md.
+    image: imresamu/postgis:16-3.4
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-helios}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helios}
@@ -14,6 +19,45 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # One-shot: runs to completion, then exits. Kept separate from the api
+  # service so migrations never race across replicas on startup.
+  migrate:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # The slim base image has no curl; use the interpreter that's already here.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://localhost:8000/healthz")
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:
