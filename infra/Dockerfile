@@ -31,8 +31,8 @@ FROM python:3.12-slim-bookworm AS runtime
 
 # Run as a non-root user. psycopg[binary] bundles libpq, so no apt packages
 # are needed at runtime.
-RUN groupadd --system helios \
-    && useradd --system --gid helios --create-home helios
+RUN groupadd --system --gid 999 helios \
+    && useradd --system --uid 999 --gid 999 --create-home helios
 
 WORKDIR /app
 COPY --from=builder --chown=helios:helios /app /app
