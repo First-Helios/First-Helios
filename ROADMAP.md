@@ -110,15 +110,15 @@ Nine algorithms worth porting. Each has a proven V1 implementation and a clear p
 
 | # | Process | V1 Source | Why Keep | V2 Target |
 |---|---------|-----------|----------|-----------|
-| 1 | Sub-deal decomposition | `collectors/meal_deals/sub_deals.py` | Splits "Mon–Fri 3–6pm. $1 off beer. Half off apps. $5 margs." into 3 offers via an ordered regex chain. Battle-tested. | `packages/parsing/sub_deals.py` — port; add Hypothesis property tests; externalize the pattern list to YAML. |
-| 2 | Temporal parsing | `collectors/meal_deals/temporal.py` | Handles 50+ variants: "Mon-Fri", "Monday through Friday", "3pm–close", em/en dashes, 12-hour AM/PM. | `packages/parsing/temporal.py` — port; return a structured `dataclass` (`weekdays: set`, `start: time`, `end: time \| Literal["close"]`). |
-| 3 | Signal-quality scoring | `collectors/meal_deals/quality.py` | 6-factor composite (price 25%, time 20%, description 15%, name 15%, restaurant-match 10%, not-addon 15%) with clear `reject < 0.20 < review < 0.40 ≤ accept` gates. | `packages/parsing/quality.py` — port; weights + thresholds in config, not constants. |
-| 4 | Venue identity / fingerprinting | `core/venue_identity.py` + `core/normalizer.py::make_fingerprint` | Name canonicalization, address normalization, URL canonicalization, proximity clustering. Core to dedup. | `packages/core/identity.py` — port; split into name/address/url submodules; add a golden-set test fixture. |
+| 1 | Sub-deal decomposition | `collectors/meal_deals/sub_deals.py` | Splits "Mon–Fri 3–6pm. $1 off beer. Half off apps. $5 margs." into 3 offers via an ordered regex chain. Battle-tested. | `packages/helios_parsing/sub_deals.py` — port; add Hypothesis property tests; externalize the pattern list to YAML. |
+| 2 | Temporal parsing | `collectors/meal_deals/temporal.py` | Handles 50+ variants: "Mon-Fri", "Monday through Friday", "3pm–close", em/en dashes, 12-hour AM/PM. | `packages/helios_parsing/temporal.py` — port; return a structured `dataclass` (`weekdays: set`, `start: time`, `end: time \| Literal["close"]`). |
+| 3 | Signal-quality scoring | `collectors/meal_deals/quality.py` | 6-factor composite (price 25%, time 20%, description 15%, name 15%, restaurant-match 10%, not-addon 15%) with clear `reject < 0.20 < review < 0.40 ≤ accept` gates. | `packages/helios_parsing/quality.py` — port; weights + thresholds in config, not constants. |
+| 4 | Venue identity / fingerprinting | `core/venue_identity.py` + `core/normalizer.py::make_fingerprint` | Name canonicalization, address normalization, URL canonicalization, proximity clustering. Core to dedup. | `packages/helios_core/identity.py` — port; split into name/address/url submodules; add a golden-set test fixture. |
 | 5 | Replay-manifest pattern | `scripts/build_website_scrape_replay_manifests.py` + `data/cache/website_scrape_debug/*.json` | Every scrape persists raw HTML + fetch metadata + extracted signals in a deterministic bundle. Diff-able across runs. | `apps/scraper/replay/` — port bundle format; move cache root to `var/replay/` (Twelve-Factor) and index in Postgres so queries don't walk the filesystem. |
 | 6 | Expectation-vs-capture diffing | `scripts/compare_website_scrape_expectations.py` + `config/meal_deal_expectation_registry.json` | Asserts "we should see $X deal at site Y" against real captures; catches regressions. | `apps/scraper/audit/expectations.py` — port; expectations become YAML per source, versioned alongside the scraper. |
 | 7 | Collector registry decorator | `collectors/meal_deals/registry.py` | Self-registration so the scheduler auto-discovers scrapers. | `apps/scraper/registry.py` — port; resolve via `importlib.metadata` entry-points instead of import side-effects. |
 | 8 | Config-driven strategy routing | `config/meal_deal_sources.yaml` | One YAML maps domain → strategy (static / playwright / menu_only / app_only) + selectors + rate limit. | `config/sources.yaml` — port; add JSON-Schema validation in CI so misconfigurations break the build, not runtime. |
-| 9 | Multi-layer data model (pattern) | `core/database.py` — `DealObservation → DealApplicability → DealMaterialization` | Observation is the canonical atom; applicability fans out to many venues; materialization is the pre-computed consumer view. | `packages/core/models/` — port schema intent; redesign with SQLAlchemy 2.0 typed `Mapped[...]`, enum types, and **only** this pattern (drop the legacy `MealDeal` denormalized table). |
+| 9 | Multi-layer data model (pattern) | `core/database.py` — `DealObservation → DealApplicability → DealMaterialization` | Observation is the canonical atom; applicability fans out to many venues; materialization is the pre-computed consumer view. | `packages/helios_core/db/models/` — port schema intent; redesign with SQLAlchemy 2.0 typed `Mapped[...]`, enum types, and **only** this pattern (drop the legacy `MealDeal` denormalized table). |
 
 **What we are deliberately *not* porting**
 
@@ -166,12 +166,12 @@ helios-v2/
 │       ├── audit/        # expectation-vs-capture comparator
 │       └── tests/
 ├── packages/
-│   ├── core/             # Domain models, DB session, identity
-│   │   ├── models/       # SQLAlchemy 2.0 typed models
-│   │   ├── db.py
+│   ├── helios_core/      # Domain models, DB session, identity
+│   │   ├── db/           # SQLAlchemy 2.0 typed models, session, base
+│   │   │   └── models/
 │   │   ├── identity.py   # from V1 core/venue_identity.py
 │   │   └── tests/
-│   └── parsing/          # Pure-function text parsers, zero I/O
+│   └── helios_parsing/   # Pure-function text parsers, zero I/O
 │       ├── sub_deals.py
 │       ├── temporal.py
 │       ├── quality.py
@@ -179,10 +179,10 @@ helios-v2/
 ├── infra/
 │   ├── docker-compose.yml
 │   ├── Dockerfile
-│   ├── alembic/
-│   │   ├── env.py
-│   │   └── versions/
 │   └── systemd/          # staging host (OrangePi) units
+├── alembic/
+│   ├── env.py
+│   └── versions/
 ├── config/
 │   ├── sources.yaml      # scrape strategy per chain
 │   └── expectations.yaml # expectation registry
@@ -319,9 +319,9 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 **Deliverables**
 
-- `packages/core/models/deal.py` — `DealObservation`, `DealApplicability`, `DealMaterialization` as typed `Mapped[...]`.
-- `packages/core/models/venue.py` — `Venue`, `VenueAlias`, `SiteIdentity`.
-- `packages/core/models/menu.py` — `MenuSection`, `MenuItem`, `MenuPricePoint`, `MenuModifier` (schema only; no data yet).
+- `packages/helios_core/models/deal.py` — `DealObservation`, `DealApplicability`, `DealMaterialization` as typed `Mapped[...]`.
+- `packages/helios_core/models/venue.py` — `Venue`, `VenueAlias`, `SiteIdentity`.
+- `packages/helios_core/models/menu.py` — `MenuSection`, `MenuItem`, `MenuPricePoint`, `MenuModifier` (schema only; no data yet).
 - Postgres `CHECK` constraints for enums; partial unique indexes for chain templates.
 - Alembic migration `0001_canonical_schema.py` (autogenerated, hand-reviewed).
 - Unit tests asserting each unique constraint, each `CHECK`, each FK cascade rule.
@@ -344,9 +344,9 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 **Deliverables**
 
-- `packages/parsing/sub_deals.py` — `extract_sub_deals(text: str) → list[SubDeal]` returning a typed dataclass.
-- `packages/parsing/temporal.py` — `extract_validity(text: str) → Validity` dataclass.
-- `packages/parsing/quality.py` — `score_signal(observation: dict) → SignalQuality` with components + total.
+- `packages/helios_parsing/sub_deals.py` — `extract_sub_deals(text: str) → list[SubDeal]` returning a typed dataclass.
+- `packages/helios_parsing/temporal.py` — `extract_validity(text: str) → Validity` dataclass.
+- `packages/helios_parsing/quality.py` — `score_signal(observation: dict) → SignalQuality` with components + total.
 - Coverage ≥ 90% for the package.
 - Hypothesis property tests — e.g., "temporal parser is idempotent on its own output", "sub-deal count is ≥ 1 for any non-empty text with a dollar sign".
 - 50+ golden-file test cases ported from V1 + 20 new ones from recent scrapes.
@@ -369,8 +369,8 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 **Deliverables**
 
-- `packages/core/identity.py` — name fingerprinting, address normalization, URL canonicalization, proximity clustering.
-- `packages/core/geo.py` — Nominatim client with 1-req/sec throttle, manual overrides for ambiguous Austin suburbs, disk-cached responses keyed by normalized query.
+- `packages/helios_core/identity.py` — name fingerprinting, address normalization, URL canonicalization, proximity clustering.
+- `packages/helios_core/geo.py` — Nominatim client with 1-req/sec throttle, manual overrides for ambiguous Austin suburbs, disk-cached responses keyed by normalized query.
 - H3 r6–r9 cell computation on every venue insert.
 - Unit tests: golden-set fixture of 100 hand-labeled matches with ≥ 95% precision.
 - Integration test: Nominatim responses replayed from disk fixtures — no live calls in CI.
@@ -556,32 +556,35 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 Files to create on the very first commit of V2 (before any feature code):
 
-- [ ] `pyproject.toml` — project metadata, deps via `uv`
-- [ ] `uv.lock`
-- [ ] `ruff.toml`
-- [ ] `mypy.ini`
-- [ ] `.pre-commit-config.yaml` (ruff, mypy, commitlint, trailing-whitespace)
-- [ ] `.gitignore` — already present; extend for `var/` and `.env`
-- [ ] `.env.example`
-- [ ] `README.md` — already present; expand in Phase 0
-- [ ] `ROADMAP.md` — this file
-- [ ] `LEARNING_GUIDE.md`
-- [ ] `CONTRIBUTING.md` — how to open a PR, write a commit, write an ADR
-- [ ] `.github/workflows/ci.yml`
-- [ ] `.github/pull_request_template.md`
-- [ ] `.github/ISSUE_TEMPLATE/{bug,feature}.md`
-- [ ] `.github/CODEOWNERS`
-- [ ] `docs/adr/0000-template.md`
-- [ ] `docs/adr/0001-stack-choice.md`  ← first real ADR, ratifying this roadmap
-- [ ] `docs/rfc/0000-template.md`
-- [ ] `Makefile` — `make install`, `make test`, `make lint`, `make migrate`, `make dev`
-- [ ] `infra/docker-compose.yml` (Postgres only for now)
-- [ ] `infra/alembic.ini`
-- [ ] `infra/alembic/env.py` (empty; first migration lands in Phase 1)
-- [ ] GitHub repo settings:
-  - [ ] Branch protection on `main`: require PR, require CI, require conversation resolution
-  - [ ] Default branch = `main`
-  - [ ] Auto-delete head branches after merge
+- [x] `pyproject.toml` — project metadata, deps via `uv`
+- [x] `uv.lock`
+- [x] `ruff.toml`
+- [x] `mypy.ini`
+- [x] `.pre-commit-config.yaml` (ruff, mypy, commitlint, trailing-whitespace)
+- [x] `.gitignore` — already present; extend for `var/` and `.env`
+- [x] `.env.example`
+- [x] `README.md` — already present; expand in Phase 0
+- [x] `ROADMAP.md` — this file
+- [x] `LEARNING_GUIDE.md`
+- [x] `CLAUDE.md` — agent working instructions (not in the original plan; added once the build became agent-driven)
+- [x] `LICENSE` — Business Source License 1.1 (not in the original plan; source-visible, non-commercial until the Change Date — see the [LICENSE](../LICENSE) file itself for the current parameters)
+- [x] `CONTRIBUTING.md` — how to open a PR, write a commit, write an ADR
+- [x] `.github/workflows/ci.yml`
+- [x] `.github/pull_request_template.md`
+- [x] `.github/ISSUE_TEMPLATE/{bug,feature}.md`
+- [x] `.github/CODEOWNERS`
+- [x] `docs/adr/0000-template.md`
+- [x] `docs/adr/0001-stack-choice.md`  ← first real ADR, ratifying this roadmap
+- [x] `docs/rfc/0000-template.md`
+- [x] `Makefile` — has `install`, `lint`, `typecheck`, `test`, `ci`, `clean`; `migrate` and `dev` targets land with Docker (Phase 8 groundwork, pulled earlier — see §4.2)
+- [x] `infra/docker-compose.yml` (Postgres only for now)
+- [x] `alembic.ini` — lives at repo root, not `infra/` as originally sketched (matches `pyproject.toml`'s `pythonpath` setup)
+- [x] `alembic/env.py` — also repo root; no longer empty, the initial `venue` migration landed in PR #2
+- [x] GitHub repo settings:
+  - [x] Branch protection on `main`: require PR, require CI (all 4 jobs as required status checks), require conversation resolution
+  - [x] Default branch = `main`
+  - [x] Auto-delete head branches after merge
+  - [x] Squash-only merges (merge commit and rebase-merge disabled)
   - [ ] Disable merge commits (squash only)
 
 ---
