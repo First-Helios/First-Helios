@@ -4,9 +4,13 @@
 > This document distills what is worth keeping from V1, defines the V2 architecture, and sequences the rebuild into phases.
 > Every phase is a PR train; every PR passes CI; every architectural decision is recorded in an ADR.
 >
-> **Companion:** [LEARNING_GUIDE.md](./LEARNING_GUIDE.md) — the skills course. Each V2 phase maps to at least one learning module.
+> **How it's built.** The implementation is **agent-driven with a human reviewer in the loop** — agents write the code, a human approves the design decisions and the changes that are expensive to reverse. See [CLAUDE.md](./CLAUDE.md) for the working agreement and [CONTRIBUTING.md](./CONTRIBUTING.md) for the review gates.
+>
+> **Companion:** [LEARNING_GUIDE.md](./LEARNING_GUIDE.md) — the skills course, now serving as the **reviewer's curriculum**: read the module before reviewing the phase it maps to, so you can judge the work rather than just merge it.
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
+>
+> **Last revised:** 2026-07-29 — restructured after Phase 0 completed and the build became agent-driven.
 
 ---
 
@@ -28,7 +32,7 @@
 
 ## 1. North Star
 
-> **"A trustworthy, queryable map of real food deals in Austin, built from free public data, by a one-person team operating with professional discipline."**
+> **"A trustworthy, queryable map of real food deals in Austin, built from free public data, run as a live service, with professional discipline."**
 
 - **Trustworthy** — every price and validity window is traceable to a captured page.
 - **Queryable** — a clean HTTP API with pagination, filters, and OpenAPI docs.
@@ -56,11 +60,19 @@
 - Multi-city coverage (Austin-only until the Austin pipeline is stable).
 - The SpiritPool browser extension (separate project; this repo only handles its ingest endpoint if it is ever revisited).
 
-**Success criteria (12-week horizon)**
+**Success criteria**
 
-- Phase 7 complete: a deployed FastAPI endpoint returns paginated, filterable deals.
+- A deployed HTTP endpoint returns paginated, filterable deals for Austin.
 - ≥ 85% of visible deals pass manual spot-check for "this is real and currently valid."
-- Every module in the [Learning Guide](./LEARNING_GUIDE.md) has been completed with a merged capstone PR.
+- The service survives a reboot of its host and a wipe of its database (restore from backup + replay).
+- Every architectural decision that cost more than a day to make is written down as an ADR.
+
+> **On timelines.** The original plan budgeted 1–3 weeks per phase against a
+> 12-week horizon, assuming part-time human implementation. Agent-driven
+> implementation compresses coding time sharply but *not* review time, and
+> review is now the bottleneck. Phases are therefore sequenced but
+> deliberately **not** date-estimated — a phase is done when its "Done when"
+> clause is true, not when a week elapses.
 
 ---
 
@@ -230,13 +242,28 @@ This is the industry-standard flow. Your Orange Pi becomes the **staging** envir
 3. **Cheap.** The OPi is already running. Zero marginal cost.
 4. **Safe blast radius.** If a scraper loops, it consumes *your* bandwidth, not a hosted bill.
 
+> **Arch parity is not hypothetical.** The original `postgis/postgis` image
+> is amd64-only and could never have run on the Pi at all — the bug sat
+> unnoticed for five weeks precisely because nothing had been deployed
+> there yet. Running staging on the real target hardware catches this class
+> of problem; a laptop and an x86 CI runner do not. See
+> [ADR-0002](./docs/adr/0002-containerization.md).
+
 **What the staging host runs**
 
-- Docker + docker-compose (same image as prod).
-- A systemd unit that pulls `main` on merge, runs migrations, restarts services.
-- Postgres 16 with daily `pg_dump` to a local external drive.
-- Scrapers on a cron schedule (reduced frequency vs. prod).
-- Prometheus node-exporter so you can see it from a dashboard.
+- Docker + Docker Compose (same image as prod). ✅ *Working today —
+  `make dev` brings up Postgres → migrate → API.*
+- A systemd unit that starts the stack on boot and restarts on failure,
+  pulls `main`, and runs migrations as an explicit step. *(Phase 2)*
+- Postgres with daily `pg_dump` to a local external drive. *(Phase 8)*
+- Scrapers on a cron schedule, reduced frequency vs. prod. *(Phase 5+)*
+- Prometheus node-exporter for dashboards. *(Phase 8)*
+
+> **Note on Postgres topology.** This section originally assumed Postgres
+> would run on the staging *host* with only the app layer in Docker. It
+> currently runs in Compose alongside the app, which is simpler and fine for
+> staging. Prod topology (containerized vs. host-installed vs. managed) is an
+> open question for ADR-0006 in Phase 8.
 
 **What prod will run (Phase 8)**
 
@@ -247,7 +274,7 @@ This is the industry-standard flow. Your Orange Pi becomes the **staging** envir
   3. **Railway** — easiest, Procfile-style.
   4. **DigitalOcean Droplet** — classic; most tutorials.
 
-ADR-0005 in Phase 8 will make the call with numbers.
+ADR-0006 in Phase 8 will make the call with numbers.
 
 ### 4.3 Data Layer
 
@@ -270,8 +297,8 @@ ADR-0005 in Phase 8 will make the call with numbers.
 
 ### 4.5 Scraper Layer
 
-- **V1 baseline (Phase 4):** `httpx` + `selectolax` for static HTML, `playwright-sync` for SPAs, pure-Python orchestration, cron for scheduling.
-- **Phase 5 decision (ADR-0004):** evaluate Scrapy vs Crawlee vs keeping custom. Decided after Learning Module 8.
+- **V1 baseline:** `httpx` + `selectolax` for static HTML, `playwright-sync` for SPAs, pure-Python orchestration, cron for scheduling.
+- **Phase 5 decision (ADR-0005):** evaluate Scrapy vs Crawlee vs keeping custom, on throwaway spikes, *before* writing the real scrapers.
 - **Rate-limit middleware:** one token bucket per host, config-driven.
 - **Replay bundle:** every scrape writes `var/replay/<source>/<yyyy-mm-dd>/<site>.json` with `{url, status, html_path, extracted_signals, fetch_type}`.
 - **Expectation diff:** nightly CI job runs `compare_expectations_to_bundles` and posts failures to an issue.
@@ -287,9 +314,42 @@ ADR-0005 in Phase 8 will make the call with numbers.
 
 ## 5. Part C — Phased Build Plan
 
-Each phase is 1–3 weeks part-time. Each phase begins with a learning module (see [Learning Guide](./LEARNING_GUIDE.md)) and ends with a demoable artifact on `main`, merged through a PR with green CI.
+Each phase ends with a demoable artifact on `main`, merged through a PR with green CI. Each maps to a learning module (see [Learning Guide](./LEARNING_GUIDE.md)) — read it *before reviewing* that phase's PRs.
 
-### Phase 0 — Foundations & Tooling
+**Status at a glance**
+
+| Phase | Name | Status |
+|-------|------|--------|
+| 0 | Foundations & Tooling | ✅ **Complete** |
+| 1 | Domain Model & Migrations | ⬅️ **Next** |
+| 2 | First Light — read API + staging deploy | Planned |
+| 3 | Parsing Library | Planned |
+| 4 | Venue Identity & Geocoding | Planned |
+| 5 | Scrapers — decide, then build | Planned |
+| 6 | Ingest Pipeline | Planned |
+| 7 | API Surface — full | Planned |
+| 8 | Operations — prod | Partially done early |
+| 9 | Harden | Planned |
+
+**What changed in the 2026-07-29 revision**
+
+- **Phase 2 "First Light" is new.** A thin read API and a real staging
+  deployment land immediately after the schema, instead of waiting for the
+  old Phase 7. This proves the DB → API → deployed path once, early, so that
+  integration and deployment risk isn't all concentrated at the end. Phases
+  2–6 of the original plan each shift down by one.
+- **The old Phases 4 and 5 merged** into a single Phase 5. The original plan
+  had you hand-build a McDonald's scraper, *then* evaluate frameworks, then
+  rewire it — deliberate learning-by-doing. With agents writing the code,
+  building production code twice is waste; the evaluation now happens as
+  throwaway spikes before the real implementation.
+- **Docker moved out of Phase 8** to now (see
+  [ADR-0002](./docs/adr/0002-containerization.md)), so Phase 8 is reduced to
+  prod hosting and operational hardening.
+
+---
+
+### Phase 0 — Foundations & Tooling ✅ COMPLETE
 
 **Learning modules:** [M1](./LEARNING_GUIDE.md#m1--modern-python-project-hygiene) · [M2](./LEARNING_GUIDE.md#m2--git--team-workflow) · [M3](./LEARNING_GUIDE.md#m3--design-docs-adrs-and-rfcs)
 
@@ -307,23 +367,41 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 - One pytest passing: `assert healthz returns 200`.
 - GitHub branch protection on `main`: require PR, require 1 review (self-review OK for solo dev), require CI green, squash-merge only.
 
+**Delivered beyond the original scope** (PRs #3–#5): `CLAUDE.md` (agent
+working agreement), `CONTRIBUTING.md`, `LICENSE` (BUSL 1.1), `/readyz`,
+`pydantic-settings` config with lazy engine creation, and the containerization
+from ADR-0002.
+
 **Done when:** `git push` to a feature branch opens a PR, CI runs automatically, merge advances main. No exceptions.
+✅ **Met.** Five required CI checks gate `main`; squash-only; auto-delete branches.
+
+**Known gaps carried forward** (small, fix before or alongside Phase 1):
+
+- `require_code_owner_reviews` is off, so `CODEOWNERS` requests review on
+  migrations/models but does not *block* merge — the gate CLAUDE.md and
+  CONTRIBUTING.md both describe is not yet enforced.
+- The `Docker image` check runs on `main` but is not in the required-checks list.
+- `alembic.ini` still carries a hardcoded dev connection string that nothing reads.
+- `.gitignore` lacks `var/` (`.dockerignore` has it).
 
 ---
 
-### Phase 1 — Domain Model & Migrations
+### Phase 1 — Domain Model & Migrations ⬅️ NEXT
 
-**Learning modules:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
+**Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
 **Goal:** the canonical schema, written fresh from lessons learned, migrated cleanly, tested at the constraint level.
 
 **Deliverables**
 
-- `packages/helios_core/models/deal.py` — `DealObservation`, `DealApplicability`, `DealMaterialization` as typed `Mapped[...]`.
-- `packages/helios_core/models/venue.py` — `Venue`, `VenueAlias`, `SiteIdentity`.
-- `packages/helios_core/models/menu.py` — `MenuSection`, `MenuItem`, `MenuPricePoint`, `MenuModifier` (schema only; no data yet).
+- `packages/helios_core/db/models/deal.py` — `DealObservation`, `DealApplicability`, `DealMaterialization` as typed `Mapped[...]`.
+- `packages/helios_core/db/models/venue.py` — grow the existing `Venue` stub; add `VenueAlias`, `SiteIdentity`.
+- `packages/helios_core/db/models/menu.py` — `MenuSection`, `MenuItem`, `MenuPricePoint`, `MenuModifier` (schema only; no data yet).
+- The `raw` / `canonical` / `mart` schema split (see §4.3), including the
+  `include_schemas` + schema-allowlist change to `alembic/env.py` that the
+  split requires — its current `include_object` filter is schema-blind.
 - Postgres `CHECK` constraints for enums; partial unique indexes for chain templates.
-- Alembic migration `0001_canonical_schema.py` (autogenerated, hand-reviewed).
+- Alembic migration(s) for the canonical schema — autogenerated, then hand-reviewed.
 - Unit tests asserting each unique constraint, each `CHECK`, each FK cascade rule.
 - **ADR-0003:** "Three-layer schema (raw / canonical / mart)."
 
@@ -332,13 +410,73 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 - `core/database.py::DealObservation` (~L1283) — keep the 41 fields that proved useful, drop the dead ones.
 - `core/venue_identity.py` for venue + alias patterns.
 
-**Done when:** `alembic upgrade head` on an empty DB produces the full schema; every constraint has at least one failing-test case.
+**Sequencing note.** This is a large phase; split it across several PRs
+(venue/identity models, deal models, menu models, schema split) rather than
+one. `CODEOWNERS` requires human review on every one of them, and a 900-line
+schema PR cannot be meaningfully reviewed in one sitting.
+
+**Reviewer's checklist** — what to actually look for, since this is the phase
+where a bad decision is most expensive to undo:
+
+- Does every enum have a `CHECK` constraint, not just a Python-side `Enum`?
+- Is every FK's `ondelete` behavior deliberate, and does a test prove it?
+- Do the migrations run **and** roll back cleanly on a non-empty database?
+- Is `DealObservation` the only write path for observations, per §4.3?
+- Any column that's nullable — is it nullable because the domain allows
+  absence, or because it was easier?
+
+**Done when:** `alembic upgrade head` on an empty DB produces the full schema; `downgrade` returns it to empty; every constraint has at least one failing-test case.
 
 ---
 
-### Phase 2 — Parsing Library
+### Phase 2 — First Light: read API + staging deploy
 
-**Learning module:** [M4](./LEARNING_GUIDE.md#m4--testing-pyramid)
+**Learning modules to review against:** [M11](./LEARNING_GUIDE.md#m11--api-design) · [M12](./LEARNING_GUIDE.md#m12--operations)
+
+**Goal:** the thinnest possible end-to-end slice, running for real. One
+resource, read-only, served from the canonical schema, deployed to the Orange
+Pi and reachable. Nothing about deals yet — this phase exists to prove the
+whole path works and to establish the API conventions everything later
+inherits.
+
+**Why here and not Phase 7.** The original plan deferred every HTTP concern
+to the end. That concentrates integration and deployment risk into one late
+phase, and it means months of work with nothing observable. Doing it now
+costs little — the container stack already runs — and every later phase gets
+validated against a real deployment instead of a laptop.
+
+**Deliverables**
+
+- `apps/api/routes/venues.py` — `GET /venues` (cursor-paginated) and
+  `GET /venues/{id}`, reading the Phase 1 schema.
+- Pydantic response models, separate from ORM models. The wire format is a
+  contract; do not leak SQLAlchemy objects into it.
+- A seed/fixture command so the endpoints return something real in dev.
+- Structured logging (`structlog`) with request IDs — cheap now, painful to
+  retrofit once there's traffic.
+- CORS configuration — the frontend is a separate repo and will need it.
+- **ADR-0004:** "API conventions" — cursor vs. offset pagination, error
+  shape, versioning strategy, what a 404 vs. an empty list means. Small ADR,
+  but every later endpoint inherits it, so it's worth settling once.
+- **Staging deploy on the Orange Pi:**
+  - systemd unit wrapping `docker compose up`, with restart-on-failure and
+    start-on-boot.
+  - Migrations run as an explicit deploy step, never on container start.
+  - Reachable over the LAN; document the address and how to check health.
+  - A short runbook: how to deploy, roll back, read logs, restart.
+
+**Explicitly not in this phase:** authentication, rate limiting, a public
+domain, TLS, or a hosted prod environment. Those are Phase 8.
+
+**Done when:** you can `curl` a paginated list of venues from the Orange Pi
+over the LAN, the service comes back by itself after a host reboot, and the
+OpenAPI schema at `/openapi.json` describes it accurately.
+
+---
+
+### Phase 3 — Parsing Library
+
+**Learning module to review against:** [M4](./LEARNING_GUIDE.md#m4--testing-pyramid)
 
 **Goal:** the three text-processing algorithms lifted into a pure-function library with exhaustive tests. **No I/O, no DB, no HTTP.**
 
@@ -361,9 +499,9 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 ---
 
-### Phase 3 — Venue Identity & Geocoding
+### Phase 4 — Venue Identity & Geocoding
 
-**Learning module:** [M10](./LEARNING_GUIDE.md#m10--geospatial)
+**Learning module to review against:** [M10](./LEARNING_GUIDE.md#m10--geospatial)
 
 **Goal:** given a restaurant name + address, return a canonical venue ID (or create one). Given an address, return a lat/lng and H3 cell.
 
@@ -385,46 +523,50 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 ---
 
-### Phase 4 — First Static Scraper
+### Phase 5 — Scrapers: decide, then build
 
-**Learning module:** [M7](./LEARNING_GUIDE.md#m7--http-html--the-real-web)
+**Learning modules to review against:** [M7](./LEARNING_GUIDE.md#m7--http-html--the-real-web) · [M8](./LEARNING_GUIDE.md#m8--scraping-fundamentals)
 
-**Goal:** one chain (recommend **McDonald's** — simplest HTML) scraped end-to-end, producing `DealObservation` rows via the parsing library and writing a replay bundle.
+**Goal:** pick the scraping framework on evidence, then build two chains on
+it — one static, one SPA — sharing rate-limiting and replay middleware.
+
+> **Merged from the original Phases 4 and 5.** The old plan had you
+> hand-build McDonald's, *then* evaluate frameworks, then rewire the working
+> scraper. That sequence taught by doing, which was right for a human
+> learner. With agents writing the implementation, building production code
+> twice is waste — so the evaluation happens first, as throwaway spikes, and
+> the real implementation is written once.
 
 **Deliverables**
 
-- `apps/scraper/chains/mcdonalds.py` — fetch → parse → ingest.
-- `apps/scraper/replay/bundle.py` — writes `var/replay/mcdonalds/<date>/<url-hash>.json`.
+- **Spikes first, and they are throwaway.** Scrape McDonald's in Scrapy and
+  in Crawlee/Playwright. Benchmark throughput, ergonomics, output fidelity.
+  This code is deleted after the decision — do not let a spike graduate into
+  production by accident.
+- **ADR-0005:** "Scraper framework choice" — explicit tradeoffs, benchmark
+  numbers, decision, consequences.
+- `apps/scraper/chains/mcdonalds.py` — static HTML; fetch → parse → ingest.
+- `apps/scraper/chains/subway.py` — SPA; exercises the Playwright path.
+- `apps/scraper/replay/bundle.py` — writes `var/replay/<chain>/<date>/<url-hash>.json`.
 - `apps/scraper/audit/expectations.py` — compares a YAML expectation file against bundles.
-- `config/sources.yaml` entry for McDonald's (strategy, selectors, rate limit).
-- `config/expectations.yaml` with 3–5 known-good deals.
-- CLI: `helios scrape mcdonalds --once` works locally.
-- Integration test: feed a frozen HTML fixture, assert `DealObservation` row count + field values.
+- `config/sources.yaml` — strategy, selectors, rate limit per chain, JSON-Schema validated in CI.
+- `config/expectations.yaml` — 3–5 known-good deals per chain.
+- CLI: `helios scrape mcdonalds --once`.
+- Integration tests: frozen HTML fixtures → assert `DealObservation` row counts + field values. **No live network calls in CI.**
 
-**Done when:** the CLI run produces a replay bundle on disk, N new `deal_observation` rows in Postgres, and the expectation diff passes.
+**Scraping etiquette is a hard requirement, not a nicety.** Honor
+`robots.txt`, identify with a real User-Agent, respect the per-source rate
+limits in `config/sources.yaml`, and never bypass a paywall or login (§2,
+"public data only"). A scraper that gets the project IP-banned costs more
+than the data was worth.
 
----
-
-### Phase 5 — Scraper Framework Decision
-
-**Learning module:** [M8](./LEARNING_GUIDE.md#m8--scraping-fundamentals)
-
-**Goal:** make the framework choice consciously, document it, rewire Phase 4.
-
-**Deliverables**
-
-- A week of hands-on experiments: rebuild McDonald's once in **Scrapy**, once in **Crawlee** (Playwright). Benchmark throughput, ergonomics, output fidelity.
-- **ADR-0004:** "Scraper framework choice" — explicit tradeoffs, benchmark numbers, decision, consequences.
-- Rewire `apps/scraper/chains/mcdonalds.py` to the chosen framework.
-- Add a second chain on the chosen framework: recommend **Subway** (SPA — exercises Playwright integration).
-
-**Done when:** both McDonald's (static) and Subway (SPA) run under one framework, share middleware for rate limiting + replay bundling, and have fixture-based tests.
+**Done when:** both chains run under one framework, share middleware for rate limiting + replay bundling, have fixture-based tests, and the expectation diff passes.
 
 ---
 
 ### Phase 6 — Ingest Pipeline
 
-**Learning module:** [M9](./LEARNING_GUIDE.md#m9--data-engineering-patterns)
+**Learning module to review against:** [M9](./LEARNING_GUIDE.md#m9--data-engineering-patterns)
 
 **Goal:** scraping → parsing → identity → persistence, all idempotent, all re-runnable.
 
@@ -441,52 +583,74 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 ---
 
-### Phase 7 — API Surface
+### Phase 7 — API Surface: full
 
-**Learning module:** [M11](./LEARNING_GUIDE.md#m11--api-design)
+**Learning module to review against:** [M11](./LEARNING_GUIDE.md#m11--api-design)
 
-**Goal:** a read-only public API that a frontend or curl user can consume.
+**Goal:** grow Phase 2's skeleton into the complete read-only public API.
 
 **Deliverables**
 
 - `GET /deals?venue_id=&brand=&h3=&valid_at=` — cursor-paginated, filtered.
 - `GET /deals/{id}` — single deal with full materialization + source bundle reference.
-- `GET /venues` — cursor-paginated.
-- `GET /venues/{id}` — single venue + currently-valid deals.
+- `GET /venues/{id}` — extend Phase 2's endpoint with currently-valid deals.
 - `GET /venues/{id}/menu` — menu (empty list until menus are populated).
-- OpenAPI schema at `/openapi.json`, docs at `/docs`.
+- OpenAPI schema at `/openapi.json`, docs at `/docs` — already live from Phase 2; keep accurate.
 - Contract test: OpenAPI schema committed and diffed in CI; breaking changes fail the build.
+- Read-path performance: every filter combination above is index-backed. Add
+  a test that fails on a sequential scan of `deal_materialization`.
 
 **Done when:** `curl https://.../deals?h3=872a10075ffffff&valid_at=now` returns a page of real deals with correct pagination and a stable shape.
 
 ---
 
-### Phase 8 — Operations: Staging (OPi) → Prod (Hosted)
+### Phase 8 — Operations: Prod & Resilience
 
-**Learning module:** [M12](./LEARNING_GUIDE.md#m12--operations)
+**Learning module to review against:** [M12](./LEARNING_GUIDE.md#m12--operations)
 
-**Goal:** deployable to the Orange Pi (staging), promotable to a hosted provider (prod), observable, recoverable.
+**Goal:** promote from the Orange Pi to a hosted prod environment; make the
+whole thing observable and recoverable.
+
+> **Reduced scope.** Containerization landed early
+> ([ADR-0002](./docs/adr/0002-containerization.md)) and staging on the Pi
+> landed in Phase 2. What remains here is genuinely production-only concerns.
+
+**Already done** (kept for the record)
+
+- ~~Multi-stage `Dockerfile`~~ — done, ADR-0002. Scraper entrypoint still
+  pending; needs Phase 5's scraper to exist.
+- ~~`docker-compose.yml` for local dev~~ — done (Postgres → migrate → API).
+- ~~Orange Pi staging with systemd~~ — done in Phase 2.
 
 **Deliverables**
 
-- ~~Multi-stage `Dockerfile` for API + scraper workers (single image, different entrypoints).~~
-  **Done early** — pulled forward once the build went agent-driven; see
-  [ADR-0002](./docs/adr/0002-containerization.md). Scraper entrypoint still
-  pending (needs Phase 4's scraper to exist).
-- ~~`docker-compose.yml` for local dev (Postgres + API + one scraper).~~
-  **Done early** (Postgres + migrate + API; scraper service pending Phase 4).
-- Orange Pi staging:
-  - systemd-timer → `git pull && docker compose pull && docker compose up -d`.
-  - Postgres 16 on the host; docker for app layer.
-  - Nightly `pg_dump` → external USB drive + Backblaze B2.
-  - Node-exporter + a Prometheus scrape endpoint.
-- Prod deploy:
-  - **ADR-0005:** "Prod hosting choice" — compare Hetzner CAX / Fly.io / Railway / DO by $/learning/ergonomics. Decide.
-  - Same Docker image, promoted manually after staging is green for 24h.
-  - `.github/workflows/deploy.yml` — tagged releases build + push to registry; prod server pulls.
-- Runbook: what to do when a scraper breaks, when Postgres runs out of space, when Nominatim bans us, when prod goes down and staging is still up.
+- **ADR-0006:** "Prod hosting choice" — compare Hetzner CAX / Fly.io /
+  Railway / DO by cost, ergonomics, and ARM64 availability. Decide with
+  numbers. Note the architecture question this settles: today's Dockerfile is
+  arch-agnostic and builds natively wherever it runs; if prod is ARM64 this
+  stays simple, if it's x86 decide multi-arch buildx vs. native-only builds.
+- **Secrets handling** — the one genuinely new production concern. Dev uses
+  `.env` with throwaway credentials; prod needs real secret storage, rotation,
+  and secrets that never reach the image, a log line, or the repo.
+- **TLS + public domain**, and a decision on whether the API is fully public
+  or gated. Note §2 defers auth — revisit if that still holds under real traffic.
+- **Rate limiting** on the public API. It's read-only, but it will be on the
+  open internet.
+- **Backups:** nightly `pg_dump` → off-box (external drive + object storage).
+  A backup you have never restored is not a backup — a restore drill is part
+  of this phase, not an afterthought.
+- **Observability:** Prometheus scrape endpoint, node-exporter, and alerting
+  on the handful of things that actually page (service down, disk full,
+  scrape failure rate, replication of the ingest pipeline stalling).
+- **Deploy pipeline:** `.github/workflows/deploy.yml` — tagged releases build
+  and push to a registry; prod pulls. Same image promoted from staging after
+  it's been green for 24h. Migrations remain an explicit step.
+- **Runbook:** what to do when a scraper breaks, Postgres fills the disk,
+  Nominatim bans us, or prod is down while staging is fine.
 
-**Done when:** you can wipe the OPi, run a single `make stage`, and have yesterday's data restored within 30 minutes. Prod deploy is one command from a tagged release.
+**Done when:** you can wipe the Orange Pi, restore from backup, and be
+serving yesterday's data within 30 minutes — demonstrated, not assumed. Prod
+deploy is one command from a tagged release.
 
 ---
 
@@ -499,14 +663,47 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 - Integration test suite spinning up a real Postgres via `testcontainers`.
 - Coverage gate: `main` requires ≥ 85% for `packages/` and ≥ 70% for `apps/`.
 - Load test: k6 or Locust against a local API; document p95 latency targets.
-- Security pass: `pip-audit`, dependency review, secret-scanning.
+- Security pass: `pip-audit`, dependency review, secret-scanning, and
+  automated dependency updates (Dependabot or equivalent).
 - Retire the `V1-Graveyard` reference uses — by now V2 is self-sufficient.
+- Revisit the `imresamu/postgis` pin from ADR-0002: is it still maintained,
+  and does the prod topology chosen in Phase 8 still need it?
 
 **Done when:** you could hand the repo to another developer and they could ship a feature in their first week.
 
 ---
 
 ## 6. Engineering Process
+
+### 6.0 The agent/human split
+
+The implementation is agent-driven; the judgment is not. Where the line sits:
+
+| Agents do | Humans decide |
+|-----------|---------------|
+| Write code, tests, migrations, docs | Whether the design is right |
+| Run `make ci` and report honestly | Whether a tradeoff is acceptable |
+| Open PRs with a real test plan | Merge approval |
+| Propose ADRs | Accept or reject ADRs |
+| Flag drift between docs and code | What to do about it |
+
+**Mechanized, not remembered.** Good intentions don't scale; the gates are
+enforced by the repo itself:
+
+- `CODEOWNERS` forces human review on `alembic/versions/**` and
+  `packages/**/db/models/**` — where mistakes are expensive and hard to undo.
+- Five required CI checks; a red build cannot merge.
+- ADRs gate architectural decisions *before* implementation, not after.
+
+**An ADR is the checkpoint.** When an agent hits a genuinely new
+architectural choice, the correct move is to write the ADR and stop — not to
+implement and document afterward. See [CLAUDE.md](./CLAUDE.md) for the full
+list of stop-and-ask triggers.
+
+**Review is the bottleneck, so size PRs for review.** Agents can produce a
+1,000-line PR quickly; nobody can review one carefully. Prefer several small,
+independently-reviewable PRs — this matters most in Phase 1, where the schema
+decisions are hardest to reverse.
 
 ### 6.1 Branching
 
@@ -533,7 +730,18 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 - Every "this vs that" decision affecting more than one file lives in `docs/adr/NNNN-title.md`.
 - Statuses: `proposed`, `accepted`, `deprecated`, `superseded-by #NN`.
 - Template: Context → Decision → Consequences → Alternatives considered.
-- Expected ADRs in Phases 0–5: at least 5.
+- Numbered sequentially as written, not reserved in advance.
+
+**ADR ledger**
+
+| # | Title | Status | Phase |
+|---|-------|--------|-------|
+| [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack | Accepted | 0 |
+| [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
+| 0003 | Three-layer schema (raw / canonical / mart) | Planned | 1 |
+| 0004 | API conventions (pagination, errors, versioning) | Planned | 2 |
+| 0005 | Scraper framework choice | Planned | 5 |
+| 0006 | Prod hosting choice | Planned | 8 |
 
 ### 6.5 RFCs
 
@@ -548,11 +756,20 @@ Each phase is 1–3 weeks part-time. Each phase begins with a learning module (s
 
 ### 6.7 CI Gates
 
-- `ruff check` + `ruff format --check`
-- `mypy --strict` for `packages/`, `mypy` (non-strict) for `apps/`
-- `pytest` with coverage threshold (enforced in Phase 9)
-- `alembic check` (autogenerate diff == empty; schema matches models)
-- OpenAPI schema diff
+**Live today** (all five are required checks on `main`):
+
+- `Lint & format` — `ruff check` + `ruff format --check` via pre-commit
+- `Type check` — `mypy --strict`
+- `Tests` — `pytest` against a real Postgres service
+- `Lockfile up to date` — `uv lock --check`
+- `Docker image` — builds the image and smoke-tests `/healthz`
+
+**Planned**
+
+- Coverage threshold (Phase 9)
+- `alembic check` — autogenerate diff is empty; schema matches models (Phase 1,
+  once there's a schema worth guarding)
+- OpenAPI schema diff — breaking changes fail the build (Phase 7)
 
 ---
 
@@ -597,15 +814,26 @@ Files to create on the very first commit of V2 (before any feature code):
 
 1. **Where does V2 live?** — **Decided: this repo.** `main` is V2. `V1-Graveyard` holds the legacy code. History is a feature; having V1 one `git checkout` away is useful during Phases 1–6.
 
-2. **Menus in V1 of V2?** — Schema: yes (Phase 1 includes `menu_*` tables). Population: no (no menu scraper in Phase 4–6). Menus become Phase 10 once deals are solid.
+2. **Menus in V1 of V2?** — Schema: yes (Phase 1 includes `menu_*` tables). Population: no (no menu scraper through Phase 6). Menus become Phase 10 once deals are solid.
 
 3. **Multi-city?** — Out of scope for this roadmap. When Austin is stable, add an ADR for the multi-tenant approach (single DB with `region` column vs schema-per-region vs DB-per-region).
 
 4. **Write API / contributor endpoint?** — Out of scope. If SpiritPool browser extension is re-integrated, it becomes an RFC.
 
-5. **Frontend?** — This roadmap is backend-only. The frontend is a separate repo and a separate project; it consumes the API defined in Phase 7.
+5. **Frontend?** — This roadmap is backend-only. The frontend is a separate repo and a separate project; it consumes this API. Phase 2 adds CORS so it can.
 
-6. **When to re-evaluate this roadmap?** — After Phase 3 (identity + geocoding are the risky bit; if they go sideways, phases 4–6 reshuffle). Write a retrospective in `docs/retro/2026-XX-XX-phase-3.md`.
+6. **When to re-evaluate this roadmap?** — After **Phase 4** (identity + geocoding are the risky bit; if they go sideways, the scraper and ingest phases reshuffle). Write a retrospective in `docs/retro/YYYY-MM-DD-phase-4.md`.
+
+7. **Is the API public, and does it need auth or rate limiting?** — §2 defers
+   auth "until a real consumer exists." That holds while it's read-only public
+   data, but a public endpoint on a residential connection is a different risk
+   profile than a laptop. Settle it in Phase 8 alongside the hosting decision,
+   not by drifting into it.
+
+8. **How much does the agent-driven model change the review burden?** — Open,
+   and worth watching. Coding time compresses; review time doesn't. If review
+   becomes the bottleneck (it likely will in Phase 1), the fix is smaller PRs
+   and tighter ADR gates, not faster reading.
 
 ---
 
