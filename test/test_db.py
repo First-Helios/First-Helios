@@ -16,13 +16,10 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
+from packages.helios_core.config import get_settings
 from packages.helios_core.db.models import Venue
-from packages.helios_core.db.url import normalize_database_url
 
-_DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql+psycopg://helios:helios@localhost:5432/helios"
-)
-_DATABASE_URL = normalize_database_url(_DATABASE_URL)
+_DATABASE_URL = get_settings().database_url
 
 _db_name = _DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
 if not (_db_name.endswith("_test") or os.environ.get("HELIOS_ALLOW_NONTEST_DB") == "1"):
