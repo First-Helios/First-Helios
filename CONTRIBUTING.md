@@ -14,9 +14,10 @@ document doesn't repeat.
 3. Run `make ci` locally before opening the PR. It runs the same lint,
    typecheck, test, and lockfile checks CI does.
 4. Open a PR against `main`. Fill out the PR template.
-5. All four CI jobs must pass (they're required status checks) and at least
-   one review is required before merge.
-6. Merge is squash-only; the head branch auto-deletes.
+5. All five CI jobs must pass — they're required status checks and they are
+   the *only* mechanical gate (see below).
+6. Read your own diff in the PR UI before merging. This is the review.
+7. Merge is squash-only; the head branch auto-deletes.
 
 ## Commit messages
 
@@ -56,12 +57,32 @@ docker-compose service, once Docker support lands.
 
 Both live in `docs/adr/` and `docs/rfc/` respectively, numbered sequentially.
 
-## Code review
+## Code review — what actually gates a merge
 
-- CODEOWNERS requires a human review on migrations (`alembic/versions/**`)
-  and ORM models (`packages/**/db/models/**`) — these are the highest-cost
-  mistakes to reverse once merged.
-- Everything else can be agent-authored and agent-reviewed, gated by CI.
+This is a solo project, and being honest about that matters more than
+describing an aspirational process.
+
+**GitHub does not allow approving your own pull request.** So a required
+approval count of 1 is unsatisfiable here — it can only be cleared by an
+admin bypass, and a bypass skips *everything*, CI included. Branch protection
+therefore requires **0 approvals**, which makes the five CI checks a real,
+satisfiable gate instead of a formality that gets waived on every merge:
+
+```
+Lint & format · Type check · Tests · Lockfile up to date · Docker image
+```
+
+`.github/CODEOWNERS` is kept as a **signal, not a gate**. It flags PRs
+touching `alembic/versions/**` and `packages/**/db/models/**` in the UI —
+the paths where a mistake is most expensive — but with a single maintainer it
+cannot block a merge. When you see that flag, slow down and read the diff
+properly. That's a discipline, not an enforcement.
+
+**Copilot's review does not count as an approval.** It leaves `COMMENTED`,
+never `APPROVED`. Useful as a second pair of eyes; not a gate.
+
+If a second maintainer ever joins, turn on `require_code_owner_reviews` and
+raise the approval count — at that point CODEOWNERS starts doing real work.
 
 ## License
 

@@ -73,8 +73,31 @@ Never report a task complete without running this. If you can't run it
   reasonable people could disagree.
 - Anything touching auth, secrets, external API credentials, or
   `infra/`/deploy config.
-- CODEOWNERS-protected paths always require human review before merge:
-  `alembic/versions/**`, `packages/**/db/models/**`.
+- Changes under `alembic/versions/**` or `packages/**/db/models/**`. These
+  are the expensive-to-reverse paths — migrations touch live data, models
+  shape everything downstream.
+
+## What actually gates a merge
+
+Be precise about this, because it affects how carefully you need to work.
+
+**This is a solo project.** There is no second reviewer. GitHub does not
+permit approving your own PR, so branch protection requires **0 approvals** —
+the five CI checks are the only mechanical gate:
+
+```
+Lint & format · Type check · Tests · Lockfile up to date · Docker image
+```
+
+`.github/CODEOWNERS` still flags PRs touching migrations and models in the
+GitHub UI, but with one human it **cannot block a merge** — treat it as a
+signal that says "read this diff twice," not as a safety net that will catch
+your mistake.
+
+The practical consequence: **nothing but CI stands between your work and
+`main`.** Don't rely on review to catch what you should have caught. If
+you're unsure whether a change is correct, say so in the PR body rather than
+letting it ride.
 
 ## Don't
 
