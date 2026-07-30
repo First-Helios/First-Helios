@@ -1,10 +1,15 @@
 # Helios V2
 
-A trustworthy, queryable map of real food deals in Austin — rebuilt from
-scratch with professional rigor.
+A trustworthy, queryable price index of food in Austin — restaurant menus
+and what they actually cost, rebuilt from scratch with professional rigor.
 
 **Status:** Phase 0/1 — bootstrap tooling and the first schema migration are
 on `main`. Not yet a running service.
+
+The scope was set menus-first on 2026-07-31 by
+[RFC-0001](./docs/rfc/0001-menu-pricing-first.md): menu and item-price
+coverage across the Austin / Round Rock metro is the product, and meal deals
+become a layer built on top of it (Phase 10) rather than the foundation.
 
 This build is **agent-driven with a human reviewer in the loop**. See
 [CLAUDE.md](./CLAUDE.md) for agent working instructions and

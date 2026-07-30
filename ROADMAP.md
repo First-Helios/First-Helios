@@ -1,6 +1,6 @@
 # Helios V2 — Roadmap
 
-> **Purpose.** Restart the Helios project (meal deals + restaurant menus for Austin) with the rigor of a professional codebase.
+> **Purpose.** Restart the Helios project (a food price index for Austin — restaurant menus and item prices, with meal deals layered on top) with the rigor of a professional codebase.
 > This document distills what is worth keeping from V1, defines the V2 architecture, and sequences the rebuild into phases.
 > Every phase is a PR train; every PR passes CI; every architectural decision is recorded in an ADR.
 >
@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-07-29 — restructured after Phase 0 completed and the build became agent-driven.
+> **Last revised:** 2026-07-31 — re-scoped menus-first per [RFC-0001](./docs/rfc/0001-menu-pricing-first.md). The previous revision (2026-07-29) restructured the phases after Phase 0 completed and the build became agent-driven.
 
 ---
 
@@ -32,13 +32,20 @@
 
 ## 1. North Star
 
-> **"A trustworthy, queryable map of real food deals in Austin, built from free public data, run as a live service, with professional discipline."**
+> **"A trustworthy, queryable price index of food in Austin, built from free public data, run as a live service, with professional discipline."**
 
-- **Trustworthy** — every price and validity window is traceable to a captured page.
+- **Trustworthy** — every price is traceable to a captured page, and carries the date it was observed.
 - **Queryable** — a clean HTTP API with pagination, filters, and OpenAPI docs.
-- **Real** — each deal passes a signal-quality gate before becoming visible.
+- **Real** — every price is a first-party price a person would actually pay in the restaurant, not a delivery-inflated one.
 - **Free public data** — no paid APIs in the V1 dependency graph.
 - **Professional discipline** — PR-gated main, CI, typed code, ADRs for decisions, tests for every non-trivial function.
+
+> **Re-scoped 2026-07-31.** The North Star was previously "a map of real
+> food *deals*." The product is the **price index**: menus and item prices
+> across as many Austin/Round Rock venues as possible. Deals are a layer
+> built on top of a populated menu graph, not the foundation. See
+> [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) for the reasoning and
+> the implementation plan.
 
 ---
 
@@ -46,24 +53,31 @@
 
 **In scope**
 
-- Restaurant **meal deals** (promotions, limited-time offers, happy hours, combos) for Austin, TX.
-- Restaurant **menus** (sections, items, prices, modifiers) — schema now, population later.
-- First-party scrapes of 6–10 anchor chains, plus a handful of local independents sourced from Overture / OSM.
+- Restaurant **menus and item prices** (sections, items, prices, variants, modifiers) across the Austin / Round Rock metro — schema *and* population.
+- **Venue discovery at metro scale** — Overture / OSM seeding, website resolution, menu-URL discovery. Coverage is the product, so discovery is a first-class subsystem, not a helper script.
 - Venue identity (which restaurant is which) and geocoding (lat/lng + H3).
-- A read-only public API.
-- Replay + audit tooling so every data point is traceable.
+- A read-only public API, including price-index aggregates.
+- Replay + audit tooling so every price is traceable to a captured page.
+
+**In scope, but after the coverage milestone**
+
+- Restaurant **meal deals** (promotions, limited-time offers, happy hours, combos). Rows that look promotional are *identified and parked* during menu extraction so the deals layer has evidence to build on, but no deal is extracted, scored, or served until the menu graph is populated.
 
 **Out of scope**
 
-- Jobs, labor data, events, sentiment, Revelio, SerpAPI, Google Places — all V1 modules that are not meal-deal/menu related.
+- Jobs, labor data, events, sentiment, Revelio, SerpAPI, Google Places — all V1 modules that are not menu/price related.
+- **Aggregator and delivery-platform scraping** (Yelp, Google Maps, DoorDash, UberEats). Their terms prohibit it, and delivery menus carry a 15–30% markup, so their prices answer a different question than the one this project asks. See [RFC-0001 §D1](./docs/rfc/0001-menu-pricing-first.md).
+- Cross-venue item canonicalization (mapping "1/2 lb Angus Burger" ≈ "cheeseburger"). Aggregates are category-level for now; see §8.
+- Non-food price verticals (auto repair, plumbing, …). Explicitly a *future* direction — the constraint it imposes today is only that venue identity and the observation pattern stay food-agnostic.
 - Authentication / write API (deferred until a real consumer exists).
-- Multi-city coverage (Austin-only until the Austin pipeline is stable).
+- Multi-city coverage (Austin/Round Rock only until that pipeline is stable).
 - The SpiritPool browser extension (separate project; this repo only handles its ingest endpoint if it is ever revisited).
 
 **Success criteria**
 
-- A deployed HTTP endpoint returns paginated, filterable deals for Austin.
-- ≥ 85% of visible deals pass manual spot-check for "this is real and currently valid."
+- **300+ distinct Austin / Round Rock venues with at least one priced menu item each**, served from a deployed HTTP endpoint.
+- **≥ 80% of covered venues observed within the last 45 days** — freshness is measured and exposed, never assumed.
+- Every price traces to a replay bundle, and re-running any scrape produces zero duplicate rows.
 - The service survives a reboot of its host and a wipe of its database (restore from backup + replay).
 - Every architectural decision that cost more than a day to make is written down as an ADR.
 
@@ -79,6 +93,24 @@
 ## 3. Part A — Distilled Assets
 
 These are the pieces of V1 worth preserving. Everything else either never shipped, depended on a paid API, or was built before the design was understood.
+
+> **Read this section with the 2026-07-31 re-scope in mind.** It was written
+> deals-first, and the inventory below reflects that. What changed:
+>
+> - **§3.1's eight chain sources are now anchor *menu* sources, not deal
+>   sources** — useful for validating extraction against sites we understand,
+>   but no longer the coverage strategy. Coverage now comes from metro-wide
+>   Overture/OSM discovery (R2/R3 below), which moves from "reference data" to
+>   the most important row in the table.
+> - **§3.2's processes 1–3** (sub-deal decomposition, temporal parsing,
+>   signal-quality scoring) are deal parsers and defer to Phase 10. Processes
+>   4–9 (identity, replay, expectations, registry, config routing, the
+>   multi-layer model) are unchanged and still land early.
+> - **The most valuable V1 asset for the new scope isn't in either table:**
+>   `collectors/meal_deals/menu_sidecar.py` and its companion
+>   `menu_persistence_schema.py`. V1 built a full menu graph extractor and
+>   never persisted it — sidecar-only, awaiting a schema that never came.
+>   V2 gives it that schema in Phase 1 and ports it in Phase 3.
 
 ### 3.1 Sources (Free & Public Only)
 
@@ -318,18 +350,65 @@ Each phase ends with a demoable artifact on `main`, merged through a PR with gre
 
 **Status at a glance**
 
-| Phase | Name | Status |
-|-------|------|--------|
-| 0 | Foundations & Tooling | ✅ **Complete** |
-| 1 | Domain Model & Migrations | ⬅️ **Next** |
-| 2 | First Light — read API + staging deploy | Planned |
-| 3 | Parsing Library | Planned |
-| 4 | Venue Identity & Geocoding | Planned |
-| 5 | Scrapers — decide, then build | Planned |
-| 6 | Ingest Pipeline | Planned |
-| 7 | API Surface — full | Planned |
-| 8 | Operations — prod | Partially done early |
-| 9 | Harden | Planned |
+Phase *numbers* are stable identifiers (the [Learning Guide](./LEARNING_GUIDE.md)
+modules reference them); the **Order** column is the sequence they are
+actually built in. RFC-0001 changed the order without renumbering, because
+renumbering breaks every existing cross-reference for no benefit.
+
+| Order | Phase | Name | Status |
+|-------|-------|------|--------|
+| 1 | 0 | Foundations & Tooling | ✅ **Complete** |
+| 2 | 1 | Domain Model & Migrations | ⬅️ **Next** |
+| 3 | 2 | First Light — read API + staging deploy | Planned |
+| 4 | 4 | Venue Discovery, Identity & Geocoding | Planned |
+| 5 | 5 | Scrapers — decide, then build | Planned |
+| 6 | 3 | Parsing — menu extraction library | Planned |
+| 7 | 6 | Ingest Pipeline & Freshness | Planned |
+| 8 | 7 | API Surface — full, incl. price index | Planned |
+| 9 | 8 | Operations — prod | Partially done early |
+| 10 | 9 | Harden | Planned |
+| 11 | 10 | Deals layer | Future |
+
+**Why Phase 3 now runs after Phases 4–5.** The parsing library was
+originally first among the feature phases because V1's parsers could be
+ported blind — they were *deal-text* parsers, pure functions over strings
+already in hand. RFC-0001's parsers are *menu extractors*, and their
+golden-file fixtures have to come from real captured Austin menu pages. You
+cannot write the fixtures before you can fetch the pages, so discovery and
+the fetch/replay core come first.
+
+**Mapping to the RFC-0001 work plan.** RFC-0001 §"Work plan" is the
+authoritative PR-level sequencing; this table is the phase-level view of the
+same thing:
+
+| RFC-0001 PRs | Phase |
+|--------------|-------|
+| 0 — docs, ADR-0003 | (this revision) |
+| 1–3 — venue identity, menu graph, raw/mart schemas | 1 |
+| 4 — venues read endpoints | 2 |
+| 5–6 — Overture/OSM seeding, website + menu-URL resolution | 4 |
+| 7 — fetch + replay core (ADR-0005 first) | 5 |
+| 8–9 — JSON-LD/DOM ladder, render policy, PDF | 3 |
+| 10 — monthly cadence + change detection | 6 |
+| 11 — price index endpoints | 7 |
+
+**What changed in the 2026-07-31 revision**
+
+- **Menus became the product, deals became a later layer** — see §1 and §2.
+  The phase *contents* below are rewritten accordingly; the phase numbers
+  are not.
+- **Phase 4 absorbed discovery.** It was "venue identity & geocoding," a
+  supporting concern. Under a coverage-driven product it is the subsystem
+  that determines the ceiling on everything else, so it is now
+  "Venue Discovery, Identity & Geocoding" and carries the Overture/OSM
+  seeding and website-resolution work.
+- **Phase 3 refocused** from deal-text parsing (sub-deals, temporal
+  validity) to menu extraction, and moved after Phases 4–5 for the reason
+  above. The deal parsers are deferred to Phase 10 with the rest of the
+  deals layer.
+- **Phase 6 absorbed freshness** — re-scrape cadence and change detection
+  are ingest concerns, and the freshness SLO is now a success criterion.
+- **Phase 10 is new**: the deals layer, built on a populated menu graph.
 
 **What changed in the 2026-07-29 revision**
 
@@ -390,23 +469,41 @@ required, which is strictly stronger in practice. See §6.0.
 
 **Goal:** the canonical schema, written fresh from lessons learned, migrated cleanly, tested at the constraint level.
 
-**Deliverables**
+**Deliverables** (RFC-0001 work-plan PRs 1–3)
 
-- `packages/helios_core/db/models/deal.py` — `DealObservation`, `DealApplicability`, `DealMaterialization` as typed `Mapped[...]`.
-- `packages/helios_core/db/models/venue.py` — grow the existing `Venue` stub; add `VenueAlias`, `SiteIdentity`.
-- `packages/helios_core/db/models/menu.py` — `MenuSection`, `MenuItem`, `MenuPricePoint`, `MenuModifier` (schema only; no data yet).
-- The `raw` / `canonical` / `mart` schema split (see §4.3), including the
+- `packages/helios_core/db/models/venue.py` — grow the existing `Venue` stub; add `Brand`, `VenueAlias`, `VenueSource`, `SiteIdentity`.
+- `packages/helios_core/db/models/menu.py` — `MenuPage`, `MenuSection`, `MenuItem`, `PriceObservation`, `MenuModifier`.
+- The `raw` / `canonical` / `mart` schema split (see §4.3 and
+  [ADR-0003](./docs/adr/0003-three-layer-schema.md)), including the
   `include_schemas` + schema-allowlist change to `alembic/env.py` that the
-  split requires — its current `include_object` filter is schema-blind.
-- Postgres `CHECK` constraints for enums; partial unique indexes for chain templates.
-- Alembic migration(s) for the canonical schema — autogenerated, then hand-reviewed.
+  split requires — its current `include_object` filter is schema-blind — and
+  relocating the existing `venue` table out of `public`.
+- `raw` capture index + `rejected_signals` dead-letter; `mart.current_menu`
+  and the first price-index aggregate.
+- Postgres `CHECK` constraints for enums; deterministic natural keys so
+  re-ingest is idempotent; money as integer cents, never float.
+- Alembic migration(s) — autogenerated, then hand-reviewed.
 - Unit tests asserting each unique constraint, each `CHECK`, each FK cascade rule.
-- **ADR-0003:** "Three-layer schema (raw / canonical / mart)."
+- **ADR-0003:** "Three-layer schema (raw / canonical / mart)." ✅ *Written —
+  see [docs/adr/0003](./docs/adr/0003-three-layer-schema.md).*
+
+**Deal models are not in this phase.** `DealObservation` /
+`DealApplicability` / `DealMaterialization` move to Phase 10 with the rest
+of the deals layer. Building a schema for data we will not collect for
+months is exactly the "for later" scaffolding CLAUDE.md prohibits — and the
+menu graph is likely to change what the right deal schema looks like.
 
 **Port hints (`V1-Graveyard` branch)**
 
-- `core/database.py::DealObservation` (~L1283) — keep the 41 fields that proved useful, drop the dead ones.
+- `collectors/meal_deals/menu_persistence_schema.py` — V1's target menu-graph
+  shape (`MenuPageRow`, `MenuSectionRow`, `MenuItemRow`, `MenuPricePointRow`,
+  `MenuModifierRow`). It was deliberately built sidecar-first and never
+  became tables, so the column names and provenance fields are settled but
+  unproven against a live schema. Port the shape; V2 renames
+  `MenuPricePoint` → `PriceObservation` and stores money as integer cents.
 - `core/venue_identity.py` for venue + alias patterns.
+- `core/database.py::DealMaterialization` (~L1395) — the refresh-task
+  pattern `mart` inherits, not the deal columns themselves.
 
 **Sequencing note.** This is a large phase; split it across several PRs
 (venue/identity models, deal models, menu models, schema split) rather than
@@ -420,7 +517,12 @@ where a bad decision is most expensive to undo:
 - Does every enum have a `CHECK` constraint, not just a Python-side `Enum`?
 - Is every FK's `ondelete` behavior deliberate, and does a test prove it?
 - Do the migrations run **and** roll back cleanly on a non-empty database?
-- Is `DealObservation` the only write path for observations, per §4.3?
+- Is `PriceObservation` append-only in practice — is there any code path that
+  `UPDATE`s a price rather than inserting a new observation?
+- Is money stored as integer cents everywhere, with no float column anywhere
+  near a price?
+- Does every mapped table declare an explicit, allowlisted schema
+  ([ADR-0003](./docs/adr/0003-three-layer-schema.md)), and does a test prove it?
 - Any column that's nullable — is it nullable because the domain allows
   absence, or because it was easier?
 
@@ -473,52 +575,76 @@ OpenAPI schema at `/openapi.json` describes it accurately.
 
 ---
 
-### Phase 3 — Parsing Library
+### Phase 3 — Parsing: menu extraction library
+
+> **Runs 6th, after Phases 4–5.** Golden-file fixtures require real captured
+> menu pages. See the sequencing note in the status table.
 
 **Learning module to review against:** [M4](./LEARNING_GUIDE.md#m4--testing-pyramid)
 
-**Goal:** the three text-processing algorithms lifted into a pure-function library with exhaustive tests. **No I/O, no DB, no HTTP.**
+**Goal:** the menu-extraction ladder as a pure-function library with exhaustive tests. **No I/O, no DB, no HTTP** — it takes bytes and returns a normalized menu structure.
 
-**Deliverables**
+**Deliverables** (RFC-0001 work-plan PRs 8–9)
 
-- `packages/helios_parsing/sub_deals.py` — `extract_sub_deals(text: str) → list[SubDeal]` returning a typed dataclass.
-- `packages/helios_parsing/temporal.py` — `extract_validity(text: str) → Validity` dataclass.
-- `packages/helios_parsing/quality.py` — `score_signal(observation: dict) → SignalQuality` with components + total.
+- `packages/helios_parsing/jsonld.py` — schema.org `Menu → MenuSection → MenuItem → Offer` extraction. Rung 1 of the ladder.
+- `packages/helios_parsing/dom_menu.py` — heading + list/table item-price pairing, service-period and course tagging, modifier detection. Rung 2.
+- `packages/helios_parsing/pdf_menu.py` — text-layer extraction feeding the same pairing rules. Rung 4.
+- `packages/helios_parsing/render_policy.py` — the pure decision layer for *when* to escalate to a browser (rung 3). No Playwright import; the decision and the execution stay separate.
+- A single normalized output shape shared by every rung, so ingest has one code path.
+- **Promotional-row filtering** — rows that read as deals ("half off", "BOGO", "$2 off") are excluded from menu prices and parked with a marker for the Phase 10 deals layer. Getting this boundary wrong pollutes the price index with prices nobody pays on a normal Tuesday.
 - Coverage ≥ 90% for the package.
-- Hypothesis property tests — e.g., "temporal parser is idempotent on its own output", "sub-deal count is ≥ 1 for any non-empty text with a dollar sign".
-- 50+ golden-file test cases ported from V1 + 20 new ones from recent scrapes.
+- Hypothesis property tests — e.g., "extraction is idempotent on its own output", "no price point is ever negative or > $10,000", "every item belongs to exactly one section".
+- 20+ golden-file cases captured from real Austin/Round Rock menu pages, spanning JSON-LD, clean DOM, hostile DOM, and PDF.
 
 **Port hints (`V1-Graveyard` branch)**
 
-- `collectors/meal_deals/sub_deals.py` — regex chain, priority order matters.
-- `collectors/meal_deals/temporal.py` — day/time regex with em/en dashes, "close" sentinel.
-- `collectors/meal_deals/quality.py` — 6-factor weights (25/20/15/15/10/15).
+- `collectors/meal_deals/menu_sidecar.py` — the core port. JSON-LD walk, DOM pairing, `_SERVICE_PERIOD_RULES`, `_COURSE_RULES`, modifier regexes, and the bounded caps that keep output small on huge menus.
+- `collectors/meal_deals/render_policy.py` — escalation policy with deterministic URL-hash sampling.
+- `collectors/meal_deals/price_index_routes.py` — `_SIZE_LABEL_RE` (variant detection) and the promotional/meal-period filters, which V1 had to apply at query time because extraction didn't. V2 applies them at extraction time.
 
-**Done when:** the parsing package can be published to a private index and pulled into the scraper by version number — no cross-package imports.
+**Deferred to Phase 10** (deals layer): `sub_deals.py`, `temporal.py`, and the 6-factor `quality.py` scorer. Their V1 sources are unchanged and still worth porting — just not yet.
+
+**Done when:** the parsing package can be published to a private index and pulled into the scraper by version number — no cross-package imports — and every golden fixture round-trips.
 
 ---
 
-### Phase 4 — Venue Identity & Geocoding
+### Phase 4 — Venue Discovery, Identity & Geocoding
+
+> **Runs 4th, immediately after First Light.** This phase sets the ceiling on
+> total coverage, so it runs before anything that consumes venues.
 
 **Learning module to review against:** [M10](./LEARNING_GUIDE.md#m10--geospatial)
 
-**Goal:** given a restaurant name + address, return a canonical venue ID (or create one). Given an address, return a lat/lng and H3 cell.
+**Goal:** a populated venue table for the Austin/Round Rock metro, each venue deduplicated, geocoded, and — where one exists — pointed at its first-party website and its menu URL.
 
-**Deliverables**
+**Deliverables** (RFC-0001 work-plan PRs 5–6)
 
+- **Overture seeding** — parquet ingest filtered to `food_and_beverage` within a config-driven metro polygon, landing in `venue_source`. The polygon is a parameter, not a constant: scaling to another metro is a config change.
 - `packages/helios_core/identity.py` — name fingerprinting, address normalization, URL canonicalization, proximity clustering.
 - `packages/helios_core/geo.py` — Nominatim client with 1-req/sec throttle, manual overrides for ambiguous Austin suburbs, disk-cached responses keyed by normalized query.
 - H3 r6–r9 cell computation on every venue insert.
+- **Website resolution** — Overture `websites` field first, Overpass `website` / `contact:website` fallback, plus the `config/sources.yaml` manual registry. Results land in `site_identity` with the resolution method recorded.
+- **Menu-URL discovery** — common paths (`/menu`, `/menus`, `/food`), sitemap entries matching menu patterns, on-site links whose anchor text hits a menu lexicon. Persisted so re-scrapes skip discovery.
 - Unit tests: golden-set fixture of 100 hand-labeled matches with ≥ 95% precision.
-- Integration test: Nominatim responses replayed from disk fixtures — no live calls in CI.
+- Integration test: Nominatim and Overpass responses replayed from disk fixtures — no live calls in CI.
 
 **Port hints (`V1-Graveyard` branch)**
 
 - `core/venue_identity.py`, `core/normalizer.py::make_fingerprint`.
 - `collectors/geocoding.py` — including the 25-city override dict.
+- `collectors/meal_deals/osm_url_resolver.py` — Overpass query shape, name-fingerprint + proximity matching, URL canonicalization.
 - `scripts/build_facility_index.py` — rate-limit + viewbox patterns.
 
-**Done when:** loading 1000 Overture restaurant rows produces < 2% duplicate venues and < 1% wrong geocodes (both measured against a hand-labeled 100-row sample).
+**Expect ~30–40% website coverage from free sources.** That is V1's measured
+number (`osm_url_resolver.py` docstring), and V1 filled the gap with paid
+Google Places — which V2 has ruled out. Plan against the free number: on an
+estimated 3–4k metro food venues it yields ~1,000–1,400 candidate sites,
+which is enough headroom for the 300-venue milestone but not enormous. **Report
+the actual measured figure** — it is the single number that most determines
+whether the coverage target is reachable, and if it comes in far below 30%,
+that is a finding worth stopping on rather than scraping around.
+
+**Done when:** the metro is seeded, < 2% duplicate venues and < 1% wrong geocodes (both measured against a hand-labeled 100-row sample), and website/menu-URL coverage is measured and written down.
 
 ---
 
@@ -526,8 +652,9 @@ OpenAPI schema at `/openapi.json` describes it accurately.
 
 **Learning modules to review against:** [M7](./LEARNING_GUIDE.md#m7--http-html--the-real-web) · [M8](./LEARNING_GUIDE.md#m8--scraping-fundamentals)
 
-**Goal:** pick the scraping framework on evidence, then build two chains on
-it — one static, one SPA — sharing rate-limiting and replay middleware.
+**Goal:** pick the scraping framework on evidence, then build the fetch +
+replay core on it — rate limiting, capture indexing, and replay bundles —
+proven against two representative menu sites, one static and one SPA.
 
 > **Merged from the original Phases 4 and 5.** The old plan had you
 > hand-build McDonald's, *then* evaluate frameworks, then rewire the working
@@ -536,22 +663,24 @@ it — one static, one SPA — sharing rate-limiting and replay middleware.
 > twice is waste — so the evaluation happens first, as throwaway spikes, and
 > the real implementation is written once.
 
-**Deliverables**
+**Deliverables** (RFC-0001 work-plan PR 7)
 
-- **Spikes first, and they are throwaway.** Scrape McDonald's in Scrapy and
-  in Crawlee/Playwright. Benchmark throughput, ergonomics, output fidelity.
-  This code is deleted after the decision — do not let a spike graduate into
-  production by accident.
+- **Spikes first, and they are throwaway.** Fetch a representative menu site
+  in Scrapy and in Crawlee/Playwright. Benchmark throughput, ergonomics,
+  output fidelity. This code is deleted after the decision — do not let a
+  spike graduate into production by accident.
 - **ADR-0005:** "Scraper framework choice" — explicit tradeoffs, benchmark
-  numbers, decision, consequences.
-- `apps/scraper/chains/mcdonalds.py` — static HTML; fetch → parse → ingest.
-- `apps/scraper/chains/subway.py` — SPA; exercises the Playwright path.
-- `apps/scraper/replay/bundle.py` — writes `var/replay/<chain>/<date>/<url-hash>.json`.
+  numbers, decision, consequences. Weigh it for the actual workload: ~1,000+
+  *distinct hosts* fetched shallowly once a month, not a few hosts crawled
+  deeply. That profile favors per-host politeness and breadth over
+  crawl-depth machinery.
+- **Rate-limit middleware** — one token bucket per host, config-driven.
+- `apps/scraper/replay/bundle.py` — writes `var/replay/<source>/<date>/<url-hash>.json`, and the matching `raw` capture-index row.
 - `apps/scraper/audit/expectations.py` — compares a YAML expectation file against bundles.
-- `config/sources.yaml` — strategy, selectors, rate limit per chain, JSON-Schema validated in CI.
-- `config/expectations.yaml` — 3–5 known-good deals per chain.
-- CLI: `helios scrape mcdonalds --once`.
-- Integration tests: frozen HTML fixtures → assert `DealObservation` row counts + field values. **No live network calls in CI.**
+- `config/sources.yaml` — strategy, selectors, rate limit per source, JSON-Schema validated in CI. Doubles as the manual venue/site registry from Phase 4.
+- `config/expectations.yaml` — 3–5 known-good priced items per anchor source.
+- CLI: `helios scrape <source> --once`.
+- Integration tests: frozen HTML fixtures → assert capture rows + bundle contents. **No live network calls in CI.**
 
 **Scraping etiquette is a hard requirement, not a nicety.** Honor
 `robots.txt`, identify with a real User-Agent, respect the per-source rate
@@ -559,47 +688,49 @@ limits in `config/sources.yaml`, and never bypass a paywall or login (§2,
 "public data only"). A scraper that gets the project IP-banned costs more
 than the data was worth.
 
-**Done when:** both chains run under one framework, share middleware for rate limiting + replay bundling, have fixture-based tests, and the expectation diff passes.
+**Done when:** both representative sites run under one framework, share middleware for rate limiting + replay bundling, have fixture-based tests, and the expectation diff passes.
 
 ---
 
-### Phase 6 — Ingest Pipeline
+### Phase 6 — Ingest Pipeline & Freshness
 
 **Learning module to review against:** [M9](./LEARNING_GUIDE.md#m9--data-engineering-patterns)
 
-**Goal:** scraping → parsing → identity → persistence, all idempotent, all re-runnable.
+**Goal:** scraping → extraction → identity → persistence, all idempotent, all re-runnable — and kept fresh on a schedule without re-doing work that hasn't changed.
 
-**Deliverables**
+**Deliverables** (RFC-0001 work-plan PR 10)
 
-- Upsert on `(source, source_observation_key)` — re-running a scrape produces zero duplicates.
-- Applicability fan-out: chain-wide deals create N `deal_applicability` rows (one per active venue of that brand).
-- Materialization refresh: post-ingest task updates `mart.deal_materialization`.
-- Backfill CLI: `helios backfill --source mcdonalds --from 2026-01-01` replays bundles from disk into the DB.
-- Metrics: `scrapes_total`, `observations_ingested_total`, `applicability_rows_total`, `materialization_refresh_seconds`.
-- Dead-letter: signals that fail quality-gating land in `raw.rejected_signals` with a reason code.
+- Idempotent ingest on deterministic natural keys — re-running a scrape produces zero duplicate rows.
+- **Conflict resolution** per [RFC-0001 §D6](./docs/rfc/0001-menu-pricing-first.md): nothing overwritten, `current_menu` resolved by source-trust rank (`jsonld > dom > pdf > llm`), then recency, then confidence. Same-window contradictions flagged to a review queue rather than silently resolved.
+- **Change detection:** re-fetch → compare `content_hash`. Unchanged → touch `last_seen_at`, record a cheap confirmation, skip extraction entirely. Changed → full extraction. Items that vanish get `last_seen_at` frozen; **nothing is deleted**, because disappearance is information.
+- **Scheduling:** ~30-day default cadence, per-source overridable, cron-driven on the staging host. No queue service — adding one is a stop-and-ask dependency (see [CLAUDE.md](./CLAUDE.md)).
+- Materialization refresh: post-ingest task updates `mart.current_menu` and the price-index aggregates, targeted to the venues that actually changed.
+- Backfill CLI: `helios backfill --source <s> --from 2026-01-01` replays bundles from disk into the DB.
+- Metrics: `scrapes_total{source,outcome}`, `price_observations_ingested_total`, `venues_covered`, `menu_staleness_days` (histogram), `materialization_refresh_seconds`.
+- Dead-letter: extractions that fail the confidence gate land in `raw.rejected_signals` with a reason code.
 
-**Done when:** you can drop the entire `canonical` schema and reconstruct it by running `helios backfill --all` against the replay bundles on disk.
+**Done when:** you can drop the entire `canonical` schema and reconstruct it by running `helios backfill --all` against the replay bundles on disk; and a re-run against an unchanged site produces zero new canonical rows.
 
 ---
 
-### Phase 7 — API Surface: full
+### Phase 7 — API Surface: full, including the price index
 
 **Learning module to review against:** [M11](./LEARNING_GUIDE.md#m11--api-design)
 
-**Goal:** grow Phase 2's skeleton into the complete read-only public API.
+**Goal:** grow Phase 2's skeleton into the complete read-only public API — the price index made queryable.
 
-**Deliverables**
+**Deliverables** (RFC-0001 work-plan PR 11)
 
-- `GET /deals?venue_id=&brand=&h3=&valid_at=` — cursor-paginated, filtered.
-- `GET /deals/{id}` — single deal with full materialization + source bundle reference.
-- `GET /venues/{id}` — extend Phase 2's endpoint with currently-valid deals.
-- `GET /venues/{id}/menu` — menu (empty list until menus are populated).
+- `GET /venues/{id}/menu` — the venue's current menu from `mart.current_menu`, every price carrying `observed_at` and a staleness age.
+- `GET /venues?h3=&brand=&has_menu=` — cursor-paginated, filtered.
+- `GET /items/{id}/price-history` — the observation trail behind a single price. This is the endpoint that makes "trustworthy" checkable by a user rather than asserted by us.
+- `GET /price-index?h3=&course=` — the first aggregate: median / p25 / p75 price by area and course, with the sample size, because an aggregate over four venues is not an index and the response should admit that.
+- **Freshness in the wire format, not just the docs.** Every priced response carries `as_of`. A stale price served as though it were current is the failure mode this whole design exists to prevent.
 - OpenAPI schema at `/openapi.json`, docs at `/docs` — already live from Phase 2; keep accurate.
 - Contract test: OpenAPI schema committed and diffed in CI; breaking changes fail the build.
-- Read-path performance: every filter combination above is index-backed. Add
-  a test that fails on a sequential scan of `deal_materialization`.
+- Read-path performance: every filter combination above is index-backed. Add a test that fails on a sequential scan of `mart.current_menu`.
 
-**Done when:** `curl https://.../deals?h3=872a10075ffffff&valid_at=now` returns a page of real deals with correct pagination and a stable shape.
+**Done when:** `curl https://.../price-index?h3=872a10075ffffff&course=entree` returns a real aggregate with a sample size, and the 300-venue milestone is measurable through the API itself.
 
 ---
 
@@ -669,6 +800,35 @@ deploy is one command from a tagged release.
   and does the prod topology chosen in Phase 8 still need it?
 
 **Done when:** you could hand the repo to another developer and they could ship a feature in their first week.
+
+---
+
+### Phase 10 — Deals layer
+
+**Goal:** meal deals, built on top of a populated menu graph — the original
+V1 ambition, now with the thing it was always missing underneath it.
+
+**Why last, not first.** A deal is only meaningful relative to a price: "$5
+off" and "half price margaritas" are unquantifiable without knowing what the
+item normally costs. V1 built deals without a menu graph and could never
+answer "is this actually a good deal?" — it could only repeat the claim on
+the page. With `price_observation` populated, a deal's value becomes
+computable and the [signal-quality gate](#32-processes-reusable-algorithms)
+gets a real denominator.
+
+**Deliverables**
+
+- `packages/helios_parsing/sub_deals.py` — port V1's ordered regex chain; pattern list externalized to YAML; Hypothesis property tests.
+- `packages/helios_parsing/temporal.py` — port; return a structured `Validity` dataclass (`weekdays: set`, `start: time`, `end: time | Literal["close"]`).
+- `packages/helios_parsing/quality.py` — port the 6-factor scorer (25/20/15/15/10/15); weights + thresholds in config, not constants.
+- `packages/helios_core/db/models/deal.py` — `DealObservation`, `DealApplicability`, deferred here from Phase 1.
+- Applicability fan-out: chain-wide deals create N rows, one per active venue of that brand.
+- Promotional rows parked during Phase 3 extraction become the initial input — the evidence is already captured and replayable.
+- `mart.deal_materialization` + `GET /deals` endpoints.
+
+**Port hints (`V1-Graveyard` branch):** `collectors/meal_deals/sub_deals.py`, `temporal.py`, `quality.py`, `semantic_layer.py`, `core/database.py` (~L1283, ~L1356, ~L1395).
+
+**Done when:** a deal can be expressed as a discount against a known menu price, and ≥ 85% of visible deals pass manual spot-check for "this is real and currently valid" — the success criterion the pre-2026-07-31 roadmap set for the whole project.
 
 ---
 
@@ -759,10 +919,17 @@ decisions are hardest to reverse.
 |---|-------|--------|-------|
 | [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack | Accepted | 0 |
 | [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
-| 0003 | Three-layer schema (raw / canonical / mart) | Planned | 1 |
+| [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Proposed | 1 |
 | 0004 | API conventions (pagination, errors, versioning) | Planned | 2 |
 | 0005 | Scraper framework choice | Planned | 5 |
 | 0006 | Prod hosting choice | Planned | 8 |
+| 0007 | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
+
+**RFC ledger**
+
+| # | Title | Status | Phase |
+|---|-------|--------|-------|
+| [0001](./docs/rfc/0001-menu-pricing-first.md) | Menu-and-pricing-first data collection | Accepted | 1–7 |
 
 ### 6.5 RFCs
 
@@ -809,7 +976,7 @@ Files to create on the very first commit of V2 (before any feature code):
 - [x] `ROADMAP.md` — this file
 - [x] `LEARNING_GUIDE.md`
 - [x] `CLAUDE.md` — agent working instructions (not in the original plan; added once the build became agent-driven)
-- [x] `LICENSE` — Business Source License 1.1 (not in the original plan; source-visible, non-commercial until the Change Date — see the [LICENSE](../LICENSE) file itself for the current parameters)
+- [x] `LICENSE` — Business Source License 1.1 (not in the original plan; source-visible, non-commercial until the Change Date — see the [LICENSE](./LICENSE) file itself for the current parameters)
 - [x] `CONTRIBUTING.md` — how to open a PR, write a commit, write an ADR
 - [x] `.github/workflows/ci.yml`
 - [x] `.github/pull_request_template.md`
@@ -835,9 +1002,19 @@ Files to create on the very first commit of V2 (before any feature code):
 
 1. **Where does V2 live?** — **Decided: this repo.** `main` is V2. `V1-Graveyard` holds the legacy code. History is a feature; having V1 one `git checkout` away is useful during Phases 1–6.
 
-2. **Menus in V1 of V2?** — Schema: yes (Phase 1 includes `menu_*` tables). Population: no (no menu scraper through Phase 6). Menus become Phase 10 once deals are solid.
+2. ~~**Menus in V1 of V2?**~~ — **Resolved 2026-07-31, and inverted.** Menus
+   are the product: schema *and* population, Phases 1–7. Deals move to
+   Phase 10. See [RFC-0001](./docs/rfc/0001-menu-pricing-first.md). The
+   previous answer here ("schema yes, population no, menus become Phase 10
+   once deals are solid") is exactly backwards from what we are now building
+   — kept visible rather than deleted, because the reversal is the single
+   biggest scope decision this project has made.
 
-3. **Multi-city?** — Out of scope for this roadmap. When Austin is stable, add an ADR for the multi-tenant approach (single DB with `region` column vs schema-per-region vs DB-per-region).
+3. **Multi-city?** — Out of scope for this roadmap, but the schema must not
+   *prevent* it: nothing hardcodes Austin, venues carry lat/lng + H3, and the
+   metro boundary is a config polygon (RFC-0001 §D1). When Austin is stable,
+   add an ADR for the multi-tenant approach (single DB with `region` column
+   vs schema-per-region vs DB-per-region).
 
 4. **Write API / contributor endpoint?** — Out of scope. If SpiritPool browser extension is re-integrated, it becomes an RFC.
 
@@ -856,6 +1033,30 @@ Files to create on the very first commit of V2 (before any feature code):
    becomes the bottleneck (it likely will in Phase 1), the fix is smaller PRs
    and tighter ADR gates, not faster reading.
 
+9. **Cross-venue item canonicalization.** "What does a cheeseburger cost in
+   78704?" needs a mapping from "1/2 lb Angus Burger" to a shared concept.
+   Deferred deliberately: Phase 7 aggregates by course + section heuristics,
+   which V1 proved adequate. Revisit as its own RFC when category-level
+   aggregates demonstrably stop answering the questions people ask — this is
+   a genuinely hard problem (fuzzy matching, taxonomy maintenance, possibly
+   embeddings) and doing it early would be guessing at requirements.
+
+10. **Non-food price verticals** (auto repair, plumbing, home services). A
+    plausible future direction, and the reason venue identity and the
+    observation pattern are kept food-agnostic. But **no abstraction is built
+    for it now** — per [CLAUDE.md](./CLAUDE.md), speculative scaffolding is a
+    cost paid today for a benefit that may never arrive. The open question is
+    narrow: when a second vertical becomes real, does it share
+    `price_observation` or get its own observation table? Decide then, with a
+    concrete second vertical in hand.
+
+11. **What if free website coverage comes in well under 30%?** — Phase 4
+    measures it. V1's ~30–40% is the planning number, but V1 backfilled the
+    gap with paid Google Places, which is now ruled out. If the measured
+    figure makes 300 venues unreachable, the options are: widen the metro
+    polygon, lean harder on the manual registry, or revisit the source
+    policy. That is an owner decision, not an agent one — stop and ask.
+
 ---
 
 ## Appendix A — V1 Reference Map
@@ -864,6 +1065,12 @@ Quick index to find the most-cited V1 files on the [`V1-Graveyard`](https://gith
 
 | V2 concept | V1 file |
 |------------|---------|
+| **Menu graph extractor** (JSON-LD + DOM) | `collectors/meal_deals/menu_sidecar.py` |
+| **Menu graph target schema** | `collectors/meal_deals/menu_persistence_schema.py` |
+| **Price index API** (aggregates, size/variant + promo filters) | `collectors/meal_deals/price_index_routes.py` |
+| **Renderer escalation policy** | `collectors/meal_deals/render_policy.py` |
+| **Website URL resolution via OSM** | `collectors/meal_deals/osm_url_resolver.py` |
+| Menu DB writer | `collectors/meal_deals/menu_db_writer.py` |
 | Deal observation schema | `core/database.py` (~L1283) |
 | Deal applicability schema | `core/database.py` (~L1356) |
 | Deal materialization schema | `core/database.py` (~L1395) + `collectors/meal_deals/semantic_layer.py` |
@@ -884,4 +1091,4 @@ Quick index to find the most-cited V1 files on the [`V1-Graveyard`](https://gith
 
 ---
 
-*Last updated: 2026-04-23. This is a living document; update via PR when a phase completes or a decision changes.*
+*Last updated: 2026-07-31. This is a living document; update via PR when a phase completes or a decision changes.*
