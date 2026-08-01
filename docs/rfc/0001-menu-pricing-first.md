@@ -91,7 +91,7 @@ food. Every schema and pipeline decision below follows from them.
 ### D2. Data model (canonical schema)
 
 Three-layer split per ROADMAP §4.3 (`raw` / `canonical` / `mart` — see
-[ADR-0003](../adr/0003-three-layer-schema.md), currently **Proposed**).
+[ADR-0003](../adr/0003-three-layer-schema.md), **Accepted** 2026-08-01).
 
 **`canonical` — venue identity** (Phase 1a; grows the existing `Venue` stub)
 
