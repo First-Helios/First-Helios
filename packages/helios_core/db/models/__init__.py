@@ -5,6 +5,20 @@ Alembic introspects it. If a model isn't imported somewhere, Alembic can't
 see it and won't generate migrations for it.
 """
 
-from packages.helios_core.db.models.venue import Venue
+from packages.helios_core.db.models.venue import (
+    Brand,
+    SiteIdentity,
+    Venue,
+    VenueAlias,
+    VenueSite,
+    VenueSource,
+)
 
-__all__ = ["Venue"]
+__all__ = [
+    "Brand",
+    "SiteIdentity",
+    "Venue",
+    "VenueAlias",
+    "VenueSite",
+    "VenueSource",
+]

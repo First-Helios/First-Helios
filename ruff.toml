@@ -32,6 +32,18 @@ ignore = [
 "test/**/*.py" = ["S101", "PLR2004"] # asserts and magic numbers fine in tests
 "apps/scraper/chains/*.py" = ["E501"] # selectors get long; readability over wrap
 
+[lint.flake8-type-checking]
+# SQLAlchemy resolves `Mapped[...]` annotations at mapper-configuration time,
+# using the module namespace. An import moved into a TYPE_CHECKING block is
+# absent at runtime, so the mapping fails with MappedAnnotationError rather
+# than anything that points at the real cause. Declaring the ORM base classes
+# as runtime-evaluated tells TC00x to leave their annotations alone.
+runtime-evaluated-base-classes = [
+    "packages.helios_core.db.base.Base",
+    "packages.helios_core.db.base.TimestampMixin",
+    "sqlalchemy.orm.DeclarativeBase",
+]
+
 [format]
 quote-style = "double"
 indent-style = "space"

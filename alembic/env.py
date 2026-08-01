@@ -24,28 +24,49 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 from packages.helios_core.db import models  # noqa: F401 — registers models on Base.metadata
-from packages.helios_core.db.base import Base
+from packages.helios_core.db.base import MANAGED_SCHEMAS, VERSION_TABLE_SCHEMA, Base
 
 target_metadata = Base.metadata
 
 
 def include_object(
-    _schema_item: SchemaItem,
+    schema_item: SchemaItem,
     name: str | None,
     type_: str,
     reflected: bool,
     compare_to: SchemaItem | None,
 ) -> bool:
-    """Only let autogenerate manage objects defined in our own models.
+    """Only let autogenerate manage objects in Helios' own schemas.
 
-    The dev database runs the postgis/postgis image, which ships PostGIS and the
-    Tiger geocoder (spatial_ref_sys, topology, edges, faces, the tiger_* tables,
-    ...). Those are reflected from the DB but absent from Base.metadata, so
-    autogenerate would otherwise emit DROP statements for all of them. Ignoring
-    any reflected table not in our metadata keeps migrations scoped to Helios.
+    Two separate hazards make this filter necessary, and the second one is
+    created by the fix for the first:
+
+    1. The dev/CI database runs a PostGIS image, which ships PostGIS and the
+       Tiger geocoder (`spatial_ref_sys` in `public`, plus the `topology` and
+       `tiger` schemas). Those are reflected from the database but absent from
+       `Base.metadata`, so autogenerate would emit `DROP` statements for them.
+
+    2. The three-layer split (ADR-0003) requires `include_schemas=True` so
+       Alembic looks outside the default schema at all. That flag is precisely
+       what makes it reflect `topology` and `tiger` — reintroducing hazard 1.
+
+    So the filter is a schema allowlist rather than a "not in metadata" check:
+    an object is ours if it lives in one of `MANAGED_SCHEMAS`, and everything
+    else is invisible to autogenerate no matter which side it came from.
+
+    **Footgun, deliberately documented:** an unlisted schema's objects are
+    *silently ignored* rather than raising. If a future layer is added and its
+    tables mysteriously never appear in a migration, the cause is almost
+    certainly that it was never added to `MANAGED_SCHEMAS` in
+    `packages/helios_core/db/base.py`, which is the only place that list lives.
     """
-    is_unmanaged_reflected_object = reflected and compare_to is None
-    return not is_unmanaged_reflected_object
+    # Columns, indexes and constraints carry no schema of their own; they
+    # belong to whichever table owns them, so defer to the parent's verdict.
+    parent_table = getattr(schema_item, "table", None)
+    schema = (
+        parent_table.schema if parent_table is not None else getattr(schema_item, "schema", None)
+    )
+    return schema in MANAGED_SCHEMAS
 
 
 def run_migrations_offline() -> None:
@@ -67,6 +88,8 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_object=include_object,
+        include_schemas=True,
+        version_table_schema=VERSION_TABLE_SCHEMA,
     )
 
     with context.begin_transaction():
@@ -91,6 +114,8 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             include_object=include_object,
+            include_schemas=True,
+            version_table_schema=VERSION_TABLE_SCHEMA,
         )
 
         with context.begin_transaction():

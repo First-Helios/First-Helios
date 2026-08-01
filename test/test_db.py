@@ -1,80 +1,36 @@
-"""Database-backed tests for the ORM models.
+"""Database-backed smoke test for the ORM models.
 
-These exercise the Postgres service that CI spins up. If no database is
-reachable (or the DB name doesn't end with `_test`, unless
-`HELIOS_ALLOW_NONTEST_DB=1`), the tests skip rather than fail.
-Each test runs inside a transaction that is rolled back on teardown, so it
-never leaves rows behind or drops the migrated schema of a dev database.
+Exercises the Postgres service that CI spins up. The `session` fixture (see
+`conftest.py`) applies migrations, wraps each test in a transaction, and skips
+cleanly when no test database is reachable.
+
+Constraint-level tests for the venue-identity graph live in
+`test_venue_identity_schema.py`.
 """
 
-import os
-import subprocess
-from collections.abc import Iterator
-from pathlib import Path
+from __future__ import annotations
 
-import pytest
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from typing import TYPE_CHECKING
 
-from packages.helios_core.config import get_settings
+from sqlalchemy import select
+
 from packages.helios_core.db.models import Venue
 
-_DATABASE_URL = get_settings().database_url
-
-_db_name = _DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
-if not (_db_name.endswith("_test") or os.environ.get("HELIOS_ALLOW_NONTEST_DB") == "1"):
-    pytest.skip(
-        "Refusing to run DB tests against a non-test database. "
-        "Use a *_test DB name or set HELIOS_ALLOW_NONTEST_DB=1.",
-        allow_module_level=True,
-    )
-
-_migrations_applied = False
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_ALEMBIC_INI = _REPO_ROOT / "alembic.ini"
-
-
-@pytest.fixture
-def session() -> Iterator[Session]:
-    engine = create_engine(_DATABASE_URL)
-    try:
-        connection = engine.connect()
-    except Exception as exc:  # pragma: no cover - environment dependent
-        engine.dispose()
-        pytest.skip(f"database unreachable: {exc}")
-
-    # Apply all Alembic migrations so the test exercises the real migration
-    # path and CI will catch broken or missing migrations.
-    global _migrations_applied
-    if not _migrations_applied:
-        try:
-            subprocess.run(
-                ["alembic", "-c", str(_ALEMBIC_INI), "upgrade", "head"],
-                check=True,
-                cwd=_REPO_ROOT,
-                env={**os.environ, "DATABASE_URL": _DATABASE_URL},
-            )
-        except Exception:
-            connection.close()
-            engine.dispose()
-            raise
-        _migrations_applied = True
-
-    outer = connection.begin()
-    sess = Session(bind=connection, join_transaction_mode="create_savepoint")
-    try:
-        yield sess
-    finally:
-        sess.close()
-        outer.rollback()
-        connection.close()
-        engine.dispose()
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 def test_venue_round_trip(session: Session) -> None:
     venue = Venue(
         name="Torchy's Tacos",
-        address="1822 S Congress Ave, Austin, TX 78704",
+        address_raw="1822 S Congress Ave, Austin, TX 78704",
+        street="1822 S Congress Ave",
+        city="Austin",
+        region="TX",
+        postal_code="78704",
+        country="US",
+        lat=30.2472,
+        lng=-97.7500,
     )
     session.add(venue)
     session.commit()
@@ -83,7 +39,12 @@ def test_venue_round_trip(session: Session) -> None:
     assert venue.id is not None
     assert venue.created_at is not None
     assert venue.updated_at is not None
+    # Server-side defaults, not Python-side ones.
+    assert venue.status == "unknown"
+    assert venue.first_seen_at is not None
+    assert venue.last_seen_at is not None
 
     fetched = session.execute(select(Venue).filter_by(name="Torchy's Tacos")).scalar_one()
-    assert fetched.address is not None
-    assert fetched.address.endswith("Austin, TX 78704")
+    assert fetched.address_raw is not None
+    assert fetched.address_raw.endswith("Austin, TX 78704")
+    assert fetched.city == "Austin"
