@@ -1,7 +1,8 @@
 # ADR-0003: Three-layer schema (raw / canonical / mart)
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-31
+**Accepted:** 2026-08-01 by the project owner
 
 ## Context
 
