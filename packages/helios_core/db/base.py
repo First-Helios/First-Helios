@@ -38,10 +38,10 @@ class Base(DeclarativeBase):
 
 
 class TimestampMixin:
-    """`created_at` / `updated_at`, defaulted by the database.
+    """`created_at` / `updated_at` timestamps.
 
-    Server-side defaults rather than Python-side ones, so rows written by
-    migrations, `psql`, or any future non-Python writer get them too.
+    Both columns default to `now()` on insert via `server_default`.
+    `updated_at` is set on ORM UPDATEs via `onupdate=func.now()`; non-ORM writers must set it explicitly.
 
     The `datetime` import above cannot move into a TYPE_CHECKING block:
     SQLAlchemy resolves `Mapped[datetime]` against the module namespace at
