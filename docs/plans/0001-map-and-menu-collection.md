@@ -84,8 +84,7 @@ schema PR below, and the `venue`-out-of-`public` move is only free while the
 table is empty.
 
 **Done when:** status flipped to `Accepted` with the date, owner merges.
-Docs-only — no CI beyond lint.
-
+Docs-only — still ensure `make ci` (and CI) is green; no DB-specific verification required.
 ---
 
 ### Step 1 — `feat(db): venue identity schema` (RFC-0001 PR 1)
