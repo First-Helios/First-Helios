@@ -62,7 +62,7 @@ service, and cheap to avoid now rather than after it corrupts something.
 arch-agnostic (both `python:3.12-slim` and `uv` publish arm64 and amd64), so
 it builds natively wherever it runs — arm64 on the Pi, amd64 in CI. The
 *publishing* question (multi-arch buildx vs. arm64-only) is deferred to
-ADR-0005 in Phase 8, when there's actually a registry and a chosen prod host.
+ADR-0007 in Phase 8, when there's actually a registry and a chosen prod host.
 
 ## Alternatives considered
 
@@ -88,8 +88,9 @@ ADR-0005 in Phase 8, when there's actually a registry and a chosen prod host.
   Postgres **on the host**, not in compose — so the blast radius is dev,
   staging, and CI. **Revisit if** the image goes stale (it self-labels
   "(test)"), or when Phase 8 picks a prod host.
-- Renumbers the roadmap's planned ADRs: three-layer schema 0002 → 0003,
-  scraper framework 0003 → 0004, prod hosting 0004 → 0005.
+- At acceptance, this renumbered the roadmap's then-planned ADRs. Planned
+  identifiers have moved again as intervening ADRs were written; the current
+  ROADMAP ADR ledger is authoritative.
 
 ## References
 

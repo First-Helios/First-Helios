@@ -1,6 +1,7 @@
 # Plan 0001: Map data + menu collection — implementation spec
 
-**Status:** Approved (owner, 2026-08-01)
+**Status:** Approved (owner, 2026-08-01); affected portions have a proposed
+successor in [Plan 0002](./0002-identity-foundation-before-menu.md)
 **Implements:** [RFC-0001](../rfc/0001-menu-pricing-first.md) work-plan PRs 1–3, 5–8
 **Supersedes ordering in:** RFC-0001 work plan (PR 4 deferred — see §0)
 
@@ -8,6 +9,11 @@ This is the handoff spec for the worker agent. RFC-0001 is the *design*; this
 document is the *sequence*, with the open questions closed and the
 stop-and-ask gates resolved. Where this document and RFC-0001 disagree on
 ordering, this document wins. Where they disagree on design, RFC-0001 wins.
+
+> **Proposed supersession (2026-09-12):** Plan 0002 replaces Step 2, Step 3,
+> and the identity/provenance persistence portions of Steps 4–8 if ADR-0004
+> and Plan 0002 are accepted. Step 1 remains the historical record of what
+> shipped. Until then, this approved plan and ADR-0003 remain in force.
 
 ---
 
@@ -24,7 +30,7 @@ to the worker. They are now settled — do not re-open them.
 
 Still open, still gated, **not part of this plan**:
 
-- **ADR-0007 (LLM extraction fallback)** — proposed only after rungs 1–4
+- **ADR-0008 (LLM extraction fallback)** — proposed only after rungs 1–4
   coverage is measured. No LLM code in this train.
 - **Cross-venue item canonicalization** — deferred per RFC-0001 §D2.
 - **Deals layer** — Phase 10.
@@ -60,7 +66,7 @@ fresh stop-and-ask (CLAUDE.md).
 |------|--------------------|-----|
 | 3 (seeding) | `duckdb`, `h3`, `httpx` | remote parquet + SQL filter (D-2); H3 cells on every venue; Nominatim/Overpass calls |
 | 4 (URL resolution) | — | reuses `httpx` |
-| 5 (fetch/replay) | per **ADR-0005** | framework choice is its own decision |
+| 5 (fetch/replay) | per **ADR-0006** | framework choice is its own decision |
 | 6 (extraction) | `selectolax` *or* `beautifulsoup4` + `lxml`; `pdfplumber` | DOM rung; PDF rung |
 
 Deliberately **not** added: any queue, cache, or search-index service.
@@ -190,11 +196,11 @@ reachable at all.
 ### Step 6 — `feat(api): venues read endpoints` (RFC-0001 PR 4, moved)
 
 Now that there are real rows. ROADMAP Phase 2 as written: cursor pagination,
-**ADR-0004**, staging deploy to the Orange Pi.
+**ADR-0005**, staging deploy to the Orange Pi.
 
 ---
 
-### Step 7 — ADR-0005, then `feat(scraper): fetch + replay core` (RFC-0001 PR 7)
+### Step 7 — ADR-0006, then `feat(scraper): fetch + replay core` (RFC-0001 PR 7)
 
 - **Spikes first, and they are throwaway.** Scrapy vs Crawlee/Playwright on a
   real menu site. Delete the spike code after the decision — do not let a

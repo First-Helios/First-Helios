@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-08-01 — [ADR-0003](./docs/adr/0003-three-layer-schema.md) accepted and [Plan 0001](./docs/plans/0001-map-and-menu-collection.md) approved as the implementation sequence. The 2026-07-31 revision re-scoped the project menus-first per [RFC-0001](./docs/rfc/0001-menu-pricing-first.md); the 2026-07-29 revision restructured the phases after Phase 0 completed and the build became agent-driven.
+> **Last revised:** 2026-09-12 — [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) and [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md) proposed for owner review; no schema change is authorized yet. The 2026-08-01 revision accepted [ADR-0003](./docs/adr/0003-three-layer-schema.md) and approved [Plan 0001](./docs/plans/0001-map-and-menu-collection.md).
 
 ---
 
@@ -295,7 +295,7 @@ This is the industry-standard flow. Your Orange Pi becomes the **staging** envir
 > would run on the staging *host* with only the app layer in Docker. It
 > currently runs in Compose alongside the app, which is simpler and fine for
 > staging. Prod topology (containerized vs. host-installed vs. managed) is an
-> open question for ADR-0006 in Phase 8.
+> open question for ADR-0007 in Phase 8.
 
 **What prod will run (Phase 8)**
 
@@ -306,9 +306,15 @@ This is the industry-standard flow. Your Orange Pi becomes the **staging** envir
   3. **Railway** — easiest, Procfile-style.
   4. **DigitalOcean Droplet** — classic; most tutorials.
 
-ADR-0006 in Phase 8 will make the call with numbers.
+ADR-0007 in Phase 8 will make the call with numbers.
 
 ### 4.3 Data Layer
+
+> **Proposed architecture change (2026-09-12):**
+> [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md)
+> would replace the physical three-layer split below with Bronze provenance,
+> shared Identity Silver, vertical Silver schemas, and Gold. ADR-0003 remains
+> accepted until owner review.
 
 - **Postgres 16** as the only database. Install with **PostGIS** + the **h3-pg** extension for geospatial.
 - **Schema split** within a single database (not separate DBs):
@@ -330,7 +336,7 @@ ADR-0006 in Phase 8 will make the call with numbers.
 ### 4.5 Scraper Layer
 
 - **V1 baseline:** `httpx` + `selectolax` for static HTML, `playwright-sync` for SPAs, pure-Python orchestration, cron for scheduling.
-- **Phase 5 decision (ADR-0005):** evaluate Scrapy vs Crawlee vs keeping custom, on throwaway spikes, *before* writing the real scrapers.
+- **Phase 5 decision (ADR-0006):** evaluate Scrapy vs Crawlee vs keeping custom, on throwaway spikes, *before* writing the real scrapers.
 - **Rate-limit middleware:** one token bucket per host, config-driven.
 - **Replay bundle:** every scrape writes `var/replay/<source>/<yyyy-mm-dd>/<site>.json` with `{url, status, html_path, extracted_signals, fetch_type}`.
 - **Expectation diff:** nightly CI job runs `compare_expectations_to_bundles` and posts failures to an issue.
@@ -387,7 +393,7 @@ same thing:
 | 1–3 — venue identity, menu graph, raw/mart schemas | 1 |
 | 4 — venues read endpoints | 2 |
 | 5–6 — Overture/OSM seeding, website + menu-URL resolution | 4 |
-| 7 — fetch + replay core (ADR-0005 first) | 5 |
+| 7 — fetch + replay core (ADR-0006 first) | 5 |
 | 8–9 — JSON-LD/DOM ladder, render policy, PDF | 3 |
 | 10 — monthly cadence + change detection | 6 |
 | 11 — price index endpoints | 7 |
@@ -464,6 +470,11 @@ required, which is strictly stronger in practice. See §6.0.
 ---
 
 ### Phase 1 — Domain Model & Migrations ⬅️ NEXT
+
+> **Current checkpoint (2026-09-12):** the venue-identity and three-schema
+> migration below has landed. [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md)
+> proposes the identity/provenance correction that must precede the menu
+> schema; it is documentation only until ADR-0004 is accepted.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -561,7 +572,7 @@ validated against a real deployment instead of a laptop.
 - Structured logging (`structlog`) with request IDs — cheap now, painful to
   retrofit once there's traffic.
 - CORS configuration — the frontend is a separate repo and will need it.
-- **ADR-0004:** "API conventions" — cursor vs. offset pagination, error
+- **ADR-0005:** "API conventions" — cursor vs. offset pagination, error
   shape, versioning strategy, what a 404 vs. an empty list means. Small ADR,
   but every later endpoint inherits it, so it's worth settling once.
 - **Staging deploy on the Orange Pi:**
@@ -674,7 +685,7 @@ proven against two representative menu sites, one static and one SPA.
   in Scrapy and in Crawlee/Playwright. Benchmark throughput, ergonomics,
   output fidelity. This code is deleted after the decision — do not let a
   spike graduate into production by accident.
-- **ADR-0005:** "Scraper framework choice" — explicit tradeoffs, benchmark
+- **ADR-0006:** "Scraper framework choice" — explicit tradeoffs, benchmark
   numbers, decision, consequences. Weigh it for the actual workload: ~1,000+
   *distinct hosts* fetched shallowly once a month, not a few hosts crawled
   deeply. That profile favors per-host politeness and breadth over
@@ -759,7 +770,7 @@ whole thing observable and recoverable.
 
 **Deliverables**
 
-- **ADR-0006:** "Prod hosting choice" — compare Hetzner CAX / Fly.io /
+- **ADR-0007:** "Prod hosting choice" — compare Hetzner CAX / Fly.io /
   Railway / DO by cost, ergonomics, and ARM64 availability. Decide with
   numbers. Note the architecture question this settles: today's Dockerfile is
   arch-agnostic and builds natively wherever it runs; if prod is ARM64 this
@@ -925,10 +936,11 @@ decisions are hardest to reverse.
 | [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack | Accepted | 0 |
 | [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Accepted | 1 |
-| 0004 | API conventions (pagination, errors, versioning) | Planned | 2 |
-| 0005 | Scraper framework choice | Planned | 5 |
-| 0006 | Prod hosting choice | Planned | 8 |
-| 0007 | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
+| [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Proposed | 1 |
+| 0005 | API conventions (pagination, errors, versioning) | Planned | 2 |
+| 0006 | Scraper framework choice | Planned | 5 |
+| 0007 | Prod hosting choice | Planned | 8 |
+| 0008 | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
 
 **RFC ledger**
 
@@ -955,6 +967,7 @@ decisions are hardest to reverse.
 | # | Title | Status | Implements |
 |---|-------|--------|------------|
 | [0001](./docs/plans/0001-map-and-menu-collection.md) | Map data + menu collection | Approved | RFC-0001 PRs 1–3, 5–8 |
+| [0002](./docs/plans/0002-identity-foundation-before-menu.md) | Identity foundation before menu schema | Proposed | ADR-0004 |
 
 ### 6.6 Issues & Labels
 

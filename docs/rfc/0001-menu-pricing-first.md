@@ -5,6 +5,13 @@
 **Accepted:** 2026-07-31 by the project owner
 **Author(s):** Claude (agent), decisions ratified by project owner
 
+> **Proposed architecture amendment (2026-09-12):**
+> [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md) would
+> supersede Section D2's identity table list, nullable unresolved
+> `menu_page.venue_id`, and free-text observation evidence. The menus-first
+> product, source policy, and milestone remain accepted. RFC-0001 remains in
+> force unchanged until the owner approves ADR-0004.
+
 ## Summary
 
 Re-scope V2 so that **menu and item-price coverage across Austin/Round Rock
@@ -50,7 +57,7 @@ These are settled; the worker agent should not re-open them.
 3. **Extraction: rules first, LLM fallback.** JSON-LD and DOM heuristics
    handle the easy majority for free. An LLM extraction pass runs **only**
    on pages that fail rule-based extraction. This adds a runtime dependency
-   and API cost → **requires ADR-0007 with a budget cap before any LLM code
+   and API cost → **requires ADR-0008 with a budget cap before any LLM code
    is written** (see Unresolved questions).
 4. **Freshness/scale target:** ~monthly re-scrape cadence with change
    detection. First milestone: **300+ Austin/Round Rock venues with priced
@@ -210,7 +217,7 @@ the core of rungs 1–2.
    residential-bandwidth crawl affordable.
 4. **PDF menus** — text-layer extraction (e.g. `pdfplumber`) feeding the
    same item-price pairing rules. Image-only PDFs fall through to rung 5.
-5. **LLM fallback** — **gated on ADR-0007** (model choice, prompt contract,
+5. **LLM fallback** — **gated on ADR-0008** (model choice, prompt contract,
    per-run budget cap, output schema = the same sidecar shape as rungs
    1–4, confidence marking `source_kind='llm'`). Runs only on pages where
    rungs 1–4 produced nothing but menu-lexicon evidence says a menu is
@@ -285,10 +292,10 @@ owner's careful read.**
 | 1 | `feat(db): venue identity schema` | `brand`, grown `venue`, `venue_alias`, `venue_source`, `site_identity` + migration + constraint tests | `alembic upgrade head`/`downgrade` clean; every constraint has a failing test |
 | 2 | `feat(db): menu graph schema` | `menu_page`, `menu_section`, `menu_item`, `price_observation`, `menu_modifier` + migration + tests | Same bar |
 | 3 | `feat(db): raw/mart layers` | Schema split (incl. `alembic/env.py` schema-allowlist fix), capture index, `current_menu` + first price-index view | Same bar; mart rebuildable from canonical |
-| 4 | `feat(api): venues read endpoints` | ROADMAP Phase 2 as written (First Light: cursor pagination, ADR-0004, staging deploy) | Phase 2 "Done when" |
+| 4 | `feat(api): venues read endpoints` | ROADMAP Phase 2 as written (First Light: cursor pagination, ADR-0005, staging deploy) | Phase 2 "Done when" |
 | 5 | `feat(discovery): Overture/OSM venue seeding` | Parquet ingest → `venue_source` → identity resolution (ports Phase 4 fingerprinting) → Nominatim geocode → H3 | 1000 Overture rows → <2% dup venues, <1% bad geocodes (hand-labeled 100-sample) |
 | 6 | `feat(discovery): website + menu-URL resolution` | Overture/OSM URL resolver, canonicalization, liveness check, menu-URL frontier | Measured %-coverage reported for the metro |
-| 7 | `feat(scraper): fetch + replay core` | ADR-0005 spike/decision first (ROADMAP Phase 5), then: rate-limited fetcher, replay bundles, capture index writes | Fixture-tested; no live calls in CI |
+| 7 | `feat(scraper): fetch + replay core` | ADR-0006 spike/decision first (ROADMAP Phase 5), then: rate-limited fetcher, replay bundles, capture index writes | Fixture-tested; no live calls in CI |
 | 8 | `feat(extract): JSON-LD + DOM ladder` | Port `menu_sidecar.py` rungs 1–2 into `packages/helios_parsing/` (pure functions) + ingest to canonical | 20+ golden-file fixtures from real Austin sites; idempotent re-ingest proven |
 | 9 | `feat(extract): render policy + PDF` | Port `render_policy.py`; Playwright path; pdfplumber rung | Escalation budget respected in tests |
 | 10 | `feat(sched): monthly cadence + change detection` | Cron scheduling, content-hash skip, `last_seen_at` semantics, staleness metrics | Re-run on unchanged site produces 0 new canonical rows |
@@ -335,7 +342,7 @@ replay bundle** — measured by a query, stated in the retro.
 
 ## Unresolved questions
 
-1. **ADR-0007 (LLM fallback):** model, prompt contract, budget cap —
+1. **ADR-0008 (LLM fallback):** model, prompt contract, budget cap —
    proposed only after rung 1–4 coverage is measured. Owner accepts.
 2. **Austin-metro polygon definition** (which counties/H3 set) — small,
    but settle in PR 5 config with owner sign-off.
