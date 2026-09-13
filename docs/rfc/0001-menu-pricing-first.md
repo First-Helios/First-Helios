@@ -5,12 +5,11 @@
 **Accepted:** 2026-07-31 by the project owner
 **Author(s):** Claude (agent), decisions ratified by project owner
 
-> **Proposed architecture amendment (2026-09-12):**
-> [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md) would
-> supersede Section D2's identity table list, nullable unresolved
+> **Architecture amendment accepted (2026-09-12):**
+> [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md)
+> supersedes Section D2's identity table list, nullable unresolved
 > `menu_page.venue_id`, and free-text observation evidence. The menus-first
-> product, source policy, and milestone remain accepted. RFC-0001 remains in
-> force unchanged until the owner approves ADR-0004.
+> product, source policy, and milestone remain accepted.
 
 ## Summary
 

@@ -1,15 +1,15 @@
 # Plan 0002: Identity foundation before menu schema
 
-**Status:** Proposed - blocked on ADR-0004 acceptance
+**Status:** Approved (owner, 2026-09-12)
 **Implements:** [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md)
-**Supersedes on approval:** Affected portions of
+**Supersedes:** Affected portions of
 [Plan 0001](./0001-map-and-menu-collection.md), listed in Section 1
 
 This is an implementation plan, not authorization to change the schema.
 Every PR under `alembic/versions/**` or `packages/**/db/models/**` remains a
 CLAUDE.md stop-and-review point.
 
-## 0. Ground truth at proposal time
+## 0. Ground truth at approval time
 
 Current `main` contains two migrations. The latest migration:
 
@@ -24,8 +24,14 @@ Current `main` contains two migrations. The latest migration:
 
 There are no menu, capture-index, rejected-signal, or Gold/Mart tables.
 There is no identity resolver, discovery ingest, or public venue read path.
-The migration strategy below assumes the existing tables are non-empty even
-if development databases happen to contain no rows.
+
+**Owner migration decision (2026-09-12): clean reset.** This is
+pre-production scaffolding with no application data worth preserving. The
+next architecture migration may intentionally delete rows in the current
+`canonical` tables and replace the `raw` / `canonical` / `mart` layout. Do
+not spend implementation effort on legacy backfill, compatibility views, a
+dual-write period, or long-term rollback of discarded data. The destructive
+SQL still receives a separate human review before execution.
 
 ## 1. Exact supersession of Plan 0001
 
@@ -37,7 +43,7 @@ product milestones that do not conflict with ADR-0004.
 | Section 0 decisions D-1 through D-3 | Unchanged: API remains after seeding; DuckDB and the configured Travis/Williamson bounding box remain approved |
 | Section 1 code snapshot | Replaced by Section 0 above |
 | Section 2 dependency budget | Unchanged; this plan adds no dependency |
-| Step 1 venue identity schema | Completed historical work; its resulting schema is the migration source, not the target architecture |
+| Step 1 venue identity schema | Completed historical work; its resulting schema is an intentionally disposable scaffold, not the target architecture |
 | Step 2 menu graph schema | Superseded and paused until the pre-menu gate in Section 3 passes |
 | Step 3 raw/mart layers | Superseded by Bronze and Gold lifecycle semantics plus bounded-context schemas |
 | Step 4 venue seeding | Coverage goals retained; persistence changes from `venue_source -> venue` to Bronze source records plus append-only Identity resolution |
@@ -61,26 +67,36 @@ The implementation PRs must not reopen these choices:
    are durable.
 5. Subject is a typed identity handle, not EAV. Place, Organization, and
    Establishment remain separate grains.
-6. Source resolution, remap, unassign, merge, split, and retirement history
-   is append-only.
+6. Resolution workflow admission, assign, remap, unassign, merge, split, and
+   retirement history is append-only.
 7. Menu facts are owned by `menu`; only identity and provenance are shared.
 8. Package imports and FKs follow the dependency matrices in ADR-0004.
+9. Source Records in the identity workflow have explicit
+   `unresolved` / `resolved` / `needs_review` current state.
+10. Subjects are `provisional` until they pass a meaningful identity-readiness
+    gate; vertical data may not attach to an ineligible Subject.
+11. Organization-scoped menu content may be refined or overridden by
+    Establishment-scoped facts; shared content never implies identical
+    location prices.
+12. The current application schema is removed through a reviewed clean reset,
+    not a legacy-data backfill.
 
 ## 3. Must be done before the menu schema
 
-The menu model must not be proposed or implemented until all of the following
-are true:
+The architecture decision is complete. The menu model must not be proposed or
+implemented until all of the following implementation gates are true:
 
-1. The owner accepts ADR-0004 and this plan.
-2. The Bronze source, Source Record, immutable version, and Evidence grains
+1. The Bronze source, Source Record, immutable version, and Evidence grains
    have approved names and constraints.
-3. The Subject, Place, Organization, and Establishment grains have approved
+2. The Subject, Place, Organization, and Establishment grains have approved
    keys, effective-time rules, and deletion behavior.
-4. Resolution and Subject-change event tables enforce append-only history,
+3. Resolution and Subject-change event tables enforce append-only history,
    confidence bounds, evidence links, valid operation shapes, and acyclic
    lineage.
-5. The current `Brand`, `Venue`, and `VenueSource` rows have an approved,
-   deterministic backfill mapping with no lossy automatic deduplication.
+4. Resolution state is explicit and queryable, and provisional Subjects are
+   blocked from downstream vertical writes until eligible.
+5. The reviewed clean-reset migration removes the current six identity tables
+   and obsolete `raw` / `canonical` / `mart` layout.
 6. Architecture fitness tests enforce schema, FK, import, append-only, and
    typed-grain boundaries.
 7. The menu dependency seam is fixed:
@@ -93,13 +109,8 @@ are true:
    - unresolved input remains Bronze and does not require a placeholder menu
      row; and
    - menu-specific observations live only in `menu`.
-8. An upgrade against a non-empty legacy fixture passes the parity checks in
-   Section 7, and the owner reviews the generated SQL twice.
-
-The old `canonical` tables do not have to be physically dropped before the
-menu PR. They do have to be read-only compatibility data, with new writes
-using Bronze and Identity. Keeping them through a short cutover window is
-safer than combining backfill, cutover, and destructive contraction.
+8. Upgrade, downgrade, and re-upgrade tests prove the clean reset's schema
+   result, and the owner reviews the generated SQL twice.
 
 ## 4. Deferred work
 
@@ -108,21 +119,19 @@ The following is explicitly **not** a prerequisite for the menu schema:
 - fuzzy/probabilistic identity matching and calibrated thresholds before the
   discovery phase that owns the duplicate-rate milestone;
 - merge/split/remap CLI commands or a human review UI;
-- bulk correction of legacy identities beyond deterministic backfill;
 - legal-entity, franchise, parent/subsidiary, or brand-hierarchy modeling;
 - retention or partitioning policy for Bronze payload versions;
 - Gold menu projections and API-specific indexes;
 - cross-venue menu-item taxonomy;
 - any second vertical;
 - a generic offering, generic observation, or EAV model;
-- a graph database, microservices, message broker, or distributed events; or
-- dropping the legacy tables after cutover.
+- a graph database, microservices, message broker, or distributed events.
 
 The event model and constraints are required before menu because later facts
 will depend on stable identity semantics. Operator tooling around those
 events is deferred until real correction volume justifies it.
 
-## 5. Proposed implementation sequence after approval
+## 5. Approved implementation sequence
 
 Each step is a separate review-sized PR with green `make ci`. Steps that
 touch models or migrations stop for owner review.
@@ -137,8 +146,7 @@ touch models or migrations stop for owner review.
 - Enforce deterministic source namespace plus external-key uniqueness.
 - Make Source namespace keys, Endpoint identities, Source Record
   `(source_id, external_key)` keys, Captures, Versions, and Evidence immutable
-  by contract. The database immutability triggers activate after the legacy
-  backfill in Step 3, before any application write path uses these tables.
+  with database-level rejection of `UPDATE` and `DELETE`.
 - Extend Alembic's allowlist and replace the "exactly three layers" test with
   ownership-aware checks.
 - Move all-model Alembic registration to
@@ -158,12 +166,18 @@ touch models or migrations stop for owner review.
 - Add rebuildable `identity.current_resolution` and Subject-lineage
   projections. Serialize resolution transitions by locking the Source Record
   and updating the projection in the same transaction as event insertion.
+- Create an explicit current-resolution row for every Source Record entering
+  identity resolution by appending an `Open` event. Index `unresolved` and
+  `needs_review` so neither state can disappear from operational work queues.
+- Add a Subject readiness state. New or weakly identified Subjects are
+  `provisional`; vertical writers reject them until the identity module marks
+  them eligible using an approved minimum-feature policy.
 - Enforce:
   - one typed grain per Subject;
   - `(subject_id, subject_kind)` composite FKs and constant-kind checks on
     typed grains;
   - Organization and Place references on every Establishment;
-  - valid assign/remap/unassign transitions;
+  - valid open/assign/remap/unassign transitions;
   - merge/split/retire cardinalities and same-kind inputs/outputs;
   - stable-order member locking and current-input validation for concurrent
     Subject changes;
@@ -179,67 +193,41 @@ Implementation may use deferred constraint triggers where a row-level
 `CHECK` cannot enforce event cardinality. The migration must name and test
 each such invariant.
 
-### Step 3 - `feat(db): backfill legacy venue identity`
+### Step 3 - `refactor(db): reset the legacy identity scaffold`
 
-Use an additive migration and a deterministic migration actor/method. Do not
-merge records by fuzzy name, proximity, URL, or address during backfill.
+This is the deliberate destructive migration authorized by the owner on
+2026-09-12.
 
-The mapping is:
+- Remove the current `Brand`, `Venue`, `VenueAlias`, `VenueSource`,
+  `SiteIdentity`, and `VenueSite` ORM models and their constraint tests.
+- Drop the six `canonical` tables in dependency order.
+- Drop the obsolete empty `raw`, `canonical`, and `mart` schemas after their
+  objects are gone.
+- Remove transitional schema allowlist entries.
+- Do not backfill, dual-write, create compatibility views, or preserve
+  application rows from the superseded scaffold.
+- Make the migration and PR body state plainly that the upgrade discards
+  pre-ADR-0004 application data.
+- Test upgrade from an old-schema fixture containing rows, proving those rows
+  are intentionally absent and the new schemas remain internally valid.
+- Test downgrade and re-upgrade structurally on disposable data. Downgrade
+  does not promise recovery of discarded application rows.
 
-| Current row | Target |
-|-------------|--------|
-| `brand` | One Organization Subject with organization kind `brand`; preserve name, non-unique match fingerprint, and timestamps with a legacy Evidence record |
-| `venue` | One Place Subject plus one Establishment Subject; raw/normalized address, coordinates, and H3 move to Place, while name and operating status describe the Establishment. Discovery `first_seen_at`/`last_seen_at` remain provenance metadata and do not become business `valid_from`/`valid_to`. |
-| branded `venue` | Establishment points to the Organization produced from its Brand |
-| unbranded `venue` | Create one provisional Organization per Venue from its name; never merge two such Organizations during migration |
-| `venue_alias` | A typed name on the Establishment Subject, preserving alias fingerprint, source, and timestamps |
-| `venue_source` | A Bronze Source Record keyed by `(source, external_id)`, one immutable version containing `raw_identity` and seen/timestamp metadata, and an initial assign event to the Establishment Subject |
-| `brand.website` | A first-party-web Source Endpoint plus a legacy Source Record keyed by Brand ID and assigned to the Brand's Organization Subject; do not duplicate the URL as an Organization attribute |
-| `site_identity` | A first-party-web Source Endpoint keyed by canonical URL plus a `site:<id>:endpoint-state` Source Record Version preserving original URL and liveness fields |
-| `venue_site` | One legacy Source Record per `(site_identity_id, venue_id)` link, assigned to the Establishment Subject with the original resolution method as Evidence; multiple records may share one Endpoint |
+If valuable or production data is discovered before this migration merges,
+stop: the clean-reset authorization no longer applies and a replacement
+migration plan requires owner approval.
 
-Create a reserved legacy source namespace such as `helios-v2-legacy` for
-facts that have no original `venue_source` row. That namespace makes
-migration-derived claims explicit instead of presenting them as Overture or
-OSM observations.
+### Step 4 - `feat(identity): add deterministic resolution entrypoints`
 
-The migration stores deterministic legacy keys (`brand:<id>`,
-`brand:<id>:website`, `venue:<id>:place`,
-`venue:<id>:establishment`, `site:<id>:endpoint-state`, and
-`site:<site_id>:venue:<venue_id>`) in Bronze, so every old row and both
-Venue-derived Subjects have a durable crosswalk without requiring a
-permanent application compatibility table.
-
-Venue and alias name fingerprints remain non-unique matching inputs on their
-typed Subject names. Every legacy scalar value is also retained in the
-migration Source Record Version so parity does not depend on a normalized
-target preserving source spelling or timestamp semantics.
-
-After inserts and parity checks, Step 3 activates database immutability
-triggers for Source namespace keys, Endpoint identities, Source Record
-identity columns, Captures, Versions, Evidence, resolution events,
-adjudications, event-Evidence links, Subject changes, change members, and
-change-Evidence links. Its downgrade drops those triggers before removing
-only the deterministic backfill rows; the earlier foundation revisions then
-remain downgradeable without a bypass flag. The downgrade aborts rather than
-delete anything if it finds rows not owned by the deterministic migration
-actor/namespace.
-
-### Step 4 - `refactor(db): cut writes to Bronze and Identity`
-
-- Replace the current Venue/Brand ORM write surface with module-owned
-  provenance and identity commands.
-- Keep old `canonical` tables read-only for parity inspection, enforced by
-  database guards that Step 4's downgrade removes.
-- Provide deterministic resolution for exact external-key, canonical-URL, and
-  legacy-crosswalk matches. New discovery writes create Bronze records first,
-  then append Identity decisions only when those rules resolve them.
-- Make unresolved candidates observable and retryable rather than rejected.
+- Provide deterministic resolution for exact external-key and canonical-URL
+  matches. New discovery writes create Bronze records first, then append
+  Identity decisions only when those rules resolve them.
+- Create explicit `unresolved` state for unmatched identity candidates and
+  `needs_review` state after unassignment; both remain observable and
+  retryable.
+- Gate vertical eligibility on meaningful typed identity features rather
+  than brand presence or a name match alone.
 - Run the architecture fitness suite from Section 8.
-
-There is no dual-write period: no current production feature requires it,
-and dual write would create two competing identity authorities. The old
-tables are a frozen comparison source only.
 
 Fuzzy and probabilistic matching remains in Plan 0001's discovery step, where
 the hand-labeled duplicate-rate metric is measured. It is deferred from this
@@ -255,6 +243,10 @@ in Section 3.
 - Keep the typed menu graph required by RFC-0001.
 - Scope the menu root to an Organization or Establishment Subject with an
   explicit allowed-kind invariant.
+- Permit Organization-scoped shared content plus Establishment-scoped
+  refinements. Define deterministic precedence for location-specific prices
+  and never infer that sibling Establishments charge the same amount.
+- Reject menu writes for provisional/ineligible Subjects.
 - Link the menu root to its immutable Bronze Source Record Version and each
   accepted observation to one or more immutable Bronze Evidence rows.
 - Leave unresolvable extraction output in Bronze rather than manufacturing a
@@ -276,103 +268,81 @@ The exact menu tables and constraints remain the subject of that schema PR.
 This replaces Plan 0001 Step 3's Mart portion and can land with the API work
 that first consumes it.
 
-### Step 7 - `refactor(db): contract legacy schemas`
-
-After at least one cutover cycle and explicit owner approval:
-
-- take and verify a backup;
-- rerun all parity queries;
-- remove obsolete ORM registrations;
-- drop the migrated `canonical` tables;
-- drop empty `raw` and `mart`;
-- remove transitional schema allowlist entries.
-
-This destructive contraction must not share a PR with backfill or the menu
-schema. If any legacy row lacks a target or preserved unresolved record, the
-step is blocked.
-
 ## 6. Architecture acceptance scenarios
 
 These scenarios define behavior, not a particular service API.
 
 | # | Given | When | Then |
 |---|-------|------|------|
-| A1 | An Overture record has not matched any identity | Its capture and record version are ingested | Bronze commits successfully, no placeholder Subject is created, and the record appears in the unresolved set |
+| A1 | An Overture record has not matched any identity | Its capture and record version enter identity resolution | Bronze commits, an `Open` event appends, no placeholder Subject is created, and explicit `unresolved` state remains indexed for retry |
 | A2 | An unresolved Source Record has address and name Evidence | A resolver assigns it to an Establishment at confidence `0.86` | One assign event and its Evidence links append; the current projection points to that Establishment |
 | A3 | A Source Record currently points to Establishment A | Better Evidence supports Establishment B | A remap event names A and B; A's event remains unchanged; current resolution points to B |
-| A4 | A Source Record was assigned incorrectly and no replacement is known | An unassign decision is recorded | The earlier assignment remains queryable and the record returns to unresolved |
+| A4 | A Source Record was assigned incorrectly and no replacement is known | An unassign decision is recorded | The earlier assignment remains queryable and the current state becomes `needs_review` |
 | A5 | Two same-kind Subjects are proven duplicates | A merge selects one survivor | Both histories remain; the loser retires through lineage; existing facts are not rewritten; current lookup reaches the survivor |
 | A6 | One Establishment Subject represented two real locations | A split is adjudicated | Two or more new Establishments are created, the predecessor retires as ambiguous, and no old menu fact is copied automatically |
 | A7 | A restaurant stops operating at an address | Its closure is recorded | The Establishment closes while the Place remains current and reusable |
-| A8 | One first-party site emits a chain-wide menu-scope Source Record | Its scope is resolved | The record resolves to the Organization; a chain menu may use that Organization Subject |
-| A9 | A first-party page emits a location-specific Source Record | Its scope is resolved | The record resolves to that Establishment; location-specific menu facts do not leak to sibling Establishments |
-| A10 | One endpoint is linked to multiple legacy Venues | Legacy data is backfilled | Each link becomes its own evidenced Source Record and assignment; the shared URL is not forced to resolve to one Subject |
+| A8 | One first-party site emits chain-wide menu content | Its scope is resolved | The content resolves to the Organization without asserting that every Establishment has the same price |
+| A9 | A first-party page emits a location-specific price | Its scope is resolved | The Establishment fact wins for that location and does not leak to sibling Establishments |
+| A10 | An end user requests the source behind a fact | Its Evidence chain is traversed | The public Source Endpoint URL remains recoverable without being stored as an Organization attribute |
 | A11 | A Gold current-menu table is lost | The refresh command runs | Gold is reconstructed from Identity and Menu without changing their rows |
-| A12 | A legacy database contains every current table with rows | The additive migration runs | Every row has a deterministic target or preserved unresolved representation, with parity queries returning zero unexplained rows |
+| A12 | A disposable database contains rows in every superseded identity table | The clean-reset migration runs | Old application rows and schemas are gone, new Bronze/Identity structures are valid, and the data loss is explicit rather than silently partial |
 
-## 7. Legacy migration strategy and parity gates
+## 7. Clean-reset migration strategy and gates
 
-The migration follows **expand -> backfill -> cut over -> observe ->
-contract**.
+The migration follows **expand -> verify empty target -> reset legacy ->
+activate**, with deliberate data loss in the superseded application tables.
+
+### Preconditions
+
+- The owner has classified the current database as pre-production and
+  disposable.
+- The migration PR reports row counts from every table it will drop so the
+  reviewer can detect an unexpected environment before running it.
+- No automatic backup, legacy backfill, or restore rehearsal is required.
+- If any environment contains data that must survive, stop and replace this
+  section with an approved preservation plan before running the migration.
 
 ### Expand
 
-- Create Bronze and Identity tables alongside `canonical`.
-- Add no FK from a legacy table into the new schemas.
-- Keep all existing constraints active.
-- Seed the migration Source and method metadata deterministically.
+- Create Bronze and Identity schemas and their typed tables.
+- Install ownership, FK-direction, append-only, and identity-state
+  constraints.
+- Create no FK, compatibility view, or dual-write path involving the
+  superseded tables.
 
-### Backfill
+### Reset legacy
 
-- Process Brands before Venues, Venues before aliases/source/site links.
-- Use stable ordering and idempotent keys so rerunning produces no duplicate
-  Subjects, versions, or events.
-- Preserve timestamps and original payloads.
-- Make no fuzzy identity decisions.
-- Write an explicit migration Evidence row for every value derived only from
-  legacy canonical columns.
+- Remove legacy ORM registrations and tests in the same reviewed change that
+  removes their schema authority.
+- Drop `venue_site`, `site_identity`, `venue_source`, `venue_alias`, `venue`,
+  and `brand` in dependency order.
+- Drop obsolete `raw`, `canonical`, and `mart` schemas after their remaining
+  objects are gone.
+- Do not transform old rows into Bronze Evidence or Identity Subjects.
+- State irreversible application-data loss in the migration docstring and PR
+  risk section.
 
-### Cut over
-
-- Stop writes through legacy ORM models.
-- Route collection to Bronze first and Identity second.
-- Keep legacy tables available read-only for parity and rollback analysis.
-- Do not create compatibility views that hide which model a caller uses.
-
-### Observe
-
-At minimum, run these parity checks against a seeded non-empty fixture and a
-copy of any real development data:
+### Verify and activate
 
 | Check | Required result |
 |-------|-----------------|
-| Brand -> Organization mapping | Exactly one target Organization per Brand |
-| Organization fingerprints | Values preserved as non-unique match inputs; duplicate fingerprints do not merge or fail |
-| Brand website preservation | Every non-null website becomes or reuses a first-party-web Endpoint, with a Brand-keyed Source Record assigned to the Brand Organization |
-| Venue -> Place mapping | Exactly one target Place per Venue |
-| Venue -> Establishment mapping | Exactly one target Establishment per Venue |
-| Establishment operator | Exactly one Organization, using Brand when present and a per-Venue provisional Organization otherwise |
-| Venue scalar preservation | Name/fingerprint, raw and normalized address, coordinates, H3, status, and all timestamps compare null-safely to their typed target or migration Version |
-| VenueSource preservation | Same row count and same `(source, external_id)` keys |
-| VenueSource scalar preservation | Raw identity plus first/last-seen and created/updated timestamps compare null-safely; canonicalized JSON hashes match |
-| Initial resolutions | Exactly one migration assign event per VenueSource |
-| Alias preservation | Same count, text, fingerprint, source, timestamps, and owning legacy Venue |
-| Site preservation | Every SiteIdentity becomes a Source Endpoint plus one Version preserving canonical/original URL, liveness status, verification time, and row timestamps |
-| VenueSite preservation | Same pair count and resolution method/timestamps; one evidenced Source Record and initial assignment per pair |
-| Coordinates and H3 | Exact value equality, including null pairs |
-| Unexplained legacy rows | Zero |
+| Seeded old-schema upgrade | Rows may exist before upgrade; all superseded tables and rows are intentionally absent afterward |
+| New schema shape | Only approved application schemas/tables are managed; `public` contains no application table |
+| New layer contents | Bronze and Identity start empty unless the migration itself requires deterministic configuration rows |
+| Alembic metadata | `alembic check` reports no diff |
+| Downgrade | Recreates the superseded schema structure on disposable data; does not claim to recover deleted rows |
+| Re-upgrade | Returns deterministically to the accepted empty target |
+| Unexpected valuable data | Causes an operator stop before migration execution, not an automatic preservation branch |
 
-### Contract
-
-The contract migration is independently reversible only from its verified
-backup once new writes begin. It therefore needs explicit owner approval,
-the parity report attached to its PR, and a restore rehearsal. A successful
-backfill is not permission to drop the old tables in the same migration.
+Application writes begin only after this reset is merged and the new module
+entrypoints are in place. There is no observation window for the old schema.
 
 ## 8. Architecture fitness tests
 
 Use existing pytest, SQLAlchemy metadata, and the Python standard library.
-Do not add an architecture-test dependency.
+Do not add an architecture-test dependency. Test each database-enforced
+invariant at least once, but do not build speculative test frameworks beyond
+the accepted boundaries.
 
 | Fitness test | Mechanism | Required failure |
 |--------------|-----------|------------------|
@@ -383,28 +353,29 @@ Do not add an architecture-test dependency.
 | Parser isolation | Inspect imports under `packages/helios_parsing` | Import from SQLAlchemy or any Helios ORM module |
 | Subject typed-grain invariant | Composite-FK tests plus a deferred-invariant fixture | Subject has zero or multiple typed rows after commit, or row kind disagrees with subtype |
 | Menu scope kind | Database constraint test in the future menu PR | A menu root references Place or an unapproved Subject kind |
-| Unresolved is valid | Insert Source Record and Version without resolution | Insert fails or creates a placeholder identity |
+| Resolution state is explicit | Route a Source Record into resolution without a match | No indexed `unresolved` state exists, or a placeholder Subject is created |
+| Subject readiness gate | Attempt a vertical write for a provisional Subject | The write succeeds before minimum identity features make the Subject eligible |
 | Decision aggregate append-only | Raw SQL `UPDATE` and `DELETE` against events, adjudications, Evidence links, and Subject-change members | Any statement succeeds |
 | Bronze identity immutable | Raw SQL changes a Source namespace, Endpoint identity, or Source Record key, or updates/deletes a Capture, Version, or Evidence | Any statement succeeds |
-| Resolution transition validity | Database/service transaction tests | Remap/unassign does not name current source; assign overwrites an existing mapping |
+| Resolution transition validity | Database/service transaction tests | Open repeats, remap/unassign does not name current source, or assign overwrites an existing mapping |
 | Subject-change shape | Constraint-trigger tests | Invalid merge/split/retire member cardinality or mixed Subject kinds commit |
 | Lineage acyclicity | Transaction test | A Subject becomes its own successor directly or transitively |
 | Confidence bounds | Constraint tests at below `0`, above `1`, and boundaries | Out-of-range value commits or valid boundary fails |
 | Evidence required | Transaction test | Decision commits without immutable Evidence/manual adjudication |
 | Gold rebuildability | Seed Bronze/Identity/Menu, delete Gold, run refresh, and compare business columns | Gold differs from its pre-delete deterministic result or source layers change |
-| Migration parity | Seed every legacy relationship and run Alembic upgrade | Any Section 7 parity query is non-zero |
+| Clean reset | Seed every superseded table and run upgrade/downgrade/re-upgrade | Old rows survive, obsolete schemas remain, or the accepted empty target is non-deterministic |
 
 Temporary migration schemas may be allowlisted only through an explicitly
 named transition set with a test that identifies the contract step that
 removes them. The final test must not freeze a universal schema count:
 bounded contexts, not the number three, are the invariant.
 
-There is no application-settable append-only bypass. Step 3 installs the
-triggers only after its deterministic inserts and drops them first on
-downgrade. Later corrections append events; any future data-fix migration
-that proposes disabling immutability is a separate owner-review gate and must
-prove that it restores every trigger before commit. A global
-`session_replication_role` bypass is not permitted.
+There is no application-settable append-only bypass. Each foundation
+migration installs immutability with the table it protects. Later corrections
+append events; any future data-fix migration that proposes disabling
+immutability is a separate owner-review gate and must prove that it restores
+every trigger before commit. A global `session_replication_role` bypass is
+not permitted.
 
 The current savepoint-based `session` fixture cannot prove deferred
 constraint behavior by calling `session.commit()`. Deferred-invariant tests
@@ -416,16 +387,15 @@ cleanup. Every deferred trigger gets a failing case through that fixture.
 
 Stop for owner review at:
 
-1. ADR-0004 and this plan.
-2. Bronze model and migration SQL.
-3. Identity model, event constraints, and migration SQL.
-4. Legacy backfill SQL and parity report.
-5. Menu model and migration SQL.
-6. Any destructive legacy contract migration.
+1. Bronze model and migration SQL.
+2. Identity model, event constraints, and migration SQL.
+3. Clean-reset migration SQL and its explicit data-loss test.
+4. Deterministic resolution entrypoints and readiness policy.
+5. Menu model, scope precedence, and migration SQL.
 
 Use the
 [ADR-0004 human review guide](../reviews/0004-architecture-review-guide.md)
 for the decision checklist, failure-scenario walkthrough, and sign-off
 record.
 
-No proposed schema in this plan is implemented by the documentation PR.
+No schema is implemented or authorized by the acceptance bookkeeping commit.

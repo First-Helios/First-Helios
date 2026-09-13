@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-09-12 — [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) and [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md) proposed for owner review; no schema change is authorized yet. The 2026-08-01 revision accepted [ADR-0003](./docs/adr/0003-three-layer-schema.md) and approved [Plan 0001](./docs/plans/0001-map-and-menu-collection.md).
+> **Last revised:** 2026-09-12 — [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) accepted and [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md) approved, superseding ADR-0003 and the affected portions of Plan 0001. The owner authorized a clean reset of the pre-production identity scaffold; implementation still requires separate model and migration review.
 
 ---
 
@@ -183,7 +183,7 @@ What a dev needs to own this codebase professionally. Each skill is expanded int
 | **ORM** | SQLAlchemy 2.0 declarative typed models, relationships, eager vs lazy loading, session lifecycle, Alembic autogenerate + manual edits, zero-downtime migration patterns. |
 | **Web fundamentals** | HTTP semantics, status codes, redirects, caching, cookies, `robots.txt`, sitemaps, DNS, TLS, `User-Agent` etiquette, rate-limit negotiation. |
 | **Scraping** | `httpx`, `selectolax`, `BeautifulSoup`, Playwright (sync + async), Scrapy, Crawlee, headless Chromium, JSON-LD extraction, PDF text extraction. |
-| **Data engineering** | Idempotency, at-least-once vs exactly-once, raw → canonical → mart layering, lineage, replay, backfill strategy, watermarks, dead-letter queues. |
+| **Data engineering** | Idempotency, at-least-once vs exactly-once, Bronze → Silver → Gold lifecycle, lineage, replay, backfill strategy, watermarks, dead-letter queues. |
 | **Geospatial** | Lat/lng, geocoding, reverse geocoding, H3 hex grids, PostGIS basics (`GEOGRAPHY(POINT)`, `ST_DWithin`), bounding boxes. |
 | **Parsing** | Regex craft, regex debugging, property-based testing with Hypothesis, when rules beat ML (and when they don't). |
 | **API design** | REST vs RPC, FastAPI, Pydantic v2, OpenAPI, pagination (cursor vs offset), error shapes, idempotency keys, rate limiting. |
@@ -310,19 +310,22 @@ ADR-0007 in Phase 8 will make the call with numbers.
 
 ### 4.3 Data Layer
 
-> **Proposed architecture change (2026-09-12):**
-> [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md)
-> would replace the physical three-layer split below with Bronze provenance,
-> shared Identity Silver, vertical Silver schemas, and Gold. ADR-0003 remains
-> accepted until owner review.
-
-- **Postgres 16** as the only database. Install with **PostGIS** + the **h3-pg** extension for geospatial.
-- **Schema split** within a single database (not separate DBs):
-  - `raw` — untransformed captures (HTML snapshots indexed, not the HTML itself — that lives on disk in `var/replay/`).
-  - `canonical` — the domain model (`deal_observation`, `deal_applicability`, `venue`, `site_identity`, `menu_*`).
-  - `mart` — denormalized read-views (`deal_materialization`).
-- **Alembic** migrations with autogenerate + hand edits, reviewed in PRs. **No `metadata.create_all()`** in production code, ever.
-- **dbt** is *not* in V1 scope. If `mart` gets complex enough (≥ 5 read-views), a learning module + ADR will introduce dbt in a later phase.
+- **Postgres 16** as the only database. Install with **PostGIS** + the
+  **h3-pg** extension for geospatial.
+- **Lifecycle and bounded-context schemas** in one database per
+  [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md):
+  - `bronze` — durable source claims, captures, record versions, and Evidence;
+  - `identity` — durable Silver Subjects, typed identity grains, and
+    append-only resolution/lineage decisions;
+  - `menu` — typed menu-domain Silver facts, created only with its first real
+    table; and
+  - `gold` — rebuildable consumer read models and aggregates.
+- Unresolved identity candidates and provisional Subjects have explicit,
+  queryable state and cannot silently flow into vertical facts.
+- **Alembic** migrations with autogenerate + hand edits, reviewed in PRs.
+  **No `metadata.create_all()`** in production code, ever.
+- **dbt** is *not* in V1 scope. Revisit only if Gold complexity justifies a
+  dedicated ADR.
 
 ### 4.4 API Layer
 
@@ -390,7 +393,7 @@ same thing:
 | RFC-0001 PRs | Phase |
 |--------------|-------|
 | 0 — docs, ADR-0003 | (this revision) |
-| 1–3 — venue identity, menu graph, raw/mart schemas | 1 |
+| 1–3 — identity foundation/reset, menu graph, Gold schema | 1 |
 | 4 — venues read endpoints | 2 |
 | 5–6 — Overture/OSM seeding, website + menu-URL resolution | 4 |
 | 7 — fetch + replay core (ADR-0006 first) | 5 |
@@ -473,35 +476,37 @@ required, which is strictly stronger in practice. See §6.0.
 
 > **Current checkpoint (2026-09-12):** the venue-identity and three-schema
 > migration below has landed. [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md)
-> proposes the identity/provenance correction that must precede the menu
-> schema; it is documentation only until ADR-0004 is accepted.
+> now governs the identity/provenance correction that must precede the menu
+> schema. The owner authorized a clean reset of this pre-production scaffold;
+> model and migration implementation still require separate review.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
-**Goal:** the canonical schema, written fresh from lessons learned, migrated cleanly, tested at the constraint level.
+**Goal:** establish the modular-monolith Bronze and Identity foundations,
+remove the superseded scaffold, then add typed Menu Silver and Gold read
+models with constraint-level tests.
 
-**Deliverables** (RFC-0001 work-plan PRs 1–3)
+**Remaining deliverables** ([Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md))
 
-- `packages/helios_core/db/models/venue.py` — grow the existing `Venue` stub; add `Brand`, `VenueAlias`, `VenueSource`, `SiteIdentity`.
-- `packages/helios_core/db/models/menu.py` — `MenuPage`, `MenuSection`, `MenuItem`, `PriceObservation`, `MenuModifier`.
-- The `raw` / `canonical` / `mart` schema split (see §4.3 and
-  [ADR-0003](./docs/adr/0003-three-layer-schema.md)), including the
-  `include_schemas` + schema-allowlist change to `alembic/env.py` that the
-  split requires — its current `include_object` filter is schema-blind — and
-  relocating the existing `venue` table out of `public`.
-- `raw` capture index + `rejected_signals` dead-letter; `mart.current_menu`
-  and the first price-index aggregate.
+- Bronze Source, Endpoint, Capture, Source Record/Version, and Evidence
+  models with immutable source history.
+- Identity Subject, Place, Organization, Establishment, explicit resolution
+  state, append-only decisions, lineage, and Subject-readiness gates.
+- A reviewed clean-reset migration that intentionally removes the current
+  `brand` / `venue` scaffold and obsolete `raw` / `canonical` / `mart`
+  schemas. No legacy application data is backfilled.
+- Architecture fitness tests for schema/FK/import directions, immutability,
+  event transitions, and deferred constraints.
+- The typed Menu graph after every pre-menu gate in Plan 0002 passes.
+- Gold current-menu and first price-index projections when first consumed.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so
   re-ingest is idempotent; money as integer cents, never float.
-- Alembic migration(s) — autogenerated, then hand-reviewed.
-- Unit tests asserting each unique constraint, each `CHECK`, each FK cascade rule.
-- **ADR-0003:** "Three-layer schema (raw / canonical / mart)." ✅ *Accepted
-  2026-08-01 — see [docs/adr/0003](./docs/adr/0003-three-layer-schema.md).*
+- Alembic migrations are autogenerate-assisted, hand-reviewed, and separately
+  authorized before execution.
 
-**Implementation sequence:** [Plan 0001](./docs/plans/0001-map-and-menu-collection.md)
-is the approved handoff spec for this phase and the discovery/extraction
-phases that follow. It closes RFC-0001's open questions and defers the
-Phase 2 read API until real venues are seeded.
+**Implementation sequence:** Plan 0002 governs the affected Phase 1 work.
+[Plan 0001](./docs/plans/0001-map-and-menu-collection.md) remains authoritative
+only for the unaffected product sequencing listed in Plan 0002 Section 1.
 
 **Deal models are not in this phase.** `DealObservation` /
 `DealApplicability` / `DealMaterialization` move to Phase 10 with the rest
@@ -519,30 +524,33 @@ menu graph is likely to change what the right deal schema looks like.
   `MenuPricePoint` → `PriceObservation` and stores money as integer cents.
 - `core/venue_identity.py` for venue + alias patterns.
 - `core/database.py::DealMaterialization` (~L1395) — the refresh-task
-  pattern `mart` inherits, not the deal columns themselves.
+  pattern Gold inherits, not the deal columns themselves.
 
-**Sequencing note.** This is a large phase; split it across several PRs
-(venue/identity models, deal models, menu models, schema split) rather than
-one. A 900-line schema PR cannot be meaningfully reviewed in one sitting, and
-with no second reviewer (§6.0) your own careful read is the only review this
-gets — so make it a readable one.
+**Sequencing note.** Keep Bronze, Identity, clean reset, Menu, and Gold in the
+review-sized steps defined by Plan 0002. Do not combine the destructive reset
+with Menu implementation.
 
 **Reviewer's checklist** — what to actually look for, since this is the phase
 where a bad decision is most expensive to undo:
 
 - Does every enum have a `CHECK` constraint, not just a Python-side `Enum`?
 - Is every FK's `ondelete` behavior deliberate, and does a test prove it?
-- Do the migrations run **and** roll back cleanly on a non-empty database?
+- Is clean-reset data loss explicit, limited to the superseded scaffold, and
+  proven on a seeded disposable database?
 - Is `PriceObservation` append-only in practice — is there any code path that
   `UPDATE`s a price rather than inserting a new observation?
 - Is money stored as integer cents everywhere, with no float column anywhere
   near a price?
-- Does every mapped table declare an explicit, allowlisted schema
-  ([ADR-0003](./docs/adr/0003-three-layer-schema.md)), and does a test prove it?
+- Does every mapped table declare an explicit, owned schema
+  ([ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md)),
+  and do tests enforce allowed FK/import directions?
 - Any column that's nullable — is it nullable because the domain allows
   absence, or because it was easier?
 
-**Done when:** `alembic upgrade head` on an empty DB produces the full schema; `downgrade` returns it to empty; every constraint has at least one failing-test case.
+**Done when:** the clean reset and each new schema migration pass
+upgrade/downgrade/re-upgrade tests, every accepted invariant has a focused
+failing case, and the Menu schema depends only on eligible Identity Subjects
+and immutable Bronze Evidence.
 
 ---
 
@@ -551,7 +559,7 @@ where a bad decision is most expensive to undo:
 **Learning modules to review against:** [M11](./LEARNING_GUIDE.md#m11--api-design) · [M12](./LEARNING_GUIDE.md#m12--operations)
 
 **Goal:** the thinnest possible end-to-end slice, running for real. One
-resource, read-only, served from the canonical schema, deployed to the Orange
+resource, read-only, served from Identity/Gold, deployed to the Orange
 Pi and reachable. Nothing about deals yet — this phase exists to prove the
 whole path works and to establish the API conventions everything later
 inherits.
@@ -631,15 +639,23 @@ OpenAPI schema at `/openapi.json` describes it accurately.
 
 **Learning module to review against:** [M10](./LEARNING_GUIDE.md#m10--geospatial)
 
-**Goal:** a populated venue table for the Austin/Round Rock metro, each venue deduplicated, geocoded, and — where one exists — pointed at its first-party website and its menu URL.
+**Goal:** populated Place/Organization/Establishment identities for the
+Austin/Round Rock metro, deduplicated, geocoded, and linked through Bronze
+provenance to first-party websites and menu URLs.
 
 **Deliverables** (RFC-0001 work-plan PRs 5–6)
 
-- **Overture seeding** — parquet ingest filtered to `food_and_beverage` within a config-driven metro polygon, landing in `venue_source`. The polygon is a parameter, not a constant: scaling to another metro is a config change.
+- **Overture seeding** — parquet ingest filtered to `food_and_beverage`
+  within a config-driven metro polygon, landing in Bronze Source Records and
+  explicit Identity resolution state. The polygon is a parameter, not a
+  constant: scaling to another metro is a config change.
 - `packages/helios_core/identity.py` — name fingerprinting, address normalization, URL canonicalization, proximity clustering.
 - `packages/helios_core/geo.py` — Nominatim client with 1-req/sec throttle, manual overrides for ambiguous Austin suburbs, disk-cached responses keyed by normalized query.
 - H3 r6–r9 cell computation on every venue insert.
-- **Website resolution** — Overture `websites` field first, Overpass `website` / `contact:website` fallback, plus the `config/sources.yaml` manual registry. Results land in `site_identity` with the resolution method recorded.
+- **Website resolution** — Overture `websites` field first, Overpass
+  `website` / `contact:website` fallback, plus the `config/sources.yaml`
+  manual registry. Results retain Source Endpoint provenance and append
+  Identity resolution decisions.
 - **Menu-URL discovery** — common paths (`/menu`, `/menus`, `/food`), sitemap entries matching menu patterns, on-site links whose anchor text hits a menu lexicon. Persisted so re-scrapes skip discovery.
 - Unit tests: golden-set fixture of 100 hand-labeled matches with ≥ 95% precision.
 - Integration test: Nominatim and Overpass responses replayed from disk fixtures — no live calls in CI.
@@ -691,7 +707,9 @@ proven against two representative menu sites, one static and one SPA.
   deeply. That profile favors per-host politeness and breadth over
   crawl-depth machinery.
 - **Rate-limit middleware** — one token bucket per host, config-driven.
-- `apps/scraper/replay/bundle.py` — writes `var/replay/<source>/<date>/<url-hash>.json`, and the matching `raw` capture-index row.
+- `apps/scraper/replay/bundle.py` — writes
+  `var/replay/<source>/<date>/<url-hash>.json`, and the matching Bronze
+  Capture row.
 - `apps/scraper/audit/expectations.py` — compares a YAML expectation file against bundles.
 - `config/sources.yaml` — strategy, selectors, rate limit per source, JSON-Schema validated in CI. Doubles as the manual venue/site registry from Phase 4.
 - `config/expectations.yaml` — 3–5 known-good priced items per anchor source.
@@ -720,12 +738,17 @@ than the data was worth.
 - **Conflict resolution** per [RFC-0001 §D6](./docs/rfc/0001-menu-pricing-first.md): nothing overwritten, `current_menu` resolved by source-trust rank (`jsonld > dom > pdf > llm`), then recency, then confidence. Same-window contradictions flagged to a review queue rather than silently resolved.
 - **Change detection:** re-fetch → compare `content_hash`. Unchanged → touch `last_seen_at`, record a cheap confirmation, skip extraction entirely. Changed → full extraction. Items that vanish get `last_seen_at` frozen; **nothing is deleted**, because disappearance is information.
 - **Scheduling:** ~30-day default cadence, per-source overridable, cron-driven on the staging host. No queue service — adding one is a stop-and-ask dependency (see [CLAUDE.md](./CLAUDE.md)).
-- Materialization refresh: post-ingest task updates `mart.current_menu` and the price-index aggregates, targeted to the venues that actually changed.
+- Materialization refresh: post-ingest task updates Gold current-menu and
+  price-index projections, targeted to the Establishments that actually
+  changed.
 - Backfill CLI: `helios backfill --source <s> --from 2026-01-01` replays bundles from disk into the DB.
 - Metrics: `scrapes_total{source,outcome}`, `price_observations_ingested_total`, `venues_covered`, `menu_staleness_days` (histogram), `materialization_refresh_seconds`.
-- Dead-letter: extractions that fail the confidence gate land in `raw.rejected_signals` with a reason code.
+- Dead-letter: extractions that fail the confidence gate remain in Bronze
+  with an explicit outcome/reason code.
 
-**Done when:** you can drop the entire `canonical` schema and reconstruct it by running `helios backfill --all` against the replay bundles on disk; and a re-run against an unchanged site produces zero new canonical rows.
+**Done when:** Menu Silver and Gold can be reconstructed from replay bundles,
+Bronze provenance, and durable Identity decisions without changing those
+decisions; a re-run against an unchanged site produces zero new observations.
 
 ---
 
@@ -737,14 +760,16 @@ than the data was worth.
 
 **Deliverables** (RFC-0001 work-plan PR 11)
 
-- `GET /venues/{id}/menu` — the venue's current menu from `mart.current_menu`, every price carrying `observed_at` and a staleness age.
+- `GET /venues/{id}/menu` — the Establishment's current menu from Gold, every
+  price carrying `observed_at` and a staleness age.
 - `GET /venues?h3=&brand=&has_menu=` — cursor-paginated, filtered.
 - `GET /items/{id}/price-history` — the observation trail behind a single price. This is the endpoint that makes "trustworthy" checkable by a user rather than asserted by us.
 - `GET /price-index?h3=&course=` — the first aggregate: median / p25 / p75 price by area and course, with the sample size, because an aggregate over four venues is not an index and the response should admit that.
 - **Freshness in the wire format, not just the docs.** Every priced response carries `as_of`. A stale price served as though it were current is the failure mode this whole design exists to prevent.
 - OpenAPI schema at `/openapi.json`, docs at `/docs` — already live from Phase 2; keep accurate.
 - Contract test: OpenAPI schema committed and diffed in CI; breaking changes fail the build.
-- Read-path performance: every filter combination above is index-backed. Add a test that fails on a sequential scan of `mart.current_menu`.
+- Read-path performance: every filter combination above is index-backed. Add
+  a test that fails on a sequential scan of the Gold current-menu table.
 
 **Done when:** `curl https://.../price-index?h3=872a10075ffffff&course=entree` returns a real aggregate with a sample size, and the 300-venue milestone is measurable through the API itself.
 
@@ -840,7 +865,7 @@ gets a real denominator.
 - `packages/helios_core/db/models/deal.py` — `DealObservation`, `DealApplicability`, deferred here from Phase 1.
 - Applicability fan-out: chain-wide deals create N rows, one per active venue of that brand.
 - Promotional rows parked during Phase 3 extraction become the initial input — the evidence is already captured and replayable.
-- `mart.deal_materialization` + `GET /deals` endpoints.
+- Gold deal materialization + `GET /deals` endpoints.
 
 **Port hints (`V1-Graveyard` branch):** `collectors/meal_deals/sub_deals.py`, `temporal.py`, `quality.py`, `semantic_layer.py`, `core/database.py` (~L1283, ~L1356, ~L1395).
 
@@ -935,8 +960,8 @@ decisions are hardest to reverse.
 |---|-------|--------|-------|
 | [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack | Accepted | 0 |
 | [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
-| [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Accepted | 1 |
-| [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Proposed | 1 |
+| [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 | 1 |
+| [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted | 1 |
 | 0005 | API conventions (pagination, errors, versioning) | Planned | 2 |
 | 0006 | Scraper framework choice | Planned | 5 |
 | 0007 | Prod hosting choice | Planned | 8 |
@@ -966,8 +991,8 @@ decisions are hardest to reverse.
 
 | # | Title | Status | Implements |
 |---|-------|--------|------------|
-| [0001](./docs/plans/0001-map-and-menu-collection.md) | Map data + menu collection | Approved | RFC-0001 PRs 1–3, 5–8 |
-| [0002](./docs/plans/0002-identity-foundation-before-menu.md) | Identity foundation before menu schema | Proposed | ADR-0004 |
+| [0001](./docs/plans/0001-map-and-menu-collection.md) | Map data + menu collection | Partially superseded by Plan 0002 | RFC-0001 PRs 1–3, 5–8 |
+| [0002](./docs/plans/0002-identity-foundation-before-menu.md) | Identity foundation before menu schema | Approved | ADR-0004 |
 
 ### 6.6 Issues & Labels
 

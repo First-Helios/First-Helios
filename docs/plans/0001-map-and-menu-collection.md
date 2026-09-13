@@ -1,7 +1,7 @@
 # Plan 0001: Map data + menu collection — implementation spec
 
-**Status:** Approved (owner, 2026-08-01); affected portions have a proposed
-successor in [Plan 0002](./0002-identity-foundation-before-menu.md)
+**Status:** Approved (owner, 2026-08-01); partially superseded by
+[Plan 0002](./0002-identity-foundation-before-menu.md) (owner, 2026-09-12)
 **Implements:** [RFC-0001](../rfc/0001-menu-pricing-first.md) work-plan PRs 1–3, 5–8
 **Supersedes ordering in:** RFC-0001 work plan (PR 4 deferred — see §0)
 
@@ -10,10 +10,10 @@ document is the *sequence*, with the open questions closed and the
 stop-and-ask gates resolved. Where this document and RFC-0001 disagree on
 ordering, this document wins. Where they disagree on design, RFC-0001 wins.
 
-> **Proposed supersession (2026-09-12):** Plan 0002 replaces Step 2, Step 3,
-> and the identity/provenance persistence portions of Steps 4–8 if ADR-0004
-> and Plan 0002 are accepted. Step 1 remains the historical record of what
-> shipped. Until then, this approved plan and ADR-0003 remain in force.
+> **Partial supersession (2026-09-12):** Plan 0002 replaces Step 2, Step 3,
+> and the identity/provenance persistence portions of Steps 4–8. Step 1
+> remains the historical record of what shipped. Plan 0002 Section 1 is the
+> authoritative disposition map.
 
 ---
 

@@ -1,8 +1,9 @@
 # ADR-0004: Modular monolith, lifecycle layers, and shared identity
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-09-12
-**Supersedes on acceptance:** [ADR-0003](./0003-three-layer-schema.md)
+**Accepted:** 2026-09-12 by project owner Fortune
+**Supersedes:** [ADR-0003](./0003-three-layer-schema.md)
 
 ## Context
 
@@ -38,8 +39,10 @@ before the menu schema depends on it:
 
 The correction is still comparatively cheap. There are no menu FKs, no
 public read API over these entities, and no tables in `raw` or `mart`.
-Nevertheless, the existing migration is data-preserving and the new plan
-must assume that every current table may contain data.
+The owner has explicitly classified the current database as pre-production
+and authorized a clean reset of its application data. The implementation
+must make that data loss explicit in a separately reviewed migration rather
+than spend effort backfilling a short-lived scaffold.
 
 Helios remains a solo, agent-built project. The architecture therefore needs
 boundaries that can be checked mechanically without adding distributed
@@ -121,10 +124,11 @@ Every Subject has exactly one typed grain:
 | **Establishment** | An organization's operation at a Place for an effective interval | A restaurant location. Operator changes at one address produce a new Establishment while retaining the Place. |
 | **Subject** | The common identity and lineage grain underlying one typed Place, Organization, or Establishment | Used by resolution and explicitly polymorphic domain roots. It carries no vertical attributes. |
 
-An Establishment references one Place and one Organization. During migration,
-an unbranded Venue receives a distinct provisional Organization rather than
-being merged by name. This preserves the grain without inventing
-cross-location identity. Organization name fingerprints are non-unique match
+An Establishment references one Place and one Organization. A newly inferred
+Subject starts `provisional` when it lacks meaningful identity features;
+vertical writers may use only eligible Subjects. Readiness is based on typed
+evidence such as source keys, normalized address/coordinates, and names, not
+on brand presence alone. Organization name fingerprints are non-unique match
 inputs, never identity keys; duplicate Place and Organization candidates are
 an expected conservative result until evidence supports a later merge.
 
@@ -146,7 +150,14 @@ polymorphic root may reference Subject only when it declares its allowed
 Subject kinds. For the future menu schema, a menu scope may be an
 Organization (chain-wide menu) or Establishment (location-specific menu),
 never a Place. Menu items and prices remain typed menu facts under that
-scope.
+scope. Organization scope means shared menu content, not identical prices at
+every location: Establishment-scoped facts may refine or override the shared
+content. The menu schema PR must define deterministic precedence without
+copying Organization prices blindly to every Establishment.
+
+Identity matching and deduplication use typed feature clusters such as source
+keys, names, addresses, coordinates, and websites. A name fingerprint is one
+input, never sufficient proof of identity by itself.
 
 ### 4. Provenance and unresolved source records
 
@@ -176,7 +187,11 @@ The following are required:
 
 An unresolved record is a valid state, not a dead letter. Rejected or
 unparseable input is different: it remains Bronze data with an explicit
-outcome or reason code.
+outcome or reason code. A Source Record may remain outside identity workflow
+with zero resolution events. Admission to that workflow appends an `Open`
+event and creates an explicit `identity.current_resolution` state of
+`unresolved`; later states are `resolved` or `needs_review`. Unresolved work
+is indexed and queryable rather than inferred from a missing row.
 
 ### 5. Append-only resolution and correction semantics
 
@@ -188,16 +203,18 @@ Resolution operations are:
 
 | Operation | Preconditions | Result |
 |-----------|---------------|--------|
-| **Assign** | The Source Record has no current Subject; `from_subject` is null and `to_subject` is non-null | Appends a target Subject; the current-resolution projection now points to it |
+| **Open** | The Source Record has no resolution history; `from_subject` and `to_subject` are null | Admits the record to identity workflow and creates explicit `unresolved` current state |
+| **Assign** | The Source Record is `unresolved` or `needs_review`; `from_subject` is null and `to_subject` is non-null | Appends a target Subject; the current-resolution projection becomes `resolved` and points to it |
 | **Remap** | `from_subject` is the current Subject; `to_subject` is non-null and different | Appends the correction; the previous assignment remains historical |
-| **Unassign** | `from_subject` is the current Subject and `to_subject` is null | Returns the Source Record to the unresolved set without erasing why it had been assigned |
+| **Unassign** | `from_subject` is the current Subject and `to_subject` is null | Sets the projection to `needs_review` without erasing why it had been assigned |
 
 The current mapping is `identity.current_resolution`, a rebuildable Silver
 projection of the event sequence, not a mutable truth row. Event insertion
 locks the owning Source Record, validates the transition against the current
 projection, appends the event, and updates the projection in the same
-transaction. One row per Source Record serializes competing assignments;
-Identity correctness never depends on Gold.
+transaction. One state row per Source Record in the resolution workflow
+serializes competing assignments and keeps unresolved work visible; Identity
+correctness never depends on Gold.
 
 Canonical Subject lineage is separate from source-record resolution:
 
@@ -251,6 +268,10 @@ least one Bronze Evidence link or one adjudication record.
 The append-only decision aggregate includes the event, adjudication, Evidence
 links, and Subject-change members. None can be updated or deleted in
 isolation to rewrite an old decision.
+
+Evidence retains the Source Endpoint chain needed to recover the original
+public source URL. A later API may expose that link to an end user without
+making the URL an Organization attribute.
 
 ### 7. Allowed dependency directions
 
@@ -321,7 +342,7 @@ does not reach through one module to mutate another module's ORM objects.
 
 ### 9. Relationship to RFC-0001
 
-On acceptance, this ADR supersedes only these architecture details in
+This ADR supersedes only these architecture details in
 RFC-0001 Section D2:
 
 - the five-table venue identity shape;
@@ -379,20 +400,20 @@ contrary to the modular-monolith decision.
 **Harder / accepted costs**
 
 - Identity queries require joins through Subject and typed identity tables.
-- The current six-table identity model needs an additive, data-preserving
-  migration before menu tables land.
+- The current six-table identity scaffold is removed by an explicitly
+  destructive clean-reset migration before menu tables land.
 - Merge and split correctness requires transactional invariants and lineage
   checks, not only simple FKs.
 - Bronze and identity require backup as durable systems of record.
 - Alembic's managed-schema allowlist and its tests must represent bounded
   contexts rather than exactly three physical schemas.
 
-**On acceptance**
+**Acceptance effects**
 
-- ADR-0003 becomes `Superseded by ADR-0004`.
+- ADR-0003 is `Superseded by ADR-0004`.
 - [Plan 0002](../plans/0002-identity-foundation-before-menu.md) becomes the
   implementation sequence for the affected portions of Plan 0001.
-- No schema implementation begins until the owner separately approves the
+- No schema implementation begins until the owner separately authorizes the
   migration PRs required by CLAUDE.md.
 
 ## References

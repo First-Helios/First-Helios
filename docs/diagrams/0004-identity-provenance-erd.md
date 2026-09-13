@@ -2,7 +2,7 @@
 
 This is a logical model, not an approved migration. Names may be refined in
 the schema PR, but the grains, ownership, and dependency directions are
-fixed by ADR-0004 if accepted. `MENU_ROOT` shows only the future vertical's
+fixed by accepted ADR-0004. `MENU_ROOT` shows only the future vertical's
 dependency seam; it is not a generic offering model or a complete menu ERD.
 
 ```mermaid
@@ -57,6 +57,7 @@ erDiagram
     IDENTITY_SUBJECT {
         bigint id PK
         string kind
+        string readiness
         datetime created_at
     }
 
@@ -114,6 +115,7 @@ erDiagram
         bigint source_record_id PK,FK
         bigint subject_id FK
         bigint last_event_id UK,FK
+        string state
     }
 
     IDENTITY_ADJUDICATION {
@@ -185,8 +187,8 @@ erDiagram
     BRONZE_SOURCE_RECORD ||--o{ IDENTITY_RESOLUTION_EVENT : interpreted_by
     IDENTITY_SUBJECT o|--o{ IDENTITY_RESOLUTION_EVENT : previous_target
     IDENTITY_SUBJECT o|--o{ IDENTITY_RESOLUTION_EVENT : new_target
-    BRONZE_SOURCE_RECORD ||--o| IDENTITY_CURRENT_RESOLUTION : projects_to
-    IDENTITY_SUBJECT ||--o{ IDENTITY_CURRENT_RESOLUTION : current_target
+    BRONZE_SOURCE_RECORD ||--o| IDENTITY_CURRENT_RESOLUTION : enters_workflow
+    IDENTITY_SUBJECT o|--o{ IDENTITY_CURRENT_RESOLUTION : current_target
     IDENTITY_RESOLUTION_EVENT ||--o| IDENTITY_CURRENT_RESOLUTION : last_event
     IDENTITY_RESOLUTION_EVENT ||--o{ IDENTITY_RESOLUTION_EVIDENCE : cites
     BRONZE_EVIDENCE ||--o{ IDENTITY_RESOLUTION_EVIDENCE : evidence
@@ -210,4 +212,9 @@ exactly one typed row, Establishment references typed Organization and Place
 Subjects, and a menu root permits only Organization or Establishment
 Subjects. Composite `(subject_id, subject_kind)` FKs enforce the typed
 references against Subject's unique `(id, kind)` pair; the duplicated kind
-columns are intentional constraint anchors.
+columns are intentional constraint anchors. Resolution state requires a
+Subject only when `state = 'resolved'`; `unresolved` and `needs_review` keep
+an explicit null-target row. An append-only `Open` event creates the initial
+`unresolved` row, so `last_event_id` is always present and the projection is
+rebuildable. Subjects begin `provisional`, and vertical roots may reference
+only Subjects that pass the approved identity-readiness gate.

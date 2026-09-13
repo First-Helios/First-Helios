@@ -1,13 +1,9 @@
 # ADR-0003: Three-layer schema (raw / canonical / mart)
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md)
 **Date:** 2026-07-31
 **Accepted:** 2026-08-01 by the project owner
-
-> **Proposed successor (2026-09-12):**
-> [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) would
-> supersede this decision with lifecycle semantics plus bounded-context
-> schemas. This ADR remains accepted until the owner approves ADR-0004.
+**Superseded:** 2026-09-12 by the project owner
 
 ## Context
 
