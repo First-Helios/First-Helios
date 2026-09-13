@@ -1504,12 +1504,12 @@ def upgrade() -> None:
                                 AND input_member.subject_id =
                                     output_member.subject_id
                           )
-                          OR EXISTS (
-                              SELECT 1
-                              FROM {IDENTITY}.subject_change_member AS prior
-                              WHERE prior.subject_id = output_member.subject_id
-                                AND prior.subject_change_id < change_id
-                          )
+                           OR EXISTS (
+                               SELECT 1
+                               FROM {IDENTITY}.subject_change_member AS prior
+                               WHERE prior.subject_id = output_member.subject_id
+                                 AND prior.subject_change_id <> change_id
+                           )
                           OR NOT EXISTS (
                               SELECT 1
                               FROM {IDENTITY}.subject AS output_subject
