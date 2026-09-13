@@ -1,22 +1,23 @@
-"""Declarative base and the schema layout every model builds on.
+"""Declarative base and schema ownership shared by every model.
 
 Every model imports from here so they share a single MetaData instance.
 Alembic reads Base.metadata to figure out what migrations to generate.
 
-**Schema layout** (see docs/adr/0003-three-layer-schema.md): one database,
-three Postgres schemas, distinguished by who writes them and what happens
-when they are lost. Models declare their layer explicitly via
+**Schema ownership** (see ADR-0004): one database with schemas owned by
+bounded-context modules. Models declare their owner explicitly via
 ``__table_args__ = {"schema": ...}`` -- never rely on ``search_path``, which
 is how a table silently gets created in the wrong namespace.
 
-``MANAGED_SCHEMAS`` is the single source of truth for that allowlist. It is
-imported by ``alembic/env.py``; adding a layer means adding it here, and
-nowhere else.
+``SCHEMA_OWNERS`` is the single source of truth for ownership and
+``MANAGED_SCHEMAS`` is its Alembic allowlist. The legacy schemas remain
+explicitly transitional until Plan 0002 Step 3 removes them.
 """
 
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 — see TimestampMixin below
+from types import MappingProxyType
+from typing import Final
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -24,8 +25,18 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 SCHEMA_RAW = "raw"
 SCHEMA_CANONICAL = "canonical"
 SCHEMA_MART = "mart"
+SCHEMA_BRONZE = "bronze"
 
-MANAGED_SCHEMAS = frozenset({SCHEMA_RAW, SCHEMA_CANONICAL, SCHEMA_MART})
+TRANSITIONAL_SCHEMAS = frozenset({SCHEMA_RAW, SCHEMA_CANONICAL, SCHEMA_MART})
+SCHEMA_OWNERS: Final = MappingProxyType(
+    {
+        SCHEMA_BRONZE: "packages.helios_core.provenance",
+        SCHEMA_RAW: "Plan 0002 Step 3 legacy reset",
+        SCHEMA_CANONICAL: "Plan 0002 Step 3 legacy reset",
+        SCHEMA_MART: "Plan 0002 Step 3 legacy reset",
+    }
+)
+MANAGED_SCHEMAS = frozenset(SCHEMA_OWNERS)
 
 # Alembic's own bookkeeping table. It belongs to the migration tool rather
 # than to any data layer, so it stays in `public` where it is findable

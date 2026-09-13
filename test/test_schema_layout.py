@@ -1,4 +1,4 @@
-"""Guards on the three-layer schema split (ADR-0003).
+"""Architecture fitness tests for ADR-0004's schema ownership boundaries.
 
 These need no database: they inspect model metadata and the Alembic filter
 directly, so they fail fast in the lint/typecheck-speed part of the suite
@@ -13,6 +13,7 @@ isn't where anyone expects it.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 from pathlib import Path
@@ -20,10 +21,17 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import Column, Integer, MetaData, Table
+from sqlalchemy import JSON, Column, Integer, MetaData, Table
 
-from packages.helios_core.db import models  # noqa: F401 — registers models
-from packages.helios_core.db.base import MANAGED_SCHEMAS, VERSION_TABLE_SCHEMA, Base
+from packages.helios_core.db import model_registry  # noqa: F401 — registers all models
+from packages.helios_core.db.base import (
+    MANAGED_SCHEMAS,
+    SCHEMA_BRONZE,
+    SCHEMA_OWNERS,
+    TRANSITIONAL_SCHEMAS,
+    VERSION_TABLE_SCHEMA,
+    Base,
+)
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -46,10 +54,71 @@ def test_every_mapped_table_declares_an_allowlisted_schema() -> None:
     )
 
 
-def test_managed_schemas_are_exactly_the_three_layers() -> None:
-    """A tripwire, not a tautology: adding a layer is an ADR-0003 amendment."""
-    assert set(MANAGED_SCHEMAS) == {"raw", "canonical", "mart"}
+def test_schema_ownership_names_bounded_contexts_and_legacy_transition() -> None:
+    assert SCHEMA_OWNERS[SCHEMA_BRONZE] == "packages.helios_core.provenance"
+    assert {"raw", "canonical", "mart"} == TRANSITIONAL_SCHEMAS
+    for schema in TRANSITIONAL_SCHEMAS:
+        assert SCHEMA_OWNERS[schema] == "Plan 0002 Step 3 legacy reset"
+    assert frozenset(SCHEMA_OWNERS) == MANAGED_SCHEMAS
     assert VERSION_TABLE_SCHEMA == "public"
+
+
+def test_bronze_owns_exactly_the_provenance_tables_in_step_one() -> None:
+    bronze_tables = {
+        table.name for table in Base.metadata.sorted_tables if table.schema == SCHEMA_BRONZE
+    }
+    assert bronze_tables == {
+        "source",
+        "source_endpoint",
+        "capture",
+        "source_record",
+        "source_record_version",
+        "evidence",
+    }
+
+
+def test_bronze_foreign_keys_never_point_upward_or_cascade() -> None:
+    violations: list[str] = []
+    for table in Base.metadata.sorted_tables:
+        if table.schema != SCHEMA_BRONZE:
+            continue
+        for foreign_key in table.foreign_keys:
+            target = foreign_key.column.table
+            if target.schema != SCHEMA_BRONZE or foreign_key.ondelete not in {
+                "RESTRICT",
+                "NO ACTION",
+            }:
+                violations.append(
+                    f"{table.fullname}.{foreign_key.parent.name} -> "
+                    f"{target.fullname} ondelete={foreign_key.ondelete!r}"
+                )
+    assert not violations, f"invalid Bronze FK directions or deletion rules: {violations}"
+
+
+def test_source_payload_json_exists_only_on_bronze_record_versions() -> None:
+    bronze_json_columns = {
+        f"{table.fullname}.{column.name}"
+        for table in Base.metadata.sorted_tables
+        if table.schema == SCHEMA_BRONZE
+        for column in table.columns
+        if isinstance(column.type, JSON)
+    }
+    assert bronze_json_columns == {"bronze.source_record_version.source_payload"}
+
+
+def test_model_registry_is_the_only_db_module_importing_provenance_models() -> None:
+    db_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "db"
+    importers: set[str] = set()
+    for path in db_root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        if any(
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and node.module.startswith("packages.helios_core.provenance")
+            for node in ast.walk(tree)
+        ):
+            importers.add(path.relative_to(db_root).as_posix())
+    assert importers == {"model_registry.py"}
 
 
 def _load_alembic_env() -> ModuleType:
@@ -117,7 +186,7 @@ def test_autogenerate_ignores_everything_else(schema: str | None) -> None:
 def test_column_inherits_its_parent_tables_verdict() -> None:
     """Columns carry no schema of their own; they must defer to the table."""
     env = _load_alembic_env()
-    ours = _table_in("canonical")
+    ours = _table_in("bronze")
     theirs = _table_in("tiger")
 
     assert env.include_object(ours.c.id, "id", "column", True, None) is True
