@@ -26,11 +26,13 @@ SCHEMA_RAW = "raw"
 SCHEMA_CANONICAL = "canonical"
 SCHEMA_MART = "mart"
 SCHEMA_BRONZE = "bronze"
+SCHEMA_IDENTITY = "identity"
 
 TRANSITIONAL_SCHEMAS = frozenset({SCHEMA_RAW, SCHEMA_CANONICAL, SCHEMA_MART})
 SCHEMA_OWNERS: Final = MappingProxyType(
     {
         SCHEMA_BRONZE: "packages.helios_core.provenance",
+        SCHEMA_IDENTITY: "packages.helios_core.identity",
         SCHEMA_RAW: "Plan 0002 Step 3 legacy reset",
         SCHEMA_CANONICAL: "Plan 0002 Step 3 legacy reset",
         SCHEMA_MART: "Plan 0002 Step 3 legacy reset",
