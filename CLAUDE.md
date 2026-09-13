@@ -53,8 +53,9 @@ Never report a task complete without running this. If you can't run it
   original roadmap draft used a different name; the code is what's real, see
   [ADR-0001](./docs/adr/0001-stack-choice.md)).
 - All ORM models import `Base` from `packages/helios_core/db/base.py` and
-  must be registered in `packages/helios_core/db/models/__init__.py` or
-  Alembic autogenerate won't see them.
+  must be registered in `packages/helios_core/db/model_registry.py` or
+  Alembic autogenerate won't see them. That registry is the sole
+  import-direction exception allowed to import every module's ORM models.
 - Migrations are hand-reviewed, not blindly accepted from autogenerate —
   check the generated SQL, especially for anything touching an existing
   table with data in it.

@@ -23,7 +23,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from packages.helios_core.db import models  # noqa: F401 — registers models on Base.metadata
+from packages.helios_core.db import model_registry  # noqa: F401 — registers all models
 from packages.helios_core.db.base import MANAGED_SCHEMAS, VERSION_TABLE_SCHEMA, Base
 
 target_metadata = Base.metadata
@@ -46,7 +46,7 @@ def include_object(
        `tiger` schemas). Those are reflected from the database but absent from
        `Base.metadata`, so autogenerate would emit `DROP` statements for them.
 
-    2. The three-layer split (ADR-0003) requires `include_schemas=True` so
+    2. ADR-0004's bounded-context schemas require `include_schemas=True` so
        Alembic looks outside the default schema at all. That flag is precisely
        what makes it reflect `topology` and `tiger` — reintroducing hazard 1.
 
@@ -57,7 +57,7 @@ def include_object(
     **Footgun, deliberately documented:** an unlisted schema's objects are
     *silently ignored* rather than raising. If a future layer is added and its
     tables mysteriously never appear in a migration, the cause is almost
-    certainly that it was never added to `MANAGED_SCHEMAS` in
+    certainly that it was never added to `SCHEMA_OWNERS` in
     `packages/helios_core/db/base.py`, which is the only place that list lives.
     """
     # Columns, indexes and constraints carry no schema of their own; they
