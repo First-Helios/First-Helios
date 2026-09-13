@@ -27,6 +27,7 @@ from packages.helios_core.db import model_registry  # noqa: F401 — registers a
 from packages.helios_core.db.base import (
     MANAGED_SCHEMAS,
     SCHEMA_BRONZE,
+    SCHEMA_IDENTITY,
     SCHEMA_OWNERS,
     TRANSITIONAL_SCHEMAS,
     VERSION_TABLE_SCHEMA,
@@ -56,6 +57,7 @@ def test_every_mapped_table_declares_an_allowlisted_schema() -> None:
 
 def test_schema_ownership_names_bounded_contexts_and_legacy_transition() -> None:
     assert SCHEMA_OWNERS[SCHEMA_BRONZE] == "packages.helios_core.provenance"
+    assert SCHEMA_OWNERS[SCHEMA_IDENTITY] == "packages.helios_core.identity"
     assert {"raw", "canonical", "mart"} == TRANSITIONAL_SCHEMAS
     for schema in TRANSITIONAL_SCHEMAS:
         assert SCHEMA_OWNERS[schema] == "Plan 0002 Step 3 legacy reset"
@@ -77,6 +79,37 @@ def test_bronze_owns_exactly_the_provenance_tables_in_step_one() -> None:
     }
 
 
+def test_identity_owns_exactly_the_step_two_tables() -> None:
+    identity_tables = {
+        table.name for table in Base.metadata.sorted_tables if table.schema == SCHEMA_IDENTITY
+    }
+    assert identity_tables == {
+        "adjudication",
+        "applied_subject_change",
+        "current_resolution",
+        "establishment",
+        "organization",
+        "place",
+        "resolution_event",
+        "resolution_evidence",
+        "subject",
+        "subject_change",
+        "subject_change_evidence",
+        "subject_change_member",
+        "subject_currentness",
+        "subject_lineage",
+        "subject_name",
+    }
+
+
+def test_resolution_work_queues_have_explicit_indexes() -> None:
+    table = Base.metadata.tables["identity.current_resolution"]
+    assert {
+        "ix_current_resolution_unresolved",
+        "ix_current_resolution_needs_review",
+    }.issubset({index.name for index in table.indexes})
+
+
 def test_bronze_foreign_keys_never_point_upward_or_cascade() -> None:
     violations: list[str] = []
     for table in Base.metadata.sorted_tables:
@@ -93,6 +126,27 @@ def test_bronze_foreign_keys_never_point_upward_or_cascade() -> None:
                     f"{target.fullname} ondelete={foreign_key.ondelete!r}"
                 )
     assert not violations, f"invalid Bronze FK directions or deletion rules: {violations}"
+
+
+def test_identity_foreign_keys_only_reference_identity_or_bronze_without_cascade() -> None:
+    violations: list[str] = []
+    for table in Base.metadata.sorted_tables:
+        if table.schema != SCHEMA_IDENTITY:
+            continue
+        for foreign_key in table.foreign_keys:
+            target = foreign_key.column.table
+            if target.schema not in {
+                SCHEMA_BRONZE,
+                SCHEMA_IDENTITY,
+            } or foreign_key.ondelete not in {
+                "RESTRICT",
+                "NO ACTION",
+            }:
+                violations.append(
+                    f"{table.fullname}.{foreign_key.parent.name} -> "
+                    f"{target.fullname} ondelete={foreign_key.ondelete!r}"
+                )
+    assert not violations, f"invalid Identity FK directions or deletion rules: {violations}"
 
 
 def test_source_payload_json_exists_only_on_bronze_record_versions() -> None:
@@ -119,6 +173,72 @@ def test_model_registry_is_the_only_db_module_importing_provenance_models() -> N
         ):
             importers.add(path.relative_to(db_root).as_posix())
     assert importers == {"model_registry.py"}
+
+
+def test_model_registry_is_the_only_db_module_importing_identity_models() -> None:
+    db_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "db"
+    importers: set[str] = set()
+    for path in db_root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        if any(
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and node.module.startswith("packages.helios_core.identity")
+            for node in ast.walk(tree)
+        ):
+            importers.add(path.relative_to(db_root).as_posix())
+    assert importers == {"model_registry.py"}
+
+
+def test_identity_imports_only_lower_shared_modules() -> None:
+    identity_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "identity"
+    forbidden: list[str] = []
+    for path in identity_root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.module is None:
+                continue
+            if node.module.startswith(
+                ("apps.", "packages.helios_core.domains.", "packages.helios_core.gold")
+            ):
+                forbidden.append(f"{path.name}: {node.module}")
+    assert not forbidden, f"Identity imports higher or vertical modules: {forbidden}"
+
+
+def test_identity_uses_the_provenance_contract_not_provenance_models() -> None:
+    identity_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "identity"
+    forbidden: list[str] = []
+    for path in identity_root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "packages.helios_core.provenance.models"
+            ):
+                forbidden.append(path.name)
+    assert not forbidden, f"Identity reaches through the provenance contract: {forbidden}"
+
+
+def test_parser_package_remains_orm_free_when_it_lands() -> None:
+    parsing_root = Path(__file__).resolve().parents[1] / "packages" / "helios_parsing"
+    forbidden: list[str] = []
+    for path in parsing_root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            module = node.module if isinstance(node, ast.ImportFrom) else None
+            imported_names = (
+                [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
+            )
+            if (
+                module is not None and module.startswith(("sqlalchemy", "packages.helios_core"))
+            ) or (
+                any(
+                    name.startswith(("sqlalchemy", "packages.helios_core"))
+                    for name in imported_names
+                )
+            ):
+                forbidden.append(f"{path.name}: {module or imported_names}")
+    assert not forbidden, f"helios_parsing imports ORM/application modules: {forbidden}"
 
 
 def _load_alembic_env() -> ModuleType:
