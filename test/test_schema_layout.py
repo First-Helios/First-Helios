@@ -4,7 +4,7 @@ These need no database: they inspect model metadata and the Alembic filter
 directly, so they fail fast in the lint/typecheck-speed part of the suite
 rather than only where a Postgres service exists.
 
-Both tests exist because the failure they catch is *silent*. A model that
+These tests exist because the failures they catch are *silent*. A model that
 forgets `{"schema": ...}` lands in `public` without complaint, and a schema
 missing from the allowlist makes its tables invisible to autogenerate rather
 than raising. Neither shows up as an error -- only as a table that quietly
@@ -29,7 +29,6 @@ from packages.helios_core.db.base import (
     SCHEMA_BRONZE,
     SCHEMA_IDENTITY,
     SCHEMA_OWNERS,
-    TRANSITIONAL_SCHEMAS,
     VERSION_TABLE_SCHEMA,
     Base,
 )
@@ -55,14 +54,37 @@ def test_every_mapped_table_declares_an_allowlisted_schema() -> None:
     )
 
 
-def test_schema_ownership_names_bounded_contexts_and_legacy_transition() -> None:
-    assert SCHEMA_OWNERS[SCHEMA_BRONZE] == "packages.helios_core.provenance"
-    assert SCHEMA_OWNERS[SCHEMA_IDENTITY] == "packages.helios_core.identity"
-    assert {"raw", "canonical", "mart"} == TRANSITIONAL_SCHEMAS
-    for schema in TRANSITIONAL_SCHEMAS:
-        assert SCHEMA_OWNERS[schema] == "Plan 0002 Step 3 legacy reset"
+def test_schema_ownership_names_only_active_bounded_contexts() -> None:
+    assert dict(SCHEMA_OWNERS) == {
+        SCHEMA_BRONZE: "packages.helios_core.provenance",
+        SCHEMA_IDENTITY: "packages.helios_core.identity",
+    }
     assert frozenset(SCHEMA_OWNERS) == MANAGED_SCHEMAS
     assert VERSION_TABLE_SCHEMA == "public"
+
+
+def test_legacy_identity_scaffold_is_absent_from_model_metadata() -> None:
+    legacy_schemas = {"raw", "canonical", "mart"}
+    legacy_tables = {
+        "brand",
+        "venue",
+        "venue_alias",
+        "venue_source",
+        "site_identity",
+        "venue_site",
+    }
+    assert not {
+        table.fullname
+        for table in Base.metadata.sorted_tables
+        if table.schema in legacy_schemas or table.name in legacy_tables
+    }
+
+
+def test_model_registry_exports_every_alembic_registered_model() -> None:
+    exported_tables = {
+        model_registry.__dict__[name].__table__.fullname for name in model_registry.__all__
+    }
+    assert exported_tables == set(Base.metadata.tables)
 
 
 def test_bronze_owns_exactly_the_provenance_tables_in_step_one() -> None:
