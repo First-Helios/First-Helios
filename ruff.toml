@@ -40,7 +40,6 @@ ignore = [
 # as runtime-evaluated tells TC00x to leave their annotations alone.
 runtime-evaluated-base-classes = [
     "packages.helios_core.db.base.Base",
-    "packages.helios_core.db.base.TimestampMixin",
     "sqlalchemy.orm.DeclarativeBase",
 ]
 

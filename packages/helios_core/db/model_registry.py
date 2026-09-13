@@ -5,14 +5,6 @@ module code must import domain contracts instead of reaching through this
 registry.
 """
 
-from packages.helios_core.db.models import (
-    Brand,
-    SiteIdentity,
-    Venue,
-    VenueAlias,
-    VenueSite,
-    VenueSource,
-)
 from packages.helios_core.identity.models import (
     Adjudication,
     AppliedSubjectChange,
@@ -42,7 +34,6 @@ from packages.helios_core.provenance.models import (
 __all__ = [
     "Adjudication",
     "AppliedSubjectChange",
-    "Brand",
     "Capture",
     "CurrentResolution",
     "Evidence",
@@ -51,7 +42,6 @@ __all__ = [
     "Place",
     "ResolutionEvent",
     "ResolutionEvidence",
-    "SiteIdentity",
     "Source",
     "SourceEndpoint",
     "SourceRecord",
@@ -63,8 +53,4 @@ __all__ = [
     "SubjectCurrentness",
     "SubjectLineage",
     "SubjectName",
-    "Venue",
-    "VenueAlias",
-    "VenueSite",
-    "VenueSource",
 ]
