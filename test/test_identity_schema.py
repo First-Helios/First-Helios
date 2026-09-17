@@ -358,8 +358,8 @@ def test_subject_names_are_typed_aliases_with_optional_evidence(session: Session
 def test_readiness_contract_rejects_provisional_and_retired_subjects(
     session: Session,
 ) -> None:
-    first = create_organization(session)
-    second = create_organization(session)
+    first = create_place(session, address="100 Ready St")
+    second = create_place(session, address="200 Survivor St")
     _check_deferred(session)
 
     with pytest.raises(SubjectNotEligibleError):
@@ -369,7 +369,7 @@ def test_readiness_contract_rejects_provisional_and_retired_subjects(
         require_eligible_subject(
             session,
             first.id,
-            allowed_kinds={"organization"},
+            allowed_kinds={"place"},
         ).id
         == first.id
     )

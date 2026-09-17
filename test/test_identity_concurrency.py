@@ -42,8 +42,10 @@ from packages.helios_core.identity import (
     rebuild_identity_projections,
     record_subject_change,
     require_eligible_subject,
+    resolve_source_record_observation,
 )
 from packages.helios_core.provenance import (
+    BronzeObservation,
     Evidence,
     Source,
     SourceRecord,
@@ -120,6 +122,28 @@ def _source_fixture(session: Session) -> tuple[SourceRecord, Evidence]:
     session.add(evidence)
     session.commit()
     return record, evidence
+
+
+def _bronze_observation(
+    namespace: str,
+    external_key: str,
+    *,
+    canonical_url: str | None = None,
+) -> BronzeObservation:
+    token = uuid4().hex
+    return BronzeObservation(
+        source_namespace=namespace,
+        source_kind="concurrency-fixture",
+        external_key=external_key,
+        observed_at=datetime.now(UTC),
+        content_hash=f"sha256:record-{token}",
+        source_payload={"id": external_key, "token": token},
+        evidence_locator="$",
+        evidence_excerpt_hash=f"sha256:evidence-{token}",
+        canonical_url=canonical_url,
+        endpoint_kind="https",
+        capture_content_hash=f"sha256:capture-{token}",
+    )
 
 
 def test_competing_assignments_serialize_on_source_record(
@@ -545,7 +569,7 @@ def test_eligibility_gate_locks_subject_against_retirement(
     concurrent_sessions: sessionmaker[Session],
 ) -> None:
     with concurrent_sessions() as setup:
-        guarded = create_place(setup)
+        guarded = create_place(setup, address="100 Guarded St")
         survivor = create_place(setup)
         adjudication = create_adjudication(
             setup,
@@ -582,6 +606,42 @@ def test_eligibility_gate_locks_subject_against_retirement(
 
         with ThreadPoolExecutor(max_workers=1) as pool:
             assert pool.submit(attempt_retirement).result(timeout=5) == "blocked"
+
+
+def test_eligibility_gate_locks_typed_features(
+    concurrent_sessions: sessionmaker[Session],
+) -> None:
+    with concurrent_sessions() as setup:
+        guarded = create_place(setup, address="200 Guarded Feature St")
+        mark_subject_eligible(setup, guarded.id)
+        setup.commit()
+        guarded_id = guarded.id
+
+    with concurrent_sessions() as gated_write:
+        require_eligible_subject(gated_write, guarded_id)
+
+        def remove_only_feature() -> str:
+            with concurrent_sessions() as worker:
+                worker.execute(text("SET LOCAL lock_timeout = '250ms'"))
+                try:
+                    worker.execute(
+                        text(
+                            """
+                            UPDATE identity.place
+                            SET address = NULL
+                            WHERE subject_id = :subject_id
+                            """
+                        ),
+                        {"subject_id": guarded_id},
+                    )
+                    worker.commit()
+                except DBAPIError:
+                    worker.rollback()
+                    return "blocked"
+                return "committed"
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            assert pool.submit(remove_only_feature).result(timeout=5) == "blocked"
 
 
 def test_decision_members_reject_late_insert_after_commit(
@@ -679,3 +739,245 @@ def test_projection_rebuild_fails_fast_while_an_identity_writer_is_active(
         finally:
             release_writer.set()
         writer.result(timeout=5)
+
+
+def test_concurrent_reobservation_reuses_one_external_key_and_open_event(
+    concurrent_sessions: sessionmaker[Session],
+) -> None:
+    token = uuid4().hex
+    namespace = f"concurrent-step4-key-{token}"
+    barrier = Barrier(2)
+
+    def observe() -> tuple[str, int | None]:
+        with concurrent_sessions() as worker:
+            barrier.wait()
+            try:
+                result = resolve_source_record_observation(
+                    worker,
+                    observation=_bronze_observation(namespace, "same-key"),
+                    decided_at=datetime.now(UTC),
+                )
+                worker.commit()
+            except (DBAPIError, ValueError):
+                worker.rollback()
+                return ("rejected", None)
+            return (result.state, result.source_record_id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: observe(), range(2)))
+
+    assert [state for state, _ in results] == ["unresolved", "unresolved"]
+    record_ids = {record_id for _, record_id in results}
+    assert len(record_ids) == 1
+    record_id = record_ids.pop()
+    assert record_id is not None
+
+    with concurrent_sessions() as verify:
+        assert (
+            verify.scalar(
+                select(func.count())
+                .select_from(SourceRecordVersion)
+                .where(SourceRecordVersion.source_record_id == record_id)
+            )
+            == 2
+        )
+        assert (
+            verify.scalar(
+                select(func.count())
+                .select_from(ResolutionEvent)
+                .where(
+                    ResolutionEvent.source_record_id == record_id,
+                    ResolutionEvent.operation == "open",
+                )
+            )
+            == 1
+        )
+
+
+def test_concurrent_identical_retry_reuses_one_bronze_observation(
+    concurrent_sessions: sessionmaker[Session],
+) -> None:
+    token = uuid4().hex
+    observation = _bronze_observation(
+        f"concurrent-step4-retry-{token}",
+        "same-key",
+    )
+    barrier = Barrier(2)
+
+    def observe() -> tuple[bool, int, int, int]:
+        with concurrent_sessions() as worker:
+            barrier.wait()
+            result = resolve_source_record_observation(
+                worker,
+                observation=observation,
+                decided_at=datetime.now(UTC),
+            )
+            worker.commit()
+            return (
+                result.observation_created,
+                result.capture_id,
+                result.source_record_version_id,
+                result.evidence_id,
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: observe(), range(2)))
+
+    assert sorted(created for created, *_ in results) == [False, True]
+    assert len({result[1:] for result in results}) == 1
+
+
+def test_concurrent_exact_url_matches_serialize_and_resolve_consistently(
+    concurrent_sessions: sessionmaker[Session],
+) -> None:
+    token = uuid4().hex
+    namespace = f"concurrent-step4-url-{token}"
+    url = f"https://concurrent-{token}.example.test/"
+    with concurrent_sessions() as setup:
+        anchor = resolve_source_record_observation(
+            setup,
+            observation=_bronze_observation(
+                namespace,
+                "anchor",
+                canonical_url=url,
+            ),
+            decided_at=datetime.now(UTC),
+        )
+        target = create_organization(setup)
+        assign_source_record(
+            setup,
+            source_record_id=anchor.source_record_id,
+            to_subject_id=target.id,
+            decision=_decision(),
+            evidence_ids=[anchor.evidence_id],
+        )
+        setup.commit()
+        target_id = target.id
+
+    barrier = Barrier(2)
+
+    def observe(external_key: str) -> tuple[str, int | None]:
+        with concurrent_sessions() as worker:
+            barrier.wait()
+            try:
+                result = resolve_source_record_observation(
+                    worker,
+                    observation=_bronze_observation(
+                        namespace,
+                        external_key,
+                        canonical_url=url,
+                    ),
+                    decided_at=datetime.now(UTC),
+                )
+                worker.commit()
+            except (DBAPIError, ValueError):
+                worker.rollback()
+                return ("rejected", None)
+            return (result.state, result.subject_id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(observe, ("candidate-1", "candidate-2")))
+
+    assert results == [("resolved", target_id), ("resolved", target_id)]
+
+
+def test_url_resolution_serializes_against_explicit_same_url_assignment(
+    concurrent_sessions: sessionmaker[Session],
+) -> None:
+    token = uuid4().hex
+    namespace = f"concurrent-step4-explicit-url-{token}"
+    url = f"https://explicit-{token}.example.test/"
+    with concurrent_sessions() as setup:
+        anchor = resolve_source_record_observation(
+            setup,
+            observation=_bronze_observation(
+                namespace,
+                "anchor",
+                canonical_url=url,
+            ),
+            decided_at=datetime.now(UTC),
+        )
+        explicit_candidate = resolve_source_record_observation(
+            setup,
+            observation=_bronze_observation(
+                namespace,
+                "explicit-candidate",
+                canonical_url=url,
+            ),
+            decided_at=datetime.now(UTC),
+        )
+        first_subject = create_organization(setup)
+        second_subject = create_organization(setup)
+        assign_source_record(
+            setup,
+            source_record_id=anchor.source_record_id,
+            to_subject_id=first_subject.id,
+            decision=_decision(),
+            evidence_ids=[anchor.evidence_id],
+        )
+        setup.commit()
+        explicit_candidate_id = explicit_candidate.source_record_id
+        explicit_evidence_id = explicit_candidate.evidence_id
+        second_subject_id = second_subject.id
+
+    resolver_pid_ready = Event()
+    resolver_pid: list[int] = []
+
+    def resolve_candidate() -> tuple[str, int | None, int]:
+        with concurrent_sessions() as worker:
+            backend_pid = worker.scalar(select(func.pg_backend_pid()))
+            assert backend_pid is not None
+            resolver_pid.append(backend_pid)
+            resolver_pid_ready.set()
+            result = resolve_source_record_observation(
+                worker,
+                observation=_bronze_observation(
+                    namespace,
+                    "url-candidate",
+                    canonical_url=url,
+                ),
+                decided_at=datetime.now(UTC),
+            )
+            worker.commit()
+            return (result.state, result.subject_id, result.source_record_id)
+
+    with concurrent_sessions() as explicit_writer:
+        assign_source_record(
+            explicit_writer,
+            source_record_id=explicit_candidate_id,
+            to_subject_id=second_subject_id,
+            decision=_decision(),
+            evidence_ids=[explicit_evidence_id],
+        )
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(resolve_candidate)
+            assert resolver_pid_ready.wait(timeout=5)
+
+            blocked = False
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                wait_event_type = explicit_writer.scalar(
+                    text(
+                        """
+                        SELECT wait_event_type
+                        FROM pg_stat_activity
+                        WHERE pid = :pid
+                        """
+                    ),
+                    {"pid": resolver_pid[0]},
+                )
+                if wait_event_type == "Lock":
+                    blocked = True
+                    break
+                time.sleep(0.01)
+
+            explicit_writer.commit()
+            result = future.result(timeout=10)
+
+    assert blocked, "URL resolver did not lock every same-URL Source Record"
+    assert result[:2] == ("unresolved", None)
+    with concurrent_sessions() as verify:
+        current = verify.get(CurrentResolution, result[2])
+        assert current is not None
+        assert (current.state, current.subject_id) == ("unresolved", None)

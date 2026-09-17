@@ -12,12 +12,15 @@ from packages.helios_core.identity.commands import (
     rebuild_identity_projections,
     record_subject_change,
     remap_source_record,
+    resolve_source_record_observation,
     unassign_source_record,
 )
 from packages.helios_core.identity.contracts import (
+    DeterministicResolutionResult,
     EligibleSubject,
     SubjectNotEligibleError,
     require_eligible_subject,
+    subject_meets_readiness_policy,
 )
 from packages.helios_core.identity.models import (
     Adjudication,
@@ -42,6 +45,7 @@ __all__ = [
     "AppliedSubjectChange",
     "CurrentResolution",
     "DecisionMetadata",
+    "DeterministicResolutionResult",
     "EligibleSubject",
     "Establishment",
     "Organization",
@@ -67,5 +71,7 @@ __all__ = [
     "rebuild_identity_projections",
     "remap_source_record",
     "require_eligible_subject",
+    "resolve_source_record_observation",
+    "subject_meets_readiness_policy",
     "unassign_source_record",
 ]
