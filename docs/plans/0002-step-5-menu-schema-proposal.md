@@ -1,415 +1,434 @@
 # Plan 0002 Step 5: menu schema proposal
 
-**Status:** Revision required after technical review. Fortune accepted the
-recommended review defaults on 2026-09-17; this original detailed proposal
-has not yet been reconciled with them. No schema implementation.
-
-**Current handoff:** Read the
-[readiness reassessment and accepted defaults](../reviews/0002-step-5-readiness-reassessment.md)
-before using this specification. In particular, its Evidence, inherited-node,
-pinned-base, withdrawal, and historical-query rules below require revision.
-
-**Baseline:** `d1ff54cdae5d6fc59c385c77a4a89a1e91d8fc2f`, Step 4 / PR #15.
-**Branch:** `Plan-0002-Step-5`, created from clean, freshly fetched `main`.
-**Migration parent:** `91f4c2a7d6e8`, including the typed-grain trigger fix.
+**Status:** Reconciled 2026-09-17; concrete design proposed for review in
+[ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md).
+Accepted review defaults are retained. No Menu schema or contract is implemented.
+**Branch:** `Plan-0002-Step-5`. **Migration parent:** `91f4c2a7d6e8`.
+The original proposal baseline was `d1ff54cdae5d6fc59c385c77a4a89a1e91d8fc2f`
+(Step 4 / PR #15); it is not a claim that today's working tree is clean.
 
 Authority: [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md),
-[Plan 0002, Step 5](0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts),
-and [RFC-0001](../rfc/0001-menu-pricing-first.md), especially D1, D2, and D6.
-ADR-0004 supersedes RFC-0001's nullable Venue root and free-text evidence.
+[Plan 0002 Step 5](0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts),
+[RFC-0001](../rfc/0001-menu-pricing-first.md), and the
+[accepted defaults](../reviews/0002-step-5-readiness-reassessment.md#accepted-review-defaults-and-remaining-technical-work).
+This document supplies the detailed design; ADR-0005 records its decisions.
+The [reconciliation record](../reviews/0002-step-5-menu-design-reconciliation.md)
+contains examples, verification, remaining gates, and the self-contained handoff.
+Section 11 preserves historical planning text without granting it authority over
+this reconciled specification.
 
-This proposes menu persistence, write validation, and a pure precedence
-contract. Gold, APIs, extraction, fuzzy matching, generic offerings, and
-Step 6 are outside this change. No runtime dependency is needed.
+Scope is persistence, admission, replay, and pure selection over already
+persisted, committed Bronze input with resolved Identity. No extraction, ML,
+fuzzy matching, matching-policy change, Gold, API, Step 6, new runtime dependency,
+or deployment work. Schema and generated SQL remain separately reviewable.
 
-## 1. Recommended shape
+## 1. Immutable snapshots and streams
 
-Use immutable, source-version-specific menu snapshots. A `menu_page` is an
-accepted interpretation, not another fetch record. Its URL, capture, payload
-hash, and replay location remain in Bronze. All graph members are inserted
-with their page in one transaction and become immutable together. A later
-observation or correction appends another snapshot. This intentionally
-duplicates changed/confirmed menu structure across observations; it avoids
-mutable item attributes and preserves what each source actually supported.
+A `menu_page` is one complete accepted interpretation of one Bronze version,
+not a fetch. Its graph, prices, contexts, and support links form an immutable
+aggregate inserted in one transaction. URL, payload, capture, hash, and replay
+location stay in Bronze. All Menu tables reject UPDATE, DELETE, and TRUNCATE,
+including no-op updates and support/catalog changes. Late child/link insertion
+is forbidden. The command flushes and never commits; the caller owns commit.
 
-Organization snapshots supply shared content. An Establishment snapshot can
-explicitly refine one Organization snapshot belonging to its own operator.
-That base is pinned: a later Organization snapshot never silently changes
-an already accepted local interpretation. Price history stays append-only,
-and Organization prices are never promoted to Establishment prices.
+A **stream** is `(source_record_id, root_key, source_kind)`, independent of
+Subject, resolution event, and Bronze version. `source_kind` is interpretation
+kind (`jsonld`, `dom`, `pdf`, `llm`), not Bronze Source kind. A stream has a
+single append-only predecessor chain. Its first page is revision 1; every
+subsequent page explicitly names the committed head and advances
+`stream_revision` by one. No implicit supersession by arrival time. An ordinary
+later observation is also an explicit successor: omission means no current
+claim in that snapshot, never evidence of unavailability.
 
-## 2. Tables and keys
+Organization pages supply shared content. An Establishment may pin one
+published Organization page belonging to its operator. Ordinary observation
+or correction supersession does not invalidate an existing pin. No rebasing,
+name matching, sibling-price fallback, or Organization-to-local price copying.
+A local price and the inherited description can have different scopes,
+observation times, and Evidence paths; selection returns those separately.
 
-All tables below belong to schema `menu`, package
-`packages.helios_core.domains.menu`. Except `currency`,
-each has a surrogate `BIGINT` PK. Every graph member carries non-null
-`page_id` and exposes `UNIQUE(id, page_id)` for same-page composite FKs.
-Surrogate IDs are storage references, never semantic tie-breakers.
+## 2. Tables and relational shape
 
-| Table | Proposed columns and natural uniqueness |
+Schema `menu`, package `packages.helios_core.domains.menu`. Except `currency`,
+each table has a surrogate BIGINT PK. Children carry non-null `page_id` and
+`UNIQUE(id, page_id)` for composite FKs. Surrogate IDs never rank facts.
+Column names below are the review contract; final SQL names must map to Section 9.
+
+| Table | Columns and natural uniqueness |
 |---|---|
-| `currency` | `code VARCHAR(3)` PK, `minor_unit SMALLINT`; immutable supported-currency catalog. Initially `USD, 2`, subject to approval. |
-| `menu_page` | `subject_id`, `subject_kind`, `source_record_version_id`, `resolution_event_id`, `root_key`, `source_kind`, `method`, `method_version`, `interpretation_revision`, `observed_at`, `accepted_at`, `confidence`, `state`, nullable `base_organization_page_id`, nullable `supersedes_page_id`, DB-stamped `created_transaction_id`. Unique `(subject_id, source_record_version_id, root_key, source_kind, interpretation_revision)`. |
-| `menu_section` | `page_id`, `section_key`, optional `parent_section_id`, `name`, optional `course`, `position`, optional `applicability_id`, optional `base_section_id`, `effect`. Unique `(page_id, section_key)`. |
-| `menu_item` | `page_id`, `item_key`, required `section_id`, `name`, optional `description`, optional nonnegative integer `calories`, normalized `dietary_tags TEXT[]`, `position`, optional `applicability_id`, optional `base_item_id`, `effect`. Unique `(page_id, item_key)`. |
-| `menu_variant` | `page_id`, `variant_key`, required `item_id`, `label`, `position`, optional `applicability_id`, optional `base_variant_id`, `effect`. Unique `(page_id, item_id, variant_key)`. A variant represents a size/portion; an unqualified item price needs no invented default variant. |
-| `menu_modifier` | `page_id`, `modifier_key`, exactly one of `item_id` / `section_id`, `label`, `required BOOLEAN`, `position`, optional `applicability_id`, optional `base_modifier_id`, `effect`. Unique `(page_id, modifier_key)`. No mutable price column. Required means this individual modifier is required; choice groups are not implied. |
-| `menu_applicability` | `page_id`, `applicability_key`, `channel`, optional `service_period`, optional `valid_from` / `valid_to` (`TIMESTAMPTZ`). Unique `(page_id, applicability_key)` and unique canonical context within a page. Reusable typed applicability, not arbitrary JSON. |
-| `price_observation` | `page_id`, `observation_key`, exactly one of `section_id` / `item_id` / `variant_id` / `modifier_id`, required `applicability_id`, `price_kind`, `price_state`, nullable `amount_minor BIGINT`, required `currency_code`, `confidence`. Unique `(page_id, observation_key)`. Time and method come from the immutable page. |
-| `evidence_link` | `page_id`, `evidence_id`, `page_target BOOLEAN`, nullable `section_id`, `item_id`, `variant_id`, `modifier_id`, `applicability_id`, `price_observation_id`. Exactly one target: `page_target::int + num_nonnulls(the six typed IDs) = 1`. Seven partial unique indexes prevent duplicate `(target, evidence_id)` links, including `(page_id, evidence_id)` for a page target. |
+| `currency` | `code VARCHAR(3)` PK, `minor_unit SMALLINT`; immutable catalog seeded with `USD, 2` only. |
+| `menu_page` | `subject_id`, `subject_kind`, `source_record_id`, `source_record_version_id`, `resolution_event_id`, `root_key`, `source_kind`, `method`, `method_version`, `stream_revision`, `interpretation_revision`, `observed_at`, `accepted_at`, `confidence`, `operation`, `state`, nullable `base_organization_page_id`, nullable `supersedes_page_id`, server-stamped `created_transaction_id`. Unique `(source_record_id, root_key, source_kind, stream_revision)` and `(source_record_version_id, root_key, source_kind, interpretation_revision)`; partial unique non-null `supersedes_page_id`. Subject is absent from both revision keys. |
+| `menu_section` | `page_id`, `section_key`, optional `source_native_key`, optional `parent_section_id`, `name`, `course`, `position`, optional `applicability_id`, optional `base_section_id`, `effect`, `support_kind`. Unique `(page_id, section_key)`. |
+| `menu_item` | `page_id`, `item_key`, optional `source_native_key`, required `section_id`, `name`, `description`, `calories`, `dietary_tags TEXT[]`, `position`, optional `applicability_id`, optional `base_item_id`, `effect`, `support_kind`. Unique `(page_id, item_key)`. |
+| `menu_variant` | `page_id`, `variant_key`, optional `source_native_key`, required `item_id`, `label`, `position`, optional `applicability_id`, optional `base_variant_id`, `effect`, `support_kind`. Unique `(page_id, item_id, variant_key)`. A size/portion; no invented default variant. |
+| `menu_modifier` | `page_id`, `modifier_key`, optional `source_native_key`, exactly one of `item_id` / `section_id`, `label`, `required`, `position`, optional `applicability_id`, optional `base_modifier_id`, `effect`, `support_kind`. Unique `(page_id, modifier_key)`. Required means this individual modifier, not a choice group. |
+| `menu_applicability` | `page_id`, `applicability_key`, `channel`, optional `service_period`, optional `valid_from` / `valid_to` TIMESTAMPTZ. Unique key within page and unique canonical declared context within page. |
+| `price_observation` | `page_id`, `observation_key`, exactly one of `section_id` / `item_id` / `variant_id` / `modifier_id`, required `applicability_id`, `price_kind`, `price_state`, nullable `amount_minor BIGINT`, required `currency_code`, `confidence`. Unique `(page_id, observation_key)`; time/method inherited from page. |
+| `evidence_link` | `page_id`, `evidence_id`, `page_target BOOLEAN`, nullable section/item/variant/modifier/applicability/price target IDs. `page_target::int + num_nonnulls(the six IDs) = 1`. Seven partial unique `(target, evidence_id)` indexes including `(page_id, evidence_id)` for page support. |
 
-`evidence_link` uses seven enumerated, real FK targets. It is a menu-only
-association, with no generic `entity_type/entity_id`, EAV, or shared fact
-store. Every accepted page, section, item, variant, modifier, applicability,
-and price must have **at least one** link. Evidence can support several rows;
-it must actually support each accepted claim. This includes an unavailable
-item, an unknown price, and a correction. An Identity adjudication alone
-does not substitute for Bronze Evidence on a menu observation.
+Factual columns in graph tables are nullable only to represent the explicit
+inherit/suppress shapes below. CHECKs enforce required fields for replacements.
+Every key/label is bounded, nonblank and trimmed when present; positions and
+calories are nonnegative integers, dietary tags normalized/non-null/unique for
+replacement items. Methods are nonblank. Confidence is finite NUMERIC(5,4)
+in `[0,1]`. Page observation time equals Bronze's immutable observation time.
 
-### FK directions and graph integrity
+Every FK specifies `ON DELETE RESTRICT`, `ON UPDATE NO ACTION`; ORM has no delete
+cascade. Allowed FKs: Menu to Menu, Identity, Bronze only. No provider references
+Menu, no authoritative reference to Gold. Page `(subject_id, subject_kind)`
+references Subject's matching composite key, with allowed kinds Organization or
+Establishment only. Page references immutable resolution event and version,
+never a current-state projection. An immutable provider lookup verifies that
+`source_record_id` belongs to that version.
 
-- Page `(subject_id, subject_kind)` references existing
-  `identity.subject(id, kind)`; `CHECK subject_kind IN
-  ('organization', 'establishment')`. Neither NULL scope nor Place is legal.
-- Page references `bronze.source_record_version(id)` and the immutable
-  `identity.resolution_event(id)` that justified acceptance. It does not FK
-  to the rebuildable current-resolution projection. A deferred validator
-  proves that the event is an assign/remap of this version's Source Record
-  to this Subject, and is the current event when accepted.
-- Every child references its page. Section parents, item sections, variant
-  items, modifier parents, applicability references, price targets, and
-  Evidence-link targets use `(id, page_id)` composite FKs. Accidental joins
-  across snapshots must fail in SQL.
-- Section parents form an acyclic same-page tree. Reject self-parenting and
-  longer cycles using a deferred recursive check. Root sections have NULL
-  parent; every item belongs to a real section. A supported synthetic
-  "Unsectioned" section is allowed, with deterministic key and Evidence.
-- A local page's base must be an Organization page for the Establishment's
-  immutable `organization_subject_id`. Organization pages cannot have bases;
-  one level of refinement is sufficient. No sibling/cross-Organization base.
-- Typed `base_*_id` FKs must target the corresponding table in precisely
-  that base page. A deferred validator checks the base page and parent
-  correspondence. An override preserves its parent's correspondence;
-  moving an inherited node is a suppression plus a new local node.
-  Partial `UNIQUE(page_id, base_*_id)` permits at most one local override per
-  shared node. These are explicit source-supported links, never name matches.
-- Price currency references `menu.currency(code)`. Evidence IDs reference
-  `bronze.evidence(id)`. No FK points from Identity/Bronze into Menu, or from
-  Menu into Gold or a different vertical.
-- Every FK explicitly uses `ON DELETE RESTRICT`, `ON UPDATE NO ACTION`.
-  No cascade or `SET NULL` erases history. ORM relationships have no delete
-  cascade. Retirement, split, and remap leave old snapshots untouched.
+All parent, applicability, price-target and link-target relationships use
+`(id, page_id)` FKs. Deferred checks reject section cycles. Typed base FKs
+reference the correct table in precisely the pinned page; partial unique
+`(page_id, base_*_id)` prevents duplicate overrides. Organization pages cannot
+have bases. A base page is committed before local admission.
 
-## 3. Acceptance and provenance
+### Node shape, support, and parent mapping
 
-The current contracts are useful but incomplete for this schema:
+| Shape | Stored payload | Support and meaning |
+|---|---|---|
+| `effect=replace`, `support_kind=direct` | Complete required typed content; optional NULL clears that field. Base optional. | At least one local Evidence link supporting the factual row; no per-field merging. Without a base link this is a local addition. |
+| `effect=inherit`, `support_kind=inherited` | Required typed base link and local parent reference; all factual payload, position, native key, and applicability NULL. | Traverse the base row's support; do not copy its fields or claim local factual Evidence. Optional local Evidence may explain correspondence only. Local prices may target this reference. |
+| `effect=suppress`, `support_kind=direct` | Required typed base link and mapped local parent; factual payload, position, native key, and applicability NULL. | Local Evidence explicitly supports suppression. Hides target and descendants, including prices; no local child/price may target a suppressed branch. |
+| `effect=replace`, `support_kind=structural` | Section only: reserved `Unsectioned` key/name, position 0, no base/parent/course/native key/applicability. | Deterministic grouping of at least one directly supported local item. Support is through those child items; not an observed source heading. No direct Evidence is fabricated. |
 
-- `identity.contracts.require_eligible_subject(..., allowed_kinds=...)`
-  locks Subjects, their currentness, and typed features. Organization
-  readiness requires name/fingerprint plus a current resolved source key;
-  Establishment readiness recursively requires eligible, current parents.
-  A bare `readiness='eligible'` check is insufficient.
-- That function does not prove that this page's particular Source Record
-  resolves to that Subject. An eligible Organization can coexist with an
-  unresolved menu Source Record. Both checks are required.
-- Bronze contracts persist observations and lock Source Records, but do not
-  yet publish immutable version/Evidence lookup DTOs. Bronze versions are
-  not SQL-unique by content hash. Menu must not invent that guarantee.
+Pages (including withdrawals), direct nodes, every declared applicability, and
+every price require direct Evidence. Structural/inherited nodes require their
+explicit support path instead. A missing local price produces a derived unknown
+result, no fabricated `price_observation` or Evidence. An explicitly observed
+unknown/unavailable price is a real supported price row.
 
-Propose small, provider-owned contract additions, explicitly subject to
-approval:
+Evidence must reference either the page's exact Bronze version or that version's
+non-null Capture. Same URL/source/record without the right version/capture is
+insufficient. Base Evidence remains on the base; it cannot satisfy a direct
+local claim. Provider lookups establish ownership; the writer/reviewer must
+establish semantic support. SQL cannot prove that an excerpt means a price.
+No generic EAV support store or cross-version supplemental Evidence is added.
 
-1. Provenance publishes frozen version/Evidence references containing the
-   IDs, Source Record, capture, observed time, and deterministic source keys
-   needed for validation. Consumers never import its ORM or private helpers.
-2. Identity publishes a resolved-scope guard returning `EligibleSubject`,
-   the accepted resolution event, and Establishment parent IDs as needed.
-   It composes eligibility with the version's exact Source Record mapping.
-3. Identity owns a SQL eligibility/resolution guard usable by Menu's
-   acceptance trigger. The existing Python eligibility entrypoint delegates
-   to the same policy where practical; policy must not drift into Menu SQL.
-   The helper has only Subject/Source Record arguments, no menu concepts or
-   upward imports. Existing eligibility behavior remains the reference.
+For every mapped child, its local parent must map to the base child's parent:
+section parent to section parent (root to root), item section to base section,
+variant item to base item, modifier to the same typed item/section parent.
+Create inherit references up the complete parent path for price-only changes.
+A replacement parent can retain its base correspondence. Moving a shared node
+requires suppression at its original location and a new directly supported
+local addition. Unmentioned base descendants remain inherited unless an
+ancestor is suppressed. Structural sections cannot masquerade as base parents.
 
-Reject a missing Subject, wrong kind, provisional readiness, absent/noncurrent
-currentness, failed live typed-feature policy, ineligible/retired parents,
-absent resolution, `unresolved`, `needs_review`, mismatched Subject, or stale
-resolution event. A closed Establishment is not inherently a retired Subject:
-historical acceptance can succeed if identity remains eligible. Applicability
-must intersect its effective operating interval; never advertise historical
-facts as current operating availability.
+## 3. Provider boundary and admission
 
-Each Evidence link must target either the page's exact Record Version or
-that version's non-null Capture. Same source or same URL alone is not enough.
-This preserves both legal Bronze Evidence forms, while preventing unrelated
-evidence laundering. Supplemental Evidence outside that chain is deferred;
-separate source claims receive separate accepted snapshots. A base row retains
-its own Evidence; a local override needs its own page's supporting Evidence.
+Proposed additions, not existing APIs:
 
-Database BEFORE triggers stamp transaction IDs, validate live eligibility and
-exact resolution for every new page/member/link, and reject late member/link
-inserts after the page transaction. Deferred constraint triggers check support
-counts, graph closure, and Evidence ownership at the transaction boundary.
-Eligibility is an admission invariant, not a permanent invariant on historical
-rows: an ordered retirement/remap after acceptance, including later in the same
-transaction, preserves accepted history but disqualifies it from current
-selection. No further members may be accepted against an invalidated scope.
-Identity's deferred lineage application must be accounted for: the provider
-guard rejects a Subject/dependency with a pending unapplied change in which it
-is an input, rather than reading an obsolete currentness projection. Test both
-normal deferred execution and explicitly forced constraint execution.
-Commit an entire page aggregate or none of it. Missing or rejected menu input
-stays in Bronze; there is no draft/nullable menu placeholder.
+- Bronze publishes frozen version/Evidence DTOs and immutable SQL lookup helpers
+  for record, capture, observed time, and canonical source/Evidence keys. Bronze
+  owns their traversal and validation. Menu imports only provenance contracts.
+- Identity publishes a **batch** resolved-scope guard, with Subject/Source Record
+  IDs and expected immutable resolution-event IDs as inputs. It expands all
+  local/base Subject dependencies, acquires the complete lock set, and returns
+  eligible typed scopes and Establishment parents. Menu does not discover
+  parents, order provider locks, or copy readiness policy.
+- Identity owns the corresponding SQL guard for raw-SQL admission and shared
+  feature predicate. Python/SQL eligibility behavior must agree. Promotion uses
+  that feature predicate without requiring the candidate to be already eligible;
+  Menu admission additionally requires `readiness=eligible`. No resolver
+  thresholds, matching rules, or readiness requirements change.
 
-All menu tables reject UPDATE, DELETE, and TRUNCATE in database triggers,
-including no-op updates, link changes, and currency-unit changes. There is no
-application-settable bypass. A frozen page cannot acquire prices or children
-later; new acceptance means a new snapshot.
+Menu BEFORE INSERT triggers on pages and all children/links call the provider
+guard and reject late inserts against a page created in another transaction.
+They also check the pinned base's live validity. DB stamps cannot be forged.
+Exact existing-aggregate replay is a read-only return and needs no new admission.
+New facts require an eligible current allowed Subject, eligible/current typed
+parents, live readiness features, and this version's exact current resolved
+Source Record/event mapping. Zero events, unresolved, needs-review, stale event,
+provisional, retired, and incorrectly labeled eligible Subjects all fail.
 
-## 4. Money, applicability, and corrections
+Identity's guard checks pending unapplied lineage inputs in its expanded
+Subject set, including a surviving merge input. It does not trust currentness
+until a pending change has applied. A pending change with no input membership
+cannot yet invalidate a named Subject; once membership is inserted, further
+Menu inserts fail. A malformed incomplete change still fails Identity's own
+commit checks. Test normal deferred application and forced application.
 
-- Store exact integer **minor units**, not float money and not universally
-  named "cents". Currency defines the exponent. `code` checks `^[A-Z]{3}$`;
-  `minor_unit` checks `0..4`. The FK rejects unsupported codes, so a regex
-  alone does not pretend to validate currency identity. No FX conversion or
-  cross-currency ranking. Missing currency prevents accepting a numeric price.
-- `price_kind IN ('absolute', 'delta')`. Section/item/variant prices must be
-  absolute and nonnegative. Modifier prices must be deltas and may be negative
-  or zero. Never automatically add a section price to an item price. A variant
-  price replaces the item price for that variant; no guessed upcharge semantics.
-- `price_state IN ('priced', 'unknown', 'unavailable')`; amount is non-null
-  exactly for `priced`. Unknown/market price is not zero. An explicit local
-  unknown/unavailable observation blocks a shared-price fallback.
-- `source_kind IN ('jsonld', 'dom', 'pdf', 'llm')` describes interpretation,
-  not Bronze Source kind. This stores the RFC vocabulary but authorizes no
-  LLM/extraction work. Method/version are nonblank; confidence is finite exact
-  `NUMERIC(5,4)` in `[0,1]`. Price confidence is per claim; page confidence
-  describes content interpretation. Observation time must equal Bronze's time;
-  acceptance time is server-stamped and not a replay key or precedence input.
-- Applicability channels are `unspecified`, `dine_in`, and `takeaway`.
-  Unspecified does not prove either specific channel. Optional service-period
-  labels are trimmed, bounded source labels, not machine-inferred hours.
-  Explicit validity windows are half-open `[valid_from, valid_to)`; if both
-  bounds exist, end must exceed start. NULL bounds are unbounded within the
-  stated context. No recurring hours, timezone inference, or overnight parser
-  is introduced. Graph restrictions intersect along the ancestor path; an
-  incompatible or empty intersection is rejected.
-- Define the canonical context tuple as `(channel, service_period-or-empty,
-  valid_from-or-minus-infinity, valid_to-or-plus-infinity)`. An expression
-  unique index uses that tuple, with literal infinities/empty service labels
-  forbidden as input. This prevents NULL uniqueness holes. Matching/ranking
-  compares exact contexts; overlapping but unequal contexts remain separate
-  claims. No unapproved "more specific" heuristic selects among them.
-- Graph `effect IN ('replace', 'suppress')`. Suppression requires an explicit
-  base target. Replace uses the full typed content row: a NULL description
-  clears that description, not "inherit". Children without explicit overrides
-  retain base content. Suppressed ancestors hide their descendants.
-- Page `state IN ('published', 'withdrawn')`. A withdrawal has Evidence and
-  supersedes an earlier page; it has no content/price children. Corrections
-  and withdrawals use `supersedes_page_id`, with a partial unique index on
-  non-null predecessors to reject competing successors. The predecessor must
-  already be committed and share source Record, root key, and source kind.
-  Same-version corrections increment interpretation revision by one; a changed
-  scope is allowed only after explicit Identity remap and fresh validation.
-  New-version observations start at revision 1 and may explicitly supersede
-  an older version; arrival order alone does not imply correction.
-- A superseded snapshot remains queryable but is not a current candidate.
-  Omission from an ordinary later snapshot is not proof of unavailability;
-  use explicit supported suppression/withdrawal. No automatic split fan-out,
-  merge rewrite, or correction of previous prices.
+**Admission and deferred integrity are different.** All live eligibility,
+resolution, base validity, and pending-lineage checks happen at each insertion.
+Deferred Menu checks verify immutable support, version/event correspondence,
+graph closure, contexts, base parent mapping, and revision shape only. They
+must not re-evaluate live readiness/current mapping at commit. A complete Menu
+aggregate admitted before an ordered retirement/remap remains history even
+when that Identity change occurs later in the same transaction. Subsequent
+Menu inserts fail; an incomplete aggregate then cannot commit. Changing the
+scope first blocks all new acceptance. Cross-transaction races serialize or
+abort and retry the whole transaction; no partial aggregate is accepted.
 
-## 5. Deterministic precedence contract
+Closure is not retirement: historical observations can be admitted to an
+otherwise eligible closed Establishment. Identity supplies its operating
+interval/state for current selection; do not bake today's operating state into
+immutable Menu integrity or promise historical operating-state reconstruction.
 
-This is a pure selection specification and test fixture, not a Gold view or
-API. Input is an Establishment, an explicit menu family/base correspondence,
-an exact applicability context, currency, and as-of time. Unrelated root
-families are separate menus; the caller cannot equate names across sources.
+## 4. Stream lifecycle, replay, and base validity
 
-1. Validate current Identity eligibility and mapping before considering a
-   snapshot for a current interpretation. Exclude superseded/withdrawn pages,
-   stale assignments, retired/ambiguous predecessors, and nonmatching time or
-   channel contexts. A closed Establishment or one outside its effective
-   operating interval cannot assert current availability. Historical queries
-   retain the original scope and event. As-of history evaluates only snapshots
-   and supersessions visible by the requested observation/knowledge cutoff;
-   a later correction must not erase an earlier historical answer.
-2. Within an explicitly identified source-local root family, select an
-   accepted snapshot using RFC-0001 order: source kind `jsonld > dom > pdf >
-   llm`, then later Bronze `observed_at`, then higher page confidence.
-   Break a remaining tie by ascending canonical source/version/root/revision
-   key, never by sequence ID or database arrival order. Retain all contenders.
-3. A selected local page with a base uses exactly that Organization snapshot.
-   Do not silently rebase to a newer Organization snapshot. If the pinned base
-   is no longer a current candidate, return the local standalone facts and
-   an unresolved shared-base condition; do not reactivate withdrawn content.
-   Without a local page, Organization content may be returned as shared
-   content, with its Organization scope explicit.
-4. Overlay local sections/items/variants/modifiers by explicit `base_*` links.
-   Local replacements win for mapped nodes; suppressions hide mapped nodes
-   and descendants; unrelated local nodes are additions. Same names alone
-   neither override nor deduplicate anything.
-5. For each exact target correspondence, applicability context, and currency,
-   a local price claim wins over any Organization price claim, regardless of
-   source-kind rank. Within that scope, rank price claims by source kind,
-   observed time, price confidence, then canonical observation key. Distinct
-   contexts/currencies are not collapsed. Equal-ranked contradictions remain
-   stored; the final key makes selection repeatable, not more truthful.
-   Content selection in step 2 does not discard competing price observations:
-   evaluate active snapshots in the same family whose stable source-local
-   target keys or explicit base links correspond to the selected content.
-   A suppressed target has no eligible prices. Do not mix incompatible pinned
-   bases or infer variant/modifier correspondence from a matching item name.
-6. If no local price exists, the location price is **unknown**. Shared prices
-   may be reported separately as Organization claims. They are not copied,
-   multiplied across Establishments, or substituted as in-store location
-   prices. A sibling Establishment is never a candidate.
-
-Example: Organization O publishes Burger = USD 900. Establishment A explicitly
-links its Burger to O's item and observes USD 1050; B has no local observation.
-A's price is USD 1050; B's location price is unknown; O's USD 900 remains a
-shared claim. A later supported local `unknown` replaces A's numeric claim
-through an explicit superseding snapshot, without falling back to USD 900.
-
-## 6. Natural keys and replay
-
-Use versioned canonical encodings of structured tuples, not concatenated
-labels with ambiguous separators. Keys are bounded, nonblank, trimmed text;
-canonical serialization and normalization are frozen in `menu.contracts`.
-
-- Root identity uses source namespace + external record key + source-local
-  root key. Snapshot identity additionally uses the immutable Bronze version,
-  Subject, source kind, and explicit interpretation revision from the table.
-- Prefer stable source-native node IDs. Otherwise use a reproducible locator
-  under the captured document, including section path and duplicate occurrence
-  ordinal. Normalized name is a component/display aid, never sole identity.
-  Reordering unnamed duplicate nodes can create new identities; that is safer
-  than asserting unsupported continuity. Explicit base links establish shared
-  correspondence across snapshots/sources.
-- Observation keys combine typed target key, canonical applicability tuple,
-  currency, and source claim locator. Amount/confidence are compared payload,
-  not key material; changing them under the same key is an error. Separate
-  contradictory source claims need distinct locators/keys.
-- Canonical business tie keys use Bronze namespace/external key, UTC observed
-  time, content hash, immutable capture provenance, normalized keys, revision,
-  and Evidence locators/hashes. They exclude acceptance time and surrogate IDs.
-  Identical business keys/payloads are equivalent even if a historical raw SQL
-  Bronze insert created duplicate versions; normal replay must reuse the
-  Bronze version supplied by its published persistence contract.
-- A writer looks up the complete root natural key before creating children.
-  Exact aggregate and sorted Evidence-set equality returns existing IDs and
-  performs zero inserts. Same key with different payload/membership/Evidence
-  raises an idempotency conflict; no `ON CONFLICT DO UPDATE` and no late links.
-  Exact retry of historical data can return its existing immutable result
-  after retirement/remap, but cannot accept any new row or mark it current.
-- A corrected interpretation requires an explicit higher revision and
-  predecessor; never allocate revisions via unlocked `MAX + 1`. A later Bronze
-  observation appends even if its amount is unchanged. First/last seen are
-  derivable MIN/MAX of observation history; no freshness UPDATE is needed.
-
-## 7. Locks, checks, and indexes
-
-Acceptance uses the Identity maintenance lock and its established stable
-Subject-before-Source-Record ordering. Lock the union of local/base Subjects
-and Establishment dependencies in sorted order before calling guards for
-individual Subjects. Lock the required Bronze Source Records in sorted order,
-then re-read resolution and typed readiness inputs under their protection.
-Use Source Record `FOR NO KEY UPDATE`, compatible with Bronze FK key-share
-locks. Root/child insertion and deferred validation run under these locks.
-Concurrent correction also locks its predecessor; a unique predecessor key
-is the final defense against branching.
-
-The approved Step 4 persistence command can already hold a Source Record lock
-before its resolver acquires Subjects. Do not claim arbitrary cross-module
-composition is deadlock-free. Step 5's first writer consumes already persisted,
-resolved Bronze; same-transaction composition needs a provider-owned lock-set
-preflight and the mixed-workflow tests below. On serialization failure or
-deadlock, roll back and retry the whole transaction; never swallow it and
-commit a partial aggregate. No new broker or coordination service.
-
-Named database checks cover all enums, nonblank bounded keys/labels, kind/FK
-agreement, XOR targets, amount/state/kind consistency, currency units, finite
-confidence/time values, interval order, nonnegative positions/calories, and
-normalized non-null/nonblank unique dietary tags. Deferred validators cover
-cross-row support, same-version Evidence, base ownership/parent correspondence,
-section cycles, correction shape, and eligibility. Every trigger has a focused
-failing test using raw SQL and an actual deferred-constraint boundary.
-
-Index inventory (avoid duplicates where a PK/unique index already leads with
-the same columns):
-
-- All natural unique keys, seven Evidence-link partial unique keys, four
-  base-target partial unique keys, and unique non-null supersession target.
-- Page `(subject_id, root_key, observed_at DESC)`, `source_record_version_id`,
-  `resolution_event_id`, and `base_organization_page_id`.
-- Child FK lookup indexes for section parent, item section, variant item,
-  both modifier parents, graph applicability, and each base target.
-- Price partial target indexes `(target_id, applicability_id, currency_code)`
-  for each of its four target columns; standalone applicability/currency
-  indexes where needed for referenced-row checks.
-- Evidence-link `evidence_id` plus child-target FK indexes not already
-  covered by partial unique indexes. All page membership scans are indexed.
-
-## 8. Migration and package sequence after approval
-
-1. Review the provider contract additions and SQL guard as a narrow prerequisite
-   revision after `91f4c2a7d6e8`. Add Identity-owned functions only; no existing
-   history rewrite, table replacement, policy relaxation, or menu dependency.
-   Prove Python/SQL guard parity before introducing menu writes.
-2. A second revision creates `menu` and its first real tables atomically:
-   currency, page, applicability, section, item, variant, modifier, prices,
-   Evidence links. Add self/base references and all named constraints/indexes
-   in dependency order; install every immutability and acceptance trigger in
-   the same migration. Seed only approved supported currencies.
-3. Add `SCHEMA_MENU`/ownership in `db/base.py`. Register every model solely
-   through `db/model_registry.py`; Alembic's existing ownership allowlist then
-   includes Menu. Add `domains/menu/{models,contracts,commands}.py` and minimal
-   package initializers. Commands flush but never commit; the caller owns the
-   transaction. Published DTOs contain IDs/values, not ORM instances.
-4. Extend metadata, AST, database, replay, and migration tests. Generate both
-   upgrade and downgrade SQL for owner review; run `alembic check` and full
-   `make ci` against a disposable Postgres test database. The migration/SQL
-   approval remains separate from approval of this proposal.
-5. Downgrade removes Menu triggers, then Evidence links/prices, modifiers,
-   variants/items/sections, applicability, page, currency, and functions;
-   remove self/base FKs first where necessary. Drop schema without CASCADE.
-   Downgrading the prerequisite then removes only its added provider functions.
-   Bronze/Identity rows and existing functions/triggers must remain intact.
-   A downgrade discards Menu history; it is not an operational data restore.
-   Re-upgrade restores the same empty Menu structure and currency seed.
-
-Package fitness rules permit Menu to import only Identity/provenance
-**contracts** and DB foundation. No root-package ORM re-exports as a loophole.
-Lower modules cannot import Menu, another vertical, Gold, or apps. The registry
-is the sole exception. Check both `import` and `from ... import`, including
-relative imports. SQL guards remain owned by their provider; no Identity SQL
-function references Menu. No parser, Gold package, or API scaffolding.
-
-## 9. Required validation
-
-| Area | Concrete acceptance cases |
+| Operation | Required predecessor and result |
 |---|---|
-| Migration | Seed Bronze/Identity at `91f4c2a7d6e8`; upgrade both revisions; compare provider rows and pre-existing object signatures; seed a supported Menu aggregate; downgrade Menu only, then prerequisite; prove foundation data/structure unchanged; re-upgrade and compare constraints, indexes, triggers, functions, catalog seed, and metadata. Exercise each revision boundary and full history from base. |
-| Scope/readiness | Accept eligible Organization/Establishment. Reject Place, forged kind, NULL/missing Subject, provisional or manually mislabeled eligible Subject, retired/split predecessor, retired/provisional/feature-poor parents, zero-event/unresolved/needs-review Record, wrong/stale mapping. Closed versus retired behavior is tested separately. |
-| Provenance | Reject missing version, unrelated resolution event, zero Evidence on each accepted row type, missing Evidence, wrong version, wrong Capture, and same-URL/wrong-record Evidence. Accept exact-version Evidence and matching-Capture Evidence. Traverse to source URL when an Endpoint exists. |
-| Graph | Reject cross-page parents/targets/applicability, section cycles, invalid target counts, sibling/wrong-Organization base, duplicate overrides, wrong typed base and parent mapping. Verify full replacement, explicit NULL clearing, suppression of descendants, local additions, pinned-base behavior, and no name-based matching. |
-| Price/applicability | Zero absolute price, negative modifier delta, unsupported/invalid currency, non-integer/overflow boundary inputs, exact money round trips, unknown/unavailable state shapes, confidence boundaries and NaN, duplicate NULL contexts, reversed intervals, incompatible ancestor contexts, channel isolation, and different-currency isolation. |
-| Precedence | A/B sibling example; local DOM beats shared JSON-LD for A; Organization amount never becomes B's price; within-scope kind/recency/confidence/tie order; reversed ingestion order produces identical business result; unmatched names and unequal contexts remain distinct; no shared fallback after local unknown. |
-| Replay/correction | Exact replay changes no row count or payload; concurrent identical replay returns one aggregate; same key/different value or Evidence set fails; unchanged amount on a later observation appends; correction preserves predecessor; two concurrent corrections cannot fork; remap/split never rewrites or copies old prices. |
-| Append-only | Raw SQL UPDATE/DELETE/TRUNCATE on every Menu table, including support links/catalog; late child/Evidence insert after commit; forged transaction stamp; no-op UPDATE; rollback leaves no half-accepted page. |
-| Deferred checks | Force `SET CONSTRAINTS ALL IMMEDIATE` inside the outer fixture transaction; test insert ordering and actual commit in isolated connections. Retirement/unassign before acceptance rejects it, including pending deferred lineage; a later ordered change preserves earlier history but blocks subsequent facts and current selection. The existing savepoint fixture's `session.commit()` alone is insufficient. |
-| Concurrency | Separate connections/barriers for replay, correction, remap/unassign, retirement/merge/split, readiness-feature edits, parent readiness loss, base/local acceptance, projection rebuild, and Bronze FK inserts. Both race orderings yield valid serialization or a full retry; no stale accepted scope, partial result, or unexplained hang. Include Step 4 persistence-to-menu composition before advertising that workflow as supported. |
-| Architecture | Active ownership gains Menu only; exact Menu inventory; complete model registration; allowed FK matrix and restrictive deletion; forbidden-import failures including relative imports; parser isolation; commands never commit; authoritative tables never reference Gold; no JSON domain payload or identity food attributes. |
+| `initial` | No stream predecessor; `stream_revision=1`, `interpretation_revision=1`, published. Only one initial page per stream. |
+| `observation` | Published head, a previously unused Bronze version in this stream with strictly later `observed_at`; published full snapshot, interpretation revision 1. Same amount still appends. |
+| `correction` | Published head; explicit successor with a complete corrected snapshot, published. Same version increments its interpretation revision; a different supported version is allowed for a deliberate correction, including an older observation. |
+| `withdrawal` | Published head; withdrawn tombstone with direct page Evidence and no base, nodes, applicability, or prices. It blocks the whole stream, not just the predecessor. |
+| `restoration` | Withdrawn head; explicit published successor with a complete newly supported aggregate. Ordinary observation/correction cannot bypass a tombstone. |
 
-Focused files: `test_menu_schema.py`, `test_menu_precedence.py`,
-`test_menu_replay.py`, `test_menu_concurrency.py`, `test_menu_migration.py`,
-plus extensions to provider contract tests and `test_schema_layout.py`.
-Use existing pytest/SQLAlchemy/stdlib patterns. Do not add a test framework.
-Destructive/concurrency tests require an actual disposable `*_test` database
-without `HELIOS_ALLOW_NONTEST_DB`. Skipped database tests do not satisfy the
-implementation acceptance gate. Update old migration tests that assume only
-Bronze/Identity exist at `head`, without weakening their preservation checks.
+For every operation, interpretation revision is 1 for a version's first use in
+that stream, otherwise its previous maximum plus one under the provider's
+Source Record lock. Stream revision always increments the committed head by
+one. Keys exclude Subject, so a remap cannot restart either counter or fork
+history. Each successor has a strictly later DB-stamped `accepted_at` than its
+predecessor (clock timestamp with a minimum one-microsecond increment). Neither
+acceptance time nor surrogate IDs break business ranking ties. A Source Record
+lock plus initial/revision/predecessor uniqueness serializes competing writers;
+no unlocked `MAX + 1`. Only one page per stream per transaction; the predecessor
+must be committed, not another uncommitted page in the same aggregate.
 
-## 10. Original recommendations before technical review
+After an explicit Identity remap a correction can scope the successor to the
+new eligible Subject and new resolution event, using the same supported Bronze
+version if justified. It does not rewrite the old scope or copy prices to split
+outputs. A remap alone creates no Menu page. Later remapping back does not make
+an old event current: reacceptance requires an explicit successor. Exact replay
+compares the complete canonical payload, membership, base/predecessor references,
+revision, and sorted Evidence sets; a different Subject/event under an existing
+key is a conflict. Same key/different amount, confidence, or Evidence also fails.
+Exact replay returns existing IDs with zero inserts, even after retirement.
+
+A pin is usable only if its Organization page was published and committed,
+belongs to the Establishment's operator, and its original scope/event mapping
+remains current and eligible for a current interpretation. It need not be the
+stream head: ordinary successors leave pins intact, including new explicitly
+chosen pins to superseded pages. A withdrawal later in that stream invalidates
+**all earlier pins** for current use. Restoration makes its new page pinnable;
+it does not silently revive pre-withdrawal pins. Local rebasing is an explicit
+new local snapshot. At admission, these conditions are checked for every new
+page/member; at selection they are read again for current use. Deferred checks
+only enforce the immutable relationship.
+
+If a base becomes invalid, inherited facts, mapped replacements/suppressions,
+and prices depending on those correspondences cannot form a current resolved
+graph. Return an unresolved-base condition and only independent, directly
+supported local additions with complete independent parent paths. An orphaned
+local price is retained in history but not attached by name to a new base.
+No fallback to another Organization version or a sibling location is permitted.
+
+## 5. Money, applicability, and correspondence
+
+Money uses exact integer minor units and currency FK, initially USD with
+exponent 2. Currency regex `^[A-Z]{3}$`, exponent `0..4`, and catalog FK enforce
+shape/support. Section/item/variant `price_kind=absolute` amounts are nonnegative;
+modifier `price_kind=delta` may be negative or zero. `price_state` is priced,
+unknown, or unavailable; amount exists exactly when priced. No float, conversion,
+section-plus-item summation, or guessed variant upcharge. A variant's absolute
+price replaces its item's price for that variant. Individual required modifiers
+are supported; choice groups, bundles, tax/service-fee interpretation are deferred.
+
+Declared applicability is direct factual support: channel `unspecified`,
+`dine_in`, or `takeaway`; optional exact service-period label; half-open UTC
+`[valid_from, valid_to)`. NULL bounds are unbounded; explicit infinity, empty
+service labels, nonfinite times, and empty/reversed windows are rejected.
+Unique canonical declared tuples use NULL-safe equality (e.g. a PostgreSQL 16
+`NULLS NOT DISTINCT` unique constraint). An absent graph applicability means
+no added restriction. It differs from an explicit `channel=unspecified`, which
+is a separate exact context and cannot establish dine-in/takeaway applicability.
+
+Compute **effective** context before matching or ranking: intersect all present
+ancestor restrictions, target restriction, and the price's required context.
+For mapped nodes also retain the restrictions along the pinned base path;
+replacement cannot widen them. Non-null service labels must agree (NULL adds
+no restriction); all present channels must agree (unspecified is not a wildcard).
+Window intersection uses greatest lower bound and least upper bound. Empty or
+incompatible intersections reject the aggregate. The canonical effective tuple
+is `(channel, service_period-or-empty, from-or-minus-infinity, to-or-plus-infinity)`.
+Rank only exactly equal effective tuples and currency. Two different declared
+windows can intersect to the same effective context and then compete; unequal
+effective tuples remain separate even if both contain the requested instant.
+The effective instant filters window membership; it is not a specificity rule.
+
+For example a section restricted to dine-in/lunch `[11:00Z,14:00Z)` makes an
+item price declared `[10:00Z,15:00Z)` compete with a price declared
+`[11:00Z,14:00Z)`, with the same labels. A takeaway price under that section
+fails integrity. Identity's operating interval is a separate current-availability
+filter at the requested instant; mutable operating edits do not change the
+canonical Menu context or retroactively invalidate accepted claims.
+
+Keys use versioned canonical structured tuples, never ambiguous concatenation.
+Node keys identify rows in one snapshot. `source_native_key`, when supplied,
+is a supported stable native ID within `(record, root, node type, parent native
+path)`; partial unique indexes enforce one per page in that namespace. Source
+kind is excluded from this correspondence namespace so JSON-LD/DOM claims can
+compete when they carry the same genuine native IDs. All parents in that path
+must have stable correspondence. A positional/document fallback locator includes
+the immutable Bronze version and is **version-local**; equal names or positions
+across versions do not prove continuity. Same-version corrections can reuse
+that locator. Explicit typed links to the same pinned base establish shared
+correspondence across sources/versions. Different pinned bases remain separate
+unless a future approved mapping explicitly relates them; Step 5 adds none.
+No free-form matching hints, fuzzy IDs, or cross-source name deduplication.
+
+Observation keys contain typed target key, declared context, currency, and
+source claim locator; amount/confidence are payload, not key material.
+Canonical business tie keys use source namespace/external key, observed time,
+content hash, immutable capture keys, node/claim locators, revision and Evidence
+locators/hashes, excluding acceptance time and surrogate IDs. Exact business
+key/payload duplicates are equivalent even if historical raw SQL created duplicate
+Bronze versions; conflicting payload under an identical canonical key is an
+explicit conflict, not a row-ID tie break. Normal replay reuses Bronze's version.
+
+## 6. Time and deterministic selection
+
+Two modes are explicit: **current interpretation** and **accepted-claim history**.
+Inputs name the Subject, source-local family `(Source Record, root_key)` across
+interpretation kinds or explicit pinned correspondence, exact effective context,
+currency, and effective instant `E`. History additionally supplies acceptance
+cutoff `K` and optional observation cutoff `O`. All timestamps use UTC.
+
+| Time | Meaning and boundary |
+|---|---|
+| `observed_at` / `O` | Bronze observation time; factual page must have `observed_at <= O` if supplied. Inherited facts keep their base's own observation time and must also pass O. Never substitute acceptance time. |
+| `accepted_at` / `K` | Server admission timestamp; only committed rows with `accepted_at <= K` are visible to history. Current reads use all committed rows in a consistent transaction snapshot. This is accepted-claim time, not a reconstructed commit log: a transaction committed later may become visible with an earlier admission timestamp. |
+| Effective instant `E` | Must lie in the canonical effective window; half-open end excluded. Current availability also requires live operating eligibility from Identity. Observation/acceptance timestamps do not imply a service window. |
+
+1. At `K`, find the greatest visible stream revision **before** factual filters.
+   A tombstone blocks every older page; published head is the only ordinary
+   candidate from that stream. Apply observation/context/Identity filters after
+   lifecycle selection; a filtered head never reveals a predecessor. Lifecycle
+   controls visible by K apply even if their observed time exceeds O. Increasing
+   O cannot undo a withdrawal. Inspection of any stored page remains possible,
+   labeled historical/superseded/withdrawn as appropriate.
+2. Current mode requires live eligible scopes, original event mappings, no
+   pending lineage, and operating availability at E. History preserves the
+   originally accepted Subject/event, ignores today's eligibility/mapping and
+   operating edits, and does not claim historical Identity-state reconstruction.
+   Corrections visible only after K cannot erase an earlier accepted answer.
+3. Rank published content candidates in the identified family by source kind
+   `jsonld > dom > pdf > llm`, later observation, higher page confidence, then
+   ascending canonical business key. No unrelated family/name equivalence.
+4. For a local base pin, inspect that exact page separately from stream-head
+   selection. Ordinary supersession does not exclude it. Apply the pin validity
+   rules of Section 4; history evaluates withdrawals only up to K and does not
+   consult today's Identity. Base acceptance/observation must pass K/O too.
+   Overlay inherit, full replacements, suppressions, and independent additions.
+5. Collect local price contenders from published stream heads in the same
+   family whose native correspondence or exact base links relate them to the
+   selected content. Suppressed targets have none. Compute each contender's
+   effective context using its own full path and require equality with the
+   selected target's requested context. Never borrow an ancestor restriction
+   from a competing page to make a mismatched price fit. Rank within the local
+   scope by kind, observation, price confidence, canonical key. Retain all
+   contenders and flag contradictions; deterministic ranking is not proof of truth.
+6. Return the local value (including explicit unknown/unavailable) with its
+   Establishment, observed time and Evidence. If absent, return derived unknown
+   with no local observation/Evidence. Organization prices may be shown separately
+   as Organization claims, with their own contexts, times and Evidence. They
+   never compete for or populate the local value; sibling prices are excluded.
+
+A supported local DOM price therefore wins as the local value even with shared
+JSON-LD content. Content selection never relabels shared factual scope as local.
+This is a pure contract/fixture specification, not a Gold projection or API.
+
+## 7. Locks, indexes, and transaction boundaries
+
+Identity owns dependency expansion and stable **batch** lock ordering: maintenance
+lock, full sorted union of Subjects/currentness/typed readiness inputs, then
+sorted Source Records (including records needed to protect readiness proofs)
+using `FOR NO KEY UPDATE` (compatible with Bronze FK key-share locks), followed
+by revalidation under lock. Menu passes all local/base
+scope requests at once and takes its stream/predecessor locks only afterward.
+If dependency discovery changes under lock, fail and retry; do not append a
+lower-order lock or call single-subject guards in an arbitrary loop. Raw-SQL
+triggers use this same provider entrypoint. Arbitrarily composed multi-aggregate
+raw SQL can still deadlock; rollback/retry preserves integrity, and bounded
+concurrency tests must prove no stale acceptance or partial commit.
+
+Step 4's writer can hold a Source Record before resolving Subjects. Step 5
+therefore consumes **already committed Bronze and resolution input**. Mixed
+Bronze-persist/resolve/Menu orchestration is unsupported until a provider-owned
+preflight and dedicated race tests exist. Do not advertise it based on ADR-0004's
+general ability to share transactions. Menu itself adds no broker/lock framework.
+
+Index every FK not already covered by a leading PK/unique index: page version,
+event, subject/root/observed time, base page; section parents, item sections,
+variant items, modifier parents, applicability, typed base links; each price's
+target/applicability/currency; Evidence ID and link targets. Stream revision and
+version revision uniqueness support head/replay lookup; predecessor uniqueness
+supports successor lookup; include stream/operation lookup for tombstones. Add
+four typed native-key indexes, four base-target uniqueness indexes and seven
+Evidence-link uniqueness indexes. Canonical NULL-safe contexts are unique per
+page. Do not add duplicate indexes or an unconsumed projection.
+
+## 8. Implementation sequence after design review
+
+1. Close the outstanding CI PostGIS validation before implementation acceptance:
+   strict full suite, migration round trip, and no metadata drift on the actual
+   CI image. Native PostgreSQL results do not establish image acceptance.
+2. Prepare the narrow provider prerequisite: published immutable Bronze lookup
+   contracts and Identity batch guard/shared policy, plus a forward revision
+   after `91f4c2a7d6e8` installing provider-owned functions. No history rewrite,
+   matching-policy change, new provider table, or upward dependency. Prove
+   promotion/admission policy parity and pending-lineage/locking behavior.
+3. After that review, prepare one Menu revision creating its schema and nine
+   tables, all constraints, functions, admission/immutability/deferred triggers,
+   and USD seed atomically. Register models solely through the registry and
+   schema owner map. Commands/contracts consume provider DTOs, never provider ORM.
+4. Prepare pure selection, replay, and focused tests from Section 9. Include
+   upgrade/downgrade SQL for owner review. Execute only on disposable test data
+   within separately authorized implementation work. Commands never commit.
+5. Downgrade removes Menu triggers/links/prices, modifiers/variants/items/sections,
+   applicability, self/base references, pages, currency and owned functions/schema
+   in dependency order without CASCADE. Provider prerequisite downgrade removes
+   only its additions. Existing provider data and object signatures must remain
+   unchanged. Re-upgrade recreates empty Menu plus USD; it cannot restore deleted
+   Menu history. Review generated SQL separately from this design.
+
+## 9. Enforcement and focused acceptance tests
+
+These are **proposed** constraints/trigger names and tests, not verified Menu
+behavior. Every deferred test forces `SET CONSTRAINTS ALL IMMEDIATE` in the
+outer transaction and includes a real-commit case; savepoint `session.commit()`
+alone is insufficient. BEFORE-trigger cases use raw SQL as well as commands.
+
+| ID / invariant | Enforcement and phase | Focused proof after implementation |
+|---|---|---|
+| M01 scope, readiness, exact mapping, pending lineage | `trg_menu_admit` BEFORE every aggregate insert calls Identity batch SQL guard; kind CHECK/composite FK | `test_menu_schema`: Place/null/forged kind, provisional/feature-poor/self or parent retired, zero-event/unresolved/stale mapping fail. Provider tests: promotion succeeds from provisional with sufficient features; Python/SQL parity. |
+| M02 admission order versus history | Same BEFORE guard; `ct_menu_integrity` must not repeat live checks | `test_menu_concurrency`: scope change then insert fails; complete insert then remap/retire in same transaction commits history; additional child fails; pending lineage input (including survivor/parent) rejects before deferred apply and after forced apply as appropriate. |
+| M03 complete immutable aggregate | `trg_menu_stamp`, `trg_menu_member_transaction`, `trg_menu_immutable` on all nine tables; deferred support closure | `test_menu_schema`: forged stamp, late child/link, no-op UPDATE, DELETE, TRUNCATE fail; missing support fails at forced boundary/commit; rollback leaves no partial aggregate. |
+| M04 direct, inherited, structural support | shape CHECKs and `ct_menu_support`; Bronze immutable lookup for each link and version/event chain | `test_menu_schema`: unsupported direct page/node/context/price, wrong version/capture/same URL fail; inherit with copied facts fails; price-only inherit and structural grouping through supported items pass. No inherited Evidence presented as local. |
+| M05 same-page graph, cycles, base parents | composite restrictive FKs, base-target partial uniques, `ct_menu_graph` recursive cycle/type/base/parent check | `test_menu_schema`: cross-page parents/targets, section cycle, duplicate base link, wrong Organization, wrong parent/type fail. Deep section, variant, both modifier parent forms, full replacement/NULL clearing, suppression descendants and additions pass. |
+| M06 pin validity separate from head | `trg_menu_admit` locks/checks base stream live; `ct_menu_graph` checks immutable base ownership only; pure selector reads lifecycle | `test_menu_precedence` and concurrency: ordinary observation/correction keeps pin; withdrawal invalidates old pins; restoration needs new pin; remap/retirement invalidates current inheritance while historical query retains it. Base change after complete acceptance does not abort history. |
+| M07 one stream across remaps, revisions | `uq_menu_stream_revision`, `uq_menu_version_revision`, `uq_menu_successor`; `trg_menu_stream_admit` checks committed head under Source Record lock; `ct_menu_lifecycle` immutable operation/revision shape | `test_menu_replay`/concurrency: duplicate initial, fork, skipped revision, wrong stream, uncommitted predecessor fail; same-version correction/remap cannot reuse revision 1; concurrent successors produce one winner and explicit conflict/retry, no automatic intent rewrite. |
+| M08 tombstone/restoration | state/operation CHECK plus `ct_menu_lifecycle`, no children/base for withdrawn page | `test_menu_precedence`/replay: withdrawal hides every predecessor; observation cannot bypass it; explicit restoration creates new supported graph; K before/after tombstone and O older than tombstone cannot resurrect content. |
+| M09 exact money and row shape | `ck_menu_price_shape`, target XOR, currency FK/CHECK, finite confidence/time CHECKs | `test_menu_schema`: zero absolute, negative modifier delta pass; negative item, missing currency, unsupported code, overflow/fractional input, NaN, amount on unknown/unavailable fail; exact round trips. Strict DTO integer validation rejects coercion; SQL stores BIGINT only. |
+| M10 applicability after intersection | NULL-safe unique declared context, interval/enumeration CHECKs, `ct_menu_context` on complete target/ancestor/base paths | `test_menu_schema`/precedence: duplicate NULL contexts, conflicting channels/periods and empty intersections fail; unequal declared but equal effective windows compete; unequal effective windows do not; unspecified never proves dine-in; E at end excluded. |
+| M11 stable correspondence and replay | native-key partial uniques, `ct_menu_graph`; command canonical aggregate/Evidence comparison; selector typed correspondence | `test_menu_replay`/precedence: reordered duplicate positional nodes cannot reuse continuity across versions; stable native paths and same pinned targets can; matching names/different bases cannot. Exact/concurrent replay adds zero/one aggregate; changed payload/support conflicts. |
+| M12 time, ranking, no price leakage | immutable observed-time provider check, DB admission stamp; pure selector contract (no SQL truth heuristic) | `test_menu_precedence`: all Section 10 examples; kinds/recency/confidence/tie; reversed ingestion order same business answer; correction changes only later K; current remap vs accepted history; local unknown and absent local both avoid shared/sibling fallback. |
+| M13 race serialization and ownership | Identity maintenance/batch locks and Menu stream lock sequence; transaction retry | `test_menu_concurrency`: separate connections/barriers, both orderings for replay/correction, unassign/remap, merge/split/retire, feature/parent edits, base withdrawal, projection rebuild, Bronze FK inserts; bounded timeout; full rollback on serialization/deadlock. Mixed ingestion remains deferred. |
+| M14 migrations and boundaries | restrictive FKs, registry/owner metadata and AST checks; two forward revisions | `test_menu_migration`/`test_schema_layout`: seeded provider preservation across both boundaries, Menu downgrade/re-upgrade inventory/function/index/trigger/seed equality, offline SQL review, no drift; forbidden ordinary/relative/private ORM imports, exact registry exception, parser isolation and no upward references. |
+
+Use existing pytest/SQLAlchemy/stdlib only. All destructive/concurrency tests
+require disposable `*_test` PostgreSQL, strict mode, and no non-test override.
+Skipped tests never establish acceptance. Update migration tests' head inventory
+without weakening provider preservation. Human review checks semantic Evidence
+support; constraints guarantee provenance links and shape, not source truth.
+
+## 10. Review examples and completion gate
+
+The [concrete example matrix](../reviews/0002-step-5-menu-design-reconciliation.md#input-and-selection-examples)
+is part of this specification: value, scope, observation time, Evidence, temporal
+cutoffs, pin state and expected selected result are all explicit. Convert these
+examples to focused tests only in authorized implementation work.
+
+Design reconciliation ends with this proposal and proposed ADR, documented checks
+and handoff. It does not grant model/migration implementation approval. The next
+unit is the provider prerequisite review preparation described in the handoff,
+after owner acceptance of ADR-0005. PostGIS validation remains outstanding.
+
+## 11. Historical planning record (not the current specification)
 
 This table preserves the original recommendations. The accepted review
 defaults in the linked reassessment take precedence; approval of those
@@ -434,8 +453,3 @@ PostgreSQL 16 cluster: 121 passed, zero skipped; `alembic check` found no
 schema/model drift. This verifies the existing foundation, not Menu, and
 does not cover the proposed Menu concurrency cases. See the reassessment
 for the separately reproduced database-URL portability defect.
-
-Approval of this document authorizes preparing the model/contract/migration
-diff and its tests, not executing a migration on application data. The owner
-still reviews the concrete schema diff and generated SQL under Plan 0002's
-Step 5 review gate.

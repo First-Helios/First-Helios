@@ -4,7 +4,9 @@ A trustworthy, queryable price index of food in Austin — restaurant menus
 and what they actually cost, rebuilt from scratch with professional rigor.
 
 **Status (2026-09-17):** Bronze provenance and shared Identity are implemented
-through Plan 0002 Step 4. Menu persistence is in design review; the API has
+through Plan 0002 Step 4. Menu persistence has a reconciled [proposal](./docs/plans/0002-step-5-menu-schema-proposal.md)
+and [proposed ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md)
+ready for review; the API has
 health endpoints only. Menu collection and the price-index product are not
 implemented yet.
 

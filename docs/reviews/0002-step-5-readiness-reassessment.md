@@ -1,5 +1,12 @@
 # Step 5 readiness reassessment
 
+**Current update (2026-09-17):** The documentation-only
+[Menu design reconciliation](0002-step-5-menu-design-reconciliation.md) is complete
+and [ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md) is proposed
+for review. The prior hardening result, accepted defaults and handoff below are
+preserved as historical records. No Menu implementation is authorized by this
+update; PostGIS validation remains outstanding.
+
 **Date:** 2026-09-17
 **Scope:** Current foundation, technical debt, and the next product checkpoint.
 **Branch assessed:** `Plan-0002-Step-5`, code baseline `aafe110`.

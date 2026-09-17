@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-09-17 — Plan 0002 Steps 1–4 are implemented. Verification hardening passed strict `make ci`: 180 tests with no failures/skips on disposable PostgreSQL 16, including migration round trips and concurrency tests. Docker/PostGIS validation remains blocked by local Docker access. Step 5 defaults are accepted, but its detailed proposal needs reconciliation before implementation. See the [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for verification details, remaining limits, and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
+> **Last revised:** 2026-09-17 — Plan 0002 Steps 1–4 are implemented. Verification hardening passed strict `make ci`: 180 tests with no failures/skips on disposable PostgreSQL 16, including migration round trips and concurrency tests. Docker/PostGIS validation remains blocked by local Docker access. Step 5 defaults are accepted; its [reconciled proposal](./docs/plans/0002-step-5-menu-schema-proposal.md) and [proposed ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) are ready for review before implementation. See the [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for verification details, remaining limits, and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
 
 ---
 
@@ -477,8 +477,9 @@ required, which is strictly stronger in practice. See §6.0.
 > **Current checkpoint (2026-09-17):** Bronze, Identity, the legacy reset,
 > and deterministic resolution are implemented through Plan 0002 Step 4.
 > Verification hardening is implemented and verified on native PostgreSQL;
-> Docker/PostGIS validation remains pending. The next work is reconciliation
-> of the reviewed Step 5 Menu design. Gold remains Step 6.
+> Docker/PostGIS validation remains pending. The reconciled Step 5 Menu
+> proposal and proposed ADR-0005 are ready for review; the next implementation
+> unit is the provider prerequisite after those gates. Gold remains Step 6.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -972,10 +973,11 @@ decisions are hardest to reverse.
 | [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 | 1 |
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted | 1 |
-| 0005 | API conventions (pagination, errors, versioning) | Planned | 2 |
-| 0006 | Scraper framework choice | Planned | 5 |
-| 0007 | Prod hosting choice | Planned | 8 |
-| 0008 | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
+| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Proposed | 1 |
+| Unassigned | API conventions (pagination, errors, versioning) | Planned | 2 |
+| Unassigned | Scraper framework choice | Planned | 5 |
+| Unassigned | Prod hosting choice | Planned | 8 |
+| Unassigned | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
 
 **RFC ledger**
 

@@ -235,6 +235,15 @@ pre-menu foundation, not removed from the product plan.
 
 ### Step 5 - `feat(db): add menu graph against identity contracts`
 
+**Current design addendum (2026-09-17):** The
+[reconciled Menu proposal](0002-step-5-menu-schema-proposal.md) and
+[proposed ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md) supply
+the concrete review surface. See the
+[reconciliation record](../reviews/0002-step-5-menu-design-reconciliation.md)
+for examples, verification and the next provider prerequisite unit. This
+addendum does not alter the historical plan approval or authorize implementation;
+owner design review and outstanding PostGIS validation remain gates.
+
 This is the replacement for Plan 0001 Step 2 and starts only after the gate
 in Section 3.
 
