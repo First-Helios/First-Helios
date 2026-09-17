@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-09-12 — [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) accepted and [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md) approved, superseding ADR-0003 and the affected portions of Plan 0001. The owner authorized a clean reset of the pre-production identity scaffold; implementation still requires separate model and migration review.
+> **Last revised:** 2026-09-17 — Plan 0002 Steps 1–4 are implemented. The foundation passed 121 tests with no skips on disposable PostgreSQL 16, including migration round trips and concurrency tests. Step 5 defaults are accepted, but its detailed proposal needs reconciliation before implementation. See the [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for the immediate stabilization work and product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
 
 ---
 
@@ -472,13 +472,12 @@ required, which is strictly stronger in practice. See §6.0.
 
 ---
 
-### Phase 1 — Domain Model & Migrations ⬅️ NEXT
+### Phase 1 — Domain Model & Migrations — IN PROGRESS
 
-> **Current checkpoint (2026-09-12):** the venue-identity and three-schema
-> migration below has landed. [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md)
-> now governs the identity/provenance correction that must precede the menu
-> schema. The owner authorized a clean reset of this pre-production scaffold;
-> model and migration implementation still require separate review.
+> **Current checkpoint (2026-09-17):** Bronze, Identity, the legacy reset,
+> and deterministic resolution are implemented through Plan 0002 Step 4.
+> The next work is verification hardening and reconciliation of the reviewed
+> Step 5 Menu design. Gold remains Step 6 and is not part of that change.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -486,21 +485,28 @@ required, which is strictly stronger in practice. See §6.0.
 remove the superseded scaffold, then add typed Menu Silver and Gold read
 models with constraint-level tests.
 
-**Remaining deliverables** ([Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md))
+**Implemented foundation** ([Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md), Steps 1–4)
 
 - Bronze Source, Endpoint, Capture, Source Record/Version, and Evidence
   models with immutable source history.
 - Identity Subject, Place, Organization, Establishment, explicit resolution
   state, append-only decisions, lineage, and Subject-readiness gates.
-- A reviewed clean-reset migration that intentionally removes the current
+- A reviewed clean-reset migration that intentionally removed the former
   `brand` / `venue` scaffold and obsolete `raw` / `canonical` / `mart`
   schemas. No legacy application data is backfilled.
 - Architecture fitness tests for schema/FK/import directions, immutability,
   event transitions, and deferred constraints.
+- Deterministic external-key/URL resolution entrypoints and live typed-feature
+  readiness checks.
+
+**Remaining deliverables**
+
+- Repeatable database acceptance that fails when the required database is
+  unavailable; broaden import checks to cover the documented boundaries.
 - The typed Menu graph after every pre-menu gate in Plan 0002 passes.
 - Gold current-menu and first price-index projections when first consumed.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so
-  re-ingest is idempotent; money as integer cents, never float.
+  re-ingest is idempotent; money as integer currency minor units, never float.
 - Alembic migrations are autogenerate-assisted, hand-reviewed, and separately
   authorized before execution.
 
@@ -521,7 +527,7 @@ menu graph is likely to change what the right deal schema looks like.
   `MenuModifierRow`). It was deliberately built sidecar-first and never
   became tables, so the column names and provenance fields are settled but
   unproven against a live schema. Port the shape; V2 renames
-  `MenuPricePoint` → `PriceObservation` and stores money as integer cents.
+  `MenuPricePoint` → `PriceObservation` and stores integer currency minor units.
 - `core/venue_identity.py` for venue + alias patterns.
 - `core/database.py::DealMaterialization` (~L1395) — the refresh-task
   pattern Gold inherits, not the deal columns themselves.
@@ -539,7 +545,7 @@ where a bad decision is most expensive to undo:
   proven on a seeded disposable database?
 - Is `PriceObservation` append-only in practice — is there any code path that
   `UPDATE`s a price rather than inserting a new observation?
-- Is money stored as integer cents everywhere, with no float column anywhere
+- Is money stored as integer currency minor units, with no float column anywhere
   near a price?
 - Does every mapped table declare an explicit, owned schema
   ([ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md)),
@@ -783,15 +789,16 @@ decisions; a re-run against an unchanged site produces zero new observations.
 whole thing observable and recoverable.
 
 > **Reduced scope.** Containerization landed early
-> ([ADR-0002](./docs/adr/0002-containerization.md)) and staging on the Pi
-> landed in Phase 2. What remains here is genuinely production-only concerns.
+> ([ADR-0002](./docs/adr/0002-containerization.md)). Staging on the Pi is
+> planned in Phase 2; deployment has not been verified by the current
+> repository assessment. Phase 8 assumes that staging prerequisite is met.
 
-**Already done** (kept for the record)
+**Containerization status and staging prerequisite**
 
 - ~~Multi-stage `Dockerfile`~~ — done, ADR-0002. Scraper entrypoint still
   pending; needs Phase 5's scraper to exist.
 - ~~`docker-compose.yml` for local dev~~ — done (Postgres → migrate → API).
-- ~~Orange Pi staging with systemd~~ — done in Phase 2.
+- Orange Pi staging with systemd — planned Phase 2 prerequisite, not verified.
 
 **Deliverables**
 
@@ -1148,4 +1155,4 @@ Quick index to find the most-cited V1 files on the [`V1-Graveyard`](https://gith
 
 ---
 
-*Last updated: 2026-07-31. This is a living document; update via PR when a phase completes or a decision changes.*
+*Last updated: 2026-09-17. This is a living document; update via PR when a phase completes or a decision changes.*

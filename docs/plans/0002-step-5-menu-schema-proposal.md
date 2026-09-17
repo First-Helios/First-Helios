@@ -1,6 +1,14 @@
 # Plan 0002 Step 5: menu schema proposal
 
-**Status:** Proposed; awaiting Fortune's approval. No schema implementation.
+**Status:** Revision required after technical review. Fortune accepted the
+recommended review defaults on 2026-09-17; this original detailed proposal
+has not yet been reconciled with them. No schema implementation.
+
+**Current handoff:** Read the
+[readiness reassessment and accepted defaults](../reviews/0002-step-5-readiness-reassessment.md)
+before using this specification. In particular, its Evidence, inherited-node,
+pinned-base, withdrawal, and historical-query rules below require revision.
+
 **Baseline:** `d1ff54cdae5d6fc59c385c77a4a89a1e91d8fc2f`, Step 4 / PR #15.
 **Branch:** `Plan-0002-Step-5`, created from clean, freshly fetched `main`.
 **Migration parent:** `91f4c2a7d6e8`, including the typed-grain trigger fix.
@@ -401,9 +409,11 @@ without `HELIOS_ALLOW_NONTEST_DB`. Skipped database tests do not satisfy the
 implementation acceptance gate. Update old migration tests that assume only
 Bronze/Identity exist at `head`, without weakening their preservation checks.
 
-## 10. Owner decisions before implementation
+## 10. Original recommendations before technical review
 
-These recommendations are proposed, not silently treated as approved:
+This table preserves the original recommendations. The accepted review
+defaults in the linked reassessment take precedence; approval of those
+defaults does not approve contradictory details in this unrevised document.
 
 | Decision | Recommendation and consequence |
 |---|---|
@@ -418,6 +428,12 @@ Planning validation: baseline `make ci` completed successfully (34 tests
 passed, 87 database tests skipped); all 25 existing architecture fitness tests
 passed. This verifies the checked-out baseline, not the proposed schema.
 Database acceptance and the proposed tests remain implementation gates.
+
+Subsequent foundation validation on 2026-09-17 ran against a disposable
+PostgreSQL 16 cluster: 121 passed, zero skipped; `alembic check` found no
+schema/model drift. This verifies the existing foundation, not Menu, and
+does not cover the proposed Menu concurrency cases. See the reassessment
+for the separately reproduced database-URL portability defect.
 
 Approval of this document authorizes preparing the model/contract/migration
 diff and its tests, not executing a migration on application data. The owner

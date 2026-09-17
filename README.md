@@ -3,8 +3,14 @@
 A trustworthy, queryable price index of food in Austin — restaurant menus
 and what they actually cost, rebuilt from scratch with professional rigor.
 
-**Status:** Phase 0/1 — bootstrap tooling and the first schema migration are
-on `main`. Not yet a running service.
+**Status (2026-09-17):** Bronze provenance and shared Identity are implemented
+through Plan 0002 Step 4. Menu persistence is in design review; the API has
+health endpoints only. Menu collection and the price-index product are not
+implemented yet.
+
+The [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md)
+records verified behavior, the small stabilization pass before Menu, and the
+next product demonstration.
 
 The scope was set menus-first on 2026-07-31 by
 [RFC-0001](./docs/rfc/0001-menu-pricing-first.md): menu and item-price
@@ -26,8 +32,14 @@ This build is **agent-driven with a human reviewer in the loop**. See
 
 ## What's here now
 
-- `packages/helios_core/` — SQLAlchemy 2.0 models and DB session/engine
-  setup. One model so far: `Venue` (name, address — geocoding comes later).
+- `packages/helios_core/provenance/` — six Bronze tables for sources,
+  endpoints, captures, source records/versions, and Evidence; replay-safe
+  observation persistence.
+- `packages/helios_core/identity/` — Subject, Place, Organization, and
+  Establishment; append-only resolution and lineage decisions; deterministic
+  external-key/URL resolution and readiness guards.
+- `packages/helios_core/db/` — shared model registration, schema ownership,
+  and session/engine setup. The legacy `Venue` scaffold has been removed.
 - `apps/api/` — FastAPI service. `/healthz` (liveness) and `/readyz`
   (checks the database) so far.
 - `alembic/` — migrations. `alembic upgrade head` builds the schema from
@@ -37,8 +49,9 @@ This build is **agent-driven with a human reviewer in the loop**. See
 - Tooling: `ruff`, `mypy --strict`, `pytest`, `pre-commit`, all wired into
   CI as required status checks on `main`.
 
-Everything else in the roadmap (parsing library, venue identity, scrapers,
-the real API surface, deployment) is not yet built.
+Menu and Gold tables, discovery ingestion, extraction, scraping, and product
+API endpoints are not implemented. Staging/production deployment has not
+been verified by the current repository assessment.
 
 ## Local setup
 
@@ -64,13 +77,23 @@ make install   # uv sync + pre-commit hooks
 make ci        # lint + typecheck + test + lockfile check
 ```
 
-`make ci` mirrors CI exactly. Database-backed tests skip unless
-`DATABASE_URL` points at a `*_test` database — with the stack up, use:
+`make ci` runs local lint, type, test, and lockfile checks. GitHub CI also
+builds and smoke-tests the Docker image. A local green run with skipped
+database tests does not establish database acceptance.
+
+For full database verification, provision a separate disposable `*_test`
+database first, then use its connection URL. For example, with a separately
+created local `helios_test` database and the example development credentials:
 
 ```bash
-DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios \
-  HELIOS_ALLOW_NONTEST_DB=1 make test
+DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test make ci
+DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test uv run alembic check
 ```
+
+The migration tests downgrade and rebuild that database, and concurrency
+tests commit fixture rows. Do not point them at application data or set
+`HELIOS_ALLOW_NONTEST_DB`. On 2026-09-17, a temporary PostgreSQL 16 cluster
+passed all 121 tests with no skips, and `alembic check` reported no changes.
 
 ## V1 archive
 
