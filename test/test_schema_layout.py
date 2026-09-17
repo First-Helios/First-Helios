@@ -241,6 +241,41 @@ def test_identity_uses_the_provenance_contract_not_provenance_models() -> None:
     assert not forbidden, f"Identity reaches through the provenance contract: {forbidden}"
 
 
+def test_identity_imports_provenance_only_through_its_contract_module() -> None:
+    identity_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "identity"
+    forbidden: list[str] = []
+    for path in identity_root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module is not None
+                and node.module.startswith("packages.helios_core.provenance")
+                and node.module != "packages.helios_core.provenance.contracts"
+            ):
+                forbidden.append(f"{path.name}: {node.module}")
+    assert not forbidden, f"Identity bypasses published provenance contracts: {forbidden}"
+
+
+def test_transaction_commands_flush_but_never_commit() -> None:
+    root = Path(__file__).resolve().parents[1] / "packages" / "helios_core"
+    command_paths = (
+        root / "identity" / "commands.py",
+        root / "provenance" / "contracts.py",
+    )
+    commits: list[str] = []
+    for path in command_paths:
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "commit"
+            ):
+                commits.append(f"{path.name}:{node.lineno}")
+    assert not commits, f"transaction commands must leave commit to their caller: {commits}"
+
+
 def test_parser_package_remains_orm_free_when_it_lands() -> None:
     parsing_root = Path(__file__).resolve().parents[1] / "packages" / "helios_parsing"
     forbidden: list[str] = []

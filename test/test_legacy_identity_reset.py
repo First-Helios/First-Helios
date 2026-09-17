@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 import pytest
@@ -180,6 +180,11 @@ def _schema_row_counts(connection: Connection, schema: str) -> dict[str, int]:
         table: connection.execute(text(f"SELECT count(*) FROM {schema}.{table}")).scalar_one()
         for table in inspect(connection).get_table_names(schema=schema)
     }
+
+
+def _function_definitions(signature: dict[str, object]) -> dict[str, str]:
+    functions = cast("list[tuple[str, str, str]]", signature["functions"])
+    return {name: definition for name, _, definition in functions}
 
 
 def _legacy_schema_signature(connection: Connection) -> dict[str, object]:
@@ -378,9 +383,31 @@ def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
             assert not any(_schema_exists(connection, schema) for schema in LEGACY_SCHEMAS)
             assert not any(_table_exists(connection, table) for table in LEGACY_TABLES)
             _assert_foundations_preserved(connection, bronze_namespace, subject_id)
-            assert {
+            corrected_foundation_schema = {
                 schema: _schema_signature(connection, schema) for schema in ("bronze", "identity")
-            } == foundation_schema
+            }
+            assert corrected_foundation_schema["bronze"] == foundation_schema["bronze"]
+            for component in ("tables", "views", "sequences", "triggers"):
+                assert (
+                    corrected_foundation_schema["identity"][component]
+                    == foundation_schema["identity"][component]
+                )
+            original_functions = _function_definitions(foundation_schema["identity"])
+            corrected_functions = _function_definitions(corrected_foundation_schema["identity"])
+            assert original_functions.keys() == corrected_functions.keys()
+            assert {
+                name: definition
+                for name, definition in original_functions.items()
+                if name != "protect_typed_grain_key"
+            } == {
+                name: definition
+                for name, definition in corrected_functions.items()
+                if name != "protect_typed_grain_key"
+            }
+            assert (
+                original_functions["protect_typed_grain_key"]
+                != corrected_functions["protect_typed_grain_key"]
+            )
             assert {
                 schema: _schema_row_counts(connection, schema) for schema in ("bronze", "identity")
             } == foundation_rows
@@ -410,7 +437,7 @@ def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
             _assert_foundations_preserved(connection, bronze_namespace, subject_id)
             assert {
                 schema: _schema_signature(connection, schema) for schema in ("bronze", "identity")
-            } == foundation_schema
+            } == corrected_foundation_schema
             assert {
                 schema: _schema_row_counts(connection, schema) for schema in ("bronze", "identity")
             } == foundation_rows
