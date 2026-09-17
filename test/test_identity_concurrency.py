@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -55,34 +55,22 @@ from packages.helios_core.provenance import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from sqlalchemy.engine import Engine
+
 DATABASE_URL = get_settings().database_url
-_DB_NAME = DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
-_IS_TEST_DATABASE = _DB_NAME.endswith("_test") and os.environ.get("HELIOS_ALLOW_NONTEST_DB") != "1"
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
-def concurrent_sessions() -> Iterator[sessionmaker[Session]]:
-    if not _IS_TEST_DATABASE:
-        pytest.skip("concurrency tests require DATABASE_URL naming a *_test database")
-    engine = create_engine(DATABASE_URL)
-    try:
-        with engine.connect():
-            pass
-    except Exception as exc:  # pragma: no cover - environment dependent
-        engine.dispose()
-        pytest.skip(f"database unreachable: {exc}")
-
+def concurrent_sessions(disposable_database_engine: Engine) -> Iterator[sessionmaker[Session]]:
+    engine = disposable_database_engine
     subprocess.run(
         ["alembic", "-c", str(_REPO_ROOT / "alembic.ini"), "upgrade", "head"],
         check=True,
         cwd=_REPO_ROOT,
         env={**os.environ, "DATABASE_URL": DATABASE_URL},
     )
-    try:
-        yield sessionmaker(bind=engine, expire_on_commit=False)
-    finally:
-        engine.dispose()
+    yield sessionmaker(bind=engine, expire_on_commit=False)
 
 
 def _decision() -> DecisionMetadata:

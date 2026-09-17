@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import inspect, text
 
 from packages.helios_core.config import get_settings
 
@@ -24,9 +24,6 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection, Engine
 
 DATABASE_URL = get_settings().database_url
-DATABASE_NAME = DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
-IS_DISPOSABLE_TEST_DATABASE = DATABASE_NAME.endswith("_test")
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 PRE_RESET_REVISION = "3f8b2c1d9a74"
@@ -334,21 +331,8 @@ def _assert_foundations_preserved(
 
 
 @pytest.fixture
-def migration_engine() -> Iterator[Engine]:
-    if not IS_DISPOSABLE_TEST_DATABASE:
-        pytest.skip("destructive migration tests require DATABASE_URL naming a *_test database")
-    if os.environ.get("HELIOS_ALLOW_NONTEST_DB") is not None:
-        pytest.fail("destructive migration tests must not use HELIOS_ALLOW_NONTEST_DB")
-
-    engine = create_engine(DATABASE_URL)
-    try:
-        with engine.connect():
-            pass
-    except Exception as exc:  # pragma: no cover - environment dependent
-        engine.dispose()
-        pytest.skip(f"database unreachable: {exc}")
-    yield engine
-    engine.dispose()
+def migration_engine(disposable_database_engine: Engine) -> Iterator[Engine]:
+    yield disposable_database_engine
 
 
 def test_seeded_legacy_upgrade_downgrade_and_reupgrade(

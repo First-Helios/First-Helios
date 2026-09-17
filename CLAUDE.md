@@ -42,9 +42,16 @@ Never report a task complete without running this. If you can't run it
 
 - `make lint` — ruff check + format
 - `make typecheck` — mypy --strict on `packages.helios_core.*`
-- `make test` — pytest; DB-backed tests in `test/test_db.py` skip
-  automatically unless `DATABASE_URL` points at a `*_test` database (or
-  `HELIOS_ALLOW_NONTEST_DB=1` is set) — see that file's module docstring.
+- `make test` — pytest; optional local database tests skip when PostgreSQL is
+  unavailable or the URL does not name a `*_test` database.
+- Database acceptance: `HELIOS_STRICT_DB_TESTS=1 DATABASE_URL=... make ci`,
+  followed by `DATABASE_URL=... uv run alembic check`, against a separately
+  provisioned disposable PostgreSQL `*_test` database. CI enables strict mode.
+  It fails instead of skipping on an unavailable/unsuitable database and
+  rejects any `HELIOS_ALLOW_NONTEST_DB` setting. Migration tests rebuild the
+  database; concurrency tests commit rows. Never use application data.
+  Ordinary optional tests retain `HELIOS_ALLOW_NONTEST_DB=1`; destructive and
+  concurrency tests never accept it. See `test/conftest.py`.
 - `uv lock --check` — lockfile must match `pyproject.toml`
 
 ## Repo conventions
@@ -59,8 +66,8 @@ Never report a task complete without running this. If you can't run it
 - Migrations are hand-reviewed, not blindly accepted from autogenerate —
   check the generated SQL, especially for anything touching an existing
   table with data in it.
-- `packages/helios_core/db/session.py` builds `DATABASE_URL` from the
-  environment; never hardcode a connection string outside that module.
+- `packages/helios_core/config.py` resolves `DATABASE_URL` from the environment;
+  `db/session.py`, Alembic, and tests consume those settings.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (enforced by pre-commit's commit-msg hook).
 
@@ -74,7 +81,8 @@ Never report a task complete without running this. If you can't run it
   reasonable people could disagree.
 - Anything touching auth, secrets, external API credentials, or
   `infra/`/deploy config.
-- Changes under `alembic/versions/**` or `packages/**/db/models/**`. These
+- Changes under `alembic/versions/**`, `packages/helios_core/**/models.py`,
+  `packages/helios_core/**/models/**`, or legacy `packages/**/db/models/**`. These
   are the expensive-to-reverse paths — migrations touch live data, models
   shape everything downstream.
 

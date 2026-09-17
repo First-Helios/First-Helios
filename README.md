@@ -9,7 +9,7 @@ health endpoints only. Menu collection and the price-index product are not
 implemented yet.
 
 The [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md)
-records verified behavior, the small stabilization pass before Menu, and the
+records verified behavior, verification hardening before Menu, and the
 next product demonstration.
 
 The scope was set menus-first on 2026-07-31 by
@@ -86,14 +86,21 @@ database first, then use its connection URL. For example, with a separately
 created local `helios_test` database and the example development credentials:
 
 ```bash
-DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test make ci
+HELIOS_STRICT_DB_TESTS=1 DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test make ci
 DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test uv run alembic check
 ```
+
+Strict mode is enabled in CI. It fails instead of skipping when PostgreSQL
+is unavailable or unsuitable and rejects any `HELIOS_ALLOW_NONTEST_DB` setting.
+Without strict mode, optional local database tests can still skip.
 
 The migration tests downgrade and rebuild that database, and concurrency
 tests commit fixture rows. Do not point them at application data or set
 `HELIOS_ALLOW_NONTEST_DB`. On 2026-09-17, a temporary PostgreSQL 16 cluster
-passed all 121 tests with no skips, and `alembic check` reported no changes.
+passed strict `make ci`: 180 passed, zero failed/skipped, including the
+migration and concurrency tests, using a percent-encoded socket URL.
+`alembic check` reported no changes. Docker/PostGIS validation remains blocked
+by local Docker socket permissions; this is native PostgreSQL acceptance only.
 
 ## V1 archive
 

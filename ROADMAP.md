@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-09-17 — Plan 0002 Steps 1–4 are implemented. The foundation passed 121 tests with no skips on disposable PostgreSQL 16, including migration round trips and concurrency tests. Step 5 defaults are accepted, but its detailed proposal needs reconciliation before implementation. See the [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for the immediate stabilization work and product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
+> **Last revised:** 2026-09-17 — Plan 0002 Steps 1–4 are implemented. Verification hardening passed strict `make ci`: 180 tests with no failures/skips on disposable PostgreSQL 16, including migration round trips and concurrency tests. Docker/PostGIS validation remains blocked by local Docker access. Step 5 defaults are accepted, but its detailed proposal needs reconciliation before implementation. See the [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for verification details, remaining limits, and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
 
 ---
 
@@ -283,8 +283,8 @@ This is the industry-standard flow. Your Orange Pi becomes the **staging** envir
 
 **What the staging host runs**
 
-- Docker + Docker Compose (same image as prod). ✅ *Working today —
-  `make dev` brings up Postgres → migrate → API.*
+- Docker + Docker Compose. The repository provides `make dev` for
+  Postgres → migrate → API; staging/prod deployment remains unverified.
 - A systemd unit that starts the stack on boot and restarts on failure,
   pulls `main`, and runs migrations as an explicit step. *(Phase 2)*
 - Postgres with daily `pg_dump` to a local external drive. *(Phase 8)*
@@ -367,7 +367,7 @@ renumbering breaks every existing cross-reference for no benefit.
 | Order | Phase | Name | Status |
 |-------|-------|------|--------|
 | 1 | 0 | Foundations & Tooling | ✅ **Complete** |
-| 2 | 1 | Domain Model & Migrations | ⬅️ **Next** |
+| 2 | 1 | Domain Model & Migrations | **In progress** |
 | 3 | 2 | First Light — read API + staging deploy | Planned |
 | 4 | 4 | Venue Discovery, Identity & Geocoding | Planned |
 | 5 | 5 | Scrapers — decide, then build | Planned |
@@ -476,8 +476,9 @@ required, which is strictly stronger in practice. See §6.0.
 
 > **Current checkpoint (2026-09-17):** Bronze, Identity, the legacy reset,
 > and deterministic resolution are implemented through Plan 0002 Step 4.
-> The next work is verification hardening and reconciliation of the reviewed
-> Step 5 Menu design. Gold remains Step 6 and is not part of that change.
+> Verification hardening is implemented and verified on native PostgreSQL;
+> Docker/PostGIS validation remains pending. The next work is reconciliation
+> of the reviewed Step 5 Menu design. Gold remains Step 6.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -501,8 +502,9 @@ models with constraint-level tests.
 
 **Remaining deliverables**
 
-- Repeatable database acceptance that fails when the required database is
-  unavailable; broaden import checks to cover the documented boundaries.
+- Complete the outstanding CI PostGIS image validation when Docker access is
+  available. Strict database testing and ordinary/relative import checks are
+  implemented and verified on native PostgreSQL.
 - The typed Menu graph after every pre-menu gate in Plan 0002 passes.
 - Gold current-menu and first price-index projections when first consumed.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so
@@ -914,7 +916,8 @@ waived on every merge. A lower nominal bar that actually holds beats a higher
 one that forces a total bypass.
 
 `CODEOWNERS` is kept as a **signal**: it flags PRs touching
-`alembic/versions/**` and `packages/**/db/models/**` in the UI so the
+`alembic/versions/**`, `packages/helios_core/**/models.py`,
+`packages/helios_core/**/models/**`, and legacy `packages/**/db/models/**` in the UI so the
 expensive-to-reverse changes are visible, but it cannot block a merge with
 one human. Copilot's review does not help here either — it leaves
 `COMMENTED`, never `APPROVED`.
@@ -1012,7 +1015,8 @@ decisions are hardest to reverse.
 
 - `Lint & format` — `ruff check` + `ruff format --check` via pre-commit
 - `Type check` — `mypy --strict`
-- `Tests` — `pytest` against a real Postgres service
+- `Tests` — `pytest` against the CI PostGIS service, with
+  `HELIOS_STRICT_DB_TESTS=1` requiring database execution
 - `Lockfile up to date` — `uv lock --check`
 - `Docker image` — builds the image and smoke-tests `/healthz`
 
