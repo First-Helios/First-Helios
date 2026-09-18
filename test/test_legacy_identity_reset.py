@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import inspect, text
 
 from packages.helios_core.config import get_settings
+from test.provider_support import PROVIDER_FUNCTIONS
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -370,24 +371,24 @@ def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
             corrected_foundation_schema = {
                 schema: _schema_signature(connection, schema) for schema in ("bronze", "identity")
             }
-            assert corrected_foundation_schema["bronze"] == foundation_schema["bronze"]
-            for component in ("tables", "views", "sequences", "triggers"):
+            for schema in ("bronze", "identity"):
+                for component in ("tables", "views", "sequences", "triggers"):
+                    assert (
+                        corrected_foundation_schema[schema][component]
+                        == foundation_schema[schema][component]
+                    )
+                original_functions = _function_definitions(foundation_schema[schema])
+                corrected_functions = _function_definitions(corrected_foundation_schema[schema])
                 assert (
-                    corrected_foundation_schema["identity"][component]
-                    == foundation_schema["identity"][component]
+                    corrected_functions.keys()
+                    == original_functions.keys() | PROVIDER_FUNCTIONS[schema]
                 )
+                for name, definition in original_functions.items():
+                    if schema == "identity" and name == "protect_typed_grain_key":
+                        continue
+                    assert corrected_functions[name] == definition
             original_functions = _function_definitions(foundation_schema["identity"])
             corrected_functions = _function_definitions(corrected_foundation_schema["identity"])
-            assert original_functions.keys() == corrected_functions.keys()
-            assert {
-                name: definition
-                for name, definition in original_functions.items()
-                if name != "protect_typed_grain_key"
-            } == {
-                name: definition
-                for name, definition in corrected_functions.items()
-                if name != "protect_typed_grain_key"
-            }
             assert (
                 original_functions["protect_typed_grain_key"]
                 != corrected_functions["protect_typed_grain_key"]

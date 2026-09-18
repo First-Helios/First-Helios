@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-09-17 — Plan 0002 Steps 1–4 are implemented. Verification hardening passed strict `make ci`: 180 tests with no failures/skips on disposable PostgreSQL 16, including migration round trips and concurrency tests. Docker/PostGIS validation remains blocked by local Docker access. Step 5 defaults are accepted; its [reconciled proposal](./docs/plans/0002-step-5-menu-schema-proposal.md) and [proposed ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) are ready for review before implementation. See the [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for verification details, remaining limits, and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
+> **Last revised:** 2026-09-18 — Plan 0002 Steps 1–4 are implemented. ADR-0005 is accepted, the strict CI PostGIS image gate passed, and the narrow Step 5 [provider prerequisite and concrete SQL](./docs/reviews/0002-step-5-provider-prerequisite.md) are prepared for separate review. Menu and Gold remain unimplemented. See the [gate history](./docs/reviews/0002-step-5-provider-prerequisite-gates.md) and [readiness reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for prior results and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
 
 ---
 
@@ -474,12 +474,12 @@ required, which is strictly stronger in practice. See §6.0.
 
 ### Phase 1 — Domain Model & Migrations — IN PROGRESS
 
-> **Current checkpoint (2026-09-17):** Bronze, Identity, the legacy reset,
+> **Current checkpoint (2026-09-18):** Bronze, Identity, the legacy reset,
 > and deterministic resolution are implemented through Plan 0002 Step 4.
-> Verification hardening is implemented and verified on native PostgreSQL;
-> Docker/PostGIS validation remains pending. The reconciled Step 5 Menu
-> proposal and proposed ADR-0005 are ready for review; the next implementation
-> unit is the provider prerequisite after those gates. Gold remains Step 6.
+> Verification hardening passed native and CI-image PostGIS checks. The
+> reconciled Step 5 Menu proposal and ADR-0005 are accepted; the narrow provider
+> prerequisite is prepared for review. Menu implementation awaits that review
+> and its separate implementation unit. Gold remains Step 6.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -503,9 +503,9 @@ models with constraint-level tests.
 
 **Remaining deliverables**
 
-- Complete the outstanding CI PostGIS image validation when Docker access is
-  available. Strict database testing and ordinary/relative import checks are
-  implemented and verified on native PostgreSQL.
+- Review the [provider prerequisite and SQL](./docs/reviews/0002-step-5-provider-prerequisite.md).
+  The pre-implementation CI PostGIS image gate has passed. Strict database
+  testing and ordinary/relative import checks remain enforced.
 - The typed Menu graph after every pre-menu gate in Plan 0002 passes.
 - Gold current-menu and first price-index projections when first consumed.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so
@@ -973,7 +973,7 @@ decisions are hardest to reverse.
 | [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 | 1 |
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted | 1 |
-| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Proposed | 1 |
+| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted | 1 |
 | Unassigned | API conventions (pagination, errors, versioning) | Planned | 2 |
 | Unassigned | Scraper framework choice | Planned | 5 |
 | Unassigned | Prod hosting choice | Planned | 8 |

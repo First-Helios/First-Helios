@@ -1,9 +1,13 @@
 # Plan 0002 Step 5: menu schema proposal
 
-**Status:** Reconciled 2026-09-17; concrete design proposed for review in
+**Status:** Design accepted by owner on 2026-09-17 in
 [ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md).
 Accepted review defaults are retained. No Menu schema or contract is implemented.
 **Branch:** `Plan-0002-Step-5`. **Migration parent:** `91f4c2a7d6e8`.
+**Provider update (2026-09-18):** The CI-image gate passed and provider revision
+`b72e6a90c431` is prepared for [separate review](../reviews/0002-step-5-provider-prerequisite.md).
+The migration parent above is the provider boundary; future Menu follows its
+accepted revision. The specification and historical planning records are retained.
 The original proposal baseline was `d1ff54cdae5d6fc59c385c77a4a89a1e91d8fc2f`
 (Step 4 / PR #15); it is not a claim that today's working tree is clean.
 
@@ -426,7 +430,9 @@ examples to focused tests only in authorized implementation work.
 Design reconciliation ends with this proposal and proposed ADR, documented checks
 and handoff. It does not grant model/migration implementation approval. The next
 unit is the provider prerequisite review preparation described in the handoff,
-after owner acceptance of ADR-0005. PostGIS validation remains outstanding.
+after owner acceptance of ADR-0005. That acceptance is now recorded in the ADR;
+PostGIS validation remains outstanding. The earlier reconciliation and planning
+records below retain their historical verification and approval boundaries.
 
 ## 11. Historical planning record (not the current specification)
 

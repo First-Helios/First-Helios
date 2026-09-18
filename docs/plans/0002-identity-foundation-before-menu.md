@@ -235,6 +235,17 @@ pre-menu foundation, not removed from the product plan.
 
 ### Step 5 - `feat(db): add menu graph against identity contracts`
 
+**Provider review update (2026-09-18):** Strict CI-image PostGIS validation
+passed before provider implementation. The [provider diff and SQL](../reviews/0002-step-5-provider-prerequisite.md)
+are prepared for review; Menu remains a separate implementation unit. Earlier
+addenda below preserve their original gate states and approval history.
+
+**Owner design acceptance update (2026-09-17):** ADR-0005 and its reconciled
+proposal are now accepted. The provider prerequisite remains gated on strict
+CI-image PostGIS validation; see the
+[current gate record](../reviews/0002-step-5-provider-prerequisite-gates.md).
+The original design addendum below records the earlier proposed state.
+
 **Current design addendum (2026-09-17):** The
 [reconciled Menu proposal](0002-step-5-menu-schema-proposal.md) and
 [proposed ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md) supply

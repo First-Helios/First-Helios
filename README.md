@@ -3,16 +3,23 @@
 A trustworthy, queryable price index of food in Austin — restaurant menus
 and what they actually cost, rebuilt from scratch with professional rigor.
 
-**Status (2026-09-17):** Bronze provenance and shared Identity are implemented
+**Status (2026-09-18):** Bronze provenance and shared Identity are implemented
 through Plan 0002 Step 4. Menu persistence has a reconciled [proposal](./docs/plans/0002-step-5-menu-schema-proposal.md)
-and [proposed ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md)
-ready for review; the API has
+and [accepted ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md).
+The [provider prerequisite](./docs/reviews/0002-step-5-provider-prerequisite.md)
+is prepared for review after CI-image PostGIS validation; the API has
 health endpoints only. Menu collection and the price-index product are not
 implemented yet.
 
 The [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md)
 records verified behavior, verification hardening before Menu, and the
 next product demonstration.
+
+The [provider prerequisite gate check](./docs/reviews/0002-step-5-provider-prerequisite-gates.md)
+preserves the earlier access failures and now links the completed CI-image gate.
+ADR-0005 owner acceptance is recorded. The provider diff and
+[upgrade/downgrade SQL](./docs/reviews/0002-step-5-provider-prerequisite.md#migration-and-concrete-sql)
+await separate review; Menu implementation has not started.
 
 The scope was set menus-first on 2026-07-31 by
 [RFC-0001](./docs/rfc/0001-menu-pricing-first.md): menu and item-price
@@ -101,8 +108,10 @@ tests commit fixture rows. Do not point them at application data or set
 `HELIOS_ALLOW_NONTEST_DB`. On 2026-09-17, a temporary PostgreSQL 16 cluster
 passed strict `make ci`: 180 passed, zero failed/skipped, including the
 migration and concurrency tests, using a percent-encoded socket URL.
-`alembic check` reported no changes. Docker/PostGIS validation remains blocked
-by local Docker socket permissions; this is native PostgreSQL acceptance only.
+`alembic check` reported no changes. That result was native PostgreSQL acceptance
+only. On 2026-09-18 the CI PostGIS image passed strict pre-implementation
+validation; the [provider review](./docs/reviews/0002-step-5-provider-prerequisite.md)
+records its exact image versions, provider checks, and remaining limits.
 
 ## V1 archive
 

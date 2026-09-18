@@ -18,8 +18,11 @@ from packages.helios_core.identity.commands import (
 from packages.helios_core.identity.contracts import (
     DeterministicResolutionResult,
     EligibleSubject,
+    ResolvedScope,
+    ResolvedScopeRequest,
     SubjectNotEligibleError,
     require_eligible_subject,
+    require_resolved_scopes,
     subject_meets_readiness_policy,
 )
 from packages.helios_core.identity.models import (
@@ -47,6 +50,8 @@ __all__ = [
     "DecisionMetadata",
     "DeterministicResolutionResult",
     "EligibleSubject",
+    "ResolvedScope",
+    "ResolvedScopeRequest",
     "Establishment",
     "Organization",
     "Place",
@@ -71,6 +76,7 @@ __all__ = [
     "rebuild_identity_projections",
     "remap_source_record",
     "require_eligible_subject",
+    "require_resolved_scopes",
     "resolve_source_record_observation",
     "subject_meets_readiness_policy",
     "unassign_source_record",

@@ -1,7 +1,8 @@
 # ADR-0005: Immutable Menu snapshots and scoped selection
 
-**Status:** Proposed — concrete design for owner review; no implementation approval.
+**Status:** Accepted — design acceptance; provider implementation remains gated on CI-image PostGIS validation.
 **Date:** 2026-09-17
+**Accepted:** 2026-09-17 by project owner Fortune, in this session: “Accept ADR-0005 design”.
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md)
 **Implements:** [Plan 0002 Step 5](../plans/0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts)
 
@@ -16,8 +17,8 @@ Subject-dependent revision key also allowed ambiguous history after remapping.
 The owner accepted immutable snapshots, explicit support and inheritance,
 persistent pins, withdrawal/restoration, accepted-claim history, and a narrow
 first implementation in the [readiness reassessment](../reviews/0002-step-5-readiness-reassessment.md#accepted-review-defaults-and-remaining-technical-work).
-Those defaults are settled. This ADR records their concrete semantics for
-review; it does not reopen them or rewrite ADR-0004's acceptance history.
+Those defaults are settled. This ADR records their accepted concrete semantics;
+it does not reopen them or rewrite ADR-0004's acceptance history.
 
 ## Decision
 
@@ -144,6 +145,13 @@ No models, contracts, migrations, extraction, ML, Gold, API, runtime dependency
 or deployment changes are part of this decision-record work.
 
 ## Review and implementation boundary
+
+Owner acceptance covers this design and its reconciled proposal. The current
+request authorizes only the narrow provider prerequisite after strict CI-image
+PostGIS validation passes. Concrete migration SQL remains separately reviewable;
+Menu implementation and application-data execution are not authorized here.
+See the [provider gate record](../reviews/0002-step-5-provider-prerequisite-gates.md)
+for the acceptance and remaining access limitation.
 
 Review the concrete node shapes, lifecycle/time examples and enforcement matrix.
 Acceptance of this ADR records the design; it does not approve unseen migration
