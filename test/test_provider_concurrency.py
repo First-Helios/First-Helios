@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from packages.helios_core.identity import (
     SubjectNotEligibleError,
+    create_adjudication,
     create_establishment,
     mark_subject_eligible,
     rebuild_identity_projections,
@@ -24,7 +25,7 @@ from packages.helios_core.identity import (
 )
 from packages.helios_core.identity.contracts import require_resolved_scopes
 from packages.helios_core.provenance import Source, SourceRecordVersion
-from test.provider_support import ScopeFixture, decision, migrate, seed_scope
+from test.provider_support import ScopeFixture, decision, migrate, raw_admit, seed_scope
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -339,3 +340,74 @@ def test_serialization_failure_propagates_and_retry_revalidates(
         stale.rollback()
         with pytest.raises(SubjectNotEligibleError):
             require_resolved_scopes(stale, (fixture.establishment,))
+
+
+@pytest.mark.parametrize("isolation", ["REPEATABLE READ", "SERIALIZABLE"])
+@pytest.mark.parametrize("raw", [False, True], ids=["python", "sql"])
+@pytest.mark.parametrize("change", ["unassign", "remap", "raw_readiness_proof"])
+def test_stale_resolution_snapshot_aborts_and_whole_retry_revalidates(
+    scopes: tuple[sessionmaker[Session], ScopeFixture],
+    disposable_database_engine: Engine,
+    isolation: str,
+    raw: bool,
+    change: str,
+) -> None:
+    """Lock-only Subjects/Records cannot detect a newer projection at snapshot isolation."""
+    factory, fixture = scopes
+    marker = f"snapshot-retry-{uuid4().hex}"
+    with (
+        disposable_database_engine.connect().execution_options(
+            isolation_level=isolation
+        ) as connection,
+        Session(connection) as stale,
+    ):
+        limits(stale)
+        stale.add(Source(namespace=marker, kind="rollback-probe"))
+        stale.flush()  # Establish the old snapshot and a write that must roll back.
+        with factory.begin() as writer:
+            if change == "raw_readiness_proof":
+                # Raw SQL resolution does not refresh stored Organization readiness.
+                adjudication = create_adjudication(
+                    writer,
+                    actor="fixture",
+                    rationale="remove proof",
+                    decided_at=decision().decided_at,
+                )
+                writer.execute(
+                    text(
+                        "INSERT INTO identity.resolution_event "
+                        "(source_record_id, operation, from_subject_id, adjudication_id, "
+                        "confidence, method, method_version, actor_class, decided_at, effective_at) "
+                        "VALUES (:record, 'unassign', :subject, :adjudication, 1, "
+                        "'provider-test', '1', 'human', now(), now())"
+                    ),
+                    {
+                        "record": fixture.organization.source_record_id,
+                        "subject": fixture.organization.subject_id,
+                        "adjudication": adjudication.id,
+                    },
+                )
+            else:
+                mutate(writer, fixture, change)
+        with pytest.raises(DBAPIError) as error:
+            if raw:
+                raw_admit(stale, fixture.establishment)
+            else:
+                require_resolved_scopes(stale, (fixture.establishment,))
+        assert getattr(error.value.orig, "sqlstate", None) == "40001"
+        stale.rollback()
+        assert (
+            stale.scalar(
+                text("SELECT count(*) FROM bronze.source WHERE namespace=:n"), {"n": marker}
+            )
+            == 0
+        )
+        if raw:
+            with pytest.raises(DBAPIError) as rejected:
+                raw_admit(stale, fixture.establishment)
+            assert getattr(rejected.value.orig, "sqlstate", None) == "23514"
+            assert rejected.value.orig.diag.constraint_name == "ck_resolved_scope_admission"  # type: ignore[union-attr]
+        else:
+            with pytest.raises(SubjectNotEligibleError):
+                require_resolved_scopes(stale, (fixture.establishment,))
+        stale.rollback()

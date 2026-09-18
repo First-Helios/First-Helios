@@ -504,6 +504,9 @@ models with constraint-level tests.
 **Remaining deliverables**
 
 - Review the [provider prerequisite and SQL](./docs/reviews/0002-step-5-provider-prerequisite.md).
+  [Technical review](./docs/reviews/0002-step-5-provider-review.md) corrected stale
+  snapshot admission; 278 strict CI tests pass with no skips and no drift.
+  Owner acceptance of the corrected implementation and SQL remains pending.
   The pre-implementation CI PostGIS image gate has passed. Strict database
   testing and ordinary/relative import checks remain enforced.
 - The typed Menu graph after every pre-menu gate in Plan 0002 passes.

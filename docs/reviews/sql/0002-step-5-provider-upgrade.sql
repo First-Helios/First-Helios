@@ -182,6 +182,12 @@ CREATE FUNCTION identity.lock_scope_inputs(p_subjects bigint[], p_records bigint
             ) r;
             PERFORM r.id FROM bronze.source_record r WHERE r.id = ANY(records)
                 ORDER BY r.id FOR NO KEY UPDATE;
+            -- Resolution transitions lock Subjects/Records without necessarily
+            -- updating them. Lock the mutable proofs too so REPEATABLE READ and
+            -- SERIALIZABLE abort on a projection changed since their snapshot.
+            PERFORM c.source_record_id FROM identity.current_resolution c
+                WHERE c.source_record_id = ANY(records)
+                ORDER BY c.source_record_id FOR NO KEY UPDATE;
             -- Subject locks fence new/remapped readiness proofs. Revalidate the
             -- chosen proof set instead of acquiring additional out-of-order locks.
             IF EXISTS (

@@ -162,6 +162,8 @@ def require_resolved_scopes(
 
     SQLSTATE 40001/40P01 require rollback and retry of the WHOLE transaction;
     they are deliberately not converted to eligibility failures or retried here.
+    Mutable resolution proofs are locked as well as Subjects/Source Records,
+    so a stale Repeatable Read/Serializable snapshot fails with 40001.
     A SQL rejection also requires rollback (or a caller-owned savepoint).
     """
     batch = tuple(requests)

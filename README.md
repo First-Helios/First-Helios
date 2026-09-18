@@ -21,6 +21,12 @@ ADR-0005 owner acceptance is recorded. The provider diff and
 [upgrade/downgrade SQL](./docs/reviews/0002-step-5-provider-prerequisite.md#migration-and-concrete-sql)
 await separate review; Menu implementation has not started.
 
+The [provider technical review](./docs/reviews/0002-step-5-provider-review.md)
+fixed stale-snapshot admission after remap/unassign. Final strict CI passed
+278 tests with no failures/skips, including direct SQL preservation checks;
+Alembic found no drift. Owner acceptance of the corrected provider and both SQL
+directions remains pending.
+
 The scope was set menus-first on 2026-07-31 by
 [RFC-0001](./docs/rfc/0001-menu-pricing-first.md): menu and item-price
 coverage across the Austin / Round Rock metro is the product, and meal deals

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,20 @@ from test.test_legacy_identity_reset import _function_definitions, _schema_signa
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection, Engine
+
+SQL_DIRECTORY = Path(__file__).resolve().parents[1] / "docs/reviews/sql"
+
+
+def sequence_state(connection: Connection) -> dict[str, tuple[int, bool]]:
+    return {
+        f"{schema}.{sequence}": tuple(
+            connection.execute(
+                text(f'SELECT last_value, is_called FROM "{schema}"."{sequence}"')
+            ).one()
+        )
+        for schema in ("bronze", "identity")
+        for sequence in inspect(connection).get_sequence_names(schema=schema)
+    }
 
 
 def provider_rows(connection: Connection) -> dict[str, list[str]]:
@@ -39,8 +55,25 @@ def signatures(connection: Connection) -> dict[str, dict[str, object]]:
     return {schema: _schema_signature(connection, schema) for schema in ("bronze", "identity")}
 
 
-def test_seeded_provider_upgrade_downgrade_reupgrade(disposable_database_engine: Engine) -> None:
+@pytest.mark.parametrize("concrete_sql", [False, True], ids=["alembic", "sql-artifacts"])
+def test_seeded_provider_upgrade_downgrade_reupgrade(
+    disposable_database_engine: Engine, concrete_sql: bool
+) -> None:
     engine = disposable_database_engine
+
+    def apply(direction: str) -> None:
+        target = PARENT if direction == "downgrade" else HEAD
+        if concrete_sql:
+            sql = (SQL_DIRECTORY / f"0002-step-5-provider-{direction}.sql").read_text()
+            with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+                connection.exec_driver_sql(sql)
+        else:
+            migrate(direction, target)
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(text("SELECT version_num FROM public.alembic_version")) == target
+            )
+
     migrate("upgrade", "head")
     with Session(engine) as setup, setup.begin():
         fixture = seed_scope(setup)
@@ -72,17 +105,20 @@ def test_seeded_provider_upgrade_downgrade_reupgrade(disposable_database_engine:
         )
     with engine.connect() as connection:
         seeded = provider_rows(connection)
+        sequences = sequence_state(connection)
         assert len(seeded) == 21
         assert all(seeded.values()), "seed all six Bronze and fifteen Identity tables"
     try:
-        migrate("downgrade", PARENT)
+        apply("downgrade")
         with engine.connect() as connection:
             parent = signatures(connection)
             assert provider_rows(connection) == seeded
-        migrate("upgrade", HEAD)
+            assert sequence_state(connection) == sequences
+        apply("upgrade")
         with engine.connect() as connection:
             head = signatures(connection)
             assert provider_rows(connection) == seeded
+            assert sequence_state(connection) == sequences
             for schema in ("bronze", "identity"):
                 for part in ("tables", "views", "sequences", "triggers"):
                     assert parent[schema][part] == head[schema][part]
@@ -90,14 +126,16 @@ def test_seeded_provider_upgrade_downgrade_reupgrade(disposable_database_engine:
                 new_functions = _function_definitions(head[schema])
                 assert new_functions.keys() == old_functions.keys() | PROVIDER_FUNCTIONS[schema]
                 assert {name: new_functions[name] for name in old_functions} == old_functions
-        migrate("downgrade", PARENT)
+        apply("downgrade")
         with engine.connect() as connection:
             assert signatures(connection) == parent
             assert provider_rows(connection) == seeded
-        migrate("upgrade", HEAD)
+            assert sequence_state(connection) == sequences
+        apply("upgrade")
         with engine.connect() as connection:
             assert signatures(connection) == head
             assert provider_rows(connection) == seeded
+            assert sequence_state(connection) == sequences
     finally:
         migrate("upgrade", "head")
 
@@ -105,6 +143,9 @@ def test_seeded_provider_upgrade_downgrade_reupgrade(disposable_database_engine:
 def test_provider_offline_sql_is_available_in_both_directions() -> None:
     upgrade = migrate("upgrade", f"{PARENT}:{HEAD}", "--sql")
     downgrade = migrate("downgrade", f"{HEAD}:{PARENT}", "--sql")
+    for direction, generated in (("upgrade", upgrade), ("downgrade", downgrade)):
+        artifact = (SQL_DIRECTORY / f"0002-step-5-provider-{direction}.sql").read_text()
+        assert artifact.rstrip() == generated.rstrip()
     for schema, functions in PROVIDER_FUNCTIONS.items():
         for function in functions:
             assert f"CREATE FUNCTION {schema}.{function}(" in upgrade
