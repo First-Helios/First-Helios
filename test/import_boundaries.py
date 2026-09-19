@@ -49,6 +49,20 @@ def boundary_violations(source: str, path: Path) -> list[str]:
         forbidden = False
         if _within(owner, "packages.helios_parsing"):
             forbidden = _within(target, "sqlalchemy") or _within(target, _CORE)
+        elif _within(owner, f"{_CORE}.domains.menu"):
+            forbidden = any(
+                _within(target, package)
+                for package in (
+                    "apps",
+                    f"{_CORE}.gold",
+                    _REGISTRY,
+                )
+            )
+            if _within(target, f"{_CORE}.domains"):
+                forbidden |= not _within(target, f"{_CORE}.domains.menu")
+            for provider in ("identity", "provenance"):
+                if _within(target, f"{_CORE}.{provider}"):
+                    forbidden |= not _within(target, f"{_CORE}.{provider}.contracts")
         elif any(_within(owner, f"{_CORE}.{part}") for part in ("db", "provenance", "identity")):
             forbidden = any(
                 _within(target, package)

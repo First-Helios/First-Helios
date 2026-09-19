@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-09-18 — Plan 0002 Steps 1–4 are implemented. ADR-0005 is accepted, the strict CI PostGIS image gate passed, and the narrow Step 5 [provider prerequisite and concrete SQL](./docs/reviews/0002-step-5-provider-prerequisite.md) are prepared for separate review. Menu and Gold remain unimplemented. See the [gate history](./docs/reviews/0002-step-5-provider-prerequisite-gates.md) and [readiness reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for prior results and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
+> **Last revised:** 2026-09-18 — Plan 0002 Steps 1–4 are implemented. ADR-0005 is accepted, the strict CI PostGIS image gate passed, and the corrected Step 5 provider implementation and both SQL directions have [owner acceptance and a bounded Menu handoff](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md). Menu awaits separate implementation authorization; Menu and Gold remain unimplemented. See the [gate history](./docs/reviews/0002-step-5-provider-prerequisite-gates.md) and [readiness reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for prior results and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
 
 ---
 
@@ -478,8 +478,8 @@ required, which is strictly stronger in practice. See §6.0.
 > and deterministic resolution are implemented through Plan 0002 Step 4.
 > Verification hardening passed native and CI-image PostGIS checks. The
 > reconciled Step 5 Menu proposal and ADR-0005 are accepted; the narrow provider
-> prerequisite is prepared for review. Menu implementation awaits that review
-> and its separate implementation unit. Gold remains Step 6.
+> implementation and both SQL directions are accepted. Menu persistence/writer
+> work awaits separate implementation authorization. Gold remains Step 6.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -503,12 +503,11 @@ models with constraint-level tests.
 
 **Remaining deliverables**
 
-- Review the [provider prerequisite and SQL](./docs/reviews/0002-step-5-provider-prerequisite.md).
-  [Technical review](./docs/reviews/0002-step-5-provider-review.md) corrected stale
-  snapshot admission; 278 strict CI tests pass with no skips and no drift.
-  Owner acceptance of the corrected implementation and SQL remains pending.
-  The pre-implementation CI PostGIS image gate has passed. Strict database
-  testing and ordinary/relative import checks remain enforced.
+- Authorize the [bounded Menu persistence/writer unit](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md#one-next-unit-menu-persistence-admission-and-lifecycle-writer).
+  The corrected provider implementation and both SQL directions are accepted;
+  278 strict CI tests passed with no skips and no drift. Provider acceptance
+  does not verify future Menu behavior. Strict database testing and
+  ordinary/relative import checks remain enforced.
 - The typed Menu graph after every pre-menu gate in Plan 0002 passes.
 - Gold current-menu and first price-index projections when first consumed.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so

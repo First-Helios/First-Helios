@@ -5,6 +5,17 @@ module code must import domain contracts instead of reaching through this
 registry.
 """
 
+from packages.helios_core.domains.menu.models import (
+    Currency,
+    EvidenceLink,
+    MenuApplicability,
+    MenuItem,
+    MenuModifier,
+    MenuPage,
+    MenuSection,
+    MenuVariant,
+    PriceObservation,
+)
 from packages.helios_core.identity.models import (
     Adjudication,
     AppliedSubjectChange,
@@ -36,6 +47,15 @@ __all__ = [
     "AppliedSubjectChange",
     "Capture",
     "CurrentResolution",
+    "Currency",
+    "EvidenceLink",
+    "MenuApplicability",
+    "MenuItem",
+    "MenuModifier",
+    "MenuPage",
+    "MenuSection",
+    "MenuVariant",
+    "PriceObservation",
     "Evidence",
     "Establishment",
     "Organization",

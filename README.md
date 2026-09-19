@@ -6,8 +6,8 @@ and what they actually cost, rebuilt from scratch with professional rigor.
 **Status (2026-09-18):** Bronze provenance and shared Identity are implemented
 through Plan 0002 Step 4. Menu persistence has a reconciled [proposal](./docs/plans/0002-step-5-menu-schema-proposal.md)
 and [accepted ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md).
-The [provider prerequisite](./docs/reviews/0002-step-5-provider-prerequisite.md)
-is prepared for review after CI-image PostGIS validation; the API has
+The [provider prerequisite and concrete SQL](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md)
+are accepted by the owner after CI-image PostGIS validation; the API has
 health endpoints only. Menu collection and the price-index product are not
 implemented yet.
 
@@ -19,13 +19,21 @@ The [provider prerequisite gate check](./docs/reviews/0002-step-5-provider-prere
 preserves the earlier access failures and now links the completed CI-image gate.
 ADR-0005 owner acceptance is recorded. The provider diff and
 [upgrade/downgrade SQL](./docs/reviews/0002-step-5-provider-prerequisite.md#migration-and-concrete-sql)
-await separate review; Menu implementation has not started.
+are now accepted; Menu implementation has not started.
 
 The [provider technical review](./docs/reviews/0002-step-5-provider-review.md)
 fixed stale-snapshot admission after remap/unassign. Final strict CI passed
 278 tests with no failures/skips, including direct SQL preservation checks;
 Alembic found no drift. Owner acceptance of the corrected provider and both SQL
-directions remains pending.
+directions is recorded in the [acceptance and Menu handoff](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md).
+
+The [owner-disposition packet](./docs/reviews/0002-step-5-provider-owner-disposition.md)
+binds the corrected implementation and both SQL artifacts to exact hashes.
+Fresh strict CI again passed 278 tests with zero failures/skips and no drift;
+the disposable test container was removed. Fortune subsequently approved all
+presented items on 2026-09-18. The provider unit is complete; the bounded Menu
+persistence/writer handoff is ready for separate implementation authorization
+in a new session.
 
 The scope was set menus-first on 2026-07-31 by
 [RFC-0001](./docs/rfc/0001-menu-pricing-first.md): menu and item-price

@@ -29,6 +29,7 @@ from packages.helios_core.db.base import (
     MANAGED_SCHEMAS,
     SCHEMA_BRONZE,
     SCHEMA_IDENTITY,
+    SCHEMA_MENU,
     SCHEMA_OWNERS,
     VERSION_TABLE_SCHEMA,
     Base,
@@ -60,6 +61,7 @@ def test_schema_ownership_names_only_active_bounded_contexts() -> None:
     assert dict(SCHEMA_OWNERS) == {
         SCHEMA_BRONZE: "packages.helios_core.provenance",
         SCHEMA_IDENTITY: "packages.helios_core.identity",
+        SCHEMA_MENU: "packages.helios_core.domains.menu",
     }
     assert frozenset(SCHEMA_OWNERS) == MANAGED_SCHEMAS
     assert VERSION_TABLE_SCHEMA == "public"
@@ -188,7 +190,12 @@ def test_foundation_import_boundaries() -> None:
     root = Path(__file__).resolve().parents[1]
     violations = [
         violation
-        for package in ("helios_core/db", "helios_core/identity", "helios_core/provenance")
+        for package in (
+            "helios_core/db",
+            "helios_core/identity",
+            "helios_core/provenance",
+            "helios_core/domains/menu",
+        )
         for path in (root / "packages" / package).rglob("*.py")
         for violation in boundary_violations(path.read_text(), path.relative_to(root))
     ]
@@ -200,6 +207,7 @@ def test_transaction_commands_flush_but_never_commit() -> None:
     command_paths = (
         root / "identity" / "commands.py",
         root / "provenance" / "contracts.py",
+        root / "domains" / "menu" / "commands.py",
     )
     commits: list[str] = []
     for path in command_paths:

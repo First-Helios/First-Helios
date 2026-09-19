@@ -21,11 +21,13 @@ from sqlalchemy.orm import DeclarativeBase
 
 SCHEMA_BRONZE = "bronze"
 SCHEMA_IDENTITY = "identity"
+SCHEMA_MENU = "menu"
 
 SCHEMA_OWNERS: Final = MappingProxyType(
     {
         SCHEMA_BRONZE: "packages.helios_core.provenance",
         SCHEMA_IDENTITY: "packages.helios_core.identity",
+        SCHEMA_MENU: "packages.helios_core.domains.menu",
     }
 )
 MANAGED_SCHEMAS = frozenset(SCHEMA_OWNERS)

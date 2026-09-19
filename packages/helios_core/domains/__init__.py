@@ -1,0 +1,1 @@
+"""Owned vertical domains."""

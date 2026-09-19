@@ -75,6 +75,9 @@ def test_seeded_provider_upgrade_downgrade_reupgrade(
             )
 
     migrate("upgrade", "head")
+    # Exercise this historical boundary with its actual parent/head installed;
+    # the Menu migration has independent preservation tests and is restored below.
+    migrate("downgrade", HEAD)
     with Session(engine) as setup, setup.begin():
         fixture = seed_scope(setup)
         setup.add(
