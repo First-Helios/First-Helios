@@ -14,9 +14,10 @@ from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import inspect, text
 
 from packages.helios_core.config import get_settings
+from test.provider_support import PROVIDER_FUNCTIONS
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -24,9 +25,6 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection, Engine
 
 DATABASE_URL = get_settings().database_url
-DATABASE_NAME = DATABASE_URL.rsplit("/", 1)[-1].split("?", 1)[0]
-IS_DISPOSABLE_TEST_DATABASE = DATABASE_NAME.endswith("_test")
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 PRE_RESET_REVISION = "3f8b2c1d9a74"
@@ -334,21 +332,8 @@ def _assert_foundations_preserved(
 
 
 @pytest.fixture
-def migration_engine() -> Iterator[Engine]:
-    if not IS_DISPOSABLE_TEST_DATABASE:
-        pytest.skip("destructive migration tests require DATABASE_URL naming a *_test database")
-    if os.environ.get("HELIOS_ALLOW_NONTEST_DB") is not None:
-        pytest.fail("destructive migration tests must not use HELIOS_ALLOW_NONTEST_DB")
-
-    engine = create_engine(DATABASE_URL)
-    try:
-        with engine.connect():
-            pass
-    except Exception as exc:  # pragma: no cover - environment dependent
-        engine.dispose()
-        pytest.skip(f"database unreachable: {exc}")
-    yield engine
-    engine.dispose()
+def migration_engine(disposable_database_engine: Engine) -> Iterator[Engine]:
+    yield disposable_database_engine
 
 
 def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
@@ -386,24 +371,24 @@ def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
             corrected_foundation_schema = {
                 schema: _schema_signature(connection, schema) for schema in ("bronze", "identity")
             }
-            assert corrected_foundation_schema["bronze"] == foundation_schema["bronze"]
-            for component in ("tables", "views", "sequences", "triggers"):
+            for schema in ("bronze", "identity"):
+                for component in ("tables", "views", "sequences", "triggers"):
+                    assert (
+                        corrected_foundation_schema[schema][component]
+                        == foundation_schema[schema][component]
+                    )
+                original_functions = _function_definitions(foundation_schema[schema])
+                corrected_functions = _function_definitions(corrected_foundation_schema[schema])
                 assert (
-                    corrected_foundation_schema["identity"][component]
-                    == foundation_schema["identity"][component]
+                    corrected_functions.keys()
+                    == original_functions.keys() | PROVIDER_FUNCTIONS[schema]
                 )
+                for name, definition in original_functions.items():
+                    if schema == "identity" and name == "protect_typed_grain_key":
+                        continue
+                    assert corrected_functions[name] == definition
             original_functions = _function_definitions(foundation_schema["identity"])
             corrected_functions = _function_definitions(corrected_foundation_schema["identity"])
-            assert original_functions.keys() == corrected_functions.keys()
-            assert {
-                name: definition
-                for name, definition in original_functions.items()
-                if name != "protect_typed_grain_key"
-            } == {
-                name: definition
-                for name, definition in corrected_functions.items()
-                if name != "protect_typed_grain_key"
-            }
             assert (
                 original_functions["protect_typed_grain_key"]
                 != corrected_functions["protect_typed_grain_key"]

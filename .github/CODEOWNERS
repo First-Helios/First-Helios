@@ -1,7 +1,9 @@
-# Human review required, regardless of who (or what agent) opens the PR.
+# Review signal for expensive changes; not a merge gate with one maintainer.
 # These are the paths where a mistake is expensive and hard to reverse:
 # migrations touch live data, ORM models shape the schema everything else
 # builds on.
 
 /alembic/versions/          @4Fortune8
 /packages/**/db/models/     @4Fortune8
+/packages/helios_core/**/models.py @4Fortune8
+/packages/helios_core/**/models/   @4Fortune8

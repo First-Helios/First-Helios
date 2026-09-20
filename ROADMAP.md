@@ -10,7 +10,7 @@
 >
 > **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 >
-> **Last revised:** 2026-09-12 — [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) accepted and [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md) approved, superseding ADR-0003 and the affected portions of Plan 0001. The owner authorized a clean reset of the pre-production identity scaffold; implementation still requires separate model and migration review.
+> **Last revised:** 2026-09-18 — Plan 0002 Steps 1–4 are implemented. ADR-0005 is accepted, the strict CI PostGIS image gate passed, and the corrected Step 5 provider implementation and both SQL directions have [owner acceptance and a bounded Menu handoff](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md). Menu awaits separate implementation authorization; Menu and Gold remain unimplemented. See the [gate history](./docs/reviews/0002-step-5-provider-prerequisite-gates.md) and [readiness reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for prior results and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
 
 ---
 
@@ -283,8 +283,8 @@ This is the industry-standard flow. Your Orange Pi becomes the **staging** envir
 
 **What the staging host runs**
 
-- Docker + Docker Compose (same image as prod). ✅ *Working today —
-  `make dev` brings up Postgres → migrate → API.*
+- Docker + Docker Compose. The repository provides `make dev` for
+  Postgres → migrate → API; staging/prod deployment remains unverified.
 - A systemd unit that starts the stack on boot and restarts on failure,
   pulls `main`, and runs migrations as an explicit step. *(Phase 2)*
 - Postgres with daily `pg_dump` to a local external drive. *(Phase 8)*
@@ -367,7 +367,7 @@ renumbering breaks every existing cross-reference for no benefit.
 | Order | Phase | Name | Status |
 |-------|-------|------|--------|
 | 1 | 0 | Foundations & Tooling | ✅ **Complete** |
-| 2 | 1 | Domain Model & Migrations | ⬅️ **Next** |
+| 2 | 1 | Domain Model & Migrations | **In progress** |
 | 3 | 2 | First Light — read API + staging deploy | Planned |
 | 4 | 4 | Venue Discovery, Identity & Geocoding | Planned |
 | 5 | 5 | Scrapers — decide, then build | Planned |
@@ -472,13 +472,22 @@ required, which is strictly stronger in practice. See §6.0.
 
 ---
 
-### Phase 1 — Domain Model & Migrations ⬅️ NEXT
+### Phase 1 — Domain Model & Migrations — IN PROGRESS
 
-> **Current checkpoint (2026-09-12):** the venue-identity and three-schema
-> migration below has landed. [Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md)
-> now governs the identity/provenance correction that must precede the menu
-> schema. The owner authorized a clean reset of this pre-production scaffold;
-> model and migration implementation still require separate review.
+> **Current checkpoint (2026-09-19):** Bronze, Identity, the legacy reset,
+> and deterministic resolution are implemented through Plan 0002 Step 4.
+> Verification hardening passed native and CI-image PostGIS checks. The
+> reconciled Step 5 Menu proposal and ADR-0005 are accepted; the narrow provider
+> implementation and both SQL directions are accepted. The bounded Menu writer
+> (revision `d83f0a21c592`) and both Menu SQL directions were accepted as-is on
+> 2026-09-19, and the [read-side selection/ranking unit](./docs/reviews/0002-step-5-menu-selector-technical-review.md)
+> was accepted by the owner on 2026-09-19 (fresh strict `make ci`: 530 passed,
+> zero skips, no drift). Integrated M01–M14 final acceptance — the accepted
+> writer, both Menu SQL directions, and the selector exercised together across the
+> full ADR-0005 matrix on a fresh CI-image database (strict `make ci`: 530 passed,
+> zero skips, no drift, single head `d83f0a21c592`) — was accepted by the owner on
+> 2026-09-19 ([record](./docs/reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)).
+> Step 5 Menu engineering is complete. Gold read models are Step 6.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -486,21 +495,31 @@ required, which is strictly stronger in practice. See §6.0.
 remove the superseded scaffold, then add typed Menu Silver and Gold read
 models with constraint-level tests.
 
-**Remaining deliverables** ([Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md))
+**Implemented foundation** ([Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md), Steps 1–4)
 
 - Bronze Source, Endpoint, Capture, Source Record/Version, and Evidence
   models with immutable source history.
 - Identity Subject, Place, Organization, Establishment, explicit resolution
   state, append-only decisions, lineage, and Subject-readiness gates.
-- A reviewed clean-reset migration that intentionally removes the current
+- A reviewed clean-reset migration that intentionally removed the former
   `brand` / `venue` scaffold and obsolete `raw` / `canonical` / `mart`
   schemas. No legacy application data is backfilled.
 - Architecture fitness tests for schema/FK/import directions, immutability,
   event transitions, and deferred constraints.
+- Deterministic external-key/URL resolution entrypoints and live typed-feature
+  readiness checks.
+
+**Remaining deliverables**
+
+- Authorize the [bounded Menu persistence/writer unit](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md#one-next-unit-menu-persistence-admission-and-lifecycle-writer).
+  The corrected provider implementation and both SQL directions are accepted;
+  278 strict CI tests passed with no skips and no drift. Provider acceptance
+  does not verify future Menu behavior. Strict database testing and
+  ordinary/relative import checks remain enforced.
 - The typed Menu graph after every pre-menu gate in Plan 0002 passes.
 - Gold current-menu and first price-index projections when first consumed.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so
-  re-ingest is idempotent; money as integer cents, never float.
+  re-ingest is idempotent; money as integer currency minor units, never float.
 - Alembic migrations are autogenerate-assisted, hand-reviewed, and separately
   authorized before execution.
 
@@ -521,7 +540,7 @@ menu graph is likely to change what the right deal schema looks like.
   `MenuModifierRow`). It was deliberately built sidecar-first and never
   became tables, so the column names and provenance fields are settled but
   unproven against a live schema. Port the shape; V2 renames
-  `MenuPricePoint` → `PriceObservation` and stores money as integer cents.
+  `MenuPricePoint` → `PriceObservation` and stores integer currency minor units.
 - `core/venue_identity.py` for venue + alias patterns.
 - `core/database.py::DealMaterialization` (~L1395) — the refresh-task
   pattern Gold inherits, not the deal columns themselves.
@@ -539,7 +558,7 @@ where a bad decision is most expensive to undo:
   proven on a seeded disposable database?
 - Is `PriceObservation` append-only in practice — is there any code path that
   `UPDATE`s a price rather than inserting a new observation?
-- Is money stored as integer cents everywhere, with no float column anywhere
+- Is money stored as integer currency minor units, with no float column anywhere
   near a price?
 - Does every mapped table declare an explicit, owned schema
   ([ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md)),
@@ -783,15 +802,16 @@ decisions; a re-run against an unchanged site produces zero new observations.
 whole thing observable and recoverable.
 
 > **Reduced scope.** Containerization landed early
-> ([ADR-0002](./docs/adr/0002-containerization.md)) and staging on the Pi
-> landed in Phase 2. What remains here is genuinely production-only concerns.
+> ([ADR-0002](./docs/adr/0002-containerization.md)). Staging on the Pi is
+> planned in Phase 2; deployment has not been verified by the current
+> repository assessment. Phase 8 assumes that staging prerequisite is met.
 
-**Already done** (kept for the record)
+**Containerization status and staging prerequisite**
 
 - ~~Multi-stage `Dockerfile`~~ — done, ADR-0002. Scraper entrypoint still
   pending; needs Phase 5's scraper to exist.
 - ~~`docker-compose.yml` for local dev~~ — done (Postgres → migrate → API).
-- ~~Orange Pi staging with systemd~~ — done in Phase 2.
+- Orange Pi staging with systemd — planned Phase 2 prerequisite, not verified.
 
 **Deliverables**
 
@@ -907,7 +927,8 @@ waived on every merge. A lower nominal bar that actually holds beats a higher
 one that forces a total bypass.
 
 `CODEOWNERS` is kept as a **signal**: it flags PRs touching
-`alembic/versions/**` and `packages/**/db/models/**` in the UI so the
+`alembic/versions/**`, `packages/helios_core/**/models.py`,
+`packages/helios_core/**/models/**`, and legacy `packages/**/db/models/**` in the UI so the
 expensive-to-reverse changes are visible, but it cannot block a merge with
 one human. Copilot's review does not help here either — it leaves
 `COMMENTED`, never `APPROVED`.
@@ -962,10 +983,11 @@ decisions are hardest to reverse.
 | [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 | 1 |
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted | 1 |
-| 0005 | API conventions (pagination, errors, versioning) | Planned | 2 |
-| 0006 | Scraper framework choice | Planned | 5 |
-| 0007 | Prod hosting choice | Planned | 8 |
-| 0008 | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
+| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted | 1 |
+| Unassigned | API conventions (pagination, errors, versioning) | Planned | 2 |
+| Unassigned | Scraper framework choice | Planned | 5 |
+| Unassigned | Prod hosting choice | Planned | 8 |
+| Unassigned | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
 
 **RFC ledger**
 
@@ -1005,7 +1027,8 @@ decisions are hardest to reverse.
 
 - `Lint & format` — `ruff check` + `ruff format --check` via pre-commit
 - `Type check` — `mypy --strict`
-- `Tests` — `pytest` against a real Postgres service
+- `Tests` — `pytest` against the CI PostGIS service, with
+  `HELIOS_STRICT_DB_TESTS=1` requiring database execution
 - `Lockfile up to date` — `uv lock --check`
 - `Docker image` — builds the image and smoke-tests `/healthz`
 
@@ -1148,4 +1171,4 @@ Quick index to find the most-cited V1 files on the [`V1-Graveyard`](https://gith
 
 ---
 
-*Last updated: 2026-07-31. This is a living document; update via PR when a phase completes or a decision changes.*
+*Last updated: 2026-09-17. This is a living document; update via PR when a phase completes or a decision changes.*

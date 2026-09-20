@@ -15,7 +15,8 @@ typecheck:
 test:
 	uv run pytest --cov=. --cov-report=term-missing
 
-# Run everything CI runs, in order
+# Local checks; CI also builds/smoke-tests Docker. Set HELIOS_STRICT_DB_TESTS=1
+# and a disposable DATABASE_URL for database acceptance.
 ci: lint typecheck test
 	uv lock --check
 

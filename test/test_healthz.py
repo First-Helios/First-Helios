@@ -1,13 +1,18 @@
 """Tests for the API's health/readiness endpoints."""
 
-from collections.abc import Iterator
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 
 from apps.api.main import app
-from packages.helios_core.config import get_settings
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.engine import Engine
 
 
 @pytest.fixture
@@ -36,13 +41,7 @@ def test_readyz_unavailable_when_db_unreachable(
     assert response.json() == {"status": "unavailable"}
 
 
-def test_readyz_ok_when_db_reachable(client: TestClient) -> None:
-    try:
-        with create_engine(get_settings().database_url).connect():
-            pass
-    except Exception as exc:  # pragma: no cover - environment dependent
-        pytest.skip(f"database unreachable: {exc}")
-
+def test_readyz_ok_when_db_reachable(client: TestClient, database_engine: Engine) -> None:
     response = client.get("/readyz")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

@@ -13,7 +13,9 @@ config = context.config
 # Use the same DATABASE_URL the app resolves, rather than alembic.ini's
 # static value, so migrations target the same database as the app (CI,
 # docker, future hosts).
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# ConfigParser consumes doubled percent signs. Escape only at this boundary;
+# get_main_option/get_section return the original URL to SQLAlchemy unchanged.
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

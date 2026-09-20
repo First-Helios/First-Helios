@@ -235,6 +235,39 @@ pre-menu foundation, not removed from the product plan.
 
 ### Step 5 - `feat(db): add menu graph against identity contracts`
 
+**Writer + selector update (2026-09-19):** the bounded Menu writer (revision
+`d83f0a21c592`), its models/contracts/commands and both concrete Menu SQL
+directions were accepted "Accept as-is". The pure read-side
+[selection/ranking unit](../reviews/0002-step-5-menu-selector-technical-review.md)
+(`packages/helios_core/domains/menu/selection.py` and `test/test_menu_precedence.py`)
+is now implemented over the accepted writer, adds no migration, and was accepted
+by the owner on 2026-09-19. **Integrated M01–M14 final acceptance** — the accepted
+writer, both Menu SQL directions, and the selector exercised together across the
+full ADR-0005 matrix on a fresh CI-image database — was accepted by the owner on
+2026-09-19 ([integrated acceptance record](../reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)).
+Step 5 Menu engineering is complete; Gold read models are Step 6. Earlier addenda
+below preserve their original gate states and history.
+
+**Provider review update (2026-09-18):** Strict CI-image PostGIS validation
+passed before provider implementation. The [provider diff and SQL](../reviews/0002-step-5-provider-prerequisite.md)
+are prepared for review; Menu remains a separate implementation unit. Earlier
+addenda below preserve their original gate states and approval history.
+
+**Owner design acceptance update (2026-09-17):** ADR-0005 and its reconciled
+proposal are now accepted. The provider prerequisite remains gated on strict
+CI-image PostGIS validation; see the
+[current gate record](../reviews/0002-step-5-provider-prerequisite-gates.md).
+The original design addendum below records the earlier proposed state.
+
+**Current design addendum (2026-09-17):** The
+[reconciled Menu proposal](0002-step-5-menu-schema-proposal.md) and
+[proposed ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md) supply
+the concrete review surface. See the
+[reconciliation record](../reviews/0002-step-5-menu-design-reconciliation.md)
+for examples, verification and the next provider prerequisite unit. This
+addendum does not alter the historical plan approval or authorize implementation;
+owner design review and outstanding PostGIS validation remain gates.
+
 This is the replacement for Plan 0001 Step 2 and starts only after the gate
 in Section 3.
 

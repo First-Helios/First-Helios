@@ -80,6 +80,7 @@ jobs:
       - name: Run tests with coverage
         env:
           DATABASE_URL: postgresql://helios:helios@localhost:5432/helios_test
+          HELIOS_STRICT_DB_TESTS: "1"
         run: uv run pytest --cov=. --cov-report=term-missing
 
   lockfile:

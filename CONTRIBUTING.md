@@ -39,12 +39,23 @@ make install   # uv sync + pre-commit hooks
 make lint      # ruff check + format
 make typecheck # mypy --strict
 make test      # pytest
-make ci        # all of the above, plus lockfile check — mirrors CI exactly
+make ci        # local checks plus lockfile check; CI also builds/smokes Docker
 ```
 
-Database-backed tests (`test/test_db.py`) need a reachable Postgres with a
-`*_test`-named database — see that file's docstring, or the `infra/`
-docker-compose service, once Docker support lands.
+Database acceptance requires a separately provisioned, disposable PostgreSQL
+`*_test` database. Run:
+
+```bash
+HELIOS_STRICT_DB_TESTS=1 DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test make ci
+DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test uv run alembic check
+```
+
+CI enables strict mode: required database tests fail instead of skipping if
+PostgreSQL is unavailable or unsuitable. Any `HELIOS_ALLOW_NONTEST_DB` setting
+is rejected. Migration tests downgrade/rebuild the database and concurrency
+tests commit fixture rows; never use application data. Without strict mode,
+optional local database tests can skip. Such skips are not acceptance evidence.
+The Compose development database is not a disposable test database.
 
 ## When to write an ADR vs. an RFC
 
@@ -73,7 +84,8 @@ Lint & format · Type check · Tests · Lockfile up to date · Docker image
 ```
 
 `.github/CODEOWNERS` is kept as a **signal, not a gate**. It flags PRs
-touching `alembic/versions/**` and `packages/**/db/models/**` in the UI —
+touching `alembic/versions/**`, `packages/helios_core/**/models.py`,
+`packages/helios_core/**/models/**`, and legacy `packages/**/db/models/**` in the UI —
 the paths where a mistake is most expensive — but with a single maintainer it
 cannot block a merge. When you see that flag, slow down and read the diff
 properly. That's a discipline, not an enforcement.

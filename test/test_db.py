@@ -2,7 +2,7 @@
 
 Exercises the Postgres service that CI spins up. The `session` fixture (see
 `conftest.py`) applies migrations, wraps each test in a transaction, and skips
-cleanly when no test database is reachable.
+locally when no test database is reachable. Strict mode fails instead.
 """
 
 from __future__ import annotations

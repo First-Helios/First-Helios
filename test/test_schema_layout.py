@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import JSON, Column, Integer, MetaData, Table
 
 from packages.helios_core.db import model_registry  # noqa: F401 — registers all models
@@ -28,10 +29,12 @@ from packages.helios_core.db.base import (
     MANAGED_SCHEMAS,
     SCHEMA_BRONZE,
     SCHEMA_IDENTITY,
+    SCHEMA_MENU,
     SCHEMA_OWNERS,
     VERSION_TABLE_SCHEMA,
     Base,
 )
+from test.import_boundaries import boundary_violations
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -58,6 +61,7 @@ def test_schema_ownership_names_only_active_bounded_contexts() -> None:
     assert dict(SCHEMA_OWNERS) == {
         SCHEMA_BRONZE: "packages.helios_core.provenance",
         SCHEMA_IDENTITY: "packages.helios_core.identity",
+        SCHEMA_MENU: "packages.helios_core.domains.menu",
     }
     assert frozenset(SCHEMA_OWNERS) == MANAGED_SCHEMAS
     assert VERSION_TABLE_SCHEMA == "public"
@@ -182,79 +186,20 @@ def test_source_payload_json_exists_only_on_bronze_record_versions() -> None:
     assert bronze_json_columns == {"bronze.source_record_version.source_payload"}
 
 
-def test_model_registry_is_the_only_db_module_importing_provenance_models() -> None:
-    db_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "db"
-    importers: set[str] = set()
-    for path in db_root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
-        if any(
-            isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and node.module.startswith("packages.helios_core.provenance")
-            for node in ast.walk(tree)
-        ):
-            importers.add(path.relative_to(db_root).as_posix())
-    assert importers == {"model_registry.py"}
-
-
-def test_model_registry_is_the_only_db_module_importing_identity_models() -> None:
-    db_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "db"
-    importers: set[str] = set()
-    for path in db_root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
-        if any(
-            isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and node.module.startswith("packages.helios_core.identity")
-            for node in ast.walk(tree)
-        ):
-            importers.add(path.relative_to(db_root).as_posix())
-    assert importers == {"model_registry.py"}
-
-
-def test_identity_imports_only_lower_shared_modules() -> None:
-    identity_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "identity"
-    forbidden: list[str] = []
-    for path in identity_root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom) or node.module is None:
-                continue
-            if node.module.startswith(
-                ("apps.", "packages.helios_core.domains.", "packages.helios_core.gold")
-            ):
-                forbidden.append(f"{path.name}: {node.module}")
-    assert not forbidden, f"Identity imports higher or vertical modules: {forbidden}"
-
-
-def test_identity_uses_the_provenance_contract_not_provenance_models() -> None:
-    identity_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "identity"
-    forbidden: list[str] = []
-    for path in identity_root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.ImportFrom)
-                and node.module == "packages.helios_core.provenance.models"
-            ):
-                forbidden.append(path.name)
-    assert not forbidden, f"Identity reaches through the provenance contract: {forbidden}"
-
-
-def test_identity_imports_provenance_only_through_its_contract_module() -> None:
-    identity_root = Path(__file__).resolve().parents[1] / "packages" / "helios_core" / "identity"
-    forbidden: list[str] = []
-    for path in identity_root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.ImportFrom)
-                and node.module is not None
-                and node.module.startswith("packages.helios_core.provenance")
-                and node.module != "packages.helios_core.provenance.contracts"
-            ):
-                forbidden.append(f"{path.name}: {node.module}")
-    assert not forbidden, f"Identity bypasses published provenance contracts: {forbidden}"
+def test_foundation_import_boundaries() -> None:
+    root = Path(__file__).resolve().parents[1]
+    violations = [
+        violation
+        for package in (
+            "helios_core/db",
+            "helios_core/identity",
+            "helios_core/provenance",
+            "helios_core/domains/menu",
+        )
+        for path in (root / "packages" / package).rglob("*.py")
+        for violation in boundary_violations(path.read_text(), path.relative_to(root))
+    ]
+    assert not violations, "Import boundary violations:\n" + "\n".join(violations)
 
 
 def test_transaction_commands_flush_but_never_commit() -> None:
@@ -262,6 +207,7 @@ def test_transaction_commands_flush_but_never_commit() -> None:
     command_paths = (
         root / "identity" / "commands.py",
         root / "provenance" / "contracts.py",
+        root / "domains" / "menu" / "commands.py",
     )
     commits: list[str] = []
     for path in command_paths:
@@ -277,25 +223,13 @@ def test_transaction_commands_flush_but_never_commit() -> None:
 
 
 def test_parser_package_remains_orm_free_when_it_lands() -> None:
-    parsing_root = Path(__file__).resolve().parents[1] / "packages" / "helios_parsing"
-    forbidden: list[str] = []
-    for path in parsing_root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            module = node.module if isinstance(node, ast.ImportFrom) else None
-            imported_names = (
-                [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
-            )
-            if (
-                module is not None and module.startswith(("sqlalchemy", "packages.helios_core"))
-            ) or (
-                any(
-                    name.startswith(("sqlalchemy", "packages.helios_core"))
-                    for name in imported_names
-                )
-            ):
-                forbidden.append(f"{path.name}: {module or imported_names}")
-    assert not forbidden, f"helios_parsing imports ORM/application modules: {forbidden}"
+    root = Path(__file__).resolve().parents[1]
+    violations = [
+        violation
+        for path in (root / "packages" / "helios_parsing").rglob("*.py")
+        for violation in boundary_violations(path.read_text(), path.relative_to(root))
+    ]
+    assert not violations, "Parser imports ORM/application modules: " + str(violations)
 
 
 def _load_alembic_env() -> ModuleType:
@@ -319,7 +253,7 @@ def _load_alembic_env() -> ModuleType:
     stub = MagicMock()
     # None short-circuits env.py's logging setup; a MagicMock here would be
     # passed to fileConfig() and blow up.
-    stub.config.config_file_name = None
+    stub.config = Config()
     stub.is_offline_mode.side_effect = _StopBeforeMigrations
 
     alembic.context = stub
@@ -368,3 +302,46 @@ def test_column_inherits_its_parent_tables_verdict() -> None:
 
     assert env.include_object(ours.c.id, "id", "column", True, None) is True
     assert env.include_object(theirs.c.id, "id", "column", True, None) is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+psycopg://user:plain@localhost/helios_test",
+        "postgresql+psycopg://user:p%40ss%25word@localhost/helios_test",
+        "postgresql+psycopg:///helios_test?host=%2Ftmp%2Fhelios-socket",
+        "postgresql+psycopg://user:literal%25%28here%29s@localhost/helios_test",
+    ],
+)
+def test_alembic_preserves_encoded_urls(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
+    from types import SimpleNamespace
+
+    from sqlalchemy import create_engine
+
+    monkeypatch.setattr(
+        "packages.helios_core.config.get_settings", lambda: SimpleNamespace(database_url=url)
+    )
+    env = _load_alembic_env()
+    assert env.config.get_main_option("sqlalchemy.url") == url
+    section = env.config.get_section(env.config.config_ini_section)
+    assert section["sqlalchemy.url"] == url
+
+    # Both Alembic paths must read the interpolated original, not doubled `%`.
+    env.run_migrations_offline()
+    assert env.context.configure.call_args.kwargs["url"] == url
+    factory = MagicMock()
+    monkeypatch.setattr(env, "engine_from_config", factory)
+    env.run_migrations_online()
+    assert factory.call_args.args[0]["sqlalchemy.url"] == url
+
+    # SQLAlchemy must deliver exactly the same decoded DBAPI arguments as the
+    # direct application URL, including percent-encoded credentials/socket paths.
+    original = create_engine(url)
+    configured = create_engine(factory.call_args.args[0]["sqlalchemy.url"])
+    try:
+        assert configured.dialect.create_connect_args(configured.url) == (
+            configured.dialect.create_connect_args(original.url)
+        )
+    finally:
+        original.dispose()
+        configured.dispose()

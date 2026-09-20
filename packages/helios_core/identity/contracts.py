@@ -5,19 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, text
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from packages.helios_core.identity.models import (
-    CurrentResolution,
-    Establishment,
-    Organization,
-    Place,
     Subject,
     SubjectCurrentness,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Collection
+    from datetime import datetime
 
     from sqlalchemy.orm import Session
 
@@ -51,119 +49,6 @@ class SubjectNotEligibleError(ValueError):
     """Raised when a vertical attempts to use an ineligible Subject."""
 
 
-def _subject_meets_readiness_policy(
-    session: Session,
-    subject: Subject,
-    *,
-    evaluating: frozenset[int] = frozenset(),
-    lock_features: bool = False,
-    locked_subject_ids: frozenset[int] | None = None,
-) -> bool:
-    """Evaluate meaningful typed identity features for one Subject."""
-    if subject.id in evaluating:
-        return False
-    evaluating = evaluating | {subject.id}
-
-    if subject.kind == "place":
-        place = (
-            session.scalar(
-                select(Place)
-                .where(Place.subject_id == subject.id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-            if lock_features
-            else session.get(Place, subject.id)
-        )
-        return place is not None and (
-            (place.address is not None and bool(place.address.strip()))
-            or (place.latitude is not None and place.longitude is not None)
-        )
-
-    if subject.kind == "organization":
-        organization = (
-            session.scalar(
-                select(Organization)
-                .where(Organization.subject_id == subject.id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-            if lock_features
-            else session.get(Organization, subject.id)
-        )
-        if (
-            organization is None
-            or organization.canonical_name is None
-            or organization.name_fingerprint is None
-        ):
-            return False
-        # A name/fingerprint pair is deliberately non-unique. A current
-        # resolved source key supplies the second identity feature.
-        return (
-            session.scalar(
-                select(CurrentResolution.source_record_id)
-                .where(
-                    CurrentResolution.subject_id == subject.id,
-                    CurrentResolution.state == "resolved",
-                )
-                .limit(1)
-            )
-            is not None
-        )
-
-    if subject.kind == "establishment":
-        establishment = (
-            session.scalar(
-                select(Establishment)
-                .where(Establishment.subject_id == subject.id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-            if lock_features
-            else session.get(Establishment, subject.id)
-        )
-        if establishment is None:
-            return False
-        parent_ids = {
-            establishment.organization_subject_id,
-            establishment.place_subject_id,
-        }
-        if locked_subject_ids is not None and not parent_ids <= locked_subject_ids:
-            # An Establishment parent changed after the dependency lock set
-            # was selected. Refuse eligibility rather than accepting a parent
-            # whose Subject row is not protected for this transaction.
-            return False
-        parents = {
-            parent.id: parent
-            for parent in session.scalars(select(Subject).where(Subject.id.in_(parent_ids)))
-        }
-        current_parent_ids = set(
-            session.scalars(
-                select(SubjectCurrentness.subject_id).where(
-                    SubjectCurrentness.subject_id.in_(parent_ids),
-                    SubjectCurrentness.is_current,
-                )
-            )
-        )
-        return (
-            set(parents) == parent_ids
-            and current_parent_ids == parent_ids
-            and all(parent.readiness == "eligible" for parent in parents.values())
-            and all(
-                _subject_meets_readiness_policy(
-                    session,
-                    parent,
-                    evaluating=evaluating,
-                    lock_features=lock_features,
-                    locked_subject_ids=locked_subject_ids,
-                )
-                for parent in parents.values()
-            )
-        )
-
-    return False  # pragma: no cover - the database constrains Subject.kind
-
-
 def subject_meets_readiness_policy(
     session: Session,
     subject_id: int,
@@ -171,19 +56,33 @@ def subject_meets_readiness_policy(
     lock_features: bool = False,
     locked_subject_ids: frozenset[int] | None = None,
 ) -> bool:
-    """Return whether a current Subject passes the Step 4 feature policy."""
-    subject = session.get(Subject, subject_id)
-    currentness = session.get(SubjectCurrentness, subject_id)
-    return (
-        subject is not None
-        and currentness is not None
-        and currentness.is_current
-        and _subject_meets_readiness_policy(
-            session,
-            subject,
-            lock_features=lock_features,
-            locked_subject_ids=locked_subject_ids,
+    """Evaluate the shared SQL feature predicate, without requiring root eligibility.
+
+    Promotion and admission use the same predicate. Read-only evaluation does
+    not grant write admission. Locking callers retain locks until transaction end.
+    """
+    session.flush()
+    if lock_features:
+        dependencies = _lock_scope_inputs(session, (subject_id,))
+        if locked_subject_ids is not None and not dependencies <= locked_subject_ids:
+            return False
+    return bool(
+        session.scalar(
+            text("SELECT identity.subject_feature_ready(:subject)"),
+            {"subject": subject_id},
         )
+    )
+
+
+def _lock_scope_inputs(session: Session, subject_ids: Collection[int]) -> frozenset[int]:
+    session.flush()
+    return frozenset(
+        session.execute(
+            text(
+                "SELECT identity.lock_scope_inputs(CAST(:subjects AS bigint[]), ARRAY[]::bigint[])"
+            ),
+            {"subjects": list(subject_ids)},
+        ).scalar_one()
     )
 
 
@@ -191,43 +90,12 @@ def lock_subject_readiness_inputs(
     session: Session,
     subject_id: int,
 ) -> tuple[Subject | None, SubjectCurrentness | None, frozenset[int]]:
-    """Lock one Subject and every Subject dependency used by its policy."""
-    subject_kind = session.scalar(select(Subject.kind).where(Subject.id == subject_id))
-    subject_ids_to_lock = {subject_id}
-    if subject_kind == "establishment":
-        establishment = session.get(Establishment, subject_id)
-        if establishment is not None:
-            subject_ids_to_lock.update(
-                {
-                    establishment.organization_subject_id,
-                    establishment.place_subject_id,
-                }
-            )
-
-    subjects = {
-        subject.id: subject
-        for subject in session.scalars(
-            select(Subject)
-            .where(Subject.id.in_(sorted(subject_ids_to_lock)))
-            .order_by(Subject.id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    }
-    currentness_rows = {
-        row.subject_id: row
-        for row in session.scalars(
-            select(SubjectCurrentness)
-            .where(SubjectCurrentness.subject_id.in_(sorted(subject_ids_to_lock)))
-            .order_by(SubjectCurrentness.subject_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    }
+    """Keep the existing promotion API while delegating lock order to Identity SQL."""
+    locked = _lock_scope_inputs(session, (subject_id,))
     return (
-        subjects.get(subject_id),
-        currentness_rows.get(subject_id),
-        frozenset(subjects),
+        session.get(Subject, subject_id, populate_existing=True),
+        session.get(SubjectCurrentness, subject_id, populate_existing=True),
+        locked,
     )
 
 
@@ -237,31 +105,97 @@ def require_eligible_subject(
     *,
     allowed_kinds: Collection[str] | None = None,
 ) -> EligibleSubject:
-    """Lock and validate a Subject for a same-transaction vertical write.
-
-    The Subject lock conflicts with merge, split, and retirement processing,
-    so eligibility cannot become stale before the caller's transaction
-    commits.
-    """
-    session.execute(text("SELECT pg_advisory_xact_lock_shared(48454, 2)"))
-    subject, currentness, locked_subject_ids = lock_subject_readiness_inputs(
-        session,
-        subject_id,
+    """Validate one current eligible Subject; use the batch guard for resolved scopes."""
+    subject, currentness, locked = lock_subject_readiness_inputs(session, subject_id)
+    pending = session.scalar(
+        text("SELECT identity.has_pending_lineage(CAST(:subjects AS bigint[]))"),
+        {"subjects": sorted(locked)},
     )
     if (
         subject is None
         or subject.readiness != "eligible"
         or currentness is None
         or not currentness.is_current
+        or pending
         or (allowed_kinds is not None and subject.kind not in allowed_kinds)
-        or not _subject_meets_readiness_policy(
-            session,
-            subject,
-            lock_features=True,
-            locked_subject_ids=locked_subject_ids,
-        )
+        or not subject_meets_readiness_policy(session, subject_id)
     ):
         raise SubjectNotEligibleError(
             f"Subject {subject_id} is not current, eligible, and of an allowed kind"
         )
     return EligibleSubject(id=subject.id, kind=subject.kind)
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedScopeRequest:
+    """One expected current mapping; submit all local/base requests as one batch."""
+
+    subject_id: int
+    source_record_id: int
+    resolution_event_id: int
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedScope:
+    """Admission-time scope and parents; operating state is not a readiness rule."""
+
+    subject_id: int
+    kind: str
+    source_record_id: int
+    resolution_event_id: int
+    organization_subject_id: int | None
+    place_subject_id: int | None
+    valid_from: datetime | None
+    valid_to: datetime | None
+    operating_status: str | None
+
+
+def require_resolved_scopes(
+    session: Session, requests: Collection[ResolvedScopeRequest]
+) -> tuple[ResolvedScope, ...]:
+    """Lock and admit a complete scope batch, preserving caller request order.
+
+    Input Bronze and resolution decisions must already be committed. Mixed
+    persist/resolve/admit orchestration is outside this contract. No commit is
+    performed; locks last until the caller ends the transaction. A later ordered
+    scope change does not retroactively invalidate this successful admission.
+
+    SQLSTATE 40001/40P01 require rollback and retry of the WHOLE transaction;
+    they are deliberately not converted to eligibility failures or retried here.
+    Mutable resolution proofs are locked as well as Subjects/Source Records,
+    so a stale Repeatable Read/Serializable snapshot fails with 40001.
+    A SQL rejection also requires rollback (or a caller-owned savepoint).
+    """
+    batch = tuple(requests)
+    if not batch:
+        raise ValueError("scope admission requires a nonempty batch")
+    for request in batch:
+        for value in (request.subject_id, request.source_record_id, request.resolution_event_id):
+            if type(value) is not int or value <= 0:
+                raise ValueError("scope admission requires positive integer IDs")
+    session.flush()
+    try:
+        rows = (
+            session.execute(
+                text(
+                    "SELECT * FROM identity.require_resolved_scopes("
+                    "CAST(:subjects AS bigint[]), CAST(:records AS bigint[]), CAST(:events AS bigint[]))"
+                ),
+                {
+                    "subjects": [r.subject_id for r in batch],
+                    "records": [r.source_record_id for r in batch],
+                    "events": [r.resolution_event_id for r in batch],
+                },
+            )
+            .mappings()
+            .all()
+        )
+    except DBAPIError as exc:
+        if (
+            getattr(exc.orig, "sqlstate", None) == "23514"
+            and getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+            == "ck_resolved_scope_admission"
+        ):
+            raise SubjectNotEligibleError("scope batch failed current admission") from exc
+        raise
+    return tuple(ResolvedScope(**row) for row in rows)

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from packages.helios_core.provenance.models import (
@@ -64,6 +64,86 @@ class PersistedBronzeObservation:
     canonical_url: str | None
     source_record_created: bool
     observation_created: bool
+
+
+type CanonicalProvenanceKey = tuple[str | CanonicalProvenanceKey, ...]
+
+
+def _immutable_key(value: list[Any]) -> CanonicalProvenanceKey:
+    """Freeze versioned, orderable keys (missing Capture is (), missing strings '').
+
+    The relevant Bronze string constraints exclude empty values, so these absence
+    representations are lossless. Timestamps in keys are explicit UTC strings.
+    """
+    return tuple(_immutable_key(part) if isinstance(part, list) else part for part in value)
+
+
+@dataclass(frozen=True, slots=True)
+class RecordVersionReference:
+    """Immutable Bronze identity and observation, without source payload copying."""
+
+    id: int
+    source_record_id: int
+    capture_id: int | None
+    observed_at: datetime
+    content_hash: str
+    source_namespace: str
+    external_key: str
+    canonical_key: CanonicalProvenanceKey
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceReference:
+    """One immutable factual locator; target ownership is checked separately."""
+
+    id: int
+    source_record_version_id: int | None
+    capture_id: int | None
+    locator: str
+    excerpt_hash: str
+    canonical_key: CanonicalProvenanceKey
+
+
+def get_record_version(session: Session, version_id: int) -> RecordVersionReference:
+    """Look up committed input for downstream interpretation; missing IDs fail.
+
+    Callers must supply already committed Bronze input. This read does not
+    commit, acquire admission locks, or establish semantic truth of the payload.
+    """
+    row = (
+        session.execute(text("SELECT * FROM bronze.record_version_info(:id)"), {"id": version_id})
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise ValueError(f"unknown Bronze version {version_id}")
+    fields = dict(row)
+    fields["canonical_key"] = _immutable_key(fields["canonical_key"])
+    return RecordVersionReference(**fields)
+
+
+def get_evidence(session: Session, evidence_id: int) -> EvidenceReference:
+    """Return a frozen Evidence lookup and canonical key, excluding surrogate IDs."""
+    row = (
+        session.execute(text("SELECT * FROM bronze.evidence_info(:id)"), {"id": evidence_id})
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise ValueError(f"unknown Bronze Evidence {evidence_id}")
+    fields = dict(row)
+    fields["canonical_key"] = _immutable_key(fields["canonical_key"])
+    return EvidenceReference(**fields)
+
+
+def evidence_supports_version(session: Session, evidence_id: int, version_id: int) -> bool:
+    """True only for the exact version or its non-null Capture, never merely its URL."""
+    return bool(
+        session.scalar(
+            text("SELECT bronze.evidence_supports_version(:evidence, :version)"),
+            {"evidence": evidence_id, "version": version_id},
+        )
+    )
 
 
 def canonicalize_http_url(url: str) -> str:
