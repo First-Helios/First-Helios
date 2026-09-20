@@ -517,7 +517,11 @@ models with constraint-level tests.
   does not verify future Menu behavior. Strict database testing and
   ordinary/relative import checks remain enforced.
 - The typed Menu graph after every pre-menu gate in Plan 0002 passes.
-- Gold current-menu and first price-index projections when first consumed.
+- Gold current-menu projection: `gold.current_menu` and its bounded full-rebuild
+  refresh are implemented ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md),
+  [Step 6 review](./docs/reviews/0002-step-6-gold-read-models.md)), pending owner
+  review of the migration/models. Full-catalog refresh and the first price-index
+  projection remain deferred until first consumed.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so
   re-ingest is idempotent; money as integer currency minor units, never float.
 - Alembic migrations are autogenerate-assisted, hand-reviewed, and separately
@@ -984,6 +988,7 @@ decisions are hardest to reverse.
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 | 1 |
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted | 1 |
 | [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted | 1 |
+| [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models — shape, materialization, and refresh | Accepted | 1 |
 | Unassigned | API conventions (pagination, errors, versioning) | Planned | 2 |
 | Unassigned | Scraper framework choice | Planned | 5 |
 | Unassigned | Prod hosting choice | Planned | 8 |

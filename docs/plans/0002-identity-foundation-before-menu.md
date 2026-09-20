@@ -291,6 +291,17 @@ The exact menu tables and constraints remain the subject of that schema PR.
 
 ### Step 6 - `feat(db): add Gold menu read models`
 
+**Design + first-unit update (2026-09-19):** The Gold read-model shape and
+materialization were not settled by an existing ADR, so
+[ADR-0006](../adr/0006-gold-menu-read-models.md) was written and **accepted by the
+owner** (current-menu only; ordinary refreshed table; full deterministic rebuild;
+reuse the accepted selector; bounded caller-supplied scope set with full-catalog
+enumeration deferred; price index deferred). The first unit — schema `gold`, table
+`gold.current_menu`, package `packages.helios_core.gold`, migration `5f3a9c1e7b24`
+and its concrete SQL — is implemented and verified (strict `make ci` 539 passed,
+zero skips, `alembic check` no drift), and is **pending owner review of the concrete
+migration/models** (see the [Step 6 review](../reviews/0002-step-6-gold-read-models.md)).
+
 - Create `gold` only with its first real projection.
 - Build current-menu and price-index tables from Identity plus Menu.
 - Prove a full rebuild without mutating Bronze, Identity, or Menu. Compare

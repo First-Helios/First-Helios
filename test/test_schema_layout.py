@@ -28,6 +28,7 @@ from packages.helios_core.db import model_registry  # noqa: F401 — registers a
 from packages.helios_core.db.base import (
     MANAGED_SCHEMAS,
     SCHEMA_BRONZE,
+    SCHEMA_GOLD,
     SCHEMA_IDENTITY,
     SCHEMA_MENU,
     SCHEMA_OWNERS,
@@ -62,6 +63,7 @@ def test_schema_ownership_names_only_active_bounded_contexts() -> None:
         SCHEMA_BRONZE: "packages.helios_core.provenance",
         SCHEMA_IDENTITY: "packages.helios_core.identity",
         SCHEMA_MENU: "packages.helios_core.domains.menu",
+        SCHEMA_GOLD: "packages.helios_core.gold",
     }
     assert frozenset(SCHEMA_OWNERS) == MANAGED_SCHEMAS
     assert VERSION_TABLE_SCHEMA == "public"
@@ -126,6 +128,48 @@ def test_identity_owns_exactly_the_step_two_tables() -> None:
         "subject_lineage",
         "subject_name",
     }
+
+
+def test_gold_owns_exactly_the_step_six_tables() -> None:
+    gold_tables = {
+        table.name for table in Base.metadata.sorted_tables if table.schema == SCHEMA_GOLD
+    }
+    assert gold_tables == {"current_menu"}
+
+
+def test_gold_foreign_keys_only_reference_lower_layers_without_cascade() -> None:
+    """Gold may reference gold/menu/identity/bronze only, and never cascade
+    (ADR-0004 §7). No authoritative table references Gold -- that direction is
+    covered by the Bronze/Identity FK-direction tests above.
+    """
+    allowed = {SCHEMA_GOLD, SCHEMA_MENU, SCHEMA_IDENTITY, SCHEMA_BRONZE}
+    violations: list[str] = []
+    for table in Base.metadata.sorted_tables:
+        if table.schema != SCHEMA_GOLD:
+            continue
+        for foreign_key in table.foreign_keys:
+            target = foreign_key.column.table
+            if target.schema not in allowed or foreign_key.ondelete not in {
+                "RESTRICT",
+                "NO ACTION",
+            }:
+                violations.append(
+                    f"{table.fullname}.{foreign_key.parent.name} -> "
+                    f"{target.fullname} ondelete={foreign_key.ondelete!r}"
+                )
+    assert not violations, f"invalid Gold FK directions or deletion rules: {violations}"
+
+
+def test_no_authoritative_table_references_gold() -> None:
+    """Bronze, Identity and Menu must never depend on a Gold row existing."""
+    violations = [
+        f"{table.fullname}.{fk.parent.name} -> {fk.column.table.fullname}"
+        for table in Base.metadata.sorted_tables
+        if table.schema in {SCHEMA_BRONZE, SCHEMA_IDENTITY, SCHEMA_MENU}
+        for fk in table.foreign_keys
+        if fk.column.table.schema == SCHEMA_GOLD
+    ]
+    assert not violations, f"authoritative tables must not reference Gold: {violations}"
 
 
 def test_resolution_work_queues_have_explicit_indexes() -> None:
@@ -195,6 +239,7 @@ def test_foundation_import_boundaries() -> None:
             "helios_core/identity",
             "helios_core/provenance",
             "helios_core/domains/menu",
+            "helios_core/gold",
         )
         for path in (root / "packages" / package).rglob("*.py")
         for violation in boundary_violations(path.read_text(), path.relative_to(root))
