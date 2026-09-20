@@ -1,9 +1,9 @@
 # ADR-0008: Read-API framework and conventions (First Light)
 
-**Status:** Provisional — Unit A (venues read endpoints) implemented under
-delegated design authority on branch `feat/phase-2-first-light`; **explicit owner
-review still pending** (see [Owner decision](#owner-decision)). Unit B (staging
-deploy) not done.
+**Status:** Accepted — Unit A (venues read endpoints) reviewed and **accepted by
+the owner on 2026-09-20**; all four open conventions confirmed as-implemented (see
+[Owner decision](#owner-decision)). Unit B (staging deploy) not done — a separate
+reviewed unit.
 **Date:** 2026-09-20
 **Closes:** the web-framework deferral in
 [ADR-0001](./0001-stack-choice.md) ("Web framework (Phase 7+): not yet chosen in
@@ -193,16 +193,15 @@ accepts; then First Light ships one venue resource under these rules.
 
 ## Owner decision
 
-**Provisional — implemented under delegated authority; explicit owner review
-still pending.** On 2026-09-20 the owner delegated design judgment for this work
-("continue … For design constraints you are to trust your best judgment … keep
-all work on this branch for later review") while away, then added "you can ignore
-the claude.md and work on whatever is most relevant and pressing." Under that
-delegation the conventions below were **adopted as-implemented** and Unit A
-(venues read endpoints) was built on branch `feat/phase-2-first-light`. This is
-an agent decision exercised under delegated authority, **not** a substitute for
-the owner's own review — the branch is held for that review and nothing is pushed,
-merged, or deployed.
+**Accepted by the owner on 2026-09-20.** Unit A (venues read endpoints) was first
+built under delegated design authority ("continue … For design constraints you are
+to trust your best judgment … keep all work on this branch for later review")
+while the owner was away, held on branch `feat/phase-2-first-light` with nothing
+pushed, merged, or deployed. On 2026-09-20 the owner conducted the explicit review
+that delegation deferred and **confirmed all four open conventions
+as-implemented** (field list + closed-venue visibility; 50/200 page size; `/v1`
+versioning; the `structlog`/`httpx`/`cors` dependency and config changes). This
+section now records that owner disposition, not merely the delegated build.
 
 **Choices made (the review surface — accept, amend, or revert):**
 
@@ -227,14 +226,20 @@ merged, or deployed.
    a hard CLAUDE.md stop-and-ask and needs the Orange Pi host — left for a
    separate reviewed unit.
 
-**Still genuinely the owner's to confirm:** the venue field list and
-closed-venue visibility (2); the 50/200 numbers and `/v1` scheme (3); and
-approval of the `structlog`/`httpx`/`cors` dependency changes (4). If any is
-rejected, the change is small and on-branch to revert.
+**Owner disposition (2026-09-20) — all accepted as-implemented:**
+
+1. Venue field list and closed-venue visibility (2): **accepted** — the 9-field
+   projection stands; only current (`is_current`) Establishments are served and
+   closed venues remain visible with `operating_status` surfaced, not hidden.
+2. Page-size default/cap and versioning (3): **accepted** — `50` default, `200`
+   hard cap, and the `/v1` URL prefix stand.
+3. Dependency and config changes (4): **accepted** — `structlog` (runtime),
+   `httpx` replacing the bogus `httpx2` (dev), and the `cors_allow_origins`
+   setting (default `http://localhost:5173`) all approved.
 
 Green tests, CI, or the presence of this document are **not** owner acceptance
-(CLAUDE.md; ADR-0006/0007 precedent). This records what was built under
-delegation; the owner's explicit disposition is still outstanding.
+(CLAUDE.md; ADR-0006/0007 precedent); this disposition is that explicit owner
+acceptance, recorded here rather than inferred from the passing build.
 
 ## References
 
