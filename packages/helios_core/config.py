@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=False)
 
     database_url: str = "postgresql+psycopg://helios:helios@localhost:5432/helios"
+    # Read API (ADR-0008): CORS is locked to the frontend origin(s); never a
+    # wildcard. Override with a JSON list in CORS_ALLOW_ORIGINS.
+    cors_allow_origins: list[str] = ["http://localhost:5173"]
 
     @field_validator("database_url")
     @classmethod
