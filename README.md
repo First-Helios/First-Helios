@@ -35,6 +35,20 @@ presented items on 2026-09-18. The provider unit is complete; the bounded Menu
 persistence/writer handoff is ready for separate implementation authorization
 in a new session.
 
+**Update (2026-09-19):** the bounded Menu writer, revision `d83f0a21c592`, and
+both concrete Menu SQL directions were accepted "Accept as-is"
+([writer technical review](./docs/reviews/0002-step-5-menu-writer-technical-review.md)).
+The [read-side selection/ranking unit](./docs/reviews/0002-step-5-menu-selector-technical-review.md)
+is now implemented (`packages/helios_core/domains/menu/selection.py` and
+`test/test_menu_precedence.py`, 22 focused tests) and was **accepted by the owner
+on 2026-09-19**; it adds no migration. Fresh strict `make ci` passed **530 tests,
+zero failures/skips**, coverage 98%, `alembic check` no drift (single head
+`d83f0a21c592`). Integrated M01–M14 final acceptance — the accepted writer, both
+Menu SQL directions, and the selector exercised together across the full ADR-0005
+matrix on a fresh CI-image database — was **accepted by the owner on 2026-09-19**
+([integrated acceptance record](./docs/reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)).
+Step 5 Menu engineering is complete; Gold read models are Step 6.
+
 The scope was set menus-first on 2026-07-31 by
 [RFC-0001](./docs/rfc/0001-menu-pricing-first.md): menu and item-price
 coverage across the Austin / Round Rock metro is the product, and meal deals

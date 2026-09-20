@@ -235,6 +235,19 @@ pre-menu foundation, not removed from the product plan.
 
 ### Step 5 - `feat(db): add menu graph against identity contracts`
 
+**Writer + selector update (2026-09-19):** the bounded Menu writer (revision
+`d83f0a21c592`), its models/contracts/commands and both concrete Menu SQL
+directions were accepted "Accept as-is". The pure read-side
+[selection/ranking unit](../reviews/0002-step-5-menu-selector-technical-review.md)
+(`packages/helios_core/domains/menu/selection.py` and `test/test_menu_precedence.py`)
+is now implemented over the accepted writer, adds no migration, and was accepted
+by the owner on 2026-09-19. **Integrated M01–M14 final acceptance** — the accepted
+writer, both Menu SQL directions, and the selector exercised together across the
+full ADR-0005 matrix on a fresh CI-image database — was accepted by the owner on
+2026-09-19 ([integrated acceptance record](../reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)).
+Step 5 Menu engineering is complete; Gold read models are Step 6. Earlier addenda
+below preserve their original gate states and history.
+
 **Provider review update (2026-09-18):** Strict CI-image PostGIS validation
 passed before provider implementation. The [provider diff and SQL](../reviews/0002-step-5-provider-prerequisite.md)
 are prepared for review; Menu remains a separate implementation unit. Earlier

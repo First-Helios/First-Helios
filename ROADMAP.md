@@ -474,12 +474,20 @@ required, which is strictly stronger in practice. See §6.0.
 
 ### Phase 1 — Domain Model & Migrations — IN PROGRESS
 
-> **Current checkpoint (2026-09-18):** Bronze, Identity, the legacy reset,
+> **Current checkpoint (2026-09-19):** Bronze, Identity, the legacy reset,
 > and deterministic resolution are implemented through Plan 0002 Step 4.
 > Verification hardening passed native and CI-image PostGIS checks. The
 > reconciled Step 5 Menu proposal and ADR-0005 are accepted; the narrow provider
-> implementation and both SQL directions are accepted. Menu persistence/writer
-> work awaits separate implementation authorization. Gold remains Step 6.
+> implementation and both SQL directions are accepted. The bounded Menu writer
+> (revision `d83f0a21c592`) and both Menu SQL directions were accepted as-is on
+> 2026-09-19, and the [read-side selection/ranking unit](./docs/reviews/0002-step-5-menu-selector-technical-review.md)
+> was accepted by the owner on 2026-09-19 (fresh strict `make ci`: 530 passed,
+> zero skips, no drift). Integrated M01–M14 final acceptance — the accepted
+> writer, both Menu SQL directions, and the selector exercised together across the
+> full ADR-0005 matrix on a fresh CI-image database (strict `make ci`: 530 passed,
+> zero skips, no drift, single head `d83f0a21c592`) — was accepted by the owner on
+> 2026-09-19 ([record](./docs/reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)).
+> Step 5 Menu engineering is complete. Gold read models are Step 6.
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
