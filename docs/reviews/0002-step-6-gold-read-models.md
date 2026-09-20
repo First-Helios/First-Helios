@@ -101,7 +101,14 @@ column plus a `price_index_*` aggregate table) with no grain rework.
 
 Presented for the owner's separate review of the concrete migration SQL and models
 (CLAUDE.md expensive-to-reverse path). Green CI and this record are **not**
-acceptance. **Status: pending owner disposition.**
+acceptance.
+
+**Accepted "Accept as-is" by project owner Fortune on 2026-09-20**, jointly with the
+full-catalog follow-up that builds on it
+([full-catalog review](./0002-step-6-gold-full-catalog-refresh.md)). This accepts the
+concrete `gold` schema, the `gold.current_menu` table and migration `5f3a9c1e7b24`,
+the models, and the bounded `refresh_current_menu`. A real supplied decision, not
+inferred from tests or this record. **Status: accepted.**
 
 ## One next unit and completion criteria
 

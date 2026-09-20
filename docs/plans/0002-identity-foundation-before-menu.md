@@ -299,8 +299,14 @@ reuse the accepted selector; bounded caller-supplied scope set with full-catalog
 enumeration deferred; price index deferred). The first unit — schema `gold`, table
 `gold.current_menu`, package `packages.helios_core.gold`, migration `5f3a9c1e7b24`
 and its concrete SQL — is implemented and verified (strict `make ci` 539 passed,
-zero skips, `alembic check` no drift), and is **pending owner review of the concrete
-migration/models** (see the [Step 6 review](../reviews/0002-step-6-gold-read-models.md)).
+zero skips, `alembic check` no drift), and was **accepted by the owner "Accept
+as-is" on 2026-09-20** (see the
+[Step 6 review](../reviews/0002-step-6-gold-read-models.md)). The deferred
+**full-catalog refresh** (`refresh_full_catalog` enumerating current eligible
+operating scopes from Identity + Menu) was then implemented and **accepted jointly
+on 2026-09-20** (strict `make ci` 543 passed, zero skips, no drift, no new
+migration; [full-catalog review](../reviews/0002-step-6-gold-full-catalog-refresh.md)).
+The Gold price index remains deferred to its own ADR (Phase 7).
 
 - Create `gold` only with its first real projection.
 - Build current-menu and price-index tables from Identity plus Menu.

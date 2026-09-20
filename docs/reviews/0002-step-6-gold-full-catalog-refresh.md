@@ -145,7 +145,13 @@ anonymous volume were removed (`docker rm -f -v`); the developer stack container
 
 Presented for the owner's separate review (the full-catalog refresh and its
 price-driven scope decision). Green CI and this record are **not** acceptance.
-**Status: pending owner disposition.**
+
+**Accepted "Accept as-is" by project owner Fortune on 2026-09-20.** This is a real
+supplied decision, not inferred from tests or this document. It accepts the
+full-catalog `refresh_full_catalog` / `enumerate_current_requests` implementation,
+its price-driven grain (decision 2) and current-eligible-operating exclusion
+(decision 3), and the enumeration's placement in the Menu domain (decision 1). It
+does not authorize the price index, an API, or any deployment. **Status: accepted.**
 
 ## One next unit and completion criteria
 

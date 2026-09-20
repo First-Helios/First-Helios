@@ -78,10 +78,14 @@ This build is **agent-driven with a human reviewer in the loop**. See
 - `packages/helios_core/db/` — shared model registration, schema ownership,
   and session/engine setup. The legacy `Venue` scaffold has been removed.
 - `packages/helios_core/gold/` — the first `gold` read model,
-  `gold.current_menu`, a rebuildable projection of the accepted Menu selector
-  over a bounded scope set ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md),
-  [Step 6 review](./docs/reviews/0002-step-6-gold-read-models.md)). Concrete
-  migration/models are pending owner review.
+  `gold.current_menu`, a rebuildable projection of the accepted Menu selector.
+  The bounded per-scope refresh and the **full-catalog refresh**
+  (`refresh_full_catalog` over `enumerate_current_requests`) are implemented and
+  **owner-accepted (2026-09-20, "Accept as-is")**
+  ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md),
+  [Step 6 review](./docs/reviews/0002-step-6-gold-read-models.md),
+  [full-catalog review](./docs/reviews/0002-step-6-gold-full-catalog-refresh.md)).
+  The price index remains deferred to its own ADR.
 - `apps/api/` — FastAPI service. `/healthz` (liveness) and `/readyz`
   (checks the database) so far.
 - `alembic/` — migrations. `alembic upgrade head` builds the schema from
@@ -91,11 +95,11 @@ This build is **agent-driven with a human reviewer in the loop**. See
 - Tooling: `ruff`, `mypy --strict`, `pytest`, `pre-commit`, all wired into
   CI as required status checks on `main`.
 
-The Menu schema (Step 5) and the first Gold read model (Step 6,
-`gold.current_menu`) are implemented; the full-catalog Gold refresh, the price
-index, discovery ingestion, extraction, scraping, and product API endpoints are
-not. Staging/production deployment has not been verified by the current
-repository assessment.
+The Menu schema (Step 5) and the Gold `gold.current_menu` read model (Step 6) —
+including both the bounded and the full-catalog refresh — are implemented and
+owner-accepted; the Gold price index, discovery ingestion, extraction, scraping,
+and product API endpoints are not. Staging/production deployment has not been
+verified by the current repository assessment.
 
 ## Local setup
 

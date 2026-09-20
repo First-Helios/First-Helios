@@ -221,6 +221,17 @@ This is a real supplied decision, not inferred from tests or this document. It
 authorizes the bounded Gold current-menu implementation unit; it does not
 authorize the price index, the full-catalog refresh, an API, or any deployment.
 
+**Full-catalog refresh follow-up accepted (owner, 2026-09-20).** The deferred
+full-catalog enumeration was subsequently implemented and **accepted "Accept
+as-is" by owner Fortune on 2026-09-20** (`refresh_full_catalog` /
+`enumerate_current_requests`; price-driven grain; current-eligible-operating
+exclusion; enumeration kept in the Menu domain), jointly with the bounded unit it
+builds on. See the
+[full-catalog review](../reviews/0002-step-6-gold-full-catalog-refresh.md) and the
+[Step 6 review](../reviews/0002-step-6-gold-read-models.md). The price index, an
+API, and deployment remain unauthorized and still require their own owner-accepted
+ADR/decision.
+
 ## References
 
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) — Gold
