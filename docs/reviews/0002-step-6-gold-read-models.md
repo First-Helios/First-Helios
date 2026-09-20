@@ -90,6 +90,13 @@ price index remain deferred (ADR-0006). No API, geospatial, extraction, ML, new
 dependency, deployment, or application-data execution. Constraints guarantee FK
 direction and row shape, not semantic source truth.
 
+Descriptor / aggregate-tag columns (`course`, `dietary_tags`, and canonical
+ingredient/cuisine/cultural tags) were considered and **deferred by the owner on
+2026-09-19**: the source data is not reliably available yet and cross-venue
+canonical tagging needs its own taxonomy RFC (ADR-0006 Owner decision). The unit
+ships name/description only; adding tags later is additive (a `canonical_tags`
+column plus a `price_index_*` aggregate table) with no grain rework.
+
 ## Owner disposition
 
 Presented for the owner's separate review of the concrete migration SQL and models

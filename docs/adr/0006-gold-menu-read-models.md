@@ -203,6 +203,20 @@ Owner also confirmed (2026-09-19) that the superseded RFC-0001 §D2 Gold column
 shape is **disposable** and must not be ported; the new iteration is designed
 directly on immutable Menu aggregates and the accepted selector.
 
+**Descriptor / aggregate-tag columns deferred (owner, 2026-09-19).** Projecting
+`course`/`dietary_tags` — and, further out, canonical ingredient/cuisine/cultural
+tags for cross-venue aggregation and comparison — was considered and **deferred**.
+`course`/`dietary_tags` exist in Menu but are not reliably populated yet; canonical
+cross-venue tags have no source data and require a controlled vocabulary (RFC-0001
+§D2/§D7 defers cross-venue item taxonomy to a future RFC). The rule stands: Gold
+projects source-faithful data that exists, and does not add columns for data we do
+not have. When that data and taxonomy are real, they arrive as their own unit — a
+Silver classification layer plus a Gold `canonical_tags` column kept **distinct**
+from source-asserted `dietary_tags` (provenance), and a dedicated `price_index_*`
+aggregate table that groups `gold.current_menu` by those tags. Aggregation is an
+aggregate table over `current_menu`, not a reshaping of its per-target grain, so
+this deferral costs no rework.
+
 This is a real supplied decision, not inferred from tests or this document. It
 authorizes the bounded Gold current-menu implementation unit; it does not
 authorize the price index, the full-catalog refresh, an API, or any deployment.
