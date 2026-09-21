@@ -1,0 +1,1402 @@
+[
+  {
+    "a": {
+      "name": "Home Slice Pizza",
+      "lat": 30.249197,
+      "lon": -97.74958
+    },
+    "b": {
+      "name": "Home Slice Pizza",
+      "lat": 30.248999,
+      "lon": -97.749756
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 759)"
+  },
+  {
+    "a": {
+      "name": "Ra Sushi - Austin",
+      "lat": 30.266336,
+      "lon": -97.744659
+    },
+    "b": {
+      "name": "RA Sushi - Austin",
+      "lat": 30.266357,
+      "lon": -97.744576
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 3222)"
+  },
+  {
+    "a": {
+      "name": "Slice Street Pizza",
+      "lat": 30.1929,
+      "lon": -98.083626
+    },
+    "b": {
+      "name": "Slice Street Pizza",
+      "lat": 30.192503,
+      "lon": -98.083572
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 7005)"
+  },
+  {
+    "a": {
+      "name": "Dairy Queen",
+      "lat": 30.216314,
+      "lon": -97.79863
+    },
+    "b": {
+      "name": "Dairy Queen",
+      "lat": 30.216488,
+      "lon": -97.798645
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 8736)"
+  },
+  {
+    "a": {
+      "name": "Hao Hao Restaurant",
+      "lat": 30.201454,
+      "lon": -97.805557
+    },
+    "b": {
+      "name": "Hao-hao Restaurant",
+      "lat": 30.201786,
+      "lon": -97.805862
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 9204)"
+  },
+  {
+    "a": {
+      "name": "Burger King",
+      "lat": 30.235371,
+      "lon": -97.723602
+    },
+    "b": {
+      "name": "Burger King",
+      "lat": 30.235237,
+      "lon": -97.723602
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 12657)"
+  },
+  {
+    "a": {
+      "name": "Papa Johns Pizza",
+      "lat": 30.327427,
+      "lon": -97.739449
+    },
+    "b": {
+      "name": "Papa Johns Pizza",
+      "lat": 30.327459,
+      "lon": -97.739426
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 14691)"
+  },
+  {
+    "a": {
+      "name": "Bright Restaurant & Bar",
+      "lat": 30.553522,
+      "lon": -97.855347
+    },
+    "b": {
+      "name": "Bright Restaurant & Bar",
+      "lat": 30.553432,
+      "lon": -97.855286
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 15981)"
+  },
+  {
+    "a": {
+      "name": "Nancy's Sky Garden",
+      "lat": 30.476934,
+      "lon": -97.79512
+    },
+    "b": {
+      "name": "Nancy's Sky Garden",
+      "lat": 30.476723,
+      "lon": -97.794701
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 17313)"
+  },
+  {
+    "a": {
+      "name": "Burger King",
+      "lat": 30.286188,
+      "lon": -97.66394
+    },
+    "b": {
+      "name": "Burger King",
+      "lat": 30.285948,
+      "lon": -97.664177
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 19770)"
+  },
+  {
+    "a": {
+      "name": "Wingstop",
+      "lat": 30.366926,
+      "lon": -97.695938
+    },
+    "b": {
+      "name": "Wingstop",
+      "lat": 30.366812,
+      "lon": -97.695984
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 22644)"
+  },
+  {
+    "a": {
+      "name": "Andiamo Ristorante",
+      "lat": 30.382467,
+      "lon": -97.723679
+    },
+    "b": {
+      "name": "Andiamo Ristorante",
+      "lat": 30.38249,
+      "lon": -97.723351
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 23304)"
+  },
+  {
+    "a": {
+      "name": "Lupe Tortilla",
+      "lat": 30.387051,
+      "lon": -97.734085
+    },
+    "b": {
+      "name": "Lupe Tortilla",
+      "lat": 30.387016,
+      "lon": -97.733971
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 23352)"
+  },
+  {
+    "a": {
+      "name": "Tinos Greek Cafe",
+      "lat": 30.391825,
+      "lon": -97.731575
+    },
+    "b": {
+      "name": "Tinos Greek Cafe",
+      "lat": 30.391918,
+      "lon": -97.731628
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 23520)"
+  },
+  {
+    "a": {
+      "name": "Wingstop",
+      "lat": 30.440529,
+      "lon": -97.662643
+    },
+    "b": {
+      "name": "Wingstop",
+      "lat": 30.440521,
+      "lon": -97.662651
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 25521)"
+  },
+  {
+    "a": {
+      "name": "Sushi Zoa",
+      "lat": 30.500477,
+      "lon": -97.583549
+    },
+    "b": {
+      "name": "Sushi Zoa",
+      "lat": 30.500103,
+      "lon": -97.583504
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 25752)"
+  },
+  {
+    "a": {
+      "name": "Culver's",
+      "lat": 30.519688,
+      "lon": -97.649323
+    },
+    "b": {
+      "name": "Culver's",
+      "lat": 30.519547,
+      "lon": -97.6492
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 26841)"
+  },
+  {
+    "a": {
+      "name": "Baskin-robbins",
+      "lat": 30.666441,
+      "lon": -97.694054
+    },
+    "b": {
+      "name": "Baskin-Robbins",
+      "lat": 30.666019,
+      "lon": -97.693909
+    },
+    "label": "match",
+    "note": "merged twin POI (subject 29496)"
+  },
+  {
+    "a": {
+      "name": "Austins Pizza",
+      "lat": 30.499655,
+      "lon": -97.614563
+    },
+    "b": {
+      "name": "Austin Pizza",
+      "lat": 30.499701,
+      "lon": -97.614609
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=7m"
+  },
+  {
+    "a": {
+      "name": "SLAB BBQ & Beer",
+      "lat": 30.220673,
+      "lon": -97.826607
+    },
+    "b": {
+      "name": "SLAB BBQ & Beer",
+      "lat": 30.221066,
+      "lon": -97.825958
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=76m"
+  },
+  {
+    "a": {
+      "name": "Papa Johns",
+      "lat": 30.646706,
+      "lon": -97.677948
+    },
+    "b": {
+      "name": "Papa Johns Pizza",
+      "lat": 30.646849,
+      "lon": -97.67794
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=16m"
+  },
+  {
+    "a": {
+      "name": "The Salt Lick Bbq",
+      "lat": 30.525433,
+      "lon": -97.632767
+    },
+    "b": {
+      "name": "The Salt Lick",
+      "lat": 30.525589,
+      "lon": -97.632668
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=20m"
+  },
+  {
+    "a": {
+      "name": "Tacos Y Tortas El Chilango",
+      "lat": 30.376419,
+      "lon": -97.688873
+    },
+    "b": {
+      "name": "Tacos Y Tortas \"El Chilango\"",
+      "lat": 30.376873,
+      "lon": -97.689301
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=65m"
+  },
+  {
+    "a": {
+      "name": "Baskin-robbins",
+      "lat": 30.528992,
+      "lon": -97.814835
+    },
+    "b": {
+      "name": "Baskin-Robbins",
+      "lat": 30.529627,
+      "lon": -97.815331
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=85m"
+  },
+  {
+    "a": {
+      "name": "Qdoba Mexican Grill",
+      "lat": 30.287813,
+      "lon": -97.742119
+    },
+    "b": {
+      "name": "QDOBA Mexican Eats",
+      "lat": 30.287813,
+      "lon": -97.742119
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=0m"
+  },
+  {
+    "a": {
+      "name": "Yucatán Tacos & More (Kramer)",
+      "lat": 30.390884,
+      "lon": -97.714935
+    },
+    "b": {
+      "name": "Yucatan Tacos and More",
+      "lat": 30.391077,
+      "lon": -97.714584
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=40m"
+  },
+  {
+    "a": {
+      "name": "Austin Tea Exchange Llc",
+      "lat": 30.306995,
+      "lon": -97.945747
+    },
+    "b": {
+      "name": "Austin Tea Xchange Cafe",
+      "lat": 30.307131,
+      "lon": -97.945633
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=19m"
+  },
+  {
+    "a": {
+      "name": "Leftys Pizza Kitchen",
+      "lat": 30.330082,
+      "lon": -98.024406
+    },
+    "b": {
+      "name": "Lefty's Pizza Kitchen Austin",
+      "lat": 30.330338,
+      "lon": -98.024666
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=38m"
+  },
+  {
+    "a": {
+      "name": "Taco Bell",
+      "lat": 30.486557,
+      "lon": -97.770203
+    },
+    "b": {
+      "name": "Taco Bell",
+      "lat": 30.486856,
+      "lon": -97.769669
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=61m"
+  },
+  {
+    "a": {
+      "name": "IHOP",
+      "lat": 30.168453,
+      "lon": -97.783455
+    },
+    "b": {
+      "name": "IHOP",
+      "lat": 30.167889,
+      "lon": -97.784149
+    },
+    "label": "match",
+    "note": "confirmed duplicate d=92m"
+  },
+  {
+    "a": {
+      "name": "Fig Italian Kitchen & Bar",
+      "lat": 30.240709,
+      "lon": -97.785889
+    },
+    "b": {
+      "name": "Aroma Italian Kitchen & Bar",
+      "lat": 30.240734,
+      "lon": -97.786003
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=11m"
+  },
+  {
+    "a": {
+      "name": "Next Level Burger Austin",
+      "lat": 30.270702,
+      "lon": -97.753304
+    },
+    "b": {
+      "name": "Next Level Clucker Austin",
+      "lat": 30.270512,
+      "lon": -97.753334
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=21m"
+  },
+  {
+    "a": {
+      "name": "El Pollo Regio",
+      "lat": 30.523952,
+      "lon": -97.686363
+    },
+    "b": {
+      "name": "El Pollo Rico",
+      "lat": 30.523249,
+      "lon": -97.686157
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=81m"
+  },
+  {
+    "a": {
+      "name": "The State Line Inc",
+      "lat": 30.252644,
+      "lon": -97.741966
+    },
+    "b": {
+      "name": "The County Line Inc",
+      "lat": 30.252644,
+      "lon": -97.741966
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=0m"
+  },
+  {
+    "a": {
+      "name": "Haha Kitchen",
+      "lat": 30.341288,
+      "lon": -97.701653
+    },
+    "b": {
+      "name": "ATX Kitchens",
+      "lat": 30.341425,
+      "lon": -97.701714
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=16m"
+  },
+  {
+    "a": {
+      "name": "Tailat Kitchen",
+      "lat": 30.316116,
+      "lon": -97.708382
+    },
+    "b": {
+      "name": "Atish Kitchen",
+      "lat": 30.316116,
+      "lon": -97.708382
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=0m"
+  },
+  {
+    "a": {
+      "name": "E Nine 7 Kyle Llc",
+      "lat": 30.211414,
+      "lon": -97.966957
+    },
+    "b": {
+      "name": "E Nine 7 Westlake Llc",
+      "lat": 30.211414,
+      "lon": -97.966957
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=0m"
+  },
+  {
+    "a": {
+      "name": "E Nine 7 Kyle Llc",
+      "lat": 30.211414,
+      "lon": -97.966957
+    },
+    "b": {
+      "name": "E Nine 7 Anderson Llc",
+      "lat": 30.211414,
+      "lon": -97.966957
+    },
+    "label": "no_match",
+    "note": "co-located distinct businesses d=0m"
+  },
+  {
+    "a": {
+      "name": "Starbucks",
+      "lat": 30.447203,
+      "lon": -97.790871
+    },
+    "b": {
+      "name": "Starbucks",
+      "lat": 30.448019,
+      "lon": -97.79158
+    },
+    "label": "no_match",
+    "note": "same-fingerprint distinct locations (over 50m) d=113m"
+  },
+  {
+    "a": {
+      "name": "Starbucks",
+      "lat": 30.263178,
+      "lon": -97.743774
+    },
+    "b": {
+      "name": "Starbucks",
+      "lat": 30.264242,
+      "lon": -97.743469
+    },
+    "label": "no_match",
+    "note": "same-fingerprint distinct locations (over 50m) d=122m"
+  },
+  {
+    "a": {
+      "name": "Starbucks",
+      "lat": 30.265541,
+      "lon": -97.740181
+    },
+    "b": {
+      "name": "Starbucks",
+      "lat": 30.284771,
+      "lon": -97.736343
+    },
+    "label": "no_match",
+    "note": "distinct starbucks locations d=2170m"
+  },
+  {
+    "a": {
+      "name": "Starbucks",
+      "lat": 30.401831,
+      "lon": -97.726219
+    },
+    "b": {
+      "name": "Starbucks",
+      "lat": 30.41885,
+      "lon": -97.702675
+    },
+    "label": "no_match",
+    "note": "distinct starbucks locations d=2946m"
+  },
+  {
+    "a": {
+      "name": "Starbucks",
+      "lat": 30.41885,
+      "lon": -97.702675
+    },
+    "b": {
+      "name": "Starbucks",
+      "lat": 30.414576,
+      "lon": -97.670036
+    },
+    "label": "no_match",
+    "note": "distinct starbucks locations d=3166m"
+  },
+  {
+    "a": {
+      "name": "McDonald's",
+      "lat": 30.391359,
+      "lon": -97.720558
+    },
+    "b": {
+      "name": "McDonald's",
+      "lat": 30.343771,
+      "lon": -97.698639
+    },
+    "label": "no_match",
+    "note": "distinct mcdonalds locations d=5694m"
+  },
+  {
+    "a": {
+      "name": "McDonald's",
+      "lat": 30.482618,
+      "lon": -97.831375
+    },
+    "b": {
+      "name": "McDonald's",
+      "lat": 30.49625,
+      "lon": -97.775566
+    },
+    "label": "no_match",
+    "note": "distinct mcdonalds locations d=5558m"
+  },
+  {
+    "a": {
+      "name": "McDonald's",
+      "lat": 30.273695,
+      "lon": -97.798653
+    },
+    "b": {
+      "name": "McDonald's",
+      "lat": 30.232321,
+      "lon": -97.822929
+    },
+    "label": "no_match",
+    "note": "distinct mcdonalds locations d=5158m"
+  },
+  {
+    "a": {
+      "name": "Whataburger",
+      "lat": 30.166101,
+      "lon": -97.787987
+    },
+    "b": {
+      "name": "Whataburger",
+      "lat": 30.190601,
+      "lon": -97.771835
+    },
+    "label": "no_match",
+    "note": "distinct whataburger locations d=3136m"
+  },
+  {
+    "a": {
+      "name": "Whataburger",
+      "lat": 30.23358,
+      "lon": -97.73909
+    },
+    "b": {
+      "name": "Whataburger",
+      "lat": 30.23032,
+      "lon": -97.787231
+    },
+    "label": "no_match",
+    "note": "distinct whataburger locations d=4639m"
+  },
+  {
+    "a": {
+      "name": "Whataburger",
+      "lat": 30.514982,
+      "lon": -97.825745
+    },
+    "b": {
+      "name": "Whataburger",
+      "lat": 30.479887,
+      "lon": -97.832809
+    },
+    "label": "no_match",
+    "note": "distinct whataburger locations d=3961m"
+  },
+  {
+    "a": {
+      "name": "Taco Bell",
+      "lat": 30.166029,
+      "lon": -97.791611
+    },
+    "b": {
+      "name": "Taco Bell",
+      "lat": 30.182459,
+      "lon": -97.84668
+    },
+    "label": "no_match",
+    "note": "distinct taco bell locations d=5600m"
+  },
+  {
+    "a": {
+      "name": "Taco Bell",
+      "lat": 30.517515,
+      "lon": -97.689201
+    },
+    "b": {
+      "name": "Taco Bell",
+      "lat": 30.518736,
+      "lon": -97.654053
+    },
+    "label": "no_match",
+    "note": "distinct taco bell locations d=3370m"
+  },
+  {
+    "a": {
+      "name": "Taco Bell",
+      "lat": 30.439444,
+      "lon": -97.697098
+    },
+    "b": {
+      "name": "Taco Bell",
+      "lat": 30.391226,
+      "lon": -97.720062
+    },
+    "label": "no_match",
+    "note": "distinct taco bell locations d=5796m"
+  },
+  {
+    "a": {
+      "name": "Subway",
+      "lat": 30.499569,
+      "lon": -97.61441
+    },
+    "b": {
+      "name": "Subway",
+      "lat": 30.498762,
+      "lon": -97.589195
+    },
+    "label": "no_match",
+    "note": "distinct subway locations d=2418m"
+  },
+  {
+    "a": {
+      "name": "Wendy's",
+      "lat": 30.39856,
+      "lon": -97.745476
+    },
+    "b": {
+      "name": "Wendy's",
+      "lat": 30.418604,
+      "lon": -97.703644
+    },
+    "label": "no_match",
+    "note": "distinct wendys locations d=4589m"
+  },
+  {
+    "a": {
+      "name": "Wendy's",
+      "lat": 30.21298,
+      "lon": -97.712486
+    },
+    "b": {
+      "name": "Wendy's",
+      "lat": 30.221748,
+      "lon": -97.764229
+    },
+    "label": "no_match",
+    "note": "distinct wendys locations d=5066m"
+  },
+  {
+    "a": {
+      "name": "Wendy's",
+      "lat": 30.167646,
+      "lon": -97.794304
+    },
+    "b": {
+      "name": "Wendy's",
+      "lat": 30.191767,
+      "lon": -97.770683
+    },
+    "label": "no_match",
+    "note": "distinct wendys locations d=3514m"
+  },
+  {
+    "a": {
+      "name": "Domino's Pizza",
+      "lat": 30.496716,
+      "lon": -97.664185
+    },
+    "b": {
+      "name": "Domino's Pizza",
+      "lat": 30.504778,
+      "lon": -97.718468
+    },
+    "label": "no_match",
+    "note": "distinct dominos pizza locations d=5277m"
+  },
+  {
+    "a": {
+      "name": "Domino's Pizza",
+      "lat": 30.392942,
+      "lon": -97.706963
+    },
+    "b": {
+      "name": "Domino's Pizza",
+      "lat": 30.365915,
+      "lon": -97.696655
+    },
+    "label": "no_match",
+    "note": "distinct dominos pizza locations d=3164m"
+  },
+  {
+    "a": {
+      "name": "Domino's Pizza",
+      "lat": 30.365915,
+      "lon": -97.696655
+    },
+    "b": {
+      "name": "Domino's Pizza",
+      "lat": 30.346617,
+      "lon": -97.67659
+    },
+    "label": "no_match",
+    "note": "distinct dominos pizza locations d=2883m"
+  },
+  {
+    "a": {
+      "name": "Jack in the Box",
+      "lat": 30.303574,
+      "lon": -97.661057
+    },
+    "b": {
+      "name": "Jack in the Box",
+      "lat": 30.320301,
+      "lon": -97.689339
+    },
+    "label": "no_match",
+    "note": "distinct jack in the box locations d=3291m"
+  },
+  {
+    "a": {
+      "name": "Jack in the Box",
+      "lat": 30.213346,
+      "lon": -97.658813
+    },
+    "b": {
+      "name": "Jack in the Box",
+      "lat": 30.212185,
+      "lon": -97.713783
+    },
+    "label": "no_match",
+    "note": "distinct jack in the box locations d=5284m"
+  },
+  {
+    "a": {
+      "name": "Jack in the Box",
+      "lat": 30.496309,
+      "lon": -97.680946
+    },
+    "b": {
+      "name": "Jack in the Box",
+      "lat": 30.50416,
+      "lon": -97.735298
+    },
+    "label": "no_match",
+    "note": "distinct jack in the box locations d=5280m"
+  },
+  {
+    "a": {
+      "name": "Sonic Drive In",
+      "lat": 30.646103,
+      "lon": -97.678719
+    },
+    "b": {
+      "name": "Sonic Drive In",
+      "lat": 30.665869,
+      "lon": -97.693489
+    },
+    "label": "no_match",
+    "note": "distinct sonic drive in locations d=2613m"
+  },
+  {
+    "a": {
+      "name": "Sonic Drive In",
+      "lat": 30.188501,
+      "lon": -97.766815
+    },
+    "b": {
+      "name": "SONIC Drive In",
+      "lat": 30.232227,
+      "lon": -97.737755
+    },
+    "label": "no_match",
+    "note": "distinct sonic drive in locations d=5607m"
+  },
+  {
+    "a": {
+      "name": "SONIC Drive In",
+      "lat": 30.205189,
+      "lon": -97.641991
+    },
+    "b": {
+      "name": "Sonic Drive In",
+      "lat": 30.179976,
+      "lon": -97.614479
+    },
+    "label": "no_match",
+    "note": "distinct sonic drive in locations d=3854m"
+  },
+  {
+    "a": {
+      "name": "Chick-fil-A",
+      "lat": 30.562757,
+      "lon": -97.846794
+    },
+    "b": {
+      "name": "Chick-fil-A",
+      "lat": 30.5264,
+      "lon": -97.8144
+    },
+    "label": "no_match",
+    "note": "distinct chick fil a locations d=5096m"
+  },
+  {
+    "a": {
+      "name": "Chick-fil-A",
+      "lat": 30.35058,
+      "lon": -97.525154
+    },
+    "b": {
+      "name": "Chick-fil-A",
+      "lat": 30.349274,
+      "lon": -97.543533
+    },
+    "label": "no_match",
+    "note": "distinct chick fil a locations d=1770m"
+  },
+  {
+    "a": {
+      "name": "Chick-fil-A",
+      "lat": 30.29192,
+      "lon": -97.8274
+    },
+    "b": {
+      "name": "Chick-fil-A",
+      "lat": 30.25742,
+      "lon": -97.807892
+    },
+    "label": "no_match",
+    "note": "distinct chick fil a locations d=4269m"
+  },
+  {
+    "a": {
+      "name": "Panda Express",
+      "lat": 30.409288,
+      "lon": -97.852112
+    },
+    "b": {
+      "name": "Panda Express",
+      "lat": 30.453297,
+      "lon": -97.827324
+    },
+    "label": "no_match",
+    "note": "distinct panda express locations d=5440m"
+  },
+  {
+    "a": {
+      "name": "Panda Express",
+      "lat": 30.257803,
+      "lon": -97.807068
+    },
+    "b": {
+      "name": "Panda Express",
+      "lat": 30.220631,
+      "lon": -97.841232
+    },
+    "label": "no_match",
+    "note": "distinct panda express locations d=5278m"
+  },
+  {
+    "a": {
+      "name": "Panda Express",
+      "lat": 30.089222,
+      "lon": -97.822067
+    },
+    "b": {
+      "name": "Panda Express",
+      "lat": 30.085171,
+      "lon": -97.823547
+    },
+    "label": "no_match",
+    "note": "distinct panda express locations d=472m"
+  },
+  {
+    "a": {
+      "name": "Dairy Queen",
+      "lat": 30.216314,
+      "lon": -97.79863
+    },
+    "b": {
+      "name": "Dairy Queen",
+      "lat": 30.16342,
+      "lon": -97.790436
+    },
+    "label": "no_match",
+    "note": "distinct dairy queen locations d=5934m"
+  },
+  {
+    "a": {
+      "name": "Dairy Queen",
+      "lat": 30.461304,
+      "lon": -97.817619
+    },
+    "b": {
+      "name": "Dairy Queen",
+      "lat": 30.455322,
+      "lon": -97.792496
+    },
+    "label": "no_match",
+    "note": "distinct dairy queen locations d=2498m"
+  },
+  {
+    "a": {
+      "name": "Dairy Queen",
+      "lat": 30.455322,
+      "lon": -97.792496
+    },
+    "b": {
+      "name": "Dairy Queen",
+      "lat": 30.445471,
+      "lon": -97.78717
+    },
+    "label": "no_match",
+    "note": "distinct dairy queen locations d=1209m"
+  },
+  {
+    "a": {
+      "name": "Pizza Hut",
+      "lat": 30.374475,
+      "lon": -97.671692
+    },
+    "b": {
+      "name": "Pizza Hut",
+      "lat": 30.379524,
+      "lon": -97.712685
+    },
+    "label": "no_match",
+    "note": "distinct pizza hut locations d=3972m"
+  },
+  {
+    "a": {
+      "name": "Pizza Hut",
+      "lat": 30.349667,
+      "lon": -97.553673
+    },
+    "b": {
+      "name": "Pizza Hut",
+      "lat": 30.363102,
+      "lon": -97.531456
+    },
+    "label": "no_match",
+    "note": "distinct pizza hut locations d=2603m"
+  },
+  {
+    "a": {
+      "name": "Pizza Hut",
+      "lat": 30.200968,
+      "lon": -97.765182
+    },
+    "b": {
+      "name": "Pizza Hut",
+      "lat": 30.202454,
+      "lon": -97.806023
+    },
+    "label": "no_match",
+    "note": "distinct pizza hut locations d=3928m"
+  },
+  {
+    "a": {
+      "name": "Raising Cane's",
+      "lat": 30.526506,
+      "lon": -97.80983
+    },
+    "b": {
+      "name": "Raising Cane's",
+      "lat": 30.479361,
+      "lon": -97.804588
+    },
+    "label": "no_match",
+    "note": "distinct raising canes locations d=5266m"
+  },
+  {
+    "a": {
+      "name": "Raising Cane's",
+      "lat": 30.281536,
+      "lon": -97.742561
+    },
+    "b": {
+      "name": "Raising Cane's",
+      "lat": 30.239561,
+      "lon": -97.727005
+    },
+    "label": "no_match",
+    "note": "distinct raising canes locations d=4901m"
+  },
+  {
+    "a": {
+      "name": "Raising Cane's",
+      "lat": 30.22641,
+      "lon": -97.819496
+    },
+    "b": {
+      "name": "Raising Cane's",
+      "lat": 30.273838,
+      "lon": -97.800705
+    },
+    "label": "no_match",
+    "note": "distinct raising canes locations d=5574m"
+  },
+  {
+    "a": {
+      "name": "In-N-Out Burger",
+      "lat": 30.29213,
+      "lon": -97.741684
+    },
+    "b": {
+      "name": "In-N-Out Burger",
+      "lat": 30.304426,
+      "lon": -97.715561
+    },
+    "label": "no_match",
+    "note": "distinct in n out burger locations d=2856m"
+  },
+  {
+    "a": {
+      "name": "Pizza Depot",
+      "lat": 30.548716,
+      "lon": -97.793152
+    },
+    "b": {
+      "name": "Design Soup",
+      "lat": 30.527321,
+      "lon": -97.86779
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Chipotle Mexican Grill",
+      "lat": 30.502626,
+      "lon": -97.719948
+    },
+    "b": {
+      "name": "Marisco Grill - Downtown",
+      "lat": 30.267397,
+      "lon": -97.741241
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Dairy Queen",
+      "lat": 30.034979,
+      "lon": -98.101295
+    },
+    "b": {
+      "name": "Gordo’s Tortas & BBQ",
+      "lat": 30.230032,
+      "lon": -97.935516
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Gangnam Korean BBQ",
+      "lat": 30.198463,
+      "lon": -97.766685
+    },
+    "b": {
+      "name": "Pizza Roma",
+      "lat": 30.446484,
+      "lon": -97.805878
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Sweet Treets Bakery",
+      "lat": 30.233177,
+      "lon": -97.865868
+    },
+    "b": {
+      "name": "Brewja Cafe",
+      "lat": 30.03125,
+      "lon": -97.823112
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Two Bucks",
+      "lat": 30.266479,
+      "lon": -97.738121
+    },
+    "b": {
+      "name": "Mandola's Italian",
+      "lat": 30.31599,
+      "lon": -97.73362
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Jack in the Box",
+      "lat": 30.303574,
+      "lon": -97.661057
+    },
+    "b": {
+      "name": "Crust Pizza Co. - Leander",
+      "lat": 30.590511,
+      "lon": -97.859024
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Round Rock Smoothies and Purified Water",
+      "lat": 30.496498,
+      "lon": -97.664566
+    },
+    "b": {
+      "name": "Mister Mariachi",
+      "lat": 30.373451,
+      "lon": -97.691544
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "El Barquito 35",
+      "lat": 30.31773,
+      "lon": -97.707962
+    },
+    "b": {
+      "name": "6th Street Austin, Texas",
+      "lat": 30.26709,
+      "lon": -97.738808
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Sonic Drive In",
+      "lat": 30.085737,
+      "lon": -97.821579
+    },
+    "b": {
+      "name": "China King",
+      "lat": 30.315302,
+      "lon": -97.704781
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Jack in the Box",
+      "lat": 30.434847,
+      "lon": -97.768356
+    },
+    "b": {
+      "name": "Chester's Chicken",
+      "lat": 30.6381,
+      "lon": -97.643494
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Sunny's Backyard",
+      "lat": 30.256512,
+      "lon": -97.702019
+    },
+    "b": {
+      "name": "Machi Sushi",
+      "lat": 30.628756,
+      "lon": -97.693779
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Dairy Queen",
+      "lat": 30.409544,
+      "lon": -97.851837
+    },
+    "b": {
+      "name": "Yucatan Tacos and More",
+      "lat": 30.391077,
+      "lon": -97.714584
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Chipotle Mexican Grill",
+      "lat": 30.242086,
+      "lon": -97.727348
+    },
+    "b": {
+      "name": "Tous Les Jours",
+      "lat": 30.479406,
+      "lon": -97.799385
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Bonhomie",
+      "lat": 30.327852,
+      "lon": -97.739868
+    },
+    "b": {
+      "name": "Papa Murphy's",
+      "lat": 30.434164,
+      "lon": -97.772263
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Palenque King",
+      "lat": 30.316113,
+      "lon": -97.708511
+    },
+    "b": {
+      "name": "Y'all's",
+      "lat": 30.490097,
+      "lon": -97.679794
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "The Bayou Shack",
+      "lat": 30.519281,
+      "lon": -97.650383
+    },
+    "b": {
+      "name": "BiG Cafe and Shop",
+      "lat": 30.649641,
+      "lon": -97.675926
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Gary's Grill",
+      "lat": 30.109823,
+      "lon": -97.584969
+    },
+    "b": {
+      "name": "Dolce Vita",
+      "lat": 30.402527,
+      "lon": -97.722183
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  },
+  {
+    "a": {
+      "name": "Torres Taqueria",
+      "lat": 30.135794,
+      "lon": -97.64621
+    },
+    "b": {
+      "name": "Little Country Diner",
+      "lat": 30.366262,
+      "lon": -98.071228
+    },
+    "label": "no_match",
+    "note": "random distinct venues"
+  }
+]

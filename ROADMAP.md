@@ -369,7 +369,7 @@ renumbering breaks every existing cross-reference for no benefit.
 | 1 | 0 | Foundations & Tooling | ✅ **Complete** |
 | 2 | 1 | Domain Model & Migrations | **In progress** |
 | 3 | 2 | First Light — read API + staging deploy | Planned |
-| 4 | 4 | Venue Discovery, Identity & Geocoding | Planned |
+| 4 | 4 | Venue Discovery, Identity & Geocoding | **In progress** |
 | 5 | 5 | Scrapers — decide, then build | Planned |
 | 6 | 3 | Parsing — menu extraction library | Planned |
 | 7 | 6 | Ingest Pipeline & Freshness | Planned |
@@ -700,6 +700,18 @@ whether the coverage target is reachable, and if it comes in far below 30%,
 that is a finding worth stopping on rather than scraping around.
 
 **Done when:** the metro is seeded, < 2% duplicate venues and < 1% wrong geocodes (both measured against a hand-labeled 100-row sample), and website/menu-URL coverage is measured and written down.
+
+**Status (2026-09-21).** Seeding + identity + geocoding are done and the
+precision gate is **met** — see the retro
+([docs/retro/2026-09-21-phase-4.md](./docs/retro/2026-09-21-phase-4.md)):
+9,996 current venues; duplicate rate ≈ 0.2–0.4% (< 2%); wrong geocodes < 1%
+(0 null/out-of-bbox metro-wide); website coverage 82.1% (Overture published
+field); golden-set matcher precision 1.000 (≥ 95%). The audit is reproducible
+via [apps/discovery/audit.py](./apps/discovery/audit.py). **Not yet complete:**
+menu-URL coverage and the RFC-0001 PR 6 work (Overpass website fallback,
+`config/sources.yaml`, menu-URL discovery) remain. Per ADR-0009, **H3 was
+dropped** (lat/lon only), so the "H3 r6–r9" deliverable above is intentionally
+not implemented.
 
 ---
 
