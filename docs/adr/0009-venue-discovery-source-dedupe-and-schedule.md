@@ -1,7 +1,8 @@
 # ADR-0009: Venue discovery — source, ingestion, dedupe/minting, and schedule
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-09-20
+**Accepted:** 2026-09-20 by project owner Fortune
 **Phase:** 4 (Venue Discovery, Identity & Geocoding)
 
 ## Context
@@ -64,6 +65,10 @@ open items are listed under **Stop-and-ask**.
    line of work.
 4. **Pure-helper placement is delegated** to the implementer's judgement for
    a well-organized codebase (resolved in §4).
+5. **Parquet reader = DuckDB** (new runtime dep approved).
+6. **Ingest bbox = Travis + Williamson counties**: lat `30.02 .. 30.85`,
+   lon `-98.17 .. -97.37`.
+7. **Dedupe auto-merge radius = 50 m** (with a name-fingerprint match).
 
 ### A concrete hazard the design must avoid
 
@@ -87,12 +92,13 @@ schema changes.
 
 - **Source:** Overture Maps **Places** theme (GERS), filtered to
   `category` in the `food_and_beverage` family, clipped to a **config-driven
-  metro bounding box** (Austin + Round Rock; a parameter, never a constant).
+  metro bounding box** — Travis + Williamson counties, lat `30.02 .. 30.85`,
+  lon `-98.17 .. -97.37`; a parameter, never a constant.
   A bbox — not a precise polygon — is used at ingest so no geometry library
   is required; over-inclusion at discovery is harmless because viewing filters
   precisely (§5). Overpass/OSM and the `config/sources.yaml` manual registry
   are **follow-on units** (RFC-0001 PR 6, website + menu-URL resolution).
-- **Read mechanic (recommended):** **DuckDB** with the `httpfs` extension,
+- **Read mechanic (decided):** **DuckDB** with the `httpfs` extension,
   reading the released Overture parquet and pushing the bbox + category
   filter down. Alternative: `pyarrow`. DuckDB is recommended because the
   filter and parquet pruning are one query and it reads the S3-hosted release
@@ -130,8 +136,8 @@ add a minting step for the `unresolved` tail:
    ([ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) §3):
    normalized name fingerprint **plus** normalized address / lat-lon
    proximity. Auto-`assign` to an existing Establishment **only on a strong
-   composite signal** (same normalized street address within a tight radius
-   **and** matching name fingerprint). Everything below that bar **mints** a
+   composite signal**: matching name fingerprint **and** coordinates within
+   **50 m**. Everything below that bar **mints** a
    new Place + Organization + Establishment and `assign`s the source record
    to it, Evidence-backed, `actor_class="rule"`.
 3. This is deliberately **duplicate-tolerant**: ADR-0004 states duplicate
@@ -240,22 +246,19 @@ discovery design must respect now so viewing is not blocked later:
   end-to-end demo (`curl /v1/venues` from the dev machine returns discovered
   venues) but brings `infra/`/staging back into this unit's blast radius.
 
-## Stop-and-ask — remaining owner decisions before implementation
+## Owner decisions — all resolved (2026-09-20)
 
-1. **New runtime dependency** — approve **DuckDB** (vs pyarrow), and
-   promoting `httpx` to a runtime dep. (CLAUDE.md: new runtime deps.)
-2. **Metro bounding box** — confirm the Austin + Round Rock bbox coordinates
-   (or the county set to derive it from). (RFC-0001 unresolved Q2.)
-3. **Dedupe auto-assign threshold** — confirm the strong-signal rule (exact
-   normalized address within radius R **and** matching name fingerprint) and
-   radius R.
-4. **Orange Pi access** — confirm I may configure the Pi's compose/API bind
-   and a scheduler on it (touches `infra/`), and how the dev machine reaches
-   it (LAN address vs SSH tunnel).
-
-Resolved by the 2026-09-20 owner decisions: no H3 / lat-lon only (was a
-`Place` migration ask); interactive viewing filters; Pi in scope; helper
-placement.
+1. **No H3 / lat-lon only** — removed the `Place` migration ask; discovery is
+   additive with zero schema change.
+2. **Interactive viewing filters** — map-draw boundaries + category / tag /
+   parameter filtering (§5).
+3. **Orange Pi in scope** — discovery + API run on the Pi, LAN-reachable from
+   the dev machine; Pi infra config authorized for this unit.
+4. **Helper placement** — delegated; resolved in §4.
+5. **Parquet reader = DuckDB**; `httpx` promoted to a runtime dep.
+6. **Ingest bbox = Travis + Williamson** (lat `30.02 .. 30.85`,
+   lon `-98.17 .. -97.37`).
+7. **Dedupe auto-merge = name fingerprint match + coordinates within 50 m.**
 
 ## References
 
