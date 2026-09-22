@@ -11,6 +11,7 @@ dependencies = [
     "httpx>=0.28.1",
     "psycopg[binary]>=3.3.4",
     "pydantic-settings>=2.14.2",
+    "pyyaml>=6.0.2",
     "sqlalchemy>=2.0.51",
     "structlog>=24.4.0",
     "uvicorn[standard]>=0.51.0",
@@ -29,4 +30,5 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.12",
+    "types-pyyaml>=6.0.12",
 ]

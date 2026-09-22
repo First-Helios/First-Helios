@@ -1,0 +1,26 @@
+# Manual website / menu-URL registry (ADR-0010 §4).
+#
+# A human-curated override for hosts the automated resolution misses or gets
+# wrong. Keyed by host; an entry applies to a venue whose Overture-published
+# website is on that host. Values here take precedence over Overture.
+#
+# Each entry:
+#   host:            (required) registrable host, no scheme, no "www."
+#   website:         (optional) full HTTP(S) URL to use instead of Overture's
+#   menu_url:        (optional) full HTTP(S) URL of the menu page (skips crawl)
+#   location_unique: (optional, default false) marks the site as a single
+#                    location's own domain; recorded for a future URL-promotion
+#                    unit, not acted on now. Never set true for a shared brand
+#                    site — that would authorise collapsing chain locations.
+#
+# Example (commented; add real entries below):
+#   venues:
+#     - host: veracruzallnatural.com
+#       website: https://veracruzallnatural.com
+#       menu_url: https://veracruzallnatural.com/menu
+#       location_unique: true
+#     - host: torchystacos.com
+#       menu_url: https://torchystacos.com/menu
+#       location_unique: false
+
+venues: []
