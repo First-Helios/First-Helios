@@ -1,0 +1,208 @@
+# ADR-0010: Website & menu-URL resolution (Phase 4 PR 6)
+
+**Status:** Accepted
+**Date:** 2026-09-21
+**Accepted:** 2026-09-21 by project owner Fortune
+**Phase:** 4 (Venue Discovery, Identity & Geocoding)
+
+## Context
+
+[ADR-0009](./0009-venue-discovery-source-dedupe-and-schedule.md) shipped the
+coverage subsystem: Overture Places → Bronze → conservative mint into
+`identity.establishment`, seeded metro-wide (9,996 current venues, precision
+gate met — see [retro](../retro/2026-09-21-phase-4.md)). It deliberately left
+two Phase 4 deliverables as a follow-on unit (RFC-0001 PR 6): **website
+resolution** and **menu-URL discovery**. This ADR settles that unit.
+
+Two facts from the seed reshape the plan the ROADMAP wrote:
+
+- **Website coverage is already 82.1%** (8,217 / 10,014) from Overture's
+  published `websites` field — far above ROADMAP's ~30–40% planning number and
+  the <30% stop-report floor. The marginal value of an Overpass/OSM website
+  *fallback* — the original PR 6 headline, and the reason PR 6 was expected to
+  add a new source + the `overpy` dependency — is now small.
+- **There is no URL attribute anywhere in the identity schema.** The only URL
+  concept is `bronze.SourceEndpoint.canonical_uri`, which is the resolver's
+  **exact-match key**. That is the exact chain-collapse hazard ADR-0009 §"A
+  concrete hazard" flags: a brand website (`torchystacos.com`) cannot be a
+  `canonical_uri` — the resolver requires a canonical URL to identify *exactly
+  one* Subject, and 50 Torchy's Organizations share one site. So website and
+  menu-URL must persist as **non-identity attributes**, never as a match key.
+
+### What the current code does and does not do
+
+- Overture observations already carry `websites` in `source_payload` with
+  `canonical_url = None` (ADR-0009 §1). Website data is therefore *already in
+  Bronze* — this unit resolves and exposes it, it does not re-fetch it.
+- `identity.commands.assign_source_record` links an additional Bronze source
+  record to an existing current Subject, Evidence-backed — the mechanism for
+  attaching a second-source attribute (a website, a menu-URL) to a Subject
+  minted from Overture.
+- Runtime deps after ADR-0009: `alembic, duckdb, fastapi, httpx, psycopg,
+  pydantic-settings, sqlalchemy, structlog, uvicorn`. `httpx` is already a
+  **runtime** dependency (promoted for Nominatim).
+- There is **no `config/sources.yaml`** yet, and **no HTML/sitemap/robots
+  handling** anywhere in the tree.
+
+### Owner decisions (2026-09-21)
+
+1. **Defer Overpass.** Given 82.1% coverage, PR 6 is **menu-URL discovery +
+   the `config/sources.yaml` manual registry**. The Overpass/OSM website
+   fallback (and its `overpy` dependency) is **not built in this unit**; it
+   becomes a small later unit only if measured coverage ever needs it.
+2. **Bronze payload + Evidence, no schema change.** Resolved website and
+   menu-URL persist as Bronze source records + Evidence assigned to the
+   Subject. **No identity/menu/gold migration.**
+3. **Menu-URL grain is per-site**, keyed to the resolved website: discovery
+   crawls whatever website resolved for a Subject, so a chain sharing one brand
+   site yields one menu-URL and an independent yields its own. Grain follows
+   the website, not a fixed Org-vs-Establishment rule.
+4. **A new dependency is authorized** when it is the optimal fit (owner,
+   2026-09-21). Applied here: **PyYAML** for `config/sources.yaml`, so the
+   registry keeps the name every doc already uses (ROADMAP §3.2, ADR-0009 §1,
+   RFC-0001) and V1's `config/meal_deal_sources.yaml` shape, rather than
+   deviating to a stdlib format. No other new dependency: menu-URL discovery
+   uses the already-runtime `httpx` plus stdlib `urllib.robotparser`,
+   `xml.etree`, and `html.parser`; registry validation is hand-rolled (a
+   `jsonschema` dependency buys little for a four-field registry).
+
+## Decision
+
+Build website/menu-URL resolution as an **additive, Bronze-first, idempotent**
+unit that reuses the ADR-0009 provenance/identity contracts, adds **no runtime
+dependency** and **no schema change**, and keeps every URL out of the
+Establishment match key.
+
+### 1. Scope (owner decision 1)
+
+- **In:** promote the Overture-published website to a resolved Org-level
+  website attribute; a `config/sources.yaml` manual registry for known-good and
+  override sites; menu-URL discovery over the resolved website.
+- **Out (deferred):** Overpass/OSM website fallback and the `overpy`
+  dependency. Recorded as a follow-on unit, gated on a future coverage need.
+
+### 2. Persistence — Bronze-only, no schema change (owner decision 2)
+
+- A resolved **website** is a Bronze observation
+  (`source_namespace = "website-resolution"`, `source_kind = "website"`,
+  `external_key = <GERS id>` — per-venue, so a shared brand site never
+  collapses to one record), `assign`ed to the **Organization** Subject,
+  Evidence-backed, `actor_class="rule"`. The URL and its origin
+  (`overture` | `registry`) live in `source_payload`. **`canonical_url` stays
+  `None` in this unit** — a website is an attribute here, never a match key
+  (§4 hazard). The registry's `location_unique` flag is recorded in the payload
+  for a possible future URL-promotion unit; it is not acted on now.
+- A resolved **menu-URL** is a Bronze observation
+  (`source_kind = "menu_url"`), `assign`ed to the same Subject the website
+  resolved for (per-site grain, owner decision 3), Evidence pointing at the
+  discovery capture (the fetched page / sitemap that yielded it).
+- **Read path:** website is already queryable from `source_payload` today
+  (the retro measured 82.1% exactly this way); menu-URL becomes queryable the
+  same way. A typed **Gold `venue_url` projection** (subject_id, url_kind,
+  url, observed_at) is the forward-looking clean read surface for the API and
+  the Phase 5 scraper — noted here, consistent with ADR-0009 §5 (viewing
+  filters live in Gold, not on identity tables), **built when first consumed**,
+  not in this unit.
+
+### 3. Menu-URL discovery mechanics
+
+Per resolved website, deterministically, honoring etiquette as a hard
+requirement (ROADMAP Phase 5 "scraping etiquette"):
+
+- **robots.txt first** — stdlib `urllib.robotparser`; a disallowed path is
+  never fetched.
+- **Candidate paths:** `/menu`, `/menus`, `/food`, `/our-menu` — HEAD/GET with
+  a real User-Agent, one host at a time.
+- **Sitemap scan:** `sitemap.xml` (stdlib `xml.etree`), URLs matching a menu
+  lexicon.
+- **On-site anchors:** parse the homepage for `<a>` whose text/href hits a menu
+  lexicon (stdlib `html.parser.HTMLParser` — **no HTML-parser dependency**).
+- **Rate limit:** one token bucket per host, ~1 req/s; disk-cached replay
+  bundles under `var/` keyed by normalized URL. **No live network in CI** —
+  integration tests replay fetches/sitemaps/robots from disk fixtures.
+- **Persist so re-scrapes skip discovery:** a Subject with a current
+  `menu_url` Bronze record is not re-crawled; discovery is idempotent and
+  re-runnable.
+
+### 4. `config/sources.yaml` manual registry
+
+- A human-editable YAML registry (PyYAML): per host, a known-good website
+  and/or menu-URL, plus a `location_unique: bool` flag recorded for a future
+  URL-promotion unit (not acted on now). Ported in spirit from V1's
+  `config/meal_deal_sources.yaml` (ROADMAP §3.2 process 8).
+- **Structurally validated in code, with a CI test** that a malformed registry
+  raises — required fields, types, and HTTP(S) URL well-formedness — so a bad
+  registry breaks the build, not runtime. (Hand-rolled rather than a
+  `jsonschema` dependency; the schema is four fields.)
+
+### 5. Schedule and where it runs
+
+- A re-runnable, idempotent CLI in `apps/discovery/` (composition root,
+  ADR-0004), run on the **Orange Pi** alongside the API (ADR-0009 §3), ~monthly.
+  Determinism comes from Bronze idempotency, not run-once side effects.
+
+### 6. Hazard reaffirmed
+
+Website equality is an **Organization-level signal, never an Establishment
+identity key** (ADR-0009 §"A concrete hazard"). No code path in this unit sets
+a shared brand website as a `canonical_url` or otherwise routes two
+Establishments into one on URL equality. The registry `location_unique` flag is
+the only path to a URL match key, and it is opt-in per row.
+
+## Alternatives considered
+
+| Axis | Option | Pros | Cons |
+|------|--------|------|------|
+| Overpass | **Defer (chosen)** | 82.1% already; no new source/dep; smallest diff | No fallback for the ~18% without an Overture site |
+| | Include now | Fills some website gaps | New source + `overpy` dep for small marginal gain |
+| Persistence | **Bronze payload + Evidence (chosen)** | Zero migration; additive like ADR-0009; provenance-native | Reads go through Bronze/Gold, not a direct column |
+| | New identity columns | Direct typed reads | models + alembic = hard stop-and-ask; expensive-to-reverse |
+| | New `identity.venue_url` table | Queryable + provenance, existing tables untouched | Still a migration/new model = stop-and-ask |
+| Menu-URL grain | **Per-site (chosen)** | Matches reality; chain→one, independent→own | Chain locations share one menu-URL (correct, but coarse per-location) |
+| | Per-Establishment | Explicit per-location menus | Duplicates a shared brand menu across N locations |
+| Discovery client | **httpx + stdlib (chosen)** | No new dep; robots/sitemap/anchor all stdlib | Hand-rolled crawl vs. a framework |
+| | Scrapy/Crawlee now | Batteries included | Framework choice is Phase 5 / ADR-0006 — premature here |
+| Registry format | **YAML / PyYAML (chosen)** | Matches every doc + V1 parity; best human-edit format | One small runtime dep (owner-authorized) |
+| | TOML / stdlib tomllib | Zero dep | Deviates from the documented `.yaml` name |
+| Registry validation | **Hand-rolled + CI test (chosen)** | No dep; precise errors for four fields | Not a formal schema doc |
+| | jsonschema | Formal, declarative | A dependency for a four-field registry |
+
+## Consequences
+
+- **No schema migration**, and the only new dependency is **PyYAML**
+  (owner-authorized, optimal fit for the registry) — the migration hard gate is
+  fully cleared and the dependency gate is a single, small, well-typed library.
+  This unit stays as cheap to review as ADR-0009's additive discovery.
+- **Menu-URL coverage becomes measurable** (currently 0). Like website
+  coverage, the actual figure is the Phase 4 deliverable to report.
+- **Website reads still go through Bronze** until the Gold `venue_url`
+  projection lands; acceptable — the retro already read website coverage this
+  way. The scraper (Phase 5) will want the Gold projection; that dependency is
+  when it gets built.
+- **The ~18% of venues without an Overture website** get no website from this
+  unit except via the manual registry — an accepted gap, revisitable with
+  Overpass later.
+- **Outbound crawling of third-party restaurant sites** enters the blast
+  radius. Etiquette (robots.txt, UA, per-host rate limit, replay cache) is a
+  hard requirement, not a nicety; a scraper that gets the project IP-banned
+  costs more than the data.
+- Keeping every URL out of the Establishment match key **preserves the
+  no-collapse guarantee** ADR-0009 established.
+
+## Stop-and-ask / open items for review
+
+- **`config/sources.yaml` shape** — confirm the fields (host, website,
+  menu_url, `location_unique`) and that JSON-Schema validation belongs in CI.
+- **Gold `venue_url` projection** — confirm it is deferred to first-consumer
+  (Phase 5/7), not built in this unit.
+- **`infra/` touch** — a monthly scheduler on the Pi is an ops detail of this
+  unit (ADR-0009 §3); any `infra/` change still gets a careful read (CLAUDE.md).
+
+## References
+
+- [ROADMAP.md](../../ROADMAP.md) Phase 4; [RFC-0001](../rfc/0001-menu-pricing-first.md) §D3, PR 6
+- [ADR-0009](./0009-venue-discovery-source-dedupe-and-schedule.md) (source/dedupe/schedule; the hazard this preserves)
+- [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) (Gold vs identity placement, composition root)
+- [Phase 4 retro](../retro/2026-09-21-phase-4.md) (82.1% website coverage, menu-URL = 0)
+- V1 port hints (`V1-Graveyard`): `collectors/meal_deals/osm_url_resolver.py`
+  (URL canonicalization), `config/meal_deal_sources.yaml` (registry shape)
