@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import func, select
 
 from apps.discovery.overture import OverturePoi
@@ -30,6 +31,8 @@ from packages.helios_core.identity.models import (
 from packages.helios_core.provenance.models import Source, SourceRecord
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy.orm import Session
 
 _NOW = datetime.now(UTC)
@@ -183,6 +186,40 @@ def test_ambiguous_match_is_left_unresolved(session: Session) -> None:
     assert (report.minted, report.deduped, report.ambiguous) == (0, 0, 1)
     assert _resolution_subject(session, "gers-ambig") is None  # unresolved
     assert _current_establishment_count(session, "ambiguous grill") == 2  # unchanged
+
+
+def test_batches_commit_so_a_crash_keeps_earlier_work(session: Session) -> None:
+    def pois() -> Iterator[OverturePoi]:
+        for index in range(5):
+            yield _poi(f"Batch Venue {index}", 30.20 + index / 10, -97.6, gers_id=f"batch-{index}")
+        raise RuntimeError("simulated crash mid-run")
+
+    commits: list[int] = []
+
+    def commit() -> None:
+        commits.append(1)
+        session.commit()  # releases the fixture savepoint; the outer transaction rolls back
+
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        run_discovery(
+            session,
+            pois(),
+            decided_at=_NOW,
+            observed_at=_NOW,
+            release="test-release-2026-01-01",
+            batch_size=2,
+            on_batch=commit,
+        )
+    session.rollback()
+
+    assert len(commits) == 2
+    assert [_resolution_subject(session, f"batch-{index}") is not None for index in range(5)] == [
+        True,
+        True,
+        True,
+        True,
+        False,
+    ]
 
 
 def _dec(value: float) -> Decimal:

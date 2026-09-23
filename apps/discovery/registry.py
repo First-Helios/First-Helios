@@ -13,6 +13,7 @@ not acted on now.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _ALLOWED_KEYS = frozenset({"host", "website", "menu_url", "location_unique"})
+# A bare DNS hostname with at least one dot: no scheme, port, path, or spaces.
+_LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+_HOSTNAME = re.compile(rf"(?:{_LABEL}\.)+{_LABEL}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,8 +82,15 @@ def _parse_entry(raw: Any, index: int) -> RegistryEntry:  # noqa: ANN401 - raw Y
     if not isinstance(location_unique, bool):
         raise ValueError(f"registry entry {index}: 'location_unique' must be a boolean")
 
+    normalized_host = _normalize_host(host)
+    if _HOSTNAME.fullmatch(normalized_host) is None:
+        raise ValueError(
+            f"registry entry {index}: 'host' must be a bare hostname like 'example.com' "
+            "(no scheme, port, or path)"
+        )
+
     return RegistryEntry(
-        host=_normalize_host(host),
+        host=normalized_host,
         website=website,
         menu_url=menu_url,
         location_unique=location_unique,
@@ -105,9 +116,13 @@ def parse_registry(document: Any) -> dict[str, RegistryEntry]:  # noqa: ANN401 -
     return entries
 
 
-def load_registry(path: Path) -> dict[str, RegistryEntry]:
-    """Read and validate ``config/sources.yaml``; a missing file is an empty registry."""
-    if not path.exists():
+def load_registry(path: Path, *, missing_ok: bool = False) -> dict[str, RegistryEntry]:
+    """Read and validate ``config/sources.yaml``.
+
+    A missing file raises ``FileNotFoundError`` unless ``missing_ok`` (the CLI's
+    default path), so a mistyped ``--config`` never silently runs unregistered.
+    """
+    if missing_ok and not path.exists():
         return {}
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     return parse_registry(document)

@@ -4,15 +4,20 @@ Run after Overture seeding, on the Orange Pi against the staging database::
 
     python -m apps.discovery.resolve_urls --config config/sources.yaml
 
-Idempotent and re-runnable: a venue that already has a resolved website/menu-URL
-record is skipped, and the site fetcher caches every response on disk for 7
-days, so a re-run neither re-assigns nor re-crawls. Crawls live restaurant sites
-(robots + rate limited), so it makes network calls and is not exercised in CI.
+Idempotent and re-runnable: a venue whose website and menu-URL records are
+current and unchanged is skipped without writing or crawling, and commits land
+every 100 venues, so a re-run after an interruption skips the committed work.
+A venue where no menu was found has nothing saved and is re-crawled each run
+(from the fetch cache while it is fresh). ``--limit`` counts only venues that
+need work. Records a human put in ``needs_review`` are never re-assigned. Crawls
+live restaurant sites (robots + rate limited), so it makes network calls and is
+not exercised in CI.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,24 +27,32 @@ from apps.discovery.web_client import SiteFetcher
 from packages.helios_core.db.session import get_sessionmaker
 
 _USER_AGENT = "helios-v2-discovery/0.1 (+https://github.com/First-Helios/First-Helios)"
+_DEFAULT_CONFIG = Path("config/sources.yaml")
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python -m apps.discovery.resolve_urls", description=__doc__
     )
-    parser.add_argument("--config", type=Path, default=Path("config/sources.yaml"))
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help=f"registry file (default {_DEFAULT_CONFIG}; an explicit path must exist)",
+    )
     parser.add_argument("--cache-dir", type=Path, default=Path("var/site-cache"))
     parser.add_argument(
         "--min-interval", type=float, default=1.0, help="seconds between requests per host"
     )
-    parser.add_argument("--limit", type=int, default=None, help="max venues to process this run")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="max venues that need work (a write or crawl)"
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
-    registry = load_registry(args.config)
+    registry = load_registry(args.config or _DEFAULT_CONFIG, missing_ok=args.config is None)
     now = datetime.now(UTC)
 
     with (
@@ -57,15 +70,13 @@ def main() -> None:
             decided_at=now,
             observed_at=now,
             limit=args.limit,
+            on_batch=session.commit,  # commit every 100 venues (D3.3)
         )
         session.commit()
 
     print(  # noqa: T201 - CLI output
         "url resolution complete: "
-        f"venues={report.venues} websites_resolved={report.websites_resolved} "
-        f"websites_reused={report.websites_reused} without_website={report.without_website} "
-        f"menu_urls_found={report.menu_urls_found} menu_urls_reused={report.menu_urls_reused} "
-        f"menu_urls_absent={report.menu_urls_absent}"
+        + " ".join(f"{name}={value}" for name, value in asdict(report).items())
     )
 
 

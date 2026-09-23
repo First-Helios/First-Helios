@@ -52,6 +52,12 @@ def test_location_unique_defaults_false() -> None:
         {"venues": [{"host": "x.com", "location_unique": "yes"}]},  # non-bool
         {"venues": [{"host": "x.com", "bogus": 1}]},  # unknown key
         {"venues": [{"host": "x.com"}, {"host": "x.com"}]},  # duplicate host
+        {"venues": [{"host": "https://x.com"}]},  # scheme
+        {"venues": [{"host": "x.com:8080"}]},  # port
+        {"venues": [{"host": "x.com/menu"}]},  # path
+        {"venues": [{"host": "x .com"}]},  # whitespace inside
+        {"venues": [{"host": "localhost"}]},  # not a registrable domain
+        {"venues": [{"host": 7}]},  # not a string
         {"venues": "notalist"},  # venues not a list
         "notamapping",  # top-level not a mapping
     ],
@@ -61,8 +67,10 @@ def test_malformed_registry_raises(document: object) -> None:
         parse_registry(document)
 
 
-def test_load_missing_file_is_empty_registry(tmp_path: Path) -> None:
-    assert load_registry(tmp_path / "nope.yaml") == {}
+def test_load_missing_file_raises_unless_missing_ok(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_registry(tmp_path / "nope.yaml")
+    assert load_registry(tmp_path / "nope.yaml", missing_ok=True) == {}
 
 
 def test_load_reads_and_validates_yaml(tmp_path: Path) -> None:
@@ -78,5 +86,6 @@ def test_load_reads_and_validates_yaml(tmp_path: Path) -> None:
 
 def test_committed_registry_file_is_valid() -> None:
     """The checked-in config/sources.yaml must always parse (CI guard)."""
-    repo_root = Path(__file__).resolve().parents[1]
-    assert load_registry(repo_root / "config" / "sources.yaml") == {}
+    path = Path(__file__).resolve().parents[1] / "config" / "sources.yaml"
+    assert path.is_file(), "config/sources.yaml must stay committed"
+    assert load_registry(path) == {}

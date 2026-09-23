@@ -30,8 +30,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 |---|---|---|---|---|
 | 0 | You: answer D1–D9 (group by group is fine) | — | ~1 h of your time | [ ] |
 | 1 | S1 Guardrails (DB target, CI gates, CLAUDE.md) ⚠ | D1 | M | [X] #23 |
-| 2 | S2 Crawler etiquette ⚠ (protego) | D2 | M | [ ] |
-| 3 | S3 URL pipeline logic | D3 | M | [ ] |
+| 2 | S2 Crawler etiquette ⚠ (protego) | D2 | M | [X] #24 |
+| 3 | S3 URL pipeline logic | D3 | M | [ ] #25 open |
 | 4 | S4 Menu-URL quality | D3 | S | [ ] |
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [ ] |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] |
@@ -176,6 +176,22 @@ explains it. When a group is done, its sessions are ready to hand off.
   - [ ] One per chain (needs redesign)
   - *Why:* each Overture POI mints its own Organization today; one-per-chain needs
     the merge work first.
+- **3.7 Saved menu URL when the venue's website changes** (asked in S3, 2026-09-23)
+  - [X] ⭐ Re-discover; replace only when discovery succeeds, else keep the old one
+  - [ ] Never re-discover (registry only)
+  - *Owner note:* keep the old data in a "graveyard" and only replace it when
+    re-discovery succeeds. *S3:* Bronze already is that graveyard: each new menu
+    URL is appended as a new immutable version and the old versions are never
+    deleted, so no new table was added (that would need a migration + ADR; raise
+    it in S5/S6 if a separate table is still wanted).
+- **3.8 Website record in `needs_review`: crawl it for a menu anyway?** (asked in S3)
+  - [X] ⭐ Skip the venue (count it; no write, no crawl)
+  - [ ] Still crawl for a menu
+- **3.9 What `--limit N` counts** (asked in S3)
+  - [X] ⭐ Only venues that need work (a write or a crawl)
+  - [ ] Add an `--after-id` cursor
+  - *Caveat:* venues where no menu was found are re-crawled each run until S6
+    records failed fetches (D4.2).
 
 ### D4 — Evidence and provenance → unlocks S5, S6 (answer before the next Pi run)
 
@@ -396,14 +412,14 @@ Branch: `fix/crawler-etiquette` · Stops for review only if D2.1 = `protego` (it
 Hand-off prompt: `Do session S3 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/url-pipeline`
 
-- [ ] R04 Overrides `needs_review` decisions; crashes on retired Organizations
-- [ ] R07 Registry can't replace a menu URL once one is saved (per D3.2)
-- [ ] R15 Discovery CLIs run as one giant transaction; one error loses the whole run (per D3.3)
-- [ ] R16 Every run re-saves every website → permanent duplicate Bronze rows
-- [ ] R32 `--limit` never advances past the first N venues
-- [ ] R57 "Latest" Overture version picked by id, not date
-- [ ] R72 Registry host not validated; missing registry file silently empty
-- [ ] R73 Duplicate processing of venues with two Overture records; ADR-0010 grain wording (per D3.6)
+- [X] R04 Overrides `needs_review` decisions; crashes on retired Organizations
+- [X] R07 Registry can't replace a menu URL once one is saved (per D3.2)
+- [X] R15 Discovery CLIs run as one giant transaction; one error loses the whole run (per D3.3)
+- [X] R16 Every run re-saves every website → permanent duplicate Bronze rows
+- [X] R32 `--limit` never advances past the first N venues
+- [X] R57 "Latest" Overture version picked by id, not date
+- [X] R72 Registry host not validated; missing registry file silently empty
+- [X] R73 Duplicate processing of venues with two Overture records; ADR-0010 grain wording (per D3.6)
 
 **Recommended approach**
 - `_persist_and_assign`: branch on state — `resolved` → skip; `needs_review` → count
@@ -753,4 +769,5 @@ Agents add one row per session (or per resume).
 | Date | Session | Branch | PR | Status | Resume notes |
 |---|---|---|---|---|---|
 | 2026-09-23 | S1 | fix/guardrails | #23 | Merged | — (ticks recorded by S2; #22 wasn't on `main` yet) |
-| 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Draft, awaiting owner review (new dependency `protego`) | — |
+| 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Merged | — |
+| 2026-09-23 | S3 | fix/url-pipeline | #25 | Open, awaiting owner review | — (D3.7–3.9 asked and answered at session start) |

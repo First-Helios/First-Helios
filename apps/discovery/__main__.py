@@ -80,6 +80,7 @@ def main() -> None:
                 release=args.release,
                 geocoder=geocoder,
                 dedupe_radius_m=args.dedupe_radius_m,
+                on_batch=session.commit,  # commit every 100 POIs (D3.3)
             )
             session.commit()
     finally:
