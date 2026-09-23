@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import httpx
+import pytest
 
 from packages.helios_core.geo import GeoPoint, NominatimClient
 
@@ -64,3 +65,31 @@ def test_blank_query_never_calls_the_network(tmp_path: Path) -> None:
 
     with _client(tmp_path, httpx.MockTransport(handle)) as client:
         assert client.geocode("   ") is None
+
+
+def test_requests_are_spaced_by_min_interval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = [100.0]
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    monkeypatch.setattr("packages.helios_core.geo.time.monotonic", lambda: now[0])
+    monkeypatch.setattr("packages.helios_core.geo.time.sleep", fake_sleep)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    with NominatimClient(
+        cache_dir=tmp_path,
+        user_agent="helios-test/1.0",
+        min_interval_s=1.0,
+        client=httpx.Client(transport=httpx.MockTransport(handle)),
+    ) as client:
+        client.geocode("1 First St, Austin, TX")
+        now[0] += 0.4
+        client.geocode("2 Second St, Austin, TX")
+    assert sleeps == [pytest.approx(0.6)]

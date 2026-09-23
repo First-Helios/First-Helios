@@ -29,8 +29,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | Order | Session | Needs | Size | Status |
 |---|---|---|---|---|
 | 0 | You: answer D1–D9 (group by group is fine) | — | ~1 h of your time | [ ] |
-| 1 | S1 Guardrails (DB target, CI gates, CLAUDE.md) ⚠ | D1 | M | [ ] |
-| 2 | S2 Crawler etiquette | D2 | M | [ ] |
+| 1 | S1 Guardrails (DB target, CI gates, CLAUDE.md) ⚠ | D1 | M | [X] #23 |
+| 2 | S2 Crawler etiquette ⚠ (protego) | D2 | M | [ ] |
 | 3 | S3 URL pipeline logic | D3 | M | [ ] |
 | 4 | S4 Menu-URL quality | D3 | S | [ ] |
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [ ] |
@@ -114,8 +114,21 @@ explains it. When a group is done, its sessions are ready to hand off.
 
 - **2.1 robots.txt rules**
   - [ ] ⭐ Hand-write an RFC 9309 matcher (stdlib, no new dependency)
-  - [ ] Add the `protego` library ⚠ (new runtime dependency)
-  - [X] User idea: we need to have a discussion on the rules
+  - [X] Add the `protego` library ⚠ (new runtime dependency)
+  - [ ] User idea: we need to have a discussion on the rules
+  - *Discussed 2026-09-23 (S2):* robots.txt answers "**may** we fetch this URL"
+    (the site owner decides) and stays independent of any page-of-interest
+    classifier, which answers "is it **worth** fetching / is it a menu" (we
+    decide) and only chooses among robots-allowed URLs. Robots parsing is a
+    solved problem, so use the known library (`protego`, Scrapy's parser)
+    rather than hand-rolling it.
+  - *Follow-up (Phase 5, no code now):* classifier for pages of interest; its
+    own ADR; plugs in at `ordered_menu_candidates` (ranking) and the page check
+    in `discover_menu_url`; never overrides robots.
+  - *Follow-up (needs its own ADR first):* owner asked about an option to
+    ignore robots for sites with no other data source. Not built: it reverses
+    ADR-0010 §3. First measure how many sites robots actually blocks us from on
+    a Pi run, then decide (e.g. a hand-approved site list, not a global switch).
   - *Why:* the matcher is ~60 lines plus tests; no dependency review, no image growth.
 - **2.2 robots.txt can't be fetched (5xx, timeout)**
   - [X] ⭐ Skip that site this run
@@ -322,18 +335,18 @@ covered by another guard, or documentation of a deliberate trade-off.
 Hand-off prompt: `Do session S1 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/guardrails` · Stops for review: CI workflow, CLAUDE.md, dev dependency.
 
-- [ ] R09 Default database URL points at the legacy archive; seed CLI unguarded (per D1.1, D1.2)
-- [ ] R10 CI never runs `alembic check`; turn on `compare_server_default`
-- [ ] R39 CLAUDE.md "current `Venue` stub" exemption points at a dropped table
-- [ ] R40 CLAUDE.md/CONTRIBUTING say `make ci` equals CI
-- [ ] R80 Concurrency tests can hang; no test or job timeouts (per D1.4)
-- [ ] R87 uv version not pinned in CI
-- [ ] R88 `make ci` lockfile check can't fail locally
-- [ ] R89 CI: no permissions block, tag-pinned actions, no timeouts
-- [ ] R94 Large-file hook and commit-message check don't run in CI
-- [ ] R95 CODEOWNERS dead path and missing key paths (per D1.7)
-- [ ] R112 Coverage counts test files; no threshold (per D1.5)
-- [ ] R115 CI cancels in-progress runs on `main`
+- [X] R09 Default database URL points at the legacy archive; seed CLI unguarded (per D1.1, D1.2)
+- [X] R10 CI never runs `alembic check`; turn on `compare_server_default`
+- [X] R39 CLAUDE.md "current `Venue` stub" exemption points at a dropped table
+- [X] R40 CLAUDE.md/CONTRIBUTING say `make ci` equals CI
+- [X] R80 Concurrency tests can hang; no test or job timeouts (per D1.4)
+- [X] R87 uv version not pinned in CI
+- [X] R88 `make ci` lockfile check can't fail locally
+- [X] R89 CI: no permissions block, tag-pinned actions, no timeouts
+- [X] R94 Large-file hook and commit-message check don't run in CI
+- [X] R95 CODEOWNERS dead path and missing key paths (per D1.7)
+- [X] R112 Coverage counts test files; no threshold (per D1.5)
+- [X] R115 CI cancels in-progress runs on `main`
 
 **Recommended approach**
 - Do the safety part first: make `Settings.database_url` required (no default) with
@@ -355,14 +368,14 @@ Branch: `fix/guardrails` · Stops for review: CI workflow, CLAUDE.md, dev depend
 
 ### S2 — Crawler etiquette · size M · needs D2
 Hand-off prompt: `Do session S2 from docs/reviews/2026-09-22-remediation-checklist.md.`
-Branch: `fix/crawler-etiquette` · Stops for review only if D2.1 = `protego`.
+Branch: `fix/crawler-etiquette` · Stops for review only if D2.1 = `protego` (it is: draft PR).
 
-- [ ] R05 robots.txt rules misread (first match, no wildcards) → disallowed pages fetched
-- [ ] R13 robots.txt fetch failure treated as "crawl everything"
-- [ ] R14 Redirects followed anywhere (other hosts, private IPs), skipping robots and throttle
-- [ ] R35 No tests for rate limiting, redirects, robots errors
-- [ ] R74 Homepage links resolved against the pre-redirect URL; `<base>` ignored
-- [ ] R79 Web cache: no size cap, non-atomic writes, failures and robots cached forever
+- [X] R05 robots.txt rules misread (first match, no wildcards) → disallowed pages fetched
+- [X] R13 robots.txt fetch failure treated as "crawl everything"
+- [X] R14 Redirects followed anywhere (other hosts, private IPs), skipping robots and throttle
+- [X] R35 No tests for rate limiting, redirects, robots errors
+- [X] R74 Homepage links resolved against the pre-redirect URL; `<base>` ignored
+- [X] R79 Web cache: no size cap, non-atomic writes, failures and robots cached forever
 
 **Recommended approach**
 - New small module `apps/discovery/robots.py`: group rules by user-agent, longest
@@ -739,4 +752,5 @@ Agents add one row per session (or per resume).
 
 | Date | Session | Branch | PR | Status | Resume notes |
 |---|---|---|---|---|---|
-| | | | | | |
+| 2026-09-23 | S1 | fix/guardrails | #23 | Merged | — (ticks recorded by S2; #22 wasn't on `main` yet) |
+| 2026-09-23 | S2 | fix/crawler-etiquette | #S2PR | Draft, awaiting owner review (new dependency `protego`) | — |

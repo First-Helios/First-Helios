@@ -1,20 +1,57 @@
-"""Unit tests for SiteFetcher + menu-URL discovery (mock transport, no network)."""
+"""Unit tests for SiteFetcher + menu-URL discovery (mock transport, no network).
+
+Routes are keyed by full URL or by path; a 3xx route's body is its Location.
+DNS is faked (every host resolves to a public address unless a test says
+otherwise) and the clocks are fakes, so throttling and cache expiry are exact.
+"""
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import httpx
+import pytest
 
-from apps.discovery.web_client import SiteFetcher
+from apps.discovery.web_client import (
+    CACHE_TTL_S,
+    MAX_BODY_BYTES,
+    SiteFetcher,
+    is_public_address,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
     from pathlib import Path
 
 _HTML = "text/html"
 _TEXT = "text/plain"
+_PUBLIC_IP = "93.184.216.34"
 
 Route = tuple[int, str, str]
+
+
+class FakeClock:
+    """Wall clock, monotonic clock and sleep that only move when told to."""
+
+    def __init__(self) -> None:
+        self.wall = 1_800_000_000.0
+        self.mono = 100.0
+        self.sleeps: list[float] = []
+
+    def time(self) -> float:
+        return self.wall
+
+    def monotonic(self) -> float:
+        return self.mono
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.mono += seconds
+
+
+def _public(_host: str) -> Iterable[str]:
+    return [_PUBLIC_IP]
 
 
 def _fetcher(
@@ -22,20 +59,37 @@ def _fetcher(
     routes: dict[str, Route],
     *,
     calls: list[str] | None = None,
+    clock: FakeClock | None = None,
+    min_interval_s: float = 0.0,
+    resolve: Callable[[str], Iterable[str]] = _public,
+    handler: Callable[[httpx.Request], httpx.Response] | None = None,
 ) -> SiteFetcher:
     def handle(request: httpx.Request) -> httpx.Response:
         if calls is not None:
             calls.append(str(request.url))
-        path = request.url.path or "/"
-        status, body, ctype = routes.get(path, (404, "nope", _HTML))
+        if handler is not None:
+            return handler(request)
+        status, body, ctype = routes.get(
+            str(request.url), routes.get(request.url.path or "/", (404, "nope", _HTML))
+        )
+        if 300 <= status < 400:  # noqa: PLR2004
+            return httpx.Response(status, headers={"location": body})
         return httpx.Response(status, text=body, headers={"content-type": ctype})
 
+    clock = clock or FakeClock()
     return SiteFetcher(
         cache_dir=cache_dir,
         user_agent="helios-test/1.0",
-        min_interval_s=0.0,
+        min_interval_s=min_interval_s,
         client=httpx.Client(transport=httpx.MockTransport(handle)),
+        resolve=resolve,
+        clock=clock.time,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
     )
+
+
+# -- cache ---------------------------------------------------------------------
 
 
 def test_fetch_caches_on_disk(tmp_path: Path) -> None:
@@ -45,42 +99,285 @@ def test_fetch_caches_on_disk(tmp_path: Path) -> None:
         second = fetcher.fetch("https://k.com/")
     assert first is not None and first.status == 200
     assert second == first
-    assert calls == ["https://k.com/"], "second fetch must be served from cache"
+    assert calls == ["https://k.com/robots.txt", "https://k.com/"], "second fetch is cached"
 
 
 def test_network_error_is_cached_as_negative(tmp_path: Path) -> None:
     calls: list[str] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
-        calls.append(str(request.url))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
         raise httpx.ConnectError("boom")
 
-    with SiteFetcher(
-        cache_dir=tmp_path,
-        user_agent="helios-test/1.0",
-        min_interval_s=0.0,
-        client=httpx.Client(transport=httpx.MockTransport(handle)),
-    ) as fetcher:
+    with _fetcher(tmp_path, {}, calls=calls, handler=handle) as fetcher:
         assert fetcher.fetch("https://dead.com/") is None
         assert fetcher.fetch("https://dead.com/") is None
-    assert calls == ["https://dead.com/"], "a cached failure must not re-request"
+    assert calls.count("https://dead.com/") == 1, "a cached failure must not re-request"
+
+
+def test_cached_entries_expire_after_ttl(tmp_path: Path) -> None:
+    calls: list[str] = []
+    clock = FakeClock()
+    routes = {"/": (200, "<html>hi</html>", _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls, clock=clock) as fetcher:
+        fetcher.fetch("https://k.com/")
+    clock.wall += CACHE_TTL_S - 1
+    with _fetcher(tmp_path, routes, calls=calls, clock=clock) as fetcher:
+        fetcher.fetch("https://k.com/")
+    assert len(calls) == 2, "within the TTL robots.txt and the page come from the cache"
+    clock.wall += 2
+    with _fetcher(tmp_path, routes, calls=calls, clock=clock) as fetcher:
+        fetcher.fetch("https://k.com/")
+    assert calls[2:] == ["https://k.com/robots.txt", "https://k.com/"]
+
+
+def test_corrupt_or_legacy_cache_entry_is_refetched(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {"/": (200, "<html>hi</html>", _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        fetcher.fetch("https://k.com/")
+    entries = sorted(tmp_path.glob("*.json"))
+    assert len(entries) == 2
+    assert not list(tmp_path.glob("*.tmp")), "atomic writes leave no temp files"
+    for entry in entries:
+        assert "fetched_at" in json.loads(entry.read_text(encoding="utf-8"))
+    entries[0].write_text('{"result": {"url": "https://k', encoding="utf-8")  # torn write
+    entries[1].write_text('{"result": null}', encoding="utf-8")  # pre-S2 entry, no fetched_at
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        result = fetcher.fetch("https://k.com/")
+    assert result is not None and result.status == 200
+    assert len(calls) == 4, "both unreadable entries are re-fetched"
+
+
+def test_body_over_size_cap_is_a_failure(tmp_path: Path) -> None:
+    big = "x" * (MAX_BODY_BYTES + 1)
+    routes = {"/big": (200, big, _HTML), "/ok": (200, "x" * MAX_BODY_BYTES, _HTML)}
+    with _fetcher(tmp_path, routes) as fetcher:
+        assert fetcher.fetch("https://k.com/big") is None
+        ok = fetcher.fetch("https://k.com/ok")
+    assert ok is not None and len(ok.text) == MAX_BODY_BYTES
+
+
+def test_declared_content_length_over_cap_is_not_read(tmp_path: Path) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(
+            200, headers={"content-length": str(MAX_BODY_BYTES + 1)}, content=b"small"
+        )
+
+    with _fetcher(tmp_path, {}, handler=handle) as fetcher:
+        assert fetcher.fetch("https://k.com/") is None
+
+
+# -- robots.txt ----------------------------------------------------------------
 
 
 def test_robots_disallow_is_honoured(tmp_path: Path) -> None:
+    calls: list[str] = []
     routes = {
         "/robots.txt": (200, "User-agent: *\nDisallow: /menu", _TEXT),
         "/menu": (200, "<html>menu</html>", _HTML),
     }
-    with _fetcher(tmp_path, routes) as fetcher:
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
         assert fetcher.allowed("https://k.com/about") is True
         assert fetcher.allowed("https://k.com/menu") is False
         # A robots-disallowed menu must not be discovered even though it 200s.
         assert fetcher.discover_menu_url("https://k.com/") is None
+    assert "https://k.com/menu" not in calls
 
 
-def test_missing_robots_allows_all(tmp_path: Path) -> None:
-    with _fetcher(tmp_path, {"/menu": (200, "<html>m</html>", _HTML)}) as fetcher:
+@pytest.mark.parametrize(
+    ("robots", "path", "expected"),
+    [
+        # R05: longest match wins, not first match.
+        ("User-agent: *\nAllow: /\nDisallow: /menu", "/menu", False),
+        ("User-agent: *\nDisallow: /\nAllow: /menu", "/menu", True),
+        # Allow wins an equal-length tie.
+        ("User-agent: *\nDisallow: /menu\nAllow: /menu", "/menu", True),
+        # R05: * and $ wildcards.
+        ("User-agent: *\nDisallow: /*menu", "/our-menu", False),
+        ("User-agent: *\nDisallow: /*.pdf$", "/menu.pdf", False),
+        ("User-agent: *\nDisallow: /*.pdf$", "/menu.pdf?v=2", True),
+        # Query strings are part of the matched path.
+        ("User-agent: *\nDisallow: /*?order=", "/menu?order=1", False),
+        # Our own group beats the * group; other bots' groups don't apply to us.
+        ("User-agent: *\nDisallow:\n\nUser-agent: helios-test\nDisallow: /", "/", False),
+        ("User-agent: GPTBot\nDisallow: /", "/menu", True),
+    ],
+)
+def test_robots_rules_follow_rfc_9309(
+    tmp_path: Path, robots: str, path: str, expected: bool
+) -> None:
+    with _fetcher(tmp_path, {"/robots.txt": (200, robots, _TEXT)}) as fetcher:
+        assert fetcher.allowed(f"https://k.com{path}") is expected
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 410])
+def test_robots_4xx_allows_all(tmp_path: Path, status: int) -> None:
+    routes = {"/robots.txt": (status, "", _TEXT), "/menu": (200, "<html>m</html>", _HTML)}
+    with _fetcher(tmp_path, routes) as fetcher:
         assert fetcher.allowed("https://k.com/menu") is True
+
+
+@pytest.mark.parametrize("status", [500, 503])
+def test_robots_5xx_skips_the_site(tmp_path: Path, status: int) -> None:
+    calls: list[str] = []
+    routes = {"/robots.txt": (status, "", _TEXT), "/menu": (200, "<html>m</html>", _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        assert fetcher.discover_menu_url("https://k.com/") is None
+    assert calls == ["https://k.com/robots.txt"], "nothing but robots.txt is requested"
+
+
+def test_unreachable_robots_skips_the_site(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("slow")
+
+    with _fetcher(tmp_path, {}, calls=calls, handler=handle) as fetcher:
+        assert fetcher.fetch("https://k.com/") is None
+        assert fetcher.fetch("https://k.com/menu") is None
+    assert calls == ["https://k.com/robots.txt"]
+
+
+def test_robots_redirect_off_site_skips_the_site(tmp_path: Path) -> None:
+    routes = {"https://k.com/robots.txt": (301, "https://cdn.example.net/robots.txt", _TEXT)}
+    with _fetcher(tmp_path, routes) as fetcher:
+        assert fetcher.allowed("https://k.com/menu") is False
+
+
+def test_crawl_delay_slows_the_host(tmp_path: Path) -> None:
+    clock = FakeClock()
+    routes = {"/robots.txt": (200, "User-agent: *\nCrawl-delay: 5", _TEXT)}
+    with _fetcher(tmp_path, routes, clock=clock, min_interval_s=1.0) as fetcher:
+        fetcher.fetch("https://k.com/a")
+    assert clock.sleeps == [5.0]
+
+
+def test_excessive_crawl_delay_skips_the_site(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {"/robots.txt": (200, "User-agent: *\nCrawl-delay: 3600", _TEXT)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        assert fetcher.fetch("https://k.com/menu") is None
+    assert calls == ["https://k.com/robots.txt"]
+
+
+# -- rate limit ----------------------------------------------------------------
+
+
+def test_requests_to_one_host_are_spaced(tmp_path: Path) -> None:
+    clock = FakeClock()
+    with _fetcher(tmp_path, {}, clock=clock, min_interval_s=1.0) as fetcher:
+        fetcher.fetch("https://k.com/a")  # robots.txt, then /a after 1 s
+        clock.mono += 0.25
+        fetcher.fetch("https://k.com/b")  # 0.25 s since /a
+        fetcher.fetch("https://other.com/")  # a different host is not delayed by k.com
+    assert clock.sleeps == [1.0, 0.75, 1.0]
+
+
+# -- redirects -----------------------------------------------------------------
+
+
+def test_same_site_redirects_are_followed(tmp_path: Path) -> None:
+    routes = {
+        "http://k.com/menu": (301, "https://www.k.com/menu", _HTML),
+        "https://www.k.com/menu": (302, "/menu/", _HTML),
+        "https://www.k.com/menu/": (200, "<html>menu</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        result = fetcher.fetch("http://k.com/menu")
+    assert result is not None
+    assert result.status == 200
+    assert result.url == "https://www.k.com/menu/"
+
+
+def test_each_hop_is_throttled(tmp_path: Path) -> None:
+    clock = FakeClock()
+    routes = {
+        "https://k.com/menu": (301, "/menu/", _HTML),
+        "https://k.com/menu/": (200, "<html>menu</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes, clock=clock, min_interval_s=1.0) as fetcher:
+        fetcher.fetch("https://k.com/menu")
+    assert clock.sleeps == [1.0, 1.0], "robots.txt → /menu → /menu/ each wait a second"
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "https://ordering.example.net/k",  # another site
+        "http://192.168.1.10/admin",  # the Pi's LAN
+        "http://127.0.0.1:8000/",  # loopback
+        "http://[::ffff:10.0.0.1]/",  # IPv4-mapped private
+        "ftp://k.com/menu.pdf",  # not http(s)
+        "http://[::1",  # malformed Location
+    ],
+)
+def test_redirects_off_policy_are_refused(tmp_path: Path, location: str) -> None:
+    calls: list[str] = []
+    routes = {"https://k.com/menu": (302, location, _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        assert fetcher.fetch("https://k.com/menu") is None
+    assert calls == ["https://k.com/robots.txt", "https://k.com/menu"], "target never requested"
+
+
+def test_malformed_website_is_a_failure_not_a_crash(tmp_path: Path) -> None:
+    with _fetcher(tmp_path, {}) as fetcher:
+        assert fetcher.fetch("http://[k.com/") is None
+
+
+def test_host_resolving_to_a_private_address_is_refused(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def resolve(host: str) -> Iterable[str]:
+        return ["10.0.0.5"] if host == "intranet.k.com" else [_PUBLIC_IP]
+
+    with _fetcher(tmp_path, {}, calls=calls, resolve=resolve) as fetcher:
+        assert fetcher.fetch("https://intranet.k.com/") is None
+        assert fetcher.discover_menu_url("https://intranet.k.com/") is None
+    assert calls == []
+
+
+def test_redirect_hop_disallowed_by_robots_is_not_requested(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {
+        "https://k.com/robots.txt": (200, "User-agent: *\nDisallow: /private", _TEXT),
+        "https://k.com/menu": (302, "/private/menu", _HTML),
+    }
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        assert fetcher.fetch("https://k.com/menu") is None
+    assert "https://k.com/private/menu" not in calls
+
+
+def test_redirect_chain_is_capped(tmp_path: Path) -> None:
+    routes = {f"https://k.com/{i}": (302, f"/{i + 1}", _HTML) for i in range(10)}
+    with _fetcher(tmp_path, routes) as fetcher:
+        assert fetcher.fetch("https://k.com/0") is None
+
+
+@pytest.mark.parametrize(
+    ("address", "public"),
+    [
+        (_PUBLIC_IP, True),
+        ("2606:4700::1111", True),
+        ("192.168.1.219", False),
+        ("10.1.2.3", False),
+        ("127.0.0.1", False),
+        ("169.254.169.254", False),
+        ("100.64.0.1", False),
+        ("::1", False),
+        ("fe80::1", False),
+        ("224.0.0.1", False),
+        ("not-an-ip", False),
+    ],
+)
+def test_is_public_address(address: str, public: bool) -> None:
+    assert is_public_address(address) is public
+
+
+# -- discovery -----------------------------------------------------------------
 
 
 def test_discover_finds_well_known_menu_path(tmp_path: Path) -> None:
@@ -105,6 +402,20 @@ def test_discover_falls_back_to_homepage_anchor(tmp_path: Path) -> None:
     assert found is not None
     assert found.menu_url == "https://k.com/specials-menu"
     assert found.signal == "crawled"
+
+
+def test_discover_resolves_links_against_the_post_redirect_homepage(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {
+        "http://k.com/": (301, "https://www.k.com/en/", _HTML),
+        "https://www.k.com/en/": (200, '<a href="dinner">Dinner menu</a>', _HTML),
+        "https://www.k.com/en/dinner": (200, "<html>menu</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        found = fetcher.discover_menu_url("http://k.com/")
+    assert found is not None
+    assert found.menu_url == "https://www.k.com/en/dinner"
+    assert "http://k.com/menu" not in calls, "well-known paths use the final homepage URL"
 
 
 def test_discover_returns_none_when_no_candidate_resolves(tmp_path: Path) -> None:
