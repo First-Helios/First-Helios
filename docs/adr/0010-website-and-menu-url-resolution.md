@@ -291,9 +291,10 @@ checklist) settle:
   pre-filters; a content classifier that ranks or verifies candidates (never
   overriding robots) is out of scope here and gets its own ADR in Phase 5,
   same as Amendment 1 already recorded.
-- **Catch-all / soft-404 hosts are detected, not trusted** (D3.4, R08). Before
-  trying the well-known paths, `SiteFetcher` probes one random,
-  almost-certainly-nonexistent path per site. If that 200s as HTML, the site
+- **Catch-all / soft-404 hosts are detected, not trusted** (D3.4, R08). The
+  first time a well-known path answers 200 on a site, `SiteFetcher` probes one
+  random, almost-certainly-nonexistent path there (never otherwise, so most
+  sites cost no extra request). If that 200s as HTML, the site
   answers 200 for anything, so a well-known path's own URL (`/menu` always
   contains "menu" by construction) is not evidence of a real menu there — only
   its `<title>`/heading count for those candidates on that site.
@@ -314,22 +315,28 @@ checklist) settle:
   (R75). A sitemap *index*'s `<loc>` children name sitemap documents, never
   page candidates, and are expanded up to `MAX_SITEMAP_CHILDREN` (5); a site's
   robots.txt `Sitemap:` lines (read via `protego`'s parsed rules, same-site
-  only) are tried before the `/sitemap.xml` convention; a `.xml.gz` URL is
-  gunzipped with its own decompressed-size cap (independent of the compressed
-  fetch cap) so a small, hostile payload can't expand into a memory bomb.
+  only) are tried before the `/sitemap.xml` convention; a `.xml.gz` URL whose
+  body carries the gzip magic bytes is gunzipped with its own
+  decompressed-size cap (independent of the compressed fetch cap) so a small,
+  hostile payload can't expand into a memory bomb (one served with
+  `Content-Encoding: gzip` is already decoded by httpx and passes through).
 - **Shared platform hosts are a fallback, one menu URL per venue** (D3.5,
   R33). A small, explicit host list (Toast, Square, Clover, Facebook,
   Instagram, DoorDash, Uber Eats, Grubhub, Linktree, and alike) is never
   probed at its own well-known root paths — a shared platform's `/menu`
-  belongs to the platform, not the venue. When the venue's *own* website is
-  already on one of these hosts, that page is itself the menu-URL candidate
+  belongs to the platform, not the venue, and a platform's root
+  (`https://www.facebook.com/`) is never a venue's page. When the venue's
+  *own* website is a non-root page on one of these hosts, that page is itself
+  the menu-URL candidate
   (signal `"platform"`), verified only by fetching it — still through the
   full robots/redirect/public-IP policy, since `SiteFetcher`'s same-site
   check is relative to the URL being fetched, not the venue's original site.
   When the venue's website is its own site, a same-site menu candidate still
-  wins; only if none verifies does a homepage link into a known platform page
-  (e.g. `toasttab.com/<venue>`, a DoorDash store page) get accepted, same
-  signal. Only one menu URL is stored per venue today (D3.5); reconciling a
+  wins; only if none verifies does a homepage link to a venue page on an
+  *ordering* platform (e.g. `toasttab.com/<venue>`, a DoorDash store page) get
+  accepted, same signal. Social links (Facebook, Instagram, Linktree) are on
+  nearly every restaurant homepage and are not a menu, so they never serve as
+  that fallback; nor does a platform root such as a "Powered by Toast" footer. Only one menu URL is stored per venue today (D3.5); reconciling a
   site's menu against a platform's when both exist needs a record-contract
   change and is deferred to S5/S6 (D4), same as Amendment 2's grain
   discussion — the owner noted this data should still be collected even where

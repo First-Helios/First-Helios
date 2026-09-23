@@ -62,6 +62,7 @@ from protego import Protego
 from apps.discovery.menu_url import (
     MAX_PLATFORM_CANDIDATES,
     MAX_SITEMAP_CHILDREN,
+    is_platform_venue_page,
     menu_links_from_sitemap,
     ordered_menu_candidates,
     page_menu_signal,
@@ -308,9 +309,12 @@ class SiteFetcher:
                 body = _read_capped(response)
                 if body is None:
                     return None
-                if url.lower().split("?", 1)[0].endswith(".gz"):
+                is_gz_url = url.lower().split("?", 1)[0].endswith(".gz")
+                if is_gz_url and body.startswith(_GZIP_MAGIC):
                     # R75: a gzipped sitemap. Decompress with its own cap so a
                     # small compressed payload can't expand into a memory bomb.
+                    # Served with Content-Encoding: gzip, httpx has already
+                    # decoded it (no magic bytes), so it passes through as-is.
                     body = _gunzip_capped(body, MAX_BODY_BYTES)
                     if body is None:
                         return None
@@ -377,6 +381,8 @@ class SiteFetcher:
         (post-redirect) URL.
         """
         if platform_signal(website):
+            if not is_platform_venue_page(website):
+                return None  # a platform's root belongs to the platform (R33)
             result = self.fetch(website)
             if result is not None and result.status == 200 and _is_html(result):  # noqa: PLR2004
                 return MenuUrlDiscovery(menu_url=result.url, signal="platform")
@@ -396,7 +402,7 @@ class SiteFetcher:
             base, homepage_html=homepage_html, extra_sitemap_matches=tuple(sitemap_matches)
         )
         well_known = {url.rstrip("/") for url in path_candidates(base)}
-        is_catch_all = self._is_catch_all_site(base)
+        is_catch_all: bool | None = None  # probed lazily: only a 200 well-known path needs it
 
         for candidate in candidates:
             result = self.fetch(candidate)
@@ -405,7 +411,9 @@ class SiteFetcher:
             if same_resource(result.url, base):
                 continue  # the candidate just redirected back to the homepage (R08)
             is_well_known = candidate.rstrip("/") in well_known
-            trust_path = not (is_well_known and is_catch_all)
+            if is_well_known and is_catch_all is None:
+                is_catch_all = self._is_catch_all_site(base)
+            trust_path = not (is_well_known and bool(is_catch_all))
             if not page_menu_signal(result.text, result.url, trust_path=trust_path):
                 continue
             if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
@@ -497,6 +505,9 @@ def _decode(body: bytes, encoding: str | None) -> str:
         return body.decode(encoding or "utf-8", errors="replace")
     except LookupError:  # unknown charset in the Content-Type header
         return body.decode("utf-8", errors="replace")
+
+
+_GZIP_MAGIC = b"\x1f\x8b"
 
 
 def _gunzip_capped(data: bytes, cap: int) -> bytes | None:

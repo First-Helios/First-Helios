@@ -494,6 +494,31 @@ def test_platform_website_is_verified_directly_with_no_root_probe(tmp_path: Path
     assert "https://order.toasttab.com/menu" not in calls, "R33: no root-path probe on a platform"
 
 
+def test_platform_root_website_is_not_a_menu(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {"/": (200, "<html>facebook</html>", _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        assert fetcher.discover_menu_url("https://www.facebook.com/") is None
+    assert calls == [], "a platform's root belongs to the platform (R33)"
+
+
+def test_own_site_never_falls_back_to_a_social_link(tmp_path: Path) -> None:
+    routes = {
+        "/": (200, '<a href="https://www.facebook.com/kerbey">Facebook</a>', _HTML),
+        "https://www.facebook.com/kerbey": (200, "<html>fb</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        assert fetcher.discover_menu_url("https://k.com/") is None
+
+
+def test_catch_all_probe_only_runs_when_a_well_known_path_answers(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {"/": (200, "<html>no menu here</html>", _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        assert fetcher.discover_menu_url("https://k.com/") is None
+    assert not [c for c in calls if "helios-probe-" in c], "no 200 well-known path, no probe"
+
+
 def test_platform_website_that_fails_to_fetch_yields_no_menu(tmp_path: Path) -> None:
     with _fetcher(tmp_path, {}) as fetcher:  # /venue-1 falls through to the 404 default
         assert fetcher.discover_menu_url("https://order.toasttab.com/venue-1") is None
@@ -590,6 +615,26 @@ def test_fetch_decompresses_gzip_urls(tmp_path: Path) -> None:
         if request.url.path == "/robots.txt":
             return httpx.Response(404)
         return httpx.Response(200, content=compressed, headers={"content-type": "application/gzip"})
+
+    with _fetcher(tmp_path, {}, handler=handle) as fetcher:
+        result = fetcher.fetch("https://k.com/sitemap.xml.gz")
+    assert result is not None
+    assert result.text == xml
+
+
+def test_gz_url_already_decoded_by_content_encoding_passes_through(tmp_path: Path) -> None:
+    # A CDN serving sitemap.xml.gz with Content-Encoding: gzip: httpx decodes
+    # it, so the body is plain XML and must not be gunzipped a second time.
+    xml = "<urlset><url><loc>https://k.com/menu</loc></url></urlset>"
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(
+            200,
+            content=gzip.compress(xml.encode("utf-8")),
+            headers={"content-type": "application/xml", "content-encoding": "gzip"},
+        )
 
     with _fetcher(tmp_path, {}, handler=handle) as fetcher:
         result = fetcher.fetch("https://k.com/sitemap.xml.gz")

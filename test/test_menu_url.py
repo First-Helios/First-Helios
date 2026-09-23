@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from apps.discovery.menu_url import (
     MAX_CANDIDATES,
+    is_platform_venue_page,
     looks_like_menu,
     menu_links_from_html,
     menu_links_from_sitemap,
@@ -257,4 +258,21 @@ def test_platform_links_from_html_ignores_site_and_menu_wording() -> None:
         '<a href="https://instagram.com/venue">Follow us</a>'
     )
     links = platform_links_from_html(html, "https://kerbey.com/")
-    assert links == ["https://order.toasttab.com/venue", "https://instagram.com/venue"]
+    assert links == ["https://order.toasttab.com/venue"], "social icons are never a menu fallback"
+
+
+def test_platform_links_skip_platform_roots() -> None:
+    # A "Powered by Toast" footer link is the platform's page, not the venue's (R33).
+    html = (
+        '<a href="https://pos.toasttab.com/">Powered by Toast</a>'
+        '<a href="https://www.doordash.com/store/kerbey-123/">Order delivery</a>'
+    )
+    links = platform_links_from_html(html, "https://kerbey.com/")
+    assert links == ["https://www.doordash.com/store/kerbey-123/"]
+
+
+def test_is_platform_venue_page_requires_a_non_root_path() -> None:
+    assert is_platform_venue_page("https://www.facebook.com/kerbeylane")
+    assert not is_platform_venue_page("https://www.facebook.com/")
+    assert not is_platform_venue_page("https://www.facebook.com/kerbeylane", ordering_only=True)
+    assert is_platform_venue_page("https://order.toasttab.com/online/kerbey", ordering_only=True)

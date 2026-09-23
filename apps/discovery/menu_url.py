@@ -84,22 +84,23 @@ MAX_PLATFORM_CANDIDATES = 3
 
 # Shared food-ordering / social platforms whose own pages are accepted as a
 # venue's menu source (owner decision D3.5): a website hosted here is never
-# probed at its own well-known root paths (R33), and an own-site venue with no
-# verified menu falls back to a homepage link into one of these.
-PLATFORM_HOSTS: frozenset[str] = frozenset(
+# probed at its own well-known root paths (R33); the venue's page on it (a
+# non-root path) is itself the menu URL.
+ORDERING_PLATFORM_HOSTS: frozenset[str] = frozenset(
     {
         "toasttab.com",
         "squareup.com",
         "square.site",
         "clover.com",
-        "facebook.com",
-        "instagram.com",
         "doordash.com",
         "ubereats.com",
         "grubhub.com",
-        "linktr.ee",
     },
 )
+SOCIAL_PLATFORM_HOSTS: frozenset[str] = frozenset(
+    {"facebook.com", "instagram.com", "linktr.ee"},
+)
+PLATFORM_HOSTS: frozenset[str] = ORDERING_PLATFORM_HOSTS | SOCIAL_PLATFORM_HOSTS
 
 _HEADING_TAGS: frozenset[str] = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 
@@ -164,10 +165,26 @@ def looks_like_menu(text: str, href: str) -> bool:
     return bool(_MENU_TERMS & tokens)
 
 
+def _on_hosts(url: str, domains: frozenset[str]) -> bool:
+    host = _host(url)
+    return any(host == domain or host.endswith(f".{domain}") for domain in domains)
+
+
 def platform_signal(url: str) -> bool:
     """True when a URL's host is on, or a subdomain of, a known platform (D3.5)."""
-    host = _host(url)
-    return any(host == domain or host.endswith(f".{domain}") for domain in PLATFORM_HOSTS)
+    return _on_hosts(url, PLATFORM_HOSTS)
+
+
+def is_platform_venue_page(url: str, *, ordering_only: bool = False) -> bool:
+    """True for a venue's own page on a platform: a platform host and a non-root path.
+
+    A platform's root (``https://www.facebook.com/``) belongs to the platform,
+    not any venue (R33). ``ordering_only`` restricts to ordering platforms: a
+    homepage's social-icon links (Facebook, Instagram) are on nearly every
+    restaurant site and are not a menu, so they never serve as a fallback.
+    """
+    domains = ORDERING_PLATFORM_HOSTS if ordering_only else PLATFORM_HOSTS
+    return _on_hosts(url, domains) and urlsplit(url).path.strip("/") != ""
 
 
 class _AnchorCollector(HTMLParser):
@@ -249,12 +266,13 @@ def menu_links_from_html(html: str, base_url: str) -> list[str]:
 
 
 def platform_links_from_html(html: str, base_url: str) -> list[str]:
-    """Absolute homepage-anchor URLs pointing at a known platform host, in order.
+    """Absolute homepage-anchor URLs to a venue page on an ordering platform, in order.
 
     Unlike :func:`menu_links_from_html` these deliberately leave the page's own
-    site (that is the point) and need no menu wording: landing on a known
-    platform host is itself the signal (owner decision D3.5b) — e.g. a
-    homepage link to ``toasttab.com/<venue>`` or a DoorDash store page.
+    site (that is the point) and need no menu wording: landing on a venue page
+    of a known ordering platform is itself the signal (owner decision D3.5b) —
+    e.g. a homepage link to ``toasttab.com/<venue>`` or a DoorDash store page.
+    Social links and platform roots (a "Powered by Toast" footer) are skipped.
     """
     parser = _AnchorCollector()
     parser.feed(html)
@@ -266,7 +284,9 @@ def platform_links_from_html(html: str, base_url: str) -> list[str]:
         if not href or href.startswith("#"):
             continue
         absolute = urljoin(link_base, href)
-        if urlsplit(absolute).scheme not in {"http", "https"} or not platform_signal(absolute):
+        if urlsplit(absolute).scheme not in {"http", "https"}:
+            continue
+        if not is_platform_venue_page(absolute, ordering_only=True):
             continue
         key = _dedupe_key(absolute)
         if key in seen:
