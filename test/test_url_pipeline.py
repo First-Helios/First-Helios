@@ -24,6 +24,7 @@ from apps.discovery.url_pipeline import (
     MENU_URL_NAMESPACE,
     WEBSITE_NAMESPACE,
     UrlDiscoveryReport,
+    _coerce_website,
     resolve_urls,
 )
 from apps.discovery.web_client import MenuUrlDiscovery
@@ -530,3 +531,23 @@ def test_batches_commit_so_a_crash_keeps_earlier_work(session: Session) -> None:
     for index in range(4):
         assert _record(session, MENU_URL_NAMESPACE, f"batch{index}").state == "resolved"
     assert _versions(session, WEBSITE_NAMESPACE, "batch4") == []
+
+
+# --- Review remediation S4 (R76) -------------------------------------------------
+
+
+def test_coerce_website_rejects_a_retry_host_without_a_dot() -> None:
+    # A typo'd single slash ('http:/site.com') parses on the https:// retry
+    # as scheme https, host "http" -- a URL shape, but not a real website.
+    assert _coerce_website("http:/site.com") is None
+
+
+def test_coerce_website_still_fixes_a_bare_domain() -> None:
+    assert _coerce_website("kerbey.com") == "https://kerbey.com/"
+    assert _coerce_website("https://kerbey.com") == "https://kerbey.com/"
+
+
+def test_coerce_website_rejects_garbage() -> None:
+    assert _coerce_website("not a url") is None
+    assert _coerce_website("") is None
+    assert _coerce_website("   ") is None

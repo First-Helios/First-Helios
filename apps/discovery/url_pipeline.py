@@ -122,16 +122,29 @@ def _host_of(url: str) -> str:
 
 
 def _coerce_website(value: str) -> str | None:
-    """Canonicalize an Overture website string, tolerating a missing scheme."""
+    """Canonicalize an Overture website string, tolerating a missing scheme.
+
+    The ``https://`` retry is only trusted when it parses into a real
+    hostname (one with a dot). Without that guard, garbage like
+    ``'http:/site.com'`` (a typo'd single slash) parses on retry as scheme
+    ``https``, host ``http`` — a URL-shaped string, but not a website
+    (R76) — silently "fixing" it into ``https://http/site.com``.
+    """
     candidate = value.strip()
     if not candidate:
         return None
-    for attempt in (candidate, f"https://{candidate}"):
-        try:
-            return canonicalize_http_url(attempt)
-        except ValueError:
-            continue
-    return None
+    try:
+        return canonicalize_http_url(candidate)
+    except ValueError:
+        pass
+    retry = f"https://{candidate}"
+    try:
+        canonical = canonicalize_http_url(retry)
+    except ValueError:
+        return None
+    if "." not in (urlsplit(canonical).hostname or ""):
+        return None
+    return canonical
 
 
 def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterator[VenueToResolve]:

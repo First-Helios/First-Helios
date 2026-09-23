@@ -7,12 +7,14 @@ otherwise) and the clocks are fakes, so throttling and cache expiry are exact.
 
 from __future__ import annotations
 
+import gzip
 import json
 from typing import TYPE_CHECKING
 
 import httpx
 import pytest
 
+import apps.discovery.web_client as web_client_module
 from apps.discovery.web_client import (
     CACHE_TTL_S,
     MAX_BODY_BYTES,
@@ -408,16 +410,203 @@ def test_discover_resolves_links_against_the_post_redirect_homepage(tmp_path: Pa
     calls: list[str] = []
     routes = {
         "http://k.com/": (301, "https://www.k.com/en/", _HTML),
-        "https://www.k.com/en/": (200, '<a href="dinner">Dinner menu</a>', _HTML),
-        "https://www.k.com/en/dinner": (200, "<html>menu</html>", _HTML),
+        "https://www.k.com/en/": (200, '<a href="dinner-menu">Dinner menu</a>', _HTML),
+        "https://www.k.com/en/dinner-menu": (200, "<title>Dinner Menu</title>", _HTML),
     }
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
         found = fetcher.discover_menu_url("http://k.com/")
     assert found is not None
-    assert found.menu_url == "https://www.k.com/en/dinner"
+    assert found.menu_url == "https://www.k.com/en/dinner-menu"
     assert "http://k.com/menu" not in calls, "well-known paths use the final homepage URL"
 
 
 def test_discover_returns_none_when_no_candidate_resolves(tmp_path: Path) -> None:
     with _fetcher(tmp_path, {"/": (200, "<html>no menu here</html>", _HTML)}) as fetcher:
         assert fetcher.discover_menu_url("https://k.com/") is None
+
+
+# --- Review remediation S4 (R08, R33, R34, R75, R76) ----------------------------
+
+
+def test_candidate_redirecting_back_to_homepage_is_rejected(tmp_path: Path) -> None:
+    routes = {
+        "/": (200, "<html>home</html>", _HTML),
+        "/menu": (301, "/", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        assert fetcher.discover_menu_url("https://k.com/") is None
+
+
+def test_candidate_with_body_identical_to_homepage_is_rejected(tmp_path: Path) -> None:
+    # A soft-404/SPA fallback answering every path with the homepage's own
+    # markup (a distinct URL, not a redirect) must not be accepted either.
+    routes = {
+        "/": (200, "<html>Welcome home</html>", _HTML),
+        "/menu": (200, "<html>Welcome home</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        assert fetcher.discover_menu_url("https://k.com/") is None
+
+
+def test_catch_all_site_rejects_a_well_known_path_with_no_real_title(tmp_path: Path) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(
+            200, text="<html>nothing to see here</html>", headers={"content-type": _HTML}
+        )
+
+    with _fetcher(tmp_path, {}, handler=handle) as fetcher:
+        # /menu 200s (like every other path on this catch-all host) but its
+        # own content never says "menu" anywhere but the URL, which a
+        # catch-all site must not be trusted for (R08).
+        assert fetcher.discover_menu_url("https://k.com/") is None
+
+
+def test_catch_all_site_still_accepts_a_well_known_path_with_a_real_title(tmp_path: Path) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        if request.url.path == "/menu":
+            return httpx.Response(
+                200, text="<title>Our Menu</title>", headers={"content-type": _HTML}
+            )
+        return httpx.Response(
+            200, text="<html>generic catch-all page</html>", headers={"content-type": _HTML}
+        )
+
+    with _fetcher(tmp_path, {}, handler=handle) as fetcher:
+        found = fetcher.discover_menu_url("https://k.com/")
+    assert found is not None
+    assert (found.menu_url, found.signal) == ("https://k.com/menu", "well_known")
+
+
+# -- platform sites (D3.5) ------------------------------------------------------
+
+
+def test_platform_website_is_verified_directly_with_no_root_probe(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {"/venue-1": (200, "<html>order here</html>", _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        found = fetcher.discover_menu_url("https://order.toasttab.com/venue-1")
+    assert found is not None
+    assert (found.menu_url, found.signal) == ("https://order.toasttab.com/venue-1", "platform")
+    assert "https://order.toasttab.com/menu" not in calls, "R33: no root-path probe on a platform"
+
+
+def test_platform_website_that_fails_to_fetch_yields_no_menu(tmp_path: Path) -> None:
+    with _fetcher(tmp_path, {}) as fetcher:  # /venue-1 falls through to the 404 default
+        assert fetcher.discover_menu_url("https://order.toasttab.com/venue-1") is None
+
+
+def test_own_site_falls_back_to_a_homepage_platform_link(tmp_path: Path) -> None:
+    routes = {
+        "/": (200, '<a href="https://order.toasttab.com/venue-1">Order Online</a>', _HTML),
+        "https://order.toasttab.com/venue-1": (200, "<html>order</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        found = fetcher.discover_menu_url("https://k.com/")
+    assert found is not None
+    assert (found.menu_url, found.signal) == ("https://order.toasttab.com/venue-1", "platform")
+
+
+def test_own_site_menu_wins_over_a_platform_fallback_link(tmp_path: Path) -> None:
+    routes = {
+        "/": (
+            200,
+            '<a href="/menu">Our Menu</a>'
+            '<a href="https://order.toasttab.com/venue-1">Order Online</a>',
+            _HTML,
+        ),
+        "/menu": (200, "<title>Our Menu</title>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        found = fetcher.discover_menu_url("https://k.com/")
+    assert found is not None
+    assert (found.menu_url, found.signal) == ("https://k.com/menu", "well_known")
+
+
+# -- sitemaps (R75) --------------------------------------------------------------
+
+
+def test_sitemap_url_comes_from_robots_sitemap_directive(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {
+        "/": (200, "<html>home</html>", _HTML),
+        "/robots.txt": (200, "User-agent: *\nSitemap: https://k.com/custom-sitemap.xml", _TEXT),
+        "/custom-sitemap.xml": (
+            200,
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            "<url><loc>https://k.com/dinner-menu</loc></url></urlset>",
+            "application/xml",
+        ),
+        "/dinner-menu": (200, "<title>Dinner Menu</title>", _HTML),
+    }
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        found = fetcher.discover_menu_url("https://k.com/")
+    assert found is not None
+    assert found.menu_url == "https://k.com/dinner-menu"
+    assert "https://k.com/custom-sitemap.xml" in calls
+    assert "https://k.com/sitemap.xml" not in calls
+
+
+def test_sitemap_index_children_are_expanded_for_menu_matches(tmp_path: Path) -> None:
+    calls: list[str] = []
+    routes = {
+        "/": (200, "<html>home</html>", _HTML),
+        "/sitemap.xml": (
+            200,
+            '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            "<sitemap><loc>https://k.com/sitemap-pages.xml</loc></sitemap>"
+            "</sitemapindex>",
+            "application/xml",
+        ),
+        "/sitemap-pages.xml": (
+            200,
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            "<url><loc>https://k.com/lunch-menu</loc></url></urlset>",
+            "application/xml",
+        ),
+        "/lunch-menu": (200, "<title>Lunch Menu</title>", _HTML),
+    }
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        found = fetcher.discover_menu_url("https://k.com/")
+    assert found is not None
+    assert found.menu_url == "https://k.com/lunch-menu"
+    assert "https://k.com/sitemap-pages.xml" in calls, "index children must be fetched"
+    assert "https://k.com/sitemap-pages.xml" not in [c for c in calls if c == found.menu_url], (
+        "an index child is a sitemap document, never a page candidate itself"
+    )
+
+
+def test_fetch_decompresses_gzip_urls(tmp_path: Path) -> None:
+    xml = (
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://k.com/menu</loc></url></urlset>"
+    )
+    compressed = gzip.compress(xml.encode("utf-8"))
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(200, content=compressed, headers={"content-type": "application/gzip"})
+
+    with _fetcher(tmp_path, {}, handler=handle) as fetcher:
+        result = fetcher.fetch("https://k.com/sitemap.xml.gz")
+    assert result is not None
+    assert result.text == xml
+
+
+def test_gzip_bomb_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A tiny compressed payload that decompresses far past the cap must be
+    # refused rather than decompressed in full (R75).
+    monkeypatch.setattr(web_client_module, "MAX_BODY_BYTES", 100)
+    compressed = gzip.compress(b"x" * 10_000)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(200, content=compressed, headers={"content-type": "application/gzip"})
+
+    with _fetcher(tmp_path, {}, handler=handle) as fetcher:
+        assert fetcher.fetch("https://k.com/big.xml.gz") is None
