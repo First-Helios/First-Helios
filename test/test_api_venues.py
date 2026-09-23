@@ -6,6 +6,8 @@ test transaction, so seeded rows are visible over HTTP without committing.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
@@ -14,12 +16,79 @@ from fastapi.testclient import TestClient
 from apps.api.db import get_session
 from apps.api.main import app
 from apps.api.pagination import encode_cursor
-from apps.api.seed import seed_sample_venues
+from packages.helios_core.identity.commands import (
+    create_establishment,
+    create_organization,
+    create_place,
+)
+from packages.helios_core.identity.normalize import name_fingerprint
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from sqlalchemy.orm import Session
+
+
+# (name, organization_kind, address, latitude, longitude, operating_status)
+_SAMPLE_VENUES = (
+    (
+        "Franklin Barbecue",
+        "brand",
+        "900 E 11th St, Austin, TX 78702",
+        "30.2701",
+        "-97.7313",
+        "open",
+    ),
+    ("Torchy's Tacos", "brand", "1311 S 1st St, Austin, TX 78704", "30.2515", "-97.7548", "open"),
+    (
+        "Home Slice Pizza",
+        "operating_identity",
+        "1415 S Congress Ave, Austin, TX 78704",
+        "30.2489",
+        "-97.7500",
+        "open",
+    ),
+    (
+        "Veracruz All Natural",
+        "operating_identity",
+        "1704 E Cesar Chavez St, Austin, TX 78702",
+        "30.2596",
+        "-97.7248",
+        "open",
+    ),
+    (
+        "Kerbey Lane Cafe",
+        "brand",
+        "3704 Kerbey Ln, Austin, TX 78731",
+        "30.3079",
+        "-97.7559",
+        "unknown",
+    ),
+)
+
+
+def seed_sample_venues(session: Session) -> list[int]:
+    """Create the sample venues in the test transaction; return Establishment ids."""
+    created: list[int] = []
+    for name, kind, address, latitude, longitude, status in _SAMPLE_VENUES:
+        organization = create_organization(
+            session,
+            canonical_name=name,
+            name_fingerprint=name_fingerprint(name),
+            organization_kind=kind,
+        )
+        place = create_place(
+            session, address=address, latitude=Decimal(latitude), longitude=Decimal(longitude)
+        )
+        establishment = create_establishment(
+            session,
+            organization_subject_id=organization.id,
+            place_subject_id=place.id,
+            valid_from=datetime(2024, 1, 1, tzinfo=UTC),
+            operating_status=status,
+        )
+        created.append(establishment.id)
+    return created
 
 
 @pytest.fixture

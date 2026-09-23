@@ -34,11 +34,13 @@ verify quickly. Prefer clarity and small diffs over cleverness.
 ## Verification — run before calling anything done
 
 ```bash
-make ci        # lint + typecheck + test + lockfile check — same as CI
+make ci        # lockfile + lint + typecheck + test — the local subset of CI
 ```
 
 Never report a task complete without running this. If you can't run it
 (no DB available, etc.), say so explicitly rather than claiming success.
+A `make ci` run with skipped database tests is not database acceptance; CI
+also runs strict DB tests, `alembic check`, and the Docker build.
 
 - `make lint` — ruff check + format
 - `make typecheck` — mypy --strict on `packages.helios_core.*`
@@ -67,14 +69,15 @@ Never report a task complete without running this. If you can't run it
   check the generated SQL, especially for anything touching an existing
   table with data in it.
 - `packages/helios_core/config.py` resolves `DATABASE_URL` from the environment;
-  `db/session.py`, Alembic, and tests consume those settings.
+  `db/session.py`, Alembic, and tests consume those settings. It has no
+  default (the old one was the V1 archive's address): unset means fail/skip.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (enforced by pre-commit's commit-msg hook).
 
 ## Stop and ask the human when
 
 - A migration would drop or alter a column/table that already has a
-  purpose (not a bare scaffold like the current `Venue` stub).
+  purpose.
 - Adding a new runtime dependency, especially anything with its own service
   (queue, cache, search index) — this affects the Docker/deploy story.
 - The right design isn't obvious from ROADMAP.md/existing ADRs and two

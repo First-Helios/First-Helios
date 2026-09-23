@@ -20,13 +20,14 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import Session
 
-from packages.helios_core.config import get_settings
+from packages.helios_core.config import get_database_url, get_settings
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from sqlalchemy.engine import Engine
 
+# None when unset: database tests then skip (or fail under strict mode).
 DATABASE_URL = get_settings().database_url
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,9 @@ def _database_engine(*, disposable: bool) -> Iterator[Engine]:
     override = os.environ.get("HELIOS_ALLOW_NONTEST_DB")
     if (strict or disposable) and override is not None:
         pytest.fail("database tests must not use HELIOS_ALLOW_NONTEST_DB", pytrace=False)
+    if DATABASE_URL is None:
+        _unavailable("DATABASE_URL is not set")
+        return
     url = None
     with suppress(ArgumentError):
         url = make_url(DATABASE_URL)
@@ -108,7 +112,7 @@ def session(database_engine: Engine) -> Iterator[Session]:
                 ["alembic", "-c", str(_ALEMBIC_INI), "upgrade", "head"],
                 check=True,
                 cwd=_REPO_ROOT,
-                env={**os.environ, "DATABASE_URL": DATABASE_URL},
+                env={**os.environ, "DATABASE_URL": get_database_url()},
             )
         except Exception:
             connection.close()

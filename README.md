@@ -126,7 +126,10 @@ make ci        # lint + typecheck + test + lockfile check
 ```
 
 `make ci` runs local lint, type, test, and lockfile checks. GitHub CI also
-builds and smoke-tests the Docker image. A local green run with skipped
+runs the database tests in strict mode with a coverage floor, runs
+`alembic check`, and builds and smoke-tests the Docker image.
+`DATABASE_URL` has no default: Alembic and the discovery CLIs refuse to run
+without it, and database tests skip. A local green run with skipped
 database tests does not establish database acceptance.
 
 For full database verification, provision a separate disposable `*_test`

@@ -6,7 +6,7 @@
 
 FROM python:3.12-slim-bookworm AS builder
 
-# Pinned to match the uv version used locally and in CI.
+# Keep in step with setup-uv's `version:` in .github/workflows/ci.yml.
 COPY --from=ghcr.io/astral-sh/uv:0.12.0 /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \

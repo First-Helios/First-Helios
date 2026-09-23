@@ -4,7 +4,7 @@ from sqlalchemy import engine_from_config, pool
 from sqlalchemy.schema import SchemaItem
 
 from alembic import context
-from packages.helios_core.config import get_settings
+from packages.helios_core.config import get_database_url
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -15,7 +15,8 @@ config = context.config
 # docker, future hosts).
 # ConfigParser consumes doubled percent signs. Escape only at this boundary;
 # get_main_option/get_section return the original URL to SQLAlchemy unchanged.
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+# Fails loudly when DATABASE_URL is unset; there is deliberately no default.
+config.set_main_option("sqlalchemy.url", get_database_url().replace("%", "%%"))
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
@@ -118,6 +119,9 @@ def run_migrations_online() -> None:
             include_object=include_object,
             include_schemas=True,
             version_table_schema=VERSION_TABLE_SCHEMA,
+            # Server defaults are part of the schema contract; without this,
+            # `alembic check` ignores a model/migration default mismatch.
+            compare_server_default=True,
         )
 
         with context.begin_transaction():

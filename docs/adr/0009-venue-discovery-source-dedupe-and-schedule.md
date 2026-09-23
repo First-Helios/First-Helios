@@ -9,7 +9,7 @@
 
 Phase 2 ("First Light") shipped the venue read API — `GET /v1/venues`,
 cursor-paginated ([ADR-0008](./0008-read-api-conventions.md)). It is served
-from a fixed **5-venue dev seed** ([apps/api/seed.py](../../apps/api/seed.py)),
+from a fixed **5-venue dev seed** (`apps/api/seed.py`, since removed),
 which mints Subjects **directly** via `create_organization` / `create_place` /
 `create_establishment` with **no Bronze provenance**. That is deliberate
 scaffolding for First Light, not a data path.
@@ -265,7 +265,7 @@ discovery design must respect now so viewing is not blocked later:
 - [ROADMAP.md](../../ROADMAP.md) Phase 4; [RFC-0001](../rfc/0001-menu-pricing-first.md) §D3–D6, PRs 5–6
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) (identity grains, dedupe philosophy, composition root)
 - [ADR-0008](./0008-read-api-conventions.md) (venue read contract this feeds)
-- Code: [apps/api/seed.py](../../apps/api/seed.py),
+- Code: `apps/api/seed.py` (removed after discovery replaced it),
   [identity/commands.py](../../packages/helios_core/identity/commands.py),
   [provenance/contracts.py](../../packages/helios_core/provenance/contracts.py),
   [identity/models.py](../../packages/helios_core/identity/models.py)

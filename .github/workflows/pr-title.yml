@@ -1,0 +1,31 @@
+name: PR title
+
+# Squash merges use the PR title as the commit message on main, and the
+# commit-msg hook never sees it, so the title is checked here instead. A
+# separate workflow so that editing a PR title/body does not rerun full CI.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  conventional-title:
+    name: Conventional Commits title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check PR title
+        # The title is passed through the environment, never interpolated into
+        # the script, so a crafted title cannot inject shell.
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/,-]+\))?!?: [^ ].*$'
+          if [[ "$TITLE" =~ $pattern ]]; then
+            echo "PR title OK: $TITLE"
+          else
+            echo "::error::PR title must follow Conventional Commits, e.g. 'fix(api): handle 405' (got: $TITLE)"
+            exit 1
+          fi

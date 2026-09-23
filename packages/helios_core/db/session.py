@@ -12,12 +12,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from packages.helios_core.config import get_settings
+from packages.helios_core.config import get_database_url
 
 
 @lru_cache
 def get_engine() -> Engine:
-    return create_engine(get_settings().database_url, echo=False)
+    return create_engine(get_database_url(), echo=False)
 
 
 def get_sessionmaker() -> sessionmaker[Session]:

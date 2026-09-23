@@ -6,21 +6,31 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel in-progress runs on the same branch when a new commit lands
+# Cancel superseded runs on a PR branch when a new commit lands. Pushes to
+# main are never cancelled, so every main commit gets a completed run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only token; no job needs to write to the repository.
+permissions:
+  contents: read
+
+# Actions are pinned to commit SHAs (tags are mutable); the comment names the
+# release. uv is pinned to the version infra/Dockerfile copies in.
 
 jobs:
   lint:
     name: Lint & format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
+          version: "0.12.0"
           enable-cache: true
 
       - name: Set up Python
@@ -35,10 +45,12 @@ jobs:
   typecheck:
     name: Type check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
+          version: "0.12.0"
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen
@@ -50,6 +62,8 @@ jobs:
   test:
     name: Tests
     runs-on: ubuntu-latest
+    # pytest-timeout fails a single hung test; this bounds the whole job.
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -70,9 +84,10 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
+          version: "0.12.0"
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen
@@ -81,14 +96,28 @@ jobs:
         env:
           DATABASE_URL: postgresql://helios:helios@localhost:5432/helios_test
           HELIOS_STRICT_DB_TESTS: "1"
-        run: uv run pytest --cov=. --cov-report=term-missing
+        # The threshold applies here, where every DB test runs; local runs
+        # without a database skip those tests and would always fall short.
+        run: uv run pytest --cov=. --cov-report=term-missing --cov-fail-under=88
+
+      # Models and migrations must agree: a models.py change without a
+      # migration (or vice versa) fails here instead of merging.
+      - name: Models match migrations (alembic check)
+        env:
+          DATABASE_URL: postgresql://helios:helios@localhost:5432/helios_test
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
 
   lockfile:
     name: Lockfile up to date
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          version: "0.12.0"
 
       - name: Verify uv.lock matches pyproject.toml
         run: uv lock --check
@@ -96,13 +125,14 @@ jobs:
   docker:
     name: Docker image
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: infra/Dockerfile

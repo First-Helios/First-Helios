@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: install lint typecheck test ci clean build dev dev-down dev-logs migrate
+.PHONY: install lint typecheck test lockcheck ci clean build dev dev-down dev-logs migrate
 
 install:
 	uv sync
@@ -15,10 +15,15 @@ typecheck:
 test:
 	uv run pytest --cov=. --cov-report=term-missing
 
-# Local checks; CI also builds/smoke-tests Docker. Set HELIOS_STRICT_DB_TESTS=1
-# and a disposable DATABASE_URL for database acceptance.
-ci: lint typecheck test
+# Lockfile first: the `uv run` steps below silently re-lock a stale lockfile,
+# so checking afterwards could never fail.
+lockcheck:
 	uv lock --check
+
+# Local subset of CI (CI also builds/smoke-tests Docker, runs DB tests in strict
+# mode with a coverage floor, and runs `alembic check`). For database
+# acceptance see the disposable-DB command in CONTRIBUTING.md.
+ci: lockcheck lint typecheck test
 
 # --- Docker ---------------------------------------------------------------
 

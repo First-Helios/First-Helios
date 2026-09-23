@@ -41,17 +41,22 @@ _TARGETS = [
         (True, "postgresql+psycopg:///helios_test", "0", "4 errors"),
         (True, "sqlite:///helios_test", None, "4 errors"),
         (True, "not-a-url", None, "4 errors"),
+        # Unset DATABASE_URL: no default target exists (R09).
+        (True, None, None, "4 errors"),
+        (False, None, None, "4 skipped"),
     ],
 )
 def test_database_mode_at_all_entrypoints(
-    strict: bool, url: str, override: str | None, expected: str
+    strict: bool, url: str | None, override: str | None, expected: str
 ) -> None:
     env = {
         key: value
         for key, value in os.environ.items()
-        if key not in {"HELIOS_ALLOW_NONTEST_DB", "PYTEST_ADDOPTS"}
+        if key not in {"DATABASE_URL", "HELIOS_ALLOW_NONTEST_DB", "PYTEST_ADDOPTS"}
     }
-    env.update(DATABASE_URL=url, HELIOS_STRICT_DB_TESTS="1" if strict else "0")
+    env["HELIOS_STRICT_DB_TESTS"] = "1" if strict else "0"
+    if url is not None:
+        env["DATABASE_URL"] = url
     if override is not None:
         env["HELIOS_ALLOW_NONTEST_DB"] = override
     result = subprocess.run(

@@ -23,7 +23,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 
-from packages.helios_core.config import get_settings
+from packages.helios_core.config import get_database_url
 from packages.helios_core.identity import (
     CurrentResolution,
     DecisionMetadata,
@@ -57,7 +57,6 @@ if TYPE_CHECKING:
 
     from sqlalchemy.engine import Engine
 
-DATABASE_URL = get_settings().database_url
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -68,7 +67,7 @@ def concurrent_sessions(disposable_database_engine: Engine) -> Iterator[sessionm
         ["alembic", "-c", str(_REPO_ROOT / "alembic.ini"), "upgrade", "head"],
         check=True,
         cwd=_REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": DATABASE_URL},
+        env={**os.environ, "DATABASE_URL": get_database_url()},
     )
     yield sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -157,7 +156,7 @@ def test_competing_assignments_serialize_on_source_record(
 
     def assign(target_id: int) -> str:
         with concurrent_sessions() as worker:
-            barrier.wait()
+            barrier.wait(timeout=10)
             try:
                 assign_source_record(
                     worker,
@@ -227,7 +226,7 @@ def test_resolution_lock_is_compatible_with_concurrent_bronze_version_fks(
                 )
             )
             worker.flush()
-            barrier.wait()
+            barrier.wait(timeout=10)
             try:
                 assign_source_record(
                     worker,
@@ -395,7 +394,7 @@ def test_overlapping_subject_changes_lock_members_in_stable_order(
     def merge(args: tuple[list[int], list[int], int]) -> str:
         inputs, outputs, adjudication_id = args
         with concurrent_sessions() as worker:
-            barrier.wait()
+            barrier.wait(timeout=10)
             try:
                 record_subject_change(
                     worker,
@@ -489,7 +488,7 @@ def test_raw_overlapping_subject_changes_serialize_without_lock_upgrade_deadlock
                 ]
             )
             worker.flush()
-            barrier.wait()
+            barrier.wait(timeout=10)
             try:
                 worker.execute(
                     text("SET CONSTRAINTS identity.ct_subject_change_complete_and_apply IMMEDIATE")
@@ -738,7 +737,7 @@ def test_concurrent_reobservation_reuses_one_external_key_and_open_event(
 
     def observe() -> tuple[str, int | None]:
         with concurrent_sessions() as worker:
-            barrier.wait()
+            barrier.wait(timeout=10)
             try:
                 result = resolve_source_record_observation(
                     worker,
@@ -794,7 +793,7 @@ def test_concurrent_identical_retry_reuses_one_bronze_observation(
 
     def observe() -> tuple[bool, int, int, int]:
         with concurrent_sessions() as worker:
-            barrier.wait()
+            barrier.wait(timeout=10)
             result = resolve_source_record_observation(
                 worker,
                 observation=observation,
@@ -846,7 +845,7 @@ def test_concurrent_exact_url_matches_serialize_and_resolve_consistently(
 
     def observe(external_key: str) -> tuple[str, int | None]:
         with concurrent_sessions() as worker:
-            barrier.wait()
+            barrier.wait(timeout=10)
             try:
                 result = resolve_source_record_observation(
                     worker,
