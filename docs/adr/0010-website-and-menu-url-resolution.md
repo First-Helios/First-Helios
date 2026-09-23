@@ -4,6 +4,7 @@
 **Date:** 2026-09-21
 **Accepted:** 2026-09-21 by project owner Fortune
 **Amended:** 2026-09-23 — §3 etiquette, see [Amendment 1](#amendment-1-2026-09-23-crawler-etiquette) (review session S2; owner decisions D2)
+**Amended:** 2026-09-23 — record grain and re-run rules, see [Amendment 2](#amendment-2-2026-09-23-record-grain-and-re-run-rules) (review session S3; owner decisions D3)
 **Phase:** 4 (Venue Discovery, Identity & Geocoding)
 
 ## Context
@@ -57,7 +58,9 @@ Two facts from the seed reshape the plan the ROADMAP wrote:
 3. **Menu-URL grain is per-site**, keyed to the resolved website: discovery
    crawls whatever website resolved for a Subject, so a chain sharing one brand
    site yields one menu-URL and an independent yields its own. Grain follows
-   the website, not a fixed Org-vs-Establishment rule.
+   the website, not a fixed Org-vs-Establishment rule. *(Superseded by
+   [Amendment 2](#amendment-2-2026-09-23-record-grain-and-re-run-rules): records
+   are per venue, not one per chain.)*
 4. **A new dependency is authorized** when it is the optimal fit (owner,
    2026-09-21). Applied here: **PyYAML** for `config/sources.yaml`, so the
    registry keeps the name every doc already uses (ROADMAP §3.2, ADR-0009 §1,
@@ -95,7 +98,7 @@ Establishment match key.
   for a possible future URL-promotion unit; it is not acted on now.
 - A resolved **menu-URL** is a Bronze observation
   (`source_kind = "menu_url"`), `assign`ed to the same Subject the website
-  resolved for (per-site grain, owner decision 3), Evidence pointing at the
+  resolved for (per-venue records, Amendment 2), Evidence pointing at the
   discovery capture (the fetched page / sitemap that yielded it).
 - **Read path:** website is already queryable from `source_payload` today
   (the retro measured 82.1% exactly this way); menu-URL becomes queryable the
@@ -124,7 +127,9 @@ requirement (ROADMAP Phase 5 "scraping etiquette"):
   integration tests replay fetches/sitemaps/robots from disk fixtures.
 - **Persist so re-scrapes skip discovery:** a Subject with a current
   `menu_url` Bronze record is not re-crawled; discovery is idempotent and
-  re-runnable.
+  re-runnable. *(Refined by
+  [Amendment 2](#amendment-2-2026-09-23-record-grain-and-re-run-rules): the
+  registry and a changed website both supersede a saved menu-URL.)*
 
 ### 4. `config/sources.yaml` manual registry
 
@@ -160,7 +165,7 @@ the only path to a URL match key, and it is opt-in per row.
 | Persistence | **Bronze payload + Evidence (chosen)** | Zero migration; additive like ADR-0009; provenance-native | Reads go through Bronze/Gold, not a direct column |
 | | New identity columns | Direct typed reads | models + alembic = hard stop-and-ask; expensive-to-reverse |
 | | New `identity.venue_url` table | Queryable + provenance, existing tables untouched | Still a migration/new model = stop-and-ask |
-| Menu-URL grain | **Per-site (chosen)** | Matches reality; chain→one, independent→own | Chain locations share one menu-URL (correct, but coarse per-location) |
+| Menu-URL grain | **Per-site (chosen; per-venue records, Amendment 2)** | Matches reality; chain→one, independent→own | Chain locations share one menu-URL (correct, but coarse per-location) |
 | | Per-Establishment | Explicit per-location menus | Duplicates a shared brand menu across N locations |
 | Discovery client | **httpx + stdlib (chosen)** | No new dep; robots/sitemap/anchor all stdlib | Hand-rolled crawl vs. a framework |
 | | Scrapy/Crawlee now | Batteries included | Framework choice is Phase 5 / ADR-0006 — premature here |
@@ -231,6 +236,40 @@ bullets with:
   (Phase 5; ranks/verifies candidates, never overrides robots), and whether to
   ever override a robots `Disallow` (needs its own ADR, with blocked-site data
   from a Pi run first). See the checklist's D2 notes.
+
+## Amendment 2 (2026-09-23): record grain and re-run rules
+
+The 2026-09-22 codebase review (R04, R07, R15, R16, R32, R57, R73) found that
+re-runs were neither safe nor idempotent, and that the "one per chain" wording
+above does not match the code. Owner decisions D3 (remediation checklist) settle:
+
+- **Grain is per venue** (D3.6). Website and menu-URL records are keyed by the
+  venue's GERS id and assigned to the venue's Organization. Discovery mints one
+  Organization per Overture POI today, so chain locations each get their own
+  records (usually with the same URL). One-per-chain needs the Organization
+  merge work first (venue-lifecycle sessions S12/S13). An Establishment
+  deduped from several Overture records is processed once, from its most
+  recently observed record (by `observed_at`; ties to the oldest record, so the
+  key stays stable).
+- **`needs_review` is never overruled** (D3.1). If a website or menu-URL record
+  is in `needs_review`, the run counts it and skips it: no write, no assign,
+  and no crawl of a disputed website. A venue whose Organization is no longer
+  current is counted (`org_not_current`) and skipped instead of failing the run.
+- **The registry always wins** (D3.2). A registry `menu_url` that differs from
+  the saved one is appended as a new version of the same record; it stays
+  assigned. **A changed website re-runs menu discovery**; a new menu-URL is
+  appended only when discovery succeeds, otherwise the saved one stays current.
+  Superseded values are not deleted: every earlier version stays in Bronze
+  (immutable `source_record_version` rows), which is the history of replaced
+  URLs.
+- **Unchanged values are not re-persisted** (R16). A record whose latest saved
+  payload equals the new one writes nothing, so a monthly re-run adds no Bronze
+  rows for unchanged venues.
+- **Commit every 100** (D3.3). Both discovery CLIs commit every 100 venues/POIs.
+  `resolve_urls --limit N` counts only venues that need work (a write or a
+  crawl), so chunked runs advance. A venue where no menu was found has nothing
+  saved and is re-crawled each run until failed fetches are recorded in Bronze
+  (D4.2, session S6).
 
 ## References
 

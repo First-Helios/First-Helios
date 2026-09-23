@@ -41,7 +41,7 @@ from packages.helios_core.identity.normalize import name_fingerprint, within_rad
 from packages.helios_core.provenance.contracts import BronzeObservation
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
     from datetime import datetime
 
     from sqlalchemy.orm import Session
@@ -189,10 +189,18 @@ def run_discovery(
     release: str,
     geocoder: NominatimClient | None = None,
     dedupe_radius_m: float = DEFAULT_DEDUPE_RADIUS_M,
+    batch_size: int = 100,
+    on_batch: Callable[[], None] | None = None,
 ) -> DiscoveryReport:
-    """Admit POIs to Bronze and resolve/mint/dedupe them. Flushes; caller commits."""
+    """Admit POIs to Bronze and resolve/mint/dedupe them. Flushes; caller commits.
+
+    ``on_batch`` (the CLI passes ``session.commit``) runs after every
+    ``batch_size`` POIs, bounding what one crash (e.g. a Nominatim error) can lose.
+    """
     report = DiscoveryReport()
     for poi in pois:
+        if on_batch is not None and report.fetched and report.fetched % batch_size == 0:
+            on_batch()
         report.fetched += 1
         name = poi.name.strip()
         if not name:
