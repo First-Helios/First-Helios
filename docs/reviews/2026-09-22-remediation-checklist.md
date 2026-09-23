@@ -753,4 +753,4 @@ Agents add one row per session (or per resume).
 | Date | Session | Branch | PR | Status | Resume notes |
 |---|---|---|---|---|---|
 | 2026-09-23 | S1 | fix/guardrails | #23 | Merged | — (ticks recorded by S2; #22 wasn't on `main` yet) |
-| 2026-09-23 | S2 | fix/crawler-etiquette | #S2PR | Draft, awaiting owner review (new dependency `protego`) | — |
+| 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Draft, awaiting owner review (new dependency `protego`) | — |
