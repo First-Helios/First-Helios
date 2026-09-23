@@ -10,8 +10,10 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
+      # --enforce-all: also check files that are not newly added, so the hook
+      # still runs under CI's `pre-commit run --all-files`.
       - id: check-added-large-files
-        args: ["--maxkb=500"]
+        args: ["--maxkb=500", "--enforce-all"]
       - id: check-merge-conflict
       - id: debug-statements          # catches stray breakpoint() and pdb imports
       - id: mixed-line-ending
@@ -38,7 +40,8 @@ repos:
         pass_filenames: false
         args: ["."]
 
-  # Conventional Commits — verify commit message format
+  # Conventional Commits — verify commit message format. Local only; CI checks
+  # the PR title (the squash-merge message) in .github/workflows/pr-title.yml.
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.6.0
     hooks:

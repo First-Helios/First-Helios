@@ -11,8 +11,11 @@ document doesn't repeat.
    `docs/<slug>`.
 2. Make your change. Keep PRs scoped to one logical change — a bug fix
    doesn't need a drive-by refactor riding along.
-3. Run `make ci` locally before opening the PR. It runs the same lint,
-   typecheck, test, and lockfile checks CI does.
+3. Run `make ci` locally before opening the PR. It is the local subset of
+   CI: lint, typecheck, tests, and the lockfile check. CI additionally runs
+   the database tests in strict mode against PostGIS with a coverage floor,
+   runs `alembic check`, and builds the Docker image. For database
+   acceptance, run the disposable-database commands below.
 4. Open a PR against `main`. Fill out the PR template.
 5. All five CI jobs must pass — they're required status checks and they are
    the *only* mechanical gate (see below).
@@ -32,6 +35,9 @@ pre-commit hook on the commit message:
 
 Common types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `ci`.
 
+Merges are squashed, so the PR title becomes the commit on `main`; the
+`PR title` workflow checks it against the same format.
+
 ## Local setup
 
 ```bash
@@ -39,8 +45,12 @@ make install   # uv sync + pre-commit hooks
 make lint      # ruff check + format
 make typecheck # mypy --strict
 make test      # pytest
-make ci        # local checks plus lockfile check; CI also builds/smokes Docker
+make ci        # local subset of CI; see step 3 above
 ```
+
+`DATABASE_URL` has no default. Commands that touch a database (Alembic, the
+discovery CLIs, database tests) fail or skip when it is unset; export it
+explicitly for the database you mean to use.
 
 Database acceptance requires a separately provisioned, disposable PostgreSQL
 `*_test` database. Run:

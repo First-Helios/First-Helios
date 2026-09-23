@@ -53,9 +53,17 @@ PARENT = "91f4c2a7d6e8"
 HEAD = "b72e6a90c431"
 
 
+# Offline (`--sql`) generation needs a dialect, never a connection, so SQL
+# artifact tests run without a database. DATABASE_URL itself has no default.
+_OFFLINE_SQL_URL = "postgresql+psycopg://offline@offline.invalid/offline_sql"
+
+
 def migrate(*args: str) -> str:
+    env = os.environ.copy()
+    if "--sql" in args:
+        env.setdefault("DATABASE_URL", _OFFLINE_SQL_URL)
     return subprocess.run(
-        ["alembic", *args], env=os.environ.copy(), check=True, capture_output=True, text=True
+        ["alembic", *args], env=env, check=True, capture_output=True, text=True
     ).stdout
 
 

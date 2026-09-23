@@ -16,7 +16,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import inspect, text
 
-from packages.helios_core.config import get_settings
+from packages.helios_core.config import get_database_url
 from test.provider_support import PROVIDER_FUNCTIONS
 
 if TYPE_CHECKING:
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 
     from sqlalchemy.engine import Connection, Engine
 
-DATABASE_URL = get_settings().database_url
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 PRE_RESET_REVISION = "3f8b2c1d9a74"
@@ -44,7 +43,7 @@ def _run_alembic(*arguments: str, check: bool = True) -> subprocess.CompletedPro
         ["alembic", "-c", str(ALEMBIC_INI), *arguments],
         check=check,
         cwd=REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": DATABASE_URL},
+        env={**os.environ, "DATABASE_URL": get_database_url()},
         capture_output=True,
         text=True,
     )

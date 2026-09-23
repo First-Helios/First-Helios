@@ -24,6 +24,7 @@ import pytest
 from alembic.config import Config
 from sqlalchemy import JSON, Column, Integer, MetaData, Table
 
+from packages.helios_core.config import get_settings
 from packages.helios_core.db import model_registry  # noqa: F401 — registers all models
 from packages.helios_core.db.base import (
     MANAGED_SCHEMAS,
@@ -38,6 +39,7 @@ from packages.helios_core.db.base import (
 from test.import_boundaries import boundary_violations
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from types import ModuleType
 
 
@@ -319,12 +321,23 @@ def _table_in(schema: str | None) -> Table:
     return Table("some_table", MetaData(), Column("id", Integer), schema=schema)
 
 
+@pytest.fixture
+def placeholder_database_url(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """env.py refuses to load without DATABASE_URL; the filter tests never connect."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://filter@filter.invalid/filter_test")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.mark.usefixtures("placeholder_database_url")
 @pytest.mark.parametrize("schema", sorted(MANAGED_SCHEMAS))
 def test_autogenerate_manages_our_own_schemas(schema: str) -> None:
     env = _load_alembic_env()
     assert env.include_object(_table_in(schema), "some_table", "table", True, None) is True
 
 
+@pytest.mark.usefixtures("placeholder_database_url")
 @pytest.mark.parametrize("schema", ["tiger", "tiger_data", "topology", "public", None])
 def test_autogenerate_ignores_everything_else(schema: str | None) -> None:
     """The PostGIS/Tiger drop hazard `include_schemas=True` would reintroduce.
@@ -339,6 +352,7 @@ def test_autogenerate_ignores_everything_else(schema: str | None) -> None:
     assert env.include_object(_table_in(schema), "some_table", "table", True, None) is False
 
 
+@pytest.mark.usefixtures("placeholder_database_url")
 def test_column_inherits_its_parent_tables_verdict() -> None:
     """Columns carry no schema of their own; they must defer to the table."""
     env = _load_alembic_env()

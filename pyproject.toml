@@ -21,6 +21,15 @@ dependencies = [
 # Put the repo root on sys.path so tests can import the `packages.*` namespace
 # (mirrors alembic.ini's prepend_sys_path = .).
 pythonpath = ["."]
+# A hung test (e.g. a concurrency test stuck on a lock) fails instead of
+# running until the CI job is killed. Per-test ceiling, in seconds.
+timeout = 300
+
+[tool.coverage.run]
+# Measure application code only; counting test files inflated the total.
+# The CI threshold (--cov-fail-under) lives in ci.yml, not here, because
+# local runs without a database skip the DB tests and would always fail it.
+omit = ["test/*"]
 
 [dependency-groups]
 dev = [
@@ -29,6 +38,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.15.12",
     "types-pyyaml>=6.0.12",
 ]
