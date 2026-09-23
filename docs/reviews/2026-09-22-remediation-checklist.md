@@ -31,7 +31,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 0 | You: answer D1–D9 (group by group is fine) | — | ~1 h of your time | [ ] |
 | 1 | S1 Guardrails (DB target, CI gates, CLAUDE.md) ⚠ | D1 | M | [X] #23 |
 | 2 | S2 Crawler etiquette ⚠ (protego) | D2 | M | [X] #24 |
-| 3 | S3 URL pipeline logic | D3 | M | [ ] |
+| 3 | S3 URL pipeline logic | D3 | M | [ ] #25 open |
 | 4 | S4 Menu-URL quality | D3 | S | [ ] |
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [ ] |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] |
@@ -770,4 +770,4 @@ Agents add one row per session (or per resume).
 |---|---|---|---|---|---|
 | 2026-09-23 | S1 | fix/guardrails | #23 | Merged | — (ticks recorded by S2; #22 wasn't on `main` yet) |
 | 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Merged | — |
-| 2026-09-23 | S3 | fix/url-pipeline | #PR | Open, awaiting owner review | — (D3.7–3.9 asked and answered at session start) |
+| 2026-09-23 | S3 | fix/url-pipeline | #25 | Open, awaiting owner review | — (D3.7–3.9 asked and answered at session start) |
