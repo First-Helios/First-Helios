@@ -189,45 +189,45 @@ explains it. When a group is done, its sessions are ready to hand off.
 
 - **5.1 Reads (selector, Gold) use a separate read-only eligibility check** — no
   locks, never aborts the transaction
-  - [ ] ⭐ Yes
+  - [X] ⭐ Yes
   - *Why:* root cause of R01 and R21; reads shouldn't be able to break or block writes.
 - **5.2 Bounded Gold refresh replaces all rows for each requested scope**
-  - [ ] ⭐ Yes
+  - [X] ⭐ Yes
   - *Why:* matches what "refresh this venue" means.
 - **5.3 History-mode requests passed to the Gold refresh**
-  - [ ] ⭐ Reject them
+  - [X] ⭐ Reject them
   - *Why:* the current table should hold current answers only.
 - **5.4 Menus in Phase 5 v1**
-  - [ ] ⭐ Self-contained location snapshots only; chain inheritance stays off
+  - [X] ⭐ Self-contained location snapshots only; chain inheritance stays off
     until real chain data needs it
   - [ ] Use inheritance from day one
   - *Why:* inheritance is the least-tested, most complex code; the schema already
     supports self-contained snapshots, so this costs no migration.
 - **5.5 Selector fixes R03, R22–R24 are ADR-0005 conformance fixes, not new rules**
-  - [ ] ⭐ Agree  - [ ] Treat as ADR change (write an amendment first)
+  - [X] ⭐ Agree  - [ ] Treat as ADR change (write an amendment first)
   - *Why:* ADR-0005 already states these rules; the code misses them.
 
 ### D6 — Identity → unlocks S8, S12, S13, S16
 
 - **6.1 Lock order between identity write paths**
-  - [ ] ⭐ Agent picks one global order, documents it, proves it with tests
+  - [X] ⭐ Agent picks one global order, documents it, proves it with tests
   - *Why:* one order everywhere is the standard deadlock fix; the repro in the
     review appendix becomes the regression test.
 - **6.2 Name fingerprint**
-  - [ ] ⭐ Keep non-English letters (strip accents only)
-  - [ ] ⭐ Recompute stored fingerprints on the Pi (agent writes the script, you run it)
+  - [X] ⭐ Keep non-English letters (strip accents only)
+  - [ ]  No, this wastes tokens, in dev mode its better to not need one off conversion when a rerun fix will be sufficent. if i misunderstood this push back ⭐ Recompute stored fingerprints on the Pi (agent writes the script, you run it)
   - [ ] ⭐ Don't auto-merge existing venues after the recompute
   - *Why:* today different bilingual names merge; recomputing keeps old and new
     fingerprints comparable; auto-merging is irreversible.
 - **6.3 Venue lifecycle** (re-seen venues never update; closed venues never retire)
-  - [ ] ⭐ Agent drafts an ADR with options (update changed venues; close venues
+  - [X] ⭐ Agent drafts an ADR with options (update changed venues; close venues
     missing from 2 monthly releases), then stops for your review
   - *Why:* decide the policy before monthly runs pile up stale data.
 - **6.4 Establishment eligibility** (none can take menu writes today)
-  - [ ] ⭐ Auto-promote when its Place and Organization are both eligible
+  - [X] ⭐ Auto-promote when its Place and Organization are both eligible
   - *Why:* without it, no location menu can ever be written.
 - **6.5 Can the API read Identity models directly?** (ADR-0004 says yes, ADR-0008 says no)
-  - [ ] ⭐ Yes — amend ADR-0008 §9
+  - [X] ⭐ Yes — amend ADR-0008 §9
   - [ ] No — add an Identity read contract and switch the API to it
   - *Why:* the code already does it, ADR-0004 allows it, and a read contract adds a
     layer with no current payoff.
@@ -235,22 +235,22 @@ explains it. When a group is done, its sessions are ready to hand off.
 ### D7 — API → unlocks S9
 
 - **7.1 405 Method Not Allowed** (reports `internal_error` today)
-  - [ ] ⭐ Add code `method_not_allowed`; other 4xx become `validation_error`
+  - [X] ⭐ Add code `method_not_allowed`; other 4xx become `validation_error`
   - *Why:* clients switch on `code`; their own mistake shouldn't look like a server fault.
-- **7.2 `/readyz` failure uses the standard error body**  - [ ] ⭐ Yes
+- **7.2 `/readyz` failure uses the standard error body**  - [X] ⭐ Yes
   - *Why:* one error shape everywhere, with a `trace_id` to find the log line.
-- **7.3 Reject `*` in the CORS setting**  - [ ] ⭐ Yes
+- **7.3 Reject `*` in the CORS setting**  - [X] ⭐ Yes
   - *Why:* ADR-0008 says never a wildcard; enforce it.
-- **7.4 DB timeouts**  - [ ] ⭐ Connect 5 s, pool wait 10 s, pre-ping on
+- **7.4 DB timeouts**  - [X] ⭐ Connect 5 s, pool wait 10 s, pre-ping on
   - *Why:* fail fast instead of tying up workers for 130 s.
 - **7.5 Client-supplied `X-Request-ID`**
-  - [ ] ⭐ Accept only ≤ 64 safe characters, otherwise generate one
+  - [X] ⭐ Accept only ≤ 64 safe characters, otherwise generate one
   - *Why:* keeps correlation, blocks log spoofing and giant headers.
 
 ### D8 — Schema and infra approvals → unlocks S14, S15 ⚠
 
 - **8.1 One schema-tightening migration** (R53, R54, R56, R60, R63, R69), reviewed as its own PR
-  - [ ] ⭐ Approve  - [ ] Skip for now
+  - [X] ⭐ Approve  - [ ] Skip for now
   - *Why:* all low-risk constraints; batching them means one migration review, not six.
 - **8.2 Infra PR**: `.dockerignore`, compose env handling, `var/` volume, restart
   policy, project name, image digests
