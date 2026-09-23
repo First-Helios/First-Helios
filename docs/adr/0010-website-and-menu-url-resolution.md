@@ -5,6 +5,7 @@
 **Accepted:** 2026-09-21 by project owner Fortune
 **Amended:** 2026-09-23 — §3 etiquette, see [Amendment 1](#amendment-1-2026-09-23-crawler-etiquette) (review session S2; owner decisions D2)
 **Amended:** 2026-09-23 — record grain and re-run rules, see [Amendment 2](#amendment-2-2026-09-23-record-grain-and-re-run-rules) (review session S3; owner decisions D3)
+**Amended:** 2026-09-23 — menu-page verification and platform sites, see [Amendment 3](#amendment-3-2026-09-23-menu-page-verification-and-platform-sites) (review session S4; owner decisions D3.4-D3.5)
 **Phase:** 4 (Venue Discovery, Identity & Geocoding)
 
 ## Context
@@ -270,6 +271,83 @@ above does not match the code. Owner decisions D3 (remediation checklist) settle
   crawl), so chunked runs advance. A venue where no menu was found has nothing
   saved and is re-crawled each run until failed fetches are recorded in Bronze
   (D4.2, session S6).
+
+## Amendment 3 (2026-09-23): menu-page verification and platform sites
+
+The 2026-09-22 codebase review (R08, R33, R34, R75, R76) found that §3's
+discovery mechanics accepted "any 200 HTML page" as a verified menu, joined
+well-known paths onto shared platform hosts, matched a menu lexicon too
+loosely, mishandled sitemap indexes and `.xml.gz`, and "fixed" garbage
+website strings into bogus URLs. Owner decisions D3.4-D3.5 (remediation
+checklist) settle:
+
+- **A candidate is verified, not just fetched** (D3.4, R08). A candidate that
+  is `#`, empty, non-http, or resolves to the homepage itself (directly, or
+  via a redirect, or via body content identical to the homepage's) is never a
+  menu URL. A candidate that does fetch is accepted only when its own URL
+  path, `<title>`, or first heading carries a whole-token menu word and its
+  body differs from the homepage's — no HTML-parser dependency, still stdlib
+  `html.parser` (`apps/discovery/menu_url.py`). These are cheap, deterministic
+  pre-filters; a content classifier that ranks or verifies candidates (never
+  overriding robots) is out of scope here and gets its own ADR in Phase 5,
+  same as Amendment 1 already recorded.
+- **Catch-all / soft-404 hosts are detected, not trusted** (D3.4, R08). The
+  first time a well-known path answers 200 on a site, `SiteFetcher` probes one
+  random, almost-certainly-nonexistent path there (never otherwise, so most
+  sites cost no extra request). If that 200s as HTML, the site
+  answers 200 for anything, so a well-known path's own URL (`/menu` always
+  contains "menu" by construction) is not evidence of a real menu there — only
+  its `<title>`/heading count for those candidates on that site.
+- **The menu lexicon is whole-token, with a blocklist** (D3.4, R34). Matching
+  was already whole-token (`/menu-of-services` matches "menu" as a token, not
+  a substring), so the false positives came from having no veto: a blocklist
+  (`services`, `safety`, `careers`, `policy`, `donations`, `bank`, `admin`,
+  `wp`, …) now rejects a link or page even when a menu term also matches, so
+  `/menu-of-services`, `/wp-admin/nav-menus.php`, `/food-safety-policy`, and
+  "Food Bank Donations" are rejected while `/menu`, `/dinner-menu`, and
+  "Dinner Menu" still match.
+- **Sitemap matches no longer crowd out homepage anchors** (R34). Sitemap and
+  anchor candidates are interleaved rather than concatenated before the
+  `MAX_CANDIDATES` cap, so a site with many sitemap-matched entries (e.g. a
+  blog's tagged posts) cannot fill every candidate slot before a homepage
+  anchor is ever tried.
+- **Sitemap indexes, robots `Sitemap:` lines, and `.xml.gz` are handled**
+  (R75). A sitemap *index*'s `<loc>` children name sitemap documents, never
+  page candidates, and are expanded up to `MAX_SITEMAP_CHILDREN` (5); a site's
+  robots.txt `Sitemap:` lines (read via `protego`'s parsed rules, same-site
+  only) are tried before the `/sitemap.xml` convention; a `.xml.gz` URL whose
+  body carries the gzip magic bytes is gunzipped with its own
+  decompressed-size cap (independent of the compressed fetch cap) so a small,
+  hostile payload can't expand into a memory bomb (one served with
+  `Content-Encoding: gzip` is already decoded by httpx and passes through).
+- **Shared platform hosts are a fallback, one menu URL per venue** (D3.5,
+  R33). A small, explicit host list (Toast, Square, Clover, Facebook,
+  Instagram, DoorDash, Uber Eats, Grubhub, Linktree, and alike) is never
+  probed at its own well-known root paths — a shared platform's `/menu`
+  belongs to the platform, not the venue, and a platform's root
+  (`https://www.facebook.com/`) is never a venue's page. When the venue's
+  *own* website is a non-root page on one of these hosts, that page is itself
+  the menu-URL candidate
+  (signal `"platform"`), verified only by fetching it — still through the
+  full robots/redirect/public-IP policy, since `SiteFetcher`'s same-site
+  check is relative to the URL being fetched, not the venue's original site.
+  When the venue's website is its own site, a same-site menu candidate still
+  wins; only if none verifies does a homepage link to a venue page on an
+  *ordering* platform (e.g. `toasttab.com/<venue>`, a DoorDash store page) get
+  accepted, same signal. Social links (Facebook, Instagram, Linktree) are on
+  nearly every restaurant homepage and are not a menu, so they never serve as
+  that fallback; nor does a platform root such as a "Powered by Toast" footer. Only one menu URL is stored per venue today (D3.5); reconciling a
+  site's menu against a platform's when both exist needs a record-contract
+  change and is deferred to S5/S6 (D4), same as Amendment 2's grain
+  discussion — the owner noted this data should still be collected even where
+  it duplicates the site's own menu, since some venues have no menu anywhere
+  but a platform.
+- **`_coerce_website` no longer "fixes" garbage into a bogus host** (R76). Its
+  `https://` retry (for an Overture string missing a scheme) is trusted only
+  when the retry parses into a host with a dot: `'http:/site.com'` (a typo'd
+  single slash) parsed on the old retry as scheme `https`, host `http` — a
+  URL shape, not a website — and was silently turned into
+  `https://http/site.com`. That retry is now rejected instead.
 
 ## References
 

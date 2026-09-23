@@ -31,8 +31,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 0 | You: answer D1–D9 (group by group is fine) | — | ~1 h of your time | [ ] |
 | 1 | S1 Guardrails (DB target, CI gates, CLAUDE.md) ⚠ | D1 | M | [X] #23 |
 | 2 | S2 Crawler etiquette ⚠ (protego) | D2 | M | [X] #24 |
-| 3 | S3 URL pipeline logic | D3 | M | [ ] #25 open |
-| 4 | S4 Menu-URL quality | D3 | S | [ ] |
+| 3 | S3 URL pipeline logic | D3 | M | [X] #25 |
+| 4 | S4 Menu-URL quality | D3 | S | [ ] #26 open |
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [ ] |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] |
 | 🚦 | **Pi gate:** OK to run `resolve_urls` on the Pi again after S2, S3, S4, S6 are merged | | | [ ] |
@@ -168,9 +168,20 @@ explains it. When a group is done, its sessions are ready to hand off.
   - [X] We should consider using a JEV classifier for this decicision processes, or feeding page conext to the classifier, if this isnt a rational place to do this the let me know and we can address this issue again.
   - *Why:* catches every false positive the review found with cheap checks and no
     HTML-parsing dependency.
+  - *S4 (2026-09-23), owner confirmed:* the cheap checks (⭐) ship in S4 now as the
+    pre-filter; a page classifier is a new dependency, so it gets its own ADR in
+    Phase 5 (already recorded in ADR-0010 as "ranks/verifies candidates, never
+    overrides robots"). S4's checks stay as the classifier's input filter.
 - **3.5 Platform sites (Toast, Square, Facebook, Instagram, DoorDash, …)**
   - [X] ⭐ Keep the full website path; don't probe `/menu` at the platform's root --  Note: We do want to collect this data if possible as some places dont have a menu listed anywhere but on outside platforms. We may need to eventually have a method to reconsile this information, but it should be collected even if it provides duplicates, with a prefrence menus and pricing found on the main website.
   - *Why:* root paths on a shared platform belong to the platform, not the venue.
+  - *S4 (2026-09-23), owner confirmed:* platform as fallback, one URL per venue. A
+    website on a platform host keeps its full path and is itself the menu URL
+    (signal `platform`, no root probes; a platform root is never a venue page). For
+    an own-site venue, a same-site menu wins; if none verifies, a homepage link
+    to a venue page on an *ordering* platform (Toast, Square, DoorDash, …) is
+    accepted (signal `platform`) — social links (Facebook, Instagram) are not. Keeping both the site's and the platform's menu URL per
+    venue needs a record-contract change — deferred to S5/S6 (D4).
 - **3.6 Menu-URL grain** (ADR-0010 says "one per chain"; code saves one per venue)
   - [X] ⭐ Keep per-venue; fix the ADR wording
   - [ ] One per chain (needs redesign)
@@ -442,11 +453,11 @@ Branch: `fix/url-pipeline`
 Hand-off prompt: `Do session S4 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/menu-url-quality`
 
-- [ ] R08 Homepage, `#` links, and catch-all sites saved as menu URLs (per D3.4)
-- [ ] R33 Platform sites probed at the root `/menu` (per D3.5)
-- [ ] R34 Menu word list too loose (`/menu-of-services`, `nav-menus.php`)
-- [ ] R75 Sitemap index files, robots `Sitemap:` lines, `.xml.gz` not handled
-- [ ] R76 Garbage website strings "fixed" into bogus URLs
+- [X] R08 Homepage, `#` links, and catch-all sites saved as menu URLs (per D3.4)
+- [X] R33 Platform sites probed at the root `/menu` (per D3.5)
+- [X] R34 Menu word list too loose (`/menu-of-services`, `nav-menus.php`)
+- [X] R75 Sitemap index files, robots `Sitemap:` lines, `.xml.gz` not handled
+- [X] R76 Garbage website strings "fixed" into bogus URLs
 
 **Recommended approach**
 - Drop candidates that are `#`, empty, non-http, or resolve to the homepage.
@@ -770,4 +781,5 @@ Agents add one row per session (or per resume).
 |---|---|---|---|---|---|
 | 2026-09-23 | S1 | fix/guardrails | #23 | Merged | — (ticks recorded by S2; #22 wasn't on `main` yet) |
 | 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Merged | — |
-| 2026-09-23 | S3 | fix/url-pipeline | #25 | Open, awaiting owner review | — (D3.7–3.9 asked and answered at session start) |
+| 2026-09-23 | S3 | fix/url-pipeline | #25 | Merged | — (D3.7–3.9 asked and answered at session start) |
+| 2026-09-23 | S4 | fix/menu-url-quality | #26 | Open, awaiting owner review | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |

@@ -25,17 +25,32 @@ a mock transport and CI makes no live network calls.
 The pure candidate logic lives in :mod:`apps.discovery.menu_url`; this module
 only fetches inputs, verifies which candidate actually resolves, and records
 which signal produced it.
+
+Menu-page verification (ADR-0010 Amendment 3, review session S4): a candidate
+is accepted only once it is fetched and checked, never on "200 HTML" alone.
+:func:`SiteFetcher.discover_menu_url` rejects a candidate that redirects back
+to the homepage, probes one random path per site to detect a catch-all/
+soft-404 host (which makes a well-known path's URL-path signal worthless), and
+requires the fetched page's own title/heading/path to carry a menu word
+(:func:`apps.discovery.menu_url.page_menu_signal`) with body content that
+actually differs from the homepage's. A website on a known platform host
+(Toast, Square, Facebook, …) is never probed at its own well-known paths — the
+page itself is the candidate (signal ``"platform"``); an own-site venue with
+no verified menu falls back to a homepage link into one of those platforms.
 """
 
 from __future__ import annotations
 
+import gzip
 import hashlib
+import io
 import ipaddress
 import json
 import os
 import socket
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -44,7 +59,20 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 from protego import Protego
 
-from apps.discovery.menu_url import ordered_menu_candidates, path_candidates, same_site
+from apps.discovery.menu_url import (
+    MAX_PLATFORM_CANDIDATES,
+    MAX_SITEMAP_CHILDREN,
+    is_platform_venue_page,
+    menu_links_from_sitemap,
+    ordered_menu_candidates,
+    page_menu_signal,
+    path_candidates,
+    platform_links_from_html,
+    platform_signal,
+    same_resource,
+    same_site,
+    sitemap_index_children,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -74,7 +102,10 @@ class MenuUrlDiscovery:
     """A verified menu URL and the signal that produced it."""
 
     menu_url: str
-    signal: str  # "well_known" (a known path) | "crawled" (sitemap or anchor)
+    # "well_known" (a known path) | "crawled" (sitemap or anchor) | "platform"
+    # (the venue's own site is a shared platform host, or a homepage link
+    # into one, D3.5)
+    signal: str
 
 
 def _is_html(result: FetchResult) -> bool:
@@ -84,6 +115,10 @@ def _is_html(result: FetchResult) -> bool:
 
 def _resolve_host(host: str) -> list[str]:
     return [str(info[4][0]) for info in socket.getaddrinfo(host, None)]
+
+
+def _random_token() -> str:
+    return uuid.uuid4().hex
 
 
 def is_public_address(address: str) -> bool:
@@ -112,6 +147,7 @@ class SiteFetcher:
         clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        random_token: Callable[[], str] = _random_token,
     ) -> None:
         if not user_agent.strip():
             raise ValueError("SiteFetcher requires a non-empty User-Agent")
@@ -128,6 +164,7 @@ class SiteFetcher:
         self._clock = clock
         self._monotonic = monotonic
         self._sleep = sleep
+        self._random_token = random_token
         self._last_request_at: dict[str, float] = {}
         self._crawl_delay: dict[str, float] = {}
         # origin -> rules; None means the site is skipped this run.
@@ -272,6 +309,15 @@ class SiteFetcher:
                 body = _read_capped(response)
                 if body is None:
                     return None
+                is_gz_url = url.lower().split("?", 1)[0].endswith(".gz")
+                if is_gz_url and body.startswith(_GZIP_MAGIC):
+                    # R75: a gzipped sitemap. Decompress with its own cap so a
+                    # small compressed payload can't expand into a memory bomb.
+                    # Served with Content-Encoding: gzip, httpx has already
+                    # decoded it (no magic bytes), so it passes through as-is.
+                    body = _gunzip_capped(body, MAX_BODY_BYTES)
+                    if body is None:
+                        return None
                 return FetchResult(
                     url=url,
                     status=response.status_code,
@@ -320,32 +366,123 @@ class SiteFetcher:
     def discover_menu_url(self, website: str) -> MenuUrlDiscovery | None:
         """Verify a menu URL for a resolved website, honouring robots + rate limit.
 
-        Fetches the homepage and sitemap for candidate signals, then GETs each
-        ranked candidate in order and returns the first that is robots-allowed
-        and resolves to a 200 HTML page. Candidates are built from the
-        homepage's final (post-redirect) URL.
+        A website already on a shared platform host (Toast, Square, Facebook,
+        …) is never probed at its own well-known paths (R33): the page itself
+        is the candidate, verified only by fetching it (owner decision D3.5a).
+
+        Otherwise: fetch the homepage and sitemap(s) for candidate signals,
+        probe one random path to detect a catch-all/soft-404 host (R08), then
+        GET each ranked candidate in order and accept the first that is
+        robots-allowed, resolves to a 200 HTML page distinct from the
+        homepage, and whose own content carries a menu word
+        (:func:`apps.discovery.menu_url.page_menu_signal`). If nothing
+        verifies, fall back to a homepage link into a known platform host
+        (D3.5b). Candidates are built from the homepage's final
+        (post-redirect) URL.
         """
+        if platform_signal(website):
+            if not is_platform_venue_page(website):
+                return None  # a platform's root belongs to the platform (R33)
+            result = self.fetch(website)
+            if result is not None and result.status == 200 and _is_html(result):  # noqa: PLR2004
+                return MenuUrlDiscovery(menu_url=result.url, signal="platform")
+            return None
+
         homepage = self.fetch(website)
         base = website
-        homepage_html = None
+        homepage_html: str | None = None
+        homepage_hash: str | None = None
         if homepage is not None and homepage.status == 200 and _is_html(homepage):  # noqa: PLR2004
             base = homepage.url
             homepage_html = homepage.text
+            homepage_hash = _body_hash(homepage.text)
 
-        sitemap = self.fetch(urljoin(base, "/sitemap.xml"))
-        sitemap_xml = sitemap.text if sitemap and sitemap.status == 200 else None  # noqa: PLR2004
-
+        sitemap_matches = self._sitemap_menu_matches(base)
         candidates = ordered_menu_candidates(
-            base, homepage_html=homepage_html, sitemap_xml=sitemap_xml
+            base, homepage_html=homepage_html, extra_sitemap_matches=tuple(sitemap_matches)
         )
         well_known = {url.rstrip("/") for url in path_candidates(base)}
+        is_catch_all: bool | None = None  # probed lazily: only a 200 well-known path needs it
+
         for candidate in candidates:
             result = self.fetch(candidate)
             if result is None or result.status != 200 or not _is_html(result):  # noqa: PLR2004
                 continue
-            signal = "well_known" if candidate.rstrip("/") in well_known else "crawled"
-            return MenuUrlDiscovery(menu_url=result.url, signal=signal)
+            if same_resource(result.url, base):
+                continue  # the candidate just redirected back to the homepage (R08)
+            is_well_known = candidate.rstrip("/") in well_known
+            if is_well_known and is_catch_all is None:
+                is_catch_all = self._is_catch_all_site(base)
+            trust_path = not (is_well_known and bool(is_catch_all))
+            if not page_menu_signal(result.text, result.url, trust_path=trust_path):
+                continue
+            if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
+                continue  # identical body to the homepage: a catch-all/soft-404 answer
+            return MenuUrlDiscovery(
+                menu_url=result.url, signal="well_known" if is_well_known else "crawled"
+            )
+
+        if homepage_html is not None:
+            for platform_url in platform_links_from_html(homepage_html, base)[
+                :MAX_PLATFORM_CANDIDATES
+            ]:
+                result = self.fetch(platform_url)
+                if result is not None and result.status == 200 and _is_html(result):  # noqa: PLR2004
+                    return MenuUrlDiscovery(menu_url=result.url, signal="platform")
         return None
+
+    def _is_catch_all_site(self, base_url: str) -> bool:
+        """True when a random, almost-certainly-nonexistent path 200s as HTML.
+
+        Such a site answers 200 for any path (an SPA fallback or a soft-404
+        page), so a well-known candidate's URL-path signal is worthless there
+        (R08): ``/menu`` trivially contains "menu" by construction regardless
+        of whether the site has one.
+        """
+        probe = urljoin(base_url, f"/helios-probe-{self._random_token()}")
+        result = self.fetch(probe)
+        return result is not None and result.status == 200 and _is_html(result)  # noqa: PLR2004
+
+    def _sitemap_menu_matches(self, base_url: str) -> list[str]:
+        """Same-site menu-matching URLs from every sitemap document for a site (R75).
+
+        Sitemap sources are the site's robots.txt ``Sitemap:`` lines when it
+        declares any, else the ``/sitemap.xml`` convention. A sitemap index's
+        children are expanded (never treated as page candidates themselves),
+        each fetch (top-level or child) counting against
+        :data:`MAX_SITEMAP_CHILDREN` so a hostile or huge sitemap can't fan
+        out unboundedly.
+        """
+        matches: list[str] = []
+        fetched = 0
+        for sitemap_url in self._sitemap_sources(base_url):
+            if fetched >= MAX_SITEMAP_CHILDREN:
+                break
+            result = self.fetch(sitemap_url)
+            fetched += 1
+            if result is None or result.status != 200:  # noqa: PLR2004
+                continue
+            matches.extend(menu_links_from_sitemap(result.text, base_url))
+            for child in sitemap_index_children(result.text, base_url):
+                if fetched >= MAX_SITEMAP_CHILDREN:
+                    break
+                child_result = self.fetch(child)
+                fetched += 1
+                if child_result is None or child_result.status != 200:  # noqa: PLR2004
+                    continue
+                matches.extend(menu_links_from_sitemap(child_result.text, base_url))
+        return matches
+
+    def _sitemap_sources(self, base_url: str) -> list[str]:
+        """Same-site sitemap document URLs: robots ``Sitemap:`` lines, else the default."""
+        split = urlsplit(base_url)
+        origin = f"{split.scheme}://{split.netloc}"
+        rules = self._robots.get(origin)
+        if rules is not None:
+            declared = [url for url in rules.sitemaps if same_site(url, base_url)]
+            if declared:
+                return declared[:MAX_SITEMAP_CHILDREN]
+        return [urljoin(base_url, "/sitemap.xml")]
 
 
 def _read_capped(response: httpx.Response) -> bytes | None:
@@ -368,6 +505,37 @@ def _decode(body: bytes, encoding: str | None) -> str:
         return body.decode(encoding or "utf-8", errors="replace")
     except LookupError:  # unknown charset in the Content-Type header
         return body.decode("utf-8", errors="replace")
+
+
+_GZIP_MAGIC = b"\x1f\x8b"
+
+
+def _gunzip_capped(data: bytes, cap: int) -> bytes | None:
+    """Decompress gzip ``data``, or ``None`` past ``cap`` decompressed bytes.
+
+    Reads in chunks and stops as soon as the cap is crossed, rather than
+    decompressing everything first, so a small, hostile ``.xml.gz`` cannot
+    expand into a memory bomb (R75).
+    """
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(data)) as gz:
+            chunks: list[bytes] = []
+            size = 0
+            while True:
+                chunk = gz.read(65536)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > cap:
+                    return None
+                chunks.append(chunk)
+            return b"".join(chunks)
+    except OSError:  # not actually gzip, or a truncated/corrupt stream
+        return None
+
+
+def _body_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
