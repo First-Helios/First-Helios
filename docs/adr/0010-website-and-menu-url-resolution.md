@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-09-21
 **Accepted:** 2026-09-21 by project owner Fortune
+**Amended:** 2026-09-23 — §3 etiquette, see [Amendment 1](#amendment-1-2026-09-23-crawler-etiquette) (review session S2; owner decisions D2)
 **Phase:** 4 (Venue Discovery, Identity & Geocoding)
 
 ## Context
@@ -109,8 +110,9 @@ Establishment match key.
 Per resolved website, deterministically, honoring etiquette as a hard
 requirement (ROADMAP Phase 5 "scraping etiquette"):
 
-- **robots.txt first** — stdlib `urllib.robotparser`; a disallowed path is
-  never fetched.
+- **robots.txt first** — ~~stdlib `urllib.robotparser`~~ `protego` since
+  Amendment 1 (the stdlib parser applies the first matching rule and ignores
+  wildcards); a disallowed path is never fetched.
 - **Candidate paths:** `/menu`, `/menus`, `/food`, `/our-menu` — HEAD/GET with
   a real User-Agent, one host at a time.
 - **Sitemap scan:** `sitemap.xml` (stdlib `xml.etree`), URLs matching a menu
@@ -197,6 +199,38 @@ the only path to a URL match key, and it is opt-in per row.
   (Phase 5/7), not built in this unit.
 - **`infra/` touch** — a monthly scheduler on the Pi is an ops detail of this
   unit (ADR-0009 §3); any `infra/` change still gets a careful read (CLAUDE.md).
+
+## Amendment 1 (2026-09-23): crawler etiquette
+
+The 2026-09-22 codebase review (R05, R13, R14, R74, R79) found that §3's
+etiquette was not delivered: stdlib `RobotFileParser` applies the *first*
+matching rule and ignores `*`/`$` (so `Allow: /` + `Disallow: /menu` fetched
+`/menu`), an unreachable robots.txt meant "crawl everything", and httpx
+followed redirects to any host — past robots, the throttle, and onto private
+addresses. Owner decisions D2 (remediation checklist) replace §3's etiquette
+bullets with:
+
+- **robots.txt is parsed with [`protego`](https://github.com/scrapy/protego)**
+  (Scrapy's parser; BSD-3-Clause, pure Python, no transitive dependencies,
+  typed) — RFC 9309 longest match, Allow wins ties, `*`/`$`, per-UA groups,
+  `Crawl-delay`, `Sitemap:`. Owner chose a known library over a hand-written
+  matcher (D2.1). This supersedes the "httpx + stdlib" row below for robots
+  only; everything else stays stdlib.
+- **robots.txt outcome** (RFC 9309 §2.3.1): 2xx → its rules; 4xx → allow all;
+  5xx, network error, or a refused redirect → skip the whole site this run
+  (D2.2). A `Crawl-delay` is honoured; one above 60 s skips the site.
+- **Redirects** are followed by hand, max 5 hops, http/https only, same site
+  (host, `www.` ignored), host must resolve to public addresses only; every hop
+  is robots-checked and throttled (D2.3). Homepage links resolve against the
+  post-redirect URL and `<base href>`.
+- **Size cap:** bodies are streamed and abandoned past 3 MB (D2.4).
+- **Cache:** atomic writes; every entry carries `fetched_at` and expires after
+  7 days — robots.txt and failures per D2.5; a Pi run takes a day or two, so
+  good pages are "kept for the run" (D2.5) and the next monthly run re-fetches.
+- **Out of scope, recorded for later:** a classifier for pages of interest
+  (Phase 5; ranks/verifies candidates, never overrides robots), and whether to
+  ever override a robots `Disallow` (needs its own ADR, with blocked-site data
+  from a Pi run first). See the checklist's D2 notes.
 
 ## References
 

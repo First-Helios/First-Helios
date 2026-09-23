@@ -5,9 +5,9 @@ Run after Overture seeding, on the Orange Pi against the staging database::
     python -m apps.discovery.resolve_urls --config config/sources.yaml
 
 Idempotent and re-runnable: a venue that already has a resolved website/menu-URL
-record is skipped, and the site fetcher caches every response on disk, so a
-re-run neither re-assigns nor re-crawls. Crawls live restaurant sites (robots
-+ rate limited), so it makes network calls and is not exercised in CI.
+record is skipped, and the site fetcher caches every response on disk for 7
+days, so a re-run neither re-assigns nor re-crawls. Crawls live restaurant sites
+(robots + rate limited), so it makes network calls and is not exercised in CI.
 """
 
 from __future__ import annotations

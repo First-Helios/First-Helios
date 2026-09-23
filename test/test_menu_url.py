@@ -41,6 +41,21 @@ def test_menu_links_from_html_keeps_same_site_absolute_urls() -> None:
     assert links == ["https://kerbey.com/menu", "https://kerbey.com/menus/dinner"]
 
 
+def test_menu_links_from_html_honours_base_href() -> None:
+    html = '<head><base href="/en/"></head><a href="dinner-menu">Dinner</a>'
+    assert menu_links_from_html(html, "https://kerbey.com/home") == [
+        "https://kerbey.com/en/dinner-menu"
+    ]
+
+
+def test_menu_links_from_html_base_href_cannot_leave_the_site() -> None:
+    html = '<base href="https://evil.example/"><a href="menu">Menu</a>'
+    assert menu_links_from_html(html, "https://kerbey.com/") == []
+    # A non-http base is ignored; links resolve against the page itself.
+    html = '<base href="javascript:void(0)"><a href="menu">Menu</a>'
+    assert menu_links_from_html(html, "https://kerbey.com/a/") == ["https://kerbey.com/a/menu"]
+
+
 def test_menu_links_from_sitemap_filters_by_path_and_host() -> None:
     xml = """<?xml version="1.0"?>
     <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

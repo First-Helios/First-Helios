@@ -81,15 +81,20 @@ def looks_like_menu(text: str, href: str) -> bool:
 
 
 class _AnchorCollector(HTMLParser):
-    """Collect ``(href, text)`` for every ``<a>`` with an ``href``."""
+    """Collect ``(href, text)`` for every ``<a>`` with an ``href``, plus ``<base href>``."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.anchors: list[tuple[str, str]] = []
+        self.base_href: str | None = None
         self._href: str | None = None
         self._text: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "base" and self.base_href is None:
+            # Only the first <base href> counts (HTML spec).
+            self.base_href = next((value for name, value in attrs if name == "href"), None)
+            return
         if tag != "a":
             return
         self._flush()
@@ -117,15 +122,25 @@ class _AnchorCollector(HTMLParser):
 
 
 def menu_links_from_html(html: str, base_url: str) -> list[str]:
-    """Same-site absolute menu-candidate URLs from a page's anchors, in order."""
+    """Same-site absolute menu-candidate URLs from a page's anchors, in order.
+
+    ``base_url`` is the page's own (post-redirect) URL. Relative links resolve
+    against the page's ``<base href>`` when it has an http(s) one, but must
+    still land on the page's site.
+    """
     parser = _AnchorCollector()
     parser.feed(html)
     parser.close()
+    link_base = base_url
+    if parser.base_href and parser.base_href.strip():
+        declared = urljoin(base_url, parser.base_href.strip())
+        if urlsplit(declared).scheme in {"http", "https"}:
+            link_base = declared
     out: list[str] = []
     for href, text in parser.anchors:
         if not looks_like_menu(text, href):
             continue
-        absolute = urljoin(base_url, href)
+        absolute = urljoin(link_base, href)
         if urlsplit(absolute).scheme in {"http", "https"} and same_site(absolute, base_url):
             out.append(absolute)
     return out
