@@ -384,10 +384,12 @@ Grouped by file. "Code wins" per CLAUDE.md; each item is a docs-only fix unless 
   `geo.py`, `apps/discovery/`, `config/sources.yaml`; `:88` price index "deferred to
   its own ADR" (ADR-0007 exists); `:89-90` `/healthz` + `/readyz` "so far";
   `:100-101` discovery and product API "not" implemented.
-- `:109`, `:158` clone URL `github.com/First-Helios/First-Helios`; `git remote` is
-  `4Fortune8/First-Helios` (also ADR-0002:20 and the crawler User-Agent at
-  `apps/discovery/__main__.py:25`, `resolve_urls.py:24`; a UA contact URL that does
-  not resolve would matter for Nominatim's usage policy — not checked offline).
+- Repository URL is inconsistent across docs: README `:109`, `:158`, ADR-0002:20
+  and the crawler User-Agent (`apps/discovery/__main__.py:25`, `resolve_urls.py:24`)
+  use `github.com/First-Helios/First-Helios`, which is where `gh` resolves the repo
+  (PR #22); ROADMAP `:11`, `:1161`, `LEARNING_GUIDE.md:280` and the local `origin`
+  remote still use the older `4Fortune8/First-Helios` (GitHub redirects). The stale
+  side is the `4Fortune8` references.
 - `:112` `cp .env.example .env` — nothing reads it (R85).
 
 **ROADMAP.md**
