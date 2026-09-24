@@ -1,57 +1,36 @@
 {
   "components": {
     "schemas": {
-      "HTTPValidationError": {
+      "ErrorResponse": {
+        "description": "The uniform error body returned by every non-2xx response.",
         "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
+          "code": {
+            "enum": [
+              "not_found",
+              "validation_error",
+              "invalid_cursor",
+              "method_not_allowed",
+              "service_unavailable",
+              "internal_error"
+            ],
+            "title": "Code",
             "type": "string"
           },
-          "type": {
-            "title": "Error Type",
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
             "type": "string"
           }
         },
         "required": [
-          "loc",
-          "msg",
-          "type"
+          "detail",
+          "code",
+          "trace_id"
         ],
-        "title": "ValidationError",
+        "title": "ErrorResponse",
         "type": "object"
       },
       "VenueList": {
@@ -217,6 +196,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The database is not reachable."
           }
         },
         "summary": "Readyz"
@@ -267,15 +256,25 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The cursor is malformed."
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "A query parameter failed validation."
           }
         },
         "summary": "List venues (cursor-paginated)",
@@ -294,6 +293,8 @@
             "name": "venue_id",
             "required": true,
             "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": 0,
               "title": "Venue Id",
               "type": "integer"
             }
@@ -310,15 +311,25 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No current venue has this id."
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "venue_id is out of range."
           }
         },
         "summary": "Get one venue by id",

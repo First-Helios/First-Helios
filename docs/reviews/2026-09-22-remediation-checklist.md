@@ -39,7 +39,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 🚦 | **Pi gate:** OK to run `resolve_urls` on the Pi again after S2, S3, S4, S6 are merged | | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 open, owner review |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [ ] |
-| 9 | S9 API polish | D7 | M | [ ] |
+| 9 | S9 API polish | D7 | M | [X] #32 open, owner review |
 | 10 | S10 Test hardening sweep | — | S | [ ] |
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [ ] |
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [ ] |
@@ -609,19 +609,20 @@ Branch: `fix/identity-locks` · Concurrency-sensitive accepted code: owner revie
 Hand-off prompt: `Do session S9 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/api-polish` · OpenAPI snapshot changes: owner review.
 
-- [ ] R37 OpenAPI documents the wrong error shape
-- [ ] R38 No database connect/pool timeouts (per D7.4)
-- [ ] R41 Huge id or cursor → 500 instead of 400/404
-- [ ] R42 500 errors missing request-id and CORS headers
-- [ ] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
-- [ ] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
-- [ ] R45 CORS wildcard allowed via environment (per D7.3)
-- [ ] R46 `X-Request-ID` not readable by browser JavaScript
-- [ ] R47 Deprecated 422 constant; TestClient `httpx` deprecation
-- [ ] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
-- [ ] R49 API error tests all require a database
-- [ ] R50 Timestamps not forced to UTC
-- [ ] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
+- [X] R37 OpenAPI documents the wrong error shape
+- [X] R38 No database connect/pool timeouts (per D7.4)
+- [X] R41 Huge id or cursor → 500 instead of 400/404
+- [X] R42 500 errors missing request-id and CORS headers
+- [X] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
+- [X] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
+- [X] R45 CORS wildcard allowed via environment (per D7.3)
+- [X] R46 `X-Request-ID` not readable by browser JavaScript
+- [X] R47 Deprecated 422 constant; TestClient `httpx` deprecation (constant fixed;
+  the `httpx`→`httpx2` swap is deliberately left — see PR)
+- [X] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
+- [X] R49 API error tests all require a database
+- [X] R50 Timestamps not forced to UTC
+- [X] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
 
 **Recommended approach**
 - Catch unhandled exceptions inside the request middleware and render the envelope
@@ -822,3 +823,4 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
 | 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Draft, awaiting owner acceptance of ADR-0011 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
 | 2026-09-23 | S7 | fix/gold-refresh | #28 | Open, owner review (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
+| 2026-09-24 | S9 | fix/api-polish | #32 | Open, owner review (OpenAPI snapshot changed; ADR-0008 Amendment 1 added) | — D7 was already fully answered on `main`, no owner questions asked. Closes R37, R38, R41-R50, R99. `HELIOS_STRICT_DB_TESTS=1 make ci`: 787 passed, 92% coverage; `uv run alembic check`: "No new upgrade operations detected" (disposable container `helios-s9-db`:55442, removed after). Left the `httpx`→`httpx2` swap alone per ADR-0008's existing disposition (not a one-line change) — noted in the PR. S8 (PR #30, identity lock order) untouched, as instructed. |
