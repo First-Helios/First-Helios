@@ -52,7 +52,7 @@ from packages.helios_core.provenance.contracts import (
     BronzeObservation,
     persist_source_record_observation,
 )
-from test.menu_support import aggregate
+from test.menu_support import aggregate, inherited
 from test.provider_support import (
     ScopeFixture,
     decision,
@@ -525,6 +525,30 @@ def test_full_catalog_materializes_organization_scoped_rows(
     assert row["amount_minor"] == selection.local_price.amount_minor == 1050
     assert row["price_scope_subject_id"] == scope.organization.subject_id
     assert row["content_scope"] == "local"
+
+
+def test_full_catalog_keys_inherited_prices_by_their_pinned_base(
+    factory: sessionmaker[Session],
+) -> None:
+    # R22: a local price riding a pinned base is enumerated under the base-scoped
+    # target, and the selector resolves that same target (no silent ``absent``).
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    with factory.begin() as session:
+        base = persist_menu(session, aggregate(scope, shared=True))
+    with factory.begin() as session:  # a pin must name a committed base
+        persist_menu(session, inherited(aggregate(scope), base))
+    with factory.begin() as session:
+        refresh_full_catalog(session, effective_instant=E)
+    with factory() as session:
+        rows = _business(session, _request(scope))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["target_path"] == (
+        f'[["base","{base.page_id}"],["section","s-food"],["item","i-burger"]]'
+    )
+    assert (row["price_state"], row["amount_minor"]) == ("priced", 1050)
+    assert (row["content_scope"], row["content_page_id"]) == ("organization", base.page_id)
 
 
 def test_selection_and_enumeration_take_no_write_locks(

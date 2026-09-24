@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 import pytest
@@ -69,13 +69,26 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
     from sqlalchemy.orm import Session
 
-    from packages.helios_core.domains.menu.contracts import Operation, PersistedMenu, SourceKind
+    from packages.helios_core.domains.menu.contracts import (
+        NodeKind,
+        Operation,
+        PersistedMenu,
+        SourceKind,
+    )
 
 _PriceState = Literal["priced", "unknown", "unavailable"]
+type _Path = tuple[tuple[str, str], ...]
 
 TARGET = TargetRef(kind="item", native_path=(("section", "s-food"), ("item", "i-burger")))
 LUNCH = ContextRef(channel="dine_in", service_period="lunch")
 E = datetime(2026, 9, 17, 12, 0, tzinfo=UTC)
+
+
+def _pinned(
+    base: PersistedMenu, kind: NodeKind = "item", path: _Path = TARGET.native_path
+) -> TargetRef:
+    """A target reached through links to one pinned base page (ADR-0005 §10)."""
+    return TargetRef(kind=kind, native_path=(("base", str(base.page_id)), *path))
 
 
 def _t(hour: int, minute: int = 0) -> datetime:
@@ -357,13 +370,14 @@ def _est_request(
     observation_cutoff: datetime | None = None,
     context: ContextRef = LUNCH,
     instant: datetime = E,
+    target: TargetRef = TARGET,
 ) -> SelectionRequest:
     return SelectionRequest(
         subject_id=actor.subject_id,
         subject_kind="establishment",
         source_record_id=actor.source_record_id,
         root_key="main",
-        target=TARGET,
+        target=target,
         context=context,
         currency_code="USD",
         effective_instant=instant,
@@ -395,7 +409,7 @@ def test_price_only_inheritance_and_separate_org_claim(world: World) -> None:
     o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
     _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
 
-    result = _select(world, _est_request(world.a))
+    result = _select(world, _est_request(world.a, target=_pinned(o1)))
 
     assert result.local_price.state == "priced"
     assert result.local_price.amount_minor == 1050
@@ -419,7 +433,7 @@ def test_absent_local_price_is_derived_unknown_without_fallback(world: World) ->
         _local_page(world, world.b, world.place_b, world.b.v1, o1, with_price=False),
     )
 
-    result = _select(world, _est_request(world.b))
+    result = _select(world, _est_request(world.b, target=_pinned(o1)))
 
     # No invented Evidence, no sibling (A=1050) or Organization (900) fallback.
     assert result.local_price.state == "absent"
@@ -434,8 +448,8 @@ def test_sibling_prices_stay_distinct_local_over_shared(world: World) -> None:
     _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
     _commit(world, _local_page(world, world.b, world.place_b, world.b.v1, o1, amount=1200))
 
-    a_result = _select(world, _est_request(world.a))
-    b_result = _select(world, _est_request(world.b))
+    a_result = _select(world, _est_request(world.a, target=_pinned(o1)))
+    b_result = _select(world, _est_request(world.b, target=_pinned(o1)))
 
     assert a_result.local_price.amount_minor == 1050
     assert b_result.local_price.amount_minor == 1200
@@ -509,8 +523,14 @@ def test_history_stream_head_at_k_and_later_observation(world: World) -> None:
         ),
     )
 
-    at_a1 = _select(world, _est_request(world.a, knowledge_cutoff=_accepted_at(world, a1.page_id)))
-    at_a2 = _select(world, _est_request(world.a, knowledge_cutoff=_accepted_at(world, a2.page_id)))
+    at_a1 = _select(
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, a1.page_id)),
+    )
+    at_a2 = _select(
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, a2.page_id)),
+    )
 
     assert at_a1.local_price.page_id == a1.page_id
     assert at_a1.local_price.observed_at == _t(9, 10)
@@ -552,8 +572,14 @@ def test_correction_changes_accepted_interpretation_by_k(world: World) -> None:
         ),
     )
 
-    before = _select(world, _est_request(world.a, knowledge_cutoff=_accepted_at(world, a2.page_id)))
-    after = _select(world, _est_request(world.a, knowledge_cutoff=_accepted_at(world, a3.page_id)))
+    before = _select(
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, a2.page_id)),
+    )
+    after = _select(
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, a3.page_id)),
+    )
 
     assert before.local_price.amount_minor == 1050
     assert after.local_price.amount_minor == 1150
@@ -580,7 +606,7 @@ def test_explicit_local_unknown_keeps_its_observation(world: World) -> None:
         ),
     )
 
-    result = _select(world, _est_request(world.a))
+    result = _select(world, _est_request(world.a, target=_pinned(o1)))
 
     # An explicit unknown keeps observation time and Evidence, unlike absence.
     assert result.local_price.state == "unknown"
@@ -616,6 +642,7 @@ def test_withdrawal_blocks_predecessors_even_under_observation_cutoff(world: Wor
         world,
         _est_request(
             world.a,
+            target=_pinned(o1),
             knowledge_cutoff=_accepted_at(world, a5.page_id),
             observation_cutoff=_t(10, 20),
         ),
@@ -625,7 +652,8 @@ def test_withdrawal_blocks_predecessors_even_under_observation_cutoff(world: Wor
 
     # K before the tombstone still shows the explicit unknown at A4.
     earlier = _select(
-        world, _est_request(world.a, knowledge_cutoff=_accepted_at(world, a4.page_id))
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, a4.page_id)),
     )
     assert earlier.local_price.state == "unknown"
 
@@ -651,7 +679,7 @@ def test_restoration_requires_a_new_supported_page(world: World) -> None:
         ),
     )
 
-    result = _select(world, _est_request(world.a))
+    result = _select(world, _est_request(world.a, target=_pinned(o1)))
 
     assert result.local_price.state == "priced"
     assert result.local_price.amount_minor == 1175
@@ -675,7 +703,7 @@ def test_org_successor_keeps_pin_and_shows_separate_head(world: World) -> None:
         ),
     )
 
-    result = _select(world, _est_request(world.a))
+    result = _select(world, _est_request(world.a, target=_pinned(o1)))
 
     # A stays pinned to O1: its content and shared claim are O1, not O2.
     assert result.local_price.amount_minor == 1050
@@ -708,12 +736,14 @@ def test_org_withdrawal_makes_pin_unresolved_until_rebased(world: World) -> None
 
     # Current: the pin's base is withdrawn, so no resolved local price and no
     # revived predecessor; no sibling/base fallback is invented.
-    current = _select(world, _est_request(world.a))
+    current = _select(world, _est_request(world.a, target=_pinned(o1)))
     assert current.local_price.state == "unresolved_base"
     assert current.content is None
 
     # History before the base withdrawal still resolves the pinned claim.
-    historical = _select(world, _est_request(world.a, knowledge_cutoff=before_withdrawal))
+    historical = _select(
+        world, _est_request(world.a, target=_pinned(o1), knowledge_cutoff=before_withdrawal)
+    )
     assert historical.local_price.amount_minor == 1050
 
     # An explicit organization restoration does not silently revive the old pin.
@@ -729,7 +759,7 @@ def test_org_withdrawal_makes_pin_unresolved_until_rebased(world: World) -> None
             stream_rev=3,
         ),
     )
-    still_unresolved = _select(world, _est_request(world.a))
+    still_unresolved = _select(world, _est_request(world.a, target=_pinned(o1)))
     assert still_unresolved.local_price.state == "unresolved_base"
     restored_org = _select(world, _org_request(world))
     assert restored_org.local_price.amount_minor == 975
@@ -759,10 +789,12 @@ def test_current_remap_is_stale_but_history_is_preserved(world: World) -> None:
             evidence_ids=(world.a.v1.evidence_id,),
         )
 
-    current = _select(world, _est_request(world.a))
+    current = _select(world, _est_request(world.a, target=_pinned(o1)))
     assert current.local_price.state == "unresolved_scope"
 
-    historical = _select(world, _est_request(world.a, knowledge_cutoff=accepted))
+    historical = _select(
+        world, _est_request(world.a, target=_pinned(o1), knowledge_cutoff=accepted)
+    )
     assert historical.local_price.amount_minor == 1050
     assert historical.local_price.scope_subject_id == world.a.subject_id
 
@@ -781,10 +813,12 @@ def test_current_retirement_is_ineligible_but_history_is_preserved(world: World)
             evidence_ids=(world.a.v1.evidence_id,),
         )
 
-    current = _select(world, _est_request(world.a))
+    current = _select(world, _est_request(world.a, target=_pinned(o1)))
     assert current.local_price.state == "unresolved_scope"
 
-    historical = _select(world, _est_request(world.a, knowledge_cutoff=accepted))
+    historical = _select(
+        world, _est_request(world.a, target=_pinned(o1), knowledge_cutoff=accepted)
+    )
     assert historical.local_price.amount_minor == 1050
 
 
@@ -897,7 +931,9 @@ def test_effective_context_equality_and_half_open_instant(world: World) -> None:
     # [11:00,14:00); they compete, and the [12:00,14:00) contender stays separate.
     lunch_window = ContextRef("dine_in", "lunch", _t(11, 0), _t(14, 0))
     compete = _select(world, _est_request(world.a, context=lunch_window, instant=_t(12, 0)))
-    assert compete.local_price.amount_minor in {1000, 1100}
+    # Equal kind, observation and confidence: the ascending business key
+    # ("p-mid" < "p-wide") decides, never row order.
+    assert compete.local_price.amount_minor == 1100
 
     late_window = ContextRef("dine_in", "lunch", _t(12, 0), _t(14, 0))
     distinct = _select(world, _est_request(world.a, context=late_window, instant=_t(12, 30)))
@@ -955,13 +991,14 @@ def test_pending_lineage_withholds_the_current_value(world: World) -> None:
     # unapplied pending change is only observable inside its own transaction.
     with world.factory() as session:
         pending_change(session, world.a.subject_id, "establishment")
-        current = select_price(session, _est_request(world.a))
+        current = select_price(session, _est_request(world.a, target=_pinned(o1)))
         session.rollback()
     assert current.local_price.state == "unresolved_scope"
 
     # The accepted claim is still readable as history once the change is gone.
     historical = _select(
-        world, _est_request(world.a, knowledge_cutoff=_accepted_at(world, a1.page_id))
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, a1.page_id)),
     )
     assert historical.local_price.amount_minor == 1050
 
@@ -970,7 +1007,7 @@ def test_currency_mismatch_yields_no_local_price(world: World) -> None:
     o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
     _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
 
-    request = replace(_est_request(world.a), currency_code="EUR")
+    request = replace(_est_request(world.a, target=_pinned(o1)), currency_code="EUR")
     result = _select(world, request)
 
     assert result.local_price.state == "absent"
@@ -985,6 +1022,7 @@ def test_observation_cutoff_filters_head_without_reviving_predecessor(world: Wor
         world,
         _est_request(
             world.a,
+            target=_pinned(o1),
             knowledge_cutoff=_accepted_at(world, a1.page_id),
             observation_cutoff=_t(9, 0),
         ),
@@ -997,12 +1035,440 @@ def test_native_correspondence_is_required(world: World) -> None:
     o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
     _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
     # A native-path target that no node carries has no stable correspondence.
-    mismatched = replace(
-        _est_request(world.a),
-        target=TargetRef(kind="item", native_path=(("section", "s-food"), ("item", "i-fries"))),
+    mismatched = _est_request(
+        world.a, target=_pinned(o1, path=(("section", "s-food"), ("item", "i-fries")))
     )
 
     result = _select(world, mismatched)
 
     assert result.content is None
     assert result.local_price.state == "absent"
+
+
+# --------------------------------------------------------------------------- #
+# Correspondence, base validity and lifecycle rows the matrix above lacked
+# (review R03, R22-R24, R31, R65, R67, R68).
+# --------------------------------------------------------------------------- #
+
+SPECIAL = TargetRef(kind="item", native_path=(("section", "s-specials"), ("item", "i-special")))
+
+
+def _withdraw_org(world: World, base: PersistedMenu) -> PersistedMenu:
+    obs = _append(world, world.org, _t(11, 10), 3)
+    return _commit(
+        world,
+        _withdrawal_page(
+            world,
+            world.org,
+            obs,
+            supersedes=base.page_id,
+            stream_rev=2,
+            subject_kind="organization",
+            source_kind="jsonld",
+        ),
+    )
+
+
+def _as_kind(value: MenuAggregate, kind: SourceKind) -> MenuAggregate:
+    return replace(value, page=replace(value.page, source_kind=kind))
+
+
+def _replacement_page(world: World, base: PersistedMenu) -> MenuAggregate:
+    """A local page that replaces the pinned burger and adds its own special."""
+    value = _local_page(world, world.a, world.place_a, world.a.v1, base)
+    ev = (world.a.v1.evidence_id,)
+    replacement = replace(
+        value.items[0],
+        effect="replace",
+        support_kind="direct",
+        name="House Burger",
+        description="Smashed",
+        position=0,
+        dietary_tags=(),
+        evidence_ids=ev,
+    )
+    specials = SectionInput(
+        section_key="specials",
+        name="Specials",
+        position=1,
+        effect="replace",
+        support_kind="direct",
+        evidence_ids=ev,
+        source_native_key="s-specials",
+    )
+    special = ItemInput(
+        item_key="special",
+        section_key="specials",
+        name="Special",
+        position=0,
+        dietary_tags=(),
+        effect="replace",
+        support_kind="direct",
+        evidence_ids=ev,
+        source_native_key="i-special",
+    )
+    special_price = replace(
+        value.prices[0],
+        observation_key="special-price",
+        target=Target(kind="item", key="special"),
+        amount_minor=700,
+    )
+    return replace(
+        value,
+        sections=(*value.sections, specials),
+        items=(replacement, special),
+        prices=(*value.prices, special_price),
+    )
+
+
+def test_base_linked_replacement_content_needs_a_valid_base(world: World) -> None:
+    # M06/R03: a replacement mapped to the base is base-dependent content, like
+    # its price; only the independent local addition survives the withdrawal.
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    a1 = _commit(world, _replacement_page(world, o1))
+
+    live = _select(world, _est_request(world.a, target=_pinned(o1)))
+    assert live.content is not None
+    assert (live.content.scope, live.content.page_id) == ("local", a1.page_id)
+    assert (live.content.name, live.content.description) == ("House Burger", "Smashed")
+    assert live.content.evidence_ids == (world.a.v1.evidence_id,)
+    assert live.local_price.amount_minor == 1050
+
+    _withdraw_org(world, o1)
+
+    current = _select(world, _est_request(world.a, target=_pinned(o1)))
+    assert current.local_price.state == "unresolved_base"
+    assert current.content is None
+    assert current.organization == ()
+
+    special = _select(world, _est_request(world.a, target=SPECIAL))
+    assert special.local_price.amount_minor == 700
+    assert special.content is not None
+    assert (special.content.scope, special.content.name) == ("local", "Special")
+
+    historical = _select(
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, a1.page_id)),
+    )
+    assert historical.content is not None and historical.content.name == "House Burger"
+    assert historical.local_price.amount_minor == 1050
+
+
+def test_base_remap_blocks_current_inheritance_but_keeps_history(world: World) -> None:
+    # M06: a current pin needs its base's original mapping to stay live.
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    a1 = _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
+    accepted = _accepted_at(world, a1.page_id)
+    with world.factory.begin() as session:
+        # A second resolved record keeps the Organization (and so A) eligible;
+        # only the pinned page's own record mapping goes stale.
+        kept = _observe(session, f"{world.token}-org-kept", _t(9, 0), 1)
+        admit_source_record(
+            session,
+            source_record_id=kept.source_record_id,
+            decision=decision(),
+            evidence_ids=(kept.evidence_id,),
+        )
+        assign_source_record(
+            session,
+            source_record_id=kept.source_record_id,
+            to_subject_id=world.org.subject_id,
+            decision=decision(),
+            evidence_ids=(kept.evidence_id,),
+        )
+        other = create_organization(session, canonical_name="Other", name_fingerprint="other")
+        remap_source_record(
+            session,
+            source_record_id=world.org.source_record_id,
+            from_subject_id=world.org.subject_id,
+            to_subject_id=other.id,
+            decision=decision(),
+            evidence_ids=(world.org.v1.evidence_id,),
+        )
+
+    current = _select(world, _est_request(world.a, target=_pinned(o1)))
+    assert current.local_price.state == "unresolved_base"
+    assert current.content is None
+
+    historical = _select(
+        world, _est_request(world.a, target=_pinned(o1), knowledge_cutoff=accepted)
+    )
+    assert historical.local_price.amount_minor == 1050
+    assert historical.content is not None and historical.content.page_id == o1.page_id
+    assert [(c.origin, c.amount_minor) for c in historical.organization] == [("pinned", 900)]
+
+
+def test_different_pinned_bases_stay_separate_targets(world: World) -> None:
+    # M11/R22: JSON-LD pins O1 and DOM pins O2; the same inherited native path
+    # under different bases is two targets, so JSON-LD cannot win O2's target.
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    o_v2 = _append(world, world.org, _t(11, 0), 2)
+    o2 = _commit(
+        world,
+        _org_page(
+            world,
+            o_v2,
+            amount=950,
+            description="Angus beef",
+            operation="observation",
+            supersedes=o1.page_id,
+            stream_rev=2,
+        ),
+    )
+    json_page = _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1000)
+    _commit(world, _as_kind(json_page, "jsonld"))
+    _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o2, amount=1100))
+
+    on_o1 = _select(world, _est_request(world.a, target=_pinned(o1)))
+    on_o2 = _select(world, _est_request(world.a, target=_pinned(o2)))
+
+    assert (on_o1.local_price.amount_minor, on_o1.local_price.source_kind) == (1000, "jsonld")
+    assert on_o1.content is not None and on_o1.content.page_id == o1.page_id
+    assert (on_o2.local_price.amount_minor, on_o2.local_price.source_kind) == (1100, "dom")
+    assert on_o2.content is not None
+    assert (on_o2.content.page_id, on_o2.content.description) == (o2.page_id, "Angus beef")
+    assert [(c.origin, c.amount_minor) for c in on_o2.organization] == [("pinned", 950)]
+    # The unpinned native path names neither target.
+    assert _select(world, _est_request(world.a)).local_price.state == "absent"
+
+
+def test_same_pinned_base_corresponds_across_sources(world: World) -> None:
+    # M11: explicit links to the same pinned base do compete across sources.
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    json_page = _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1000)
+    _commit(world, _as_kind(json_page, "jsonld"))
+    _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1100))
+
+    result = _select(world, _est_request(world.a, target=_pinned(o1)))
+
+    assert (result.local_price.amount_minor, result.local_price.source_kind) == (1000, "jsonld")
+
+
+@pytest.mark.parametrize("suppress_first", [True, False])
+def test_shared_canonical_path_in_one_page_is_ambiguous(world: World, suppress_first: bool) -> None:
+    # R23: a suppression of the base burger and a local addition carrying the
+    # same native path collide; neither row order may pick the answer.
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    value = _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1200)
+    ev = (world.a.v1.evidence_id,)
+    suppress = replace(
+        value.items[0],
+        item_key="burger-hidden",
+        effect="suppress",
+        support_kind="direct",
+        evidence_ids=ev,
+    )
+    addition = ItemInput(
+        item_key="burger",
+        section_key="food",
+        name="Burger",
+        description="Local",
+        position=0,
+        dietary_tags=(),
+        effect="replace",
+        support_kind="direct",
+        evidence_ids=ev,
+        source_native_key="i-burger",
+    )
+    items = (suppress, addition) if suppress_first else (addition, suppress)
+    _commit(world, replace(value, items=items))
+
+    result = _select(world, _est_request(world.a, target=_pinned(o1)))
+
+    assert result.content is None
+    assert result.local_price.state == "absent"
+    assert result.organization == ()
+
+
+def test_suppressed_base_target_has_no_content_or_price(world: World) -> None:
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    value = _local_page(world, world.a, world.place_a, world.a.v1, o1, with_price=False)
+    hidden = replace(
+        value.items[0],
+        effect="suppress",
+        support_kind="direct",
+        evidence_ids=(world.a.v1.evidence_id,),
+    )
+    _commit(world, replace(value, items=(hidden,)))
+
+    result = _select(world, _est_request(world.a, target=_pinned(o1)))
+
+    assert result.content is None
+    assert result.local_price.state == "absent"
+    assert result.organization == ()
+
+
+def test_org_head_claim_respects_observation_cutoff(world: World) -> None:
+    # R24: the shared head claim is a factual page too; O filters it.
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
+    o_v2 = _append(world, world.org, _t(11, 0), 2)
+    o2 = _commit(
+        world,
+        _org_page(
+            world, o_v2, amount=950, operation="observation", supersedes=o1.page_id, stream_rev=2
+        ),
+    )
+    k = _accepted_at(world, o2.page_id)
+
+    cut = _select(
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=k, observation_cutoff=_t(10)),
+    )
+    full = _select(world, _est_request(world.a, target=_pinned(o1), knowledge_cutoff=k))
+
+    assert [(c.origin, c.amount_minor) for c in cut.organization] == [("pinned", 900)]
+    assert sorted((c.origin, c.amount_minor) for c in full.organization) == [
+        ("head", 950),
+        ("pinned", 900),
+    ]
+
+
+def test_org_head_claim_must_belong_to_the_pinned_subject(world: World) -> None:
+    # R24: after the Organization record is remapped, a successor scoped to the
+    # new Organization is not the pinned Organization's head claim.
+    o1 = _commit(world, _org_page(world, world.org.v1, amount=900))
+    _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
+    with world.factory.begin() as session:
+        other = create_organization(session, canonical_name="Other", name_fingerprint="other")
+        event = remap_source_record(
+            session,
+            source_record_id=world.org.source_record_id,
+            from_subject_id=world.org.subject_id,
+            to_subject_id=other.id,
+            decision=decision(),
+            evidence_ids=(world.org.v1.evidence_id,),
+        )
+    o_v2 = _append(world, world.org, _t(11, 0), 2)
+    moved = _org_page(
+        world, o_v2, amount=950, operation="correction", supersedes=o1.page_id, stream_rev=2
+    )
+    o2 = _commit(
+        world,
+        replace(moved, page=replace(moved.page, subject_id=other.id, resolution_event_id=event.id)),
+    )
+
+    result = _select(
+        world,
+        _est_request(world.a, target=_pinned(o1), knowledge_cutoff=_accepted_at(world, o2.page_id)),
+    )
+
+    assert result.content is not None and result.content.page_id == o1.page_id
+    assert [(c.origin, c.amount_minor) for c in result.organization] == [("pinned", 900)]
+
+
+def test_withdrawn_only_when_no_live_stream_remains(world: World) -> None:
+    # R67: DOM is withdrawn but the live JSON-LD stream simply lacks the burger;
+    # that is an absent local price, not a withdrawal.
+    dom = _commit(world, _direct_page(world, world.a, world.place_a, world.a.v1, amount=1050))
+    fries = _direct_page(world, world.a, world.place_a, world.a.v1, amount=400, kind="jsonld")
+    fries = replace(
+        fries, items=(replace(fries.items[0], name="Fries", source_native_key="i-fries"),)
+    )
+    _commit(world, fries)
+    a_v5 = _append(world, world.a, _t(10, 30), 5)
+    _commit(world, _withdrawal_page(world, world.a, a_v5, supersedes=dom.page_id, stream_rev=2))
+
+    result = _select(world, _est_request(world.a))
+
+    assert result.content is None
+    assert result.local_price.state == "absent"
+
+
+def test_observation_cutoff_never_revives_a_real_predecessor(world: World) -> None:
+    # M08/M12: A2 is the head at K; O filters it and A1 must not come back.
+    a1 = _commit(world, _direct_page(world, world.a, world.place_a, world.a.v1, amount=1050))
+    a_v2 = _append(world, world.a, _t(10, 0), 2)
+    later = _direct_page(world, world.a, world.place_a, a_v2, amount=1100)
+    a2 = _commit(
+        world,
+        replace(
+            later,
+            page=replace(
+                later.page,
+                operation="observation",
+                supersedes_page_id=a1.page_id,
+                stream_revision=2,
+            ),
+        ),
+    )
+
+    filtered = _select(
+        world,
+        _est_request(
+            world.a, knowledge_cutoff=_accepted_at(world, a2.page_id), observation_cutoff=_t(9, 30)
+        ),
+    )
+    earlier = _select(
+        world,
+        _est_request(
+            world.a, knowledge_cutoff=_accepted_at(world, a1.page_id), observation_cutoff=_t(9, 30)
+        ),
+    )
+
+    assert filtered.content is None
+    assert filtered.local_price.state == "absent"
+    assert earlier.local_price.amount_minor == 1050
+
+
+def test_unspecified_channel_is_an_exact_context_not_a_wildcard(world: World) -> None:
+    # M10: an explicit ``unspecified`` price answers only ``unspecified``, and a
+    # dine-in price never answers an ``unspecified`` request.
+    value = _direct_page(world, world.a, world.place_a, world.a.v1, amount=1050)
+    open_context = replace(value.applicability[0], channel="unspecified", service_period=None)
+    _commit(world, replace(value, applicability=(open_context,)))
+    _commit(world, _direct_page(world, world.b, world.place_b, world.b.v1, amount=1200))
+
+    def state(actor: Actor, context: ContextRef) -> tuple[str, int | None]:
+        price = _select(world, _est_request(actor, context=context)).local_price
+        return price.state, price.amount_minor
+
+    assert state(world.a, ContextRef("unspecified")) == ("priced", 1050)
+    assert state(world.a, ContextRef("dine_in")) == ("absent", None)
+    assert state(world.a, ContextRef("takeaway")) == ("absent", None)
+    assert state(world.b, LUNCH) == ("priced", 1200)
+    assert state(world.b, ContextRef("unspecified", "lunch")) == ("absent", None)
+
+
+def test_tie_break_orders_business_keys_not_their_repr(world: World) -> None:
+    # R65/M12: equal kind, observation and confidence fall to the ascending
+    # business key. ``'a"b' < "a'b"`` as strings, but not as their reprs.
+    scope = ScopeFixture(world.org.req, world.a.req, world.place_a, world.org.v1, world.a.v1)
+    value = aggregate(scope)
+    single = replace(value.prices[0], observation_key="a'b", amount_minor=1000)
+    double = replace(value.prices[0], observation_key='a"b', amount_minor=1100)
+    _commit(world, replace(value, prices=(single, double)))
+
+    result = _select(world, _est_request(world.a))
+
+    assert result.local_price.amount_minor == 1100
+
+
+_NAIVE = datetime(2026, 9, 17, 12, 0)  # noqa: DTZ001 - deliberately naive
+
+
+def _validation_request() -> SelectionRequest:
+    return SelectionRequest(
+        subject_id=1,
+        subject_kind="establishment",
+        source_record_id=1,
+        root_key="main",
+        target=TARGET,
+        context=LUNCH,
+        currency_code="USD",
+        effective_instant=E,
+    )
+
+
+@pytest.mark.parametrize("field", ["effective_instant", "knowledge_cutoff", "observation_cutoff"])
+def test_selection_request_rejects_naive_datetimes(field: str) -> None:
+    # R68: a naive instant used to return ``absent`` or raise TypeError later.
+    naive: dict[str, Any] = {field: _NAIVE}
+    with pytest.raises(ValueError, match=field):
+        replace(_validation_request(), **naive)
+
+
+@pytest.mark.parametrize("field", ["valid_from", "valid_to"])
+def test_context_rejects_naive_window(field: str) -> None:
+    with pytest.raises(ValueError, match=field):
+        ContextRef("dine_in", "lunch", **{field: _NAIVE})
