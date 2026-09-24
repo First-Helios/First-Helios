@@ -75,3 +75,40 @@ def test_duplicate_and_sanity() -> None:
 def test_fuzzy_is_opt_in() -> None:
     assert _decide([Row("Enchilada Verdes", "12.50")]) == ["reject"]
     assert _decide([Row("Enchilada Verdes", "12.50")], fuzzy=True) == ["accept"]
+
+
+FAR = """
+<h3>Mashed Potatoes</h3><p>Allergens:</p><p>Dairy</p><p>Calories: 300</p><p>Fat: 15g</p>
+<p>Truffle oil, garlic cream sauce</p><p>Order Now</p><p>from</p><p>$4.49</p>
+<h3>Corn</h3><p>Allergens:</p><p>None</p><p>$3.99</p>
+<h3>MMA</h3><h4>$7.50</h4><p>Burger with mayo.</p>
+<h3>PILGRIM</h3><h4>$7.75</h4><p>Turkey burger.</p>
+<h2>House Special</h2><h3>Black Bean Chicken</h3><div>$16.24</div>
+<h2>Chicken</h2><h3>Black Bean Chicken</h3><div>$16.24</div>
+<p>Crispy Roasted Duck – Half $20.95/ Whole $41.95</p>
+"""
+
+
+def test_v2_far_price_run_and_boundaries() -> None:
+    rows = [
+        Row("Mashed Potatoes", "4.49"),
+        Row("Corn", "3.99"),
+        Row("MMA", "7.50"),
+        Row("PILGRIM", "7.75"),
+        Row("Black Bean Chicken", "16.24", section="House Special"),
+        Row("Black Bean Chicken", "16.24", section="Chicken"),
+        Row("Crispy Roasted Duck", "20.95", variant="Half"),
+        Row("Crispy Roasted Duck", "41.95", variant="Whole"),
+    ]
+    assert [v.decision for v in validate(segment(FAR), rows)] == ["accept"] * len(rows)
+
+
+def test_v2_price_only_heading_is_not_a_section_price() -> None:
+    rows = [Row("MMA", "7.50"), Row("PILGRIM", "7.50")]
+    assert [v.decision for v in validate(segment(FAR), rows)] == ["accept", "downgrade"]
+
+
+def test_v2_run_does_not_cross_into_next_item() -> None:
+    # Mashed Potatoes must not borrow Corn's $3.99 even though Corn's price is near.
+    rows = [Row("Mashed Potatoes", "3.99"), Row("Corn", "3.99")]
+    assert [v.decision for v in validate(segment(FAR), rows)] == ["downgrade", "accept"]

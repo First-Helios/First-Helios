@@ -16,16 +16,17 @@ Checks (tracker §[5]):
    tokens. ``fuzzy=True`` also allows one edit on tokens of ≥5 characters; it is
    off by default and measured separately.
 2. **Price grounding** — the normalized amount occurs as a price token in the
-   item's *own region*: its block (after the name span), the following blocks up
-   to the next block that grounds another extracted item (max ``WINDOW``), or a
-   price-only block immediately before it (price-first layouts), or the nearest
-   preceding section heading (a shared "all tacos $3" price).
+   item's *own region*: its block (after the name span) and the nearest run of
+   price blocks after it, before the next extracted item or a price-less heading
+   (v2; v1 used a fixed 4-block window), or a price-only block immediately before
+   it (price-first layouts), or the nearest preceding section heading that has
+   words (a shared "all tacos $3" price).
 3. **Binding** — the price occurrence chosen is the nearest matching one in
    document order, and one occurrence is bound to one item only, unless it sits
    in a heading/section block (a deliberate shared price). A row with a variant
    ("SM", "Large") must have that label printed just before the price.
 4. **Sanity** — USD only; 0.10 ≤ amount ≤ 500; no duplicate (item, variant,
-   price) rows; each accepted field records its evidence locator
+   price, section) rows; each accepted field records its evidence locator
    ``(block_id, start, end)``.
 """
 
@@ -40,7 +41,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from spikes.menu_model.segment import Block
 
-WINDOW = 4  # max blocks after the name block that may hold its price
+SCAN = 15  # v2: max blocks scanned after a name for its nearest price run (v1: fixed window 4)
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})
 
@@ -160,7 +161,8 @@ def price_label(text: str, toks: list[PriceToken], tok: PriceToken) -> str:
     ("Half $14.95 | Whole $22.95").
     """
     suffix = re.match(r"/\s*([^|•$/\d\s][^|•$/]*|\d+\s*[^\W\d][^|•$/]*)", text[tok.end :])
-    if suffix:
+    # v2: "Half $20.95/ Whole $41.95" - a label followed by a price belongs to that price
+    if suffix and not re.match(r"\s*\$?\d", text[tok.end + suffix.end() :]):
         return suffix.group(1).strip()
     prev_end = max((t.end for t in toks if t.end <= tok.start), default=0)
     return text[prev_end : tok.start].strip(" |•-–—:,")
@@ -194,6 +196,44 @@ def _claimed_by_other(
     return any(o and set(norm_tokens(o)) <= label for o in others)
 
 
+def _sole_number(block: Block) -> bool:
+    """A bare integer is a price only when it stands alone ("16"), not "Calories: 300"."""
+    return re.fullmatch(r"\s*\d{1,3}\s*", block.text) is not None
+
+
+def _price_run(
+    blocks: list[Block],
+    prices: list[list[PriceToken]],
+    nb: int,
+    item_blocks: set[int],
+    *,
+    inline: bool,
+) -> list[PriceToken]:
+    """The nearest run of price blocks after an item's name block (v2).
+
+    With a price already in the name's block ("Fajita Quesadilla ... 11.99"), only
+    immediately following price-only blocks join ("SUB SHRIMP 12.99"). Otherwise
+    skip non-price blocks (descriptions, allergens, icons; at most ``SCAN`` of them)
+    to the first price-bearing block and take the consecutive price blocks from
+    there. The scan stops at another extracted item or at a price-less heading.
+    """
+    run: list[PriceToken] = []
+    for j in range(nb + 1, min(nb + 1 + SCAN, len(blocks))):
+        if j in item_blocks:
+            break
+        toks = [t for t in prices[j] if t.kind == "money" or _sole_number(blocks[j])]
+        if inline or run:
+            if toks and (not inline or _is_price_only(blocks[j], toks)):
+                run.extend(toks)
+                continue
+            break
+        if toks:
+            run.extend(toks)
+        elif blocks[j].heading:
+            break
+    return run
+
+
 def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's check list
     blocks: list[Block], rows: list[Row], *, fuzzy: bool = False
 ) -> list[Verdict]:
@@ -214,6 +254,9 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
         else:
             after = [i for i in cands if i >= cursor]
             chosen = after[0] if after else (cands[0] if cands else None)
+            # v2: image-alt text then the heading repeat the name; take the last copy
+            while chosen is not None and chosen + 1 in cands:
+                chosen += 1
         name_block.append(chosen)
         if chosen is not None:
             cursor = chosen
@@ -231,7 +274,7 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
 
     verdicts: list[Verdict] = []
     bound: dict[tuple[int, int], int] = {}  # price occurrence -> row index
-    seen_keys: set[tuple[str, str, str]] = set()
+    seen_keys: set[tuple[str, str, str, str]] = set()
     for r_i, (row, nb) in enumerate(zip(rows, name_block, strict=True)):
         v = Verdict(row=row, decision="accept")
         verdicts.append(v)
@@ -246,11 +289,13 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
         v.name_evidence = (block.id, *span)
 
         key = (" ".join(norm_tokens(row.item)), (row.variant or "").lower(), str(amount))
-        if key in seen_keys:
+        # v2: the same dish listed in two sections is two placements, not a duplicate
+        dup_key = (*key, (row.section or "").lower())
+        if dup_key in seen_keys:
             v.decision = "reject"
             v.reasons.append("duplicate_row")
             continue
-        seen_keys.add(key)
+        seen_keys.add(dup_key)
         if row.currency.upper() != "USD":
             v.decision = "reject"
             v.reasons.append("currency")
@@ -264,13 +309,11 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
             v.reasons.append("implausible_amount")
             continue
 
-        # The item's own region, nearest first (document-order distance).
+        # The item's own region (v2): prices after the name in its block, then the
+        # nearest run of price-bearing blocks after it, before the next item/heading.
         next_start = min((s for s in starts_in[nb] if s > span[0]), default=len(block.text))
         region = [t for t in prices[nb] if span[0] <= t.start < next_start]
-        for j in range(nb + 1, min(nb + 1 + WINDOW, len(blocks))):
-            if j in item_blocks:
-                break
-            region.extend(prices[j])
+        region.extend(_price_run(blocks, prices, nb, item_blocks, inline=bool(region)))
         if (  # price-first layout: only when nothing is priced after the name
             not region
             and nb > 0
@@ -281,7 +324,7 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
             region.extend(prices[nb - 1])
         shared: list[PriceToken] = []
         for j in range(nb - 1, -1, -1):  # nearest preceding heading = section scope
-            if blocks[j].heading:
+            if blocks[j].heading and not _is_price_only(blocks[j], prices[j]):
                 shared = [t for t in prices[j] if t.kind == "money"]
                 break
 

@@ -102,6 +102,8 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
     for pid, label in gold.items():
         blocks = blocks_of(pid)
         rows = [r for r in gold_rows(label) if r.amount is not None]
+        if "--no-claims" in sys.argv:  # an extractor that gives no block ids
+            rows = [Row(r.item, r.amount, r.variant, r.section) for r in rows]
         if not rows:
             continue
         verdicts = validate(blocks, rows, fuzzy=fuzzy)
@@ -157,7 +159,14 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
             assert amt is not None
             new = _mutate(amt, rng)
             c = list(rows)
-            c[i] = Row(rows[i].item, f"{new:.2f}", rows[i].variant, rows[i].section)
+            c[i] = Row(
+                rows[i].item,
+                f"{new:.2f}",
+                rows[i].variant,
+                rows[i].section,
+                "USD",
+                rows[i].claimed_block,
+            )
             run(c, [i], "mutated_price", [own_prices(i)])
 
         for _ in range(min(PER_TYPE_PER_PAGE, len(idx))):
@@ -173,8 +182,22 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
                 continue
             j = rng.choice(near)
             c = list(rows)
-            c[i] = Row(rows[i].item, rows[j].amount, rows[i].variant, rows[i].section)
-            c[j] = Row(rows[j].item, rows[i].amount, rows[j].variant, rows[j].section)
+            c[i] = Row(
+                rows[i].item,
+                rows[j].amount,
+                rows[i].variant,
+                rows[i].section,
+                "USD",
+                rows[i].claimed_block,
+            )
+            c[j] = Row(
+                rows[j].item,
+                rows[i].amount,
+                rows[j].variant,
+                rows[j].section,
+                "USD",
+                rows[j].claimed_block,
+            )
             run(c, [i, j], "swapped_prices", [own_prices(i), own_prices(j)])
 
         page_tokens = {t for b in blocks for t in norm_tokens(b.text)}
@@ -196,10 +219,17 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
                 continue
             j = rng.choice(others)
             c = list(rows)
-            c[i] = Row(rows[i].item, rows[j].amount, rows[i].variant, rows[i].section)
+            c[i] = Row(
+                rows[i].item,
+                rows[j].amount,
+                rows[i].variant,
+                rows[i].section,
+                "USD",
+                rows[i].claimed_block,
+            )
             run(c, [i], "other_section_price", [own_prices(i)])
 
-    print(f"split={split} pages={len(gold)} fuzzy={fuzzy}")
+    print(f"split={split} pages={len(gold)} fuzzy={fuzzy} claims={'--no-claims' not in sys.argv}")
     rows_n = fr["rows"] or 1
     print(
         f"correct rows={fr['rows']} false_reject={fr['false_reject']} rate={fr['false_reject'] / rows_n:.3f}"
