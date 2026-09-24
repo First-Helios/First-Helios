@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 from spikes.menu_model.segment import Block, segment
+from spikes.menu_model.validator import price_label, price_tokens
 
 DATA = Path(os.environ.get("MENU_SPIKE_DATA", "var/spikes/menu-model"))
 LABELS = Path(__file__).parent / "labels"
@@ -95,11 +96,17 @@ def _draft_label(b: Block) -> str:
     return "item"
 
 
-def _amounts(text: str) -> list[str]:
-    out = []
-    for m in PRICE_RE.findall(text):
-        num = m.replace("$", "").replace(" ", "").replace(",", ".")
-        out.append(f"{float(num):.2f}")
+def _amounts(text: str, *, labels: bool) -> list[dict[str, str | None]]:
+    """Prices in a block; for a price-only block also its per-price label as variant."""
+    toks = price_tokens([Block("x", text, "div", "", heading=False, in_chrome=False, classes="")])[
+        0
+    ]
+    out: list[dict[str, str | None]] = []
+    for t in toks:
+        if t.kind != "money":
+            continue
+        variant = price_label(text, toks, t) if labels else ""
+        out.append({"amount": f"{t.amount:.2f}", "variant": variant or None})
     return out
 
 
@@ -117,7 +124,7 @@ def _derive_items(blocks: list[Block], labels: dict[str, str]) -> list[dict[str,
                     "section": section,
                     "name": name,
                     "description": None,
-                    "prices": [{"amount": a, "variant": None} for a in _amounts(b.text)],
+                    "prices": _amounts(b.text, labels=False),
                     "block": b.id,
                 }
             )
@@ -126,7 +133,7 @@ def _derive_items(blocks: list[Block], labels: dict[str, str]) -> list[dict[str,
         elif lab == "price" and items:
             prices = items[-1]["prices"]
             assert isinstance(prices, list)
-            prices.extend({"amount": a, "variant": None} for a in _amounts(b.text))
+            prices.extend(_amounts(b.text, labels=True))
     return items
 
 

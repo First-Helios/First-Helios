@@ -154,17 +154,44 @@ def _is_price_only(block: Block, toks: list[PriceToken]) -> bool:
     return bool(toks) and len(re.findall(r"[^\W\d_]", rest)) <= 12  # noqa: PLR2004 - "Small", "Lg"
 
 
+def price_label(text: str, toks: list[PriceToken], tok: PriceToken) -> str:
+    """The label printed with one price: a ``/Medium`` suffix ("$7.50/Medium"), else
+    the text between the previous price in the block (or the block start) and it
+    ("Half $14.95 | Whole $22.95").
+    """
+    suffix = re.match(r"/\s*([^|•$/\d\s][^|•$/]*|\d+\s*[^\W\d][^|•$/]*)", text[tok.end :])
+    if suffix:
+        return suffix.group(1).strip()
+    prev_end = max((t.end for t in toks if t.end <= tok.start), default=0)
+    return text[prev_end : tok.start].strip(" |•-–—:,")
+
+
+def _label_tokens(blocks: list[Block], prices: list[list[PriceToken]], tok: PriceToken) -> set[str]:
+    return set(norm_tokens(price_label(blocks[tok.block_index].text, prices[tok.block_index], tok)))
+
+
 def _variant_before(
     blocks: list[Block], prices: list[list[PriceToken]], tok: PriceToken, variant: str | None
 ) -> bool:
-    """A variant label ("SM", "Large", "sub shrimp") must be printed just before its
-    price: between the previous price in that block (or the block start) and it.
-    """
+    """A variant ("SM", "Large", "sub shrimp") must be the label printed with its price."""
     if not variant:
         return True
-    prev_end = max((t.end for t in prices[tok.block_index] if t.end <= tok.start), default=0)
-    context = set(norm_tokens(blocks[tok.block_index].text[prev_end : tok.start]))
-    return set(norm_tokens(variant)) <= context
+    return set(norm_tokens(variant)) <= _label_tokens(blocks, prices, tok)
+
+
+def _claimed_by_other(
+    blocks: list[Block],
+    prices: list[list[PriceToken]],
+    tok: PriceToken,
+    variant: str | None,
+    others: set[str | None],
+) -> bool:
+    """This price's label names a different variant of the item, not this row's."""
+    label = _label_tokens(blocks, prices, tok)
+    own = set(norm_tokens(variant or ""))
+    if own and own <= label:
+        return False  # "X-Large" row on an "X-Large" price, even though "Large" ⊆ it
+    return any(o and set(norm_tokens(o)) <= label for o in others)
 
 
 def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's check list
@@ -244,8 +271,9 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
             if j in item_blocks:
                 break
             region.extend(prices[j])
-        if (  # price-first layout, unless that price already trails the previous item
-            nb > 0
+        if (  # price-first layout: only when nothing is priced after the name
+            not region
+            and nb > 0
             and nb - 1 not in item_blocks
             and nb - 2 not in item_blocks
             and _is_price_only(blocks[nb - 1], prices[nb - 1])
@@ -262,7 +290,7 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
             t
             for t in region
             if t.amount == amount
-            and not any(_variant_before(blocks, prices, t, o) for o in other_variants if o)
+            and not _claimed_by_other(blocks, prices, t, row.variant, other_variants)
         ]
         if not same and any(t.amount == amount for t in region):
             v.decision = "downgrade"

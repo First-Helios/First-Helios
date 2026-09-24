@@ -1,0 +1,1187 @@
+{
+ "page_id": "abefb3029e57",
+ "url": "https://kapatad.com/food-menu",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0033",
+   "b0219"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0033": "section",
+  "b0045": "section",
+  "b0052": "section",
+  "b0082": "section",
+  "b0104": "section",
+  "b0117": "section",
+  "b0133": "section",
+  "b0153": "section",
+  "b0178": "section",
+  "b0189": "section",
+  "b0205": "section",
+  "b0034": "item",
+  "b0035": "price",
+  "b0036": "item",
+  "b0037": "price",
+  "b0038": "item",
+  "b0039": "price",
+  "b0040": "description",
+  "b0041": "item",
+  "b0042": "price",
+  "b0043": "item",
+  "b0044": "price",
+  "b0046": "item",
+  "b0047": "price",
+  "b0048": "item",
+  "b0049": "price",
+  "b0050": "item",
+  "b0051": "price",
+  "b0053": "item",
+  "b0054": "price",
+  "b0055": "item",
+  "b0056": "price",
+  "b0057": "item",
+  "b0058": "price",
+  "b0059": "item",
+  "b0060": "price",
+  "b0061": "description",
+  "b0062": "item",
+  "b0063": "price",
+  "b0064": "description",
+  "b0065": "item",
+  "b0066": "price",
+  "b0067": "item",
+  "b0068": "price",
+  "b0069": "item",
+  "b0070": "price",
+  "b0071": "description",
+  "b0072": "item",
+  "b0073": "price",
+  "b0074": "description",
+  "b0075": "item",
+  "b0076": "price",
+  "b0077": "item",
+  "b0078": "price",
+  "b0079": "item",
+  "b0080": "price",
+  "b0081": "description",
+  "b0083": "item",
+  "b0084": "price",
+  "b0085": "description",
+  "b0086": "item",
+  "b0087": "price",
+  "b0088": "item",
+  "b0089": "price",
+  "b0090": "item",
+  "b0091": "price",
+  "b0092": "item",
+  "b0093": "price",
+  "b0094": "description",
+  "b0095": "item",
+  "b0096": "price",
+  "b0097": "description",
+  "b0098": "item",
+  "b0099": "price",
+  "b0100": "description",
+  "b0101": "item",
+  "b0102": "price",
+  "b0103": "description",
+  "b0105": "item",
+  "b0107": "item",
+  "b0109": "item",
+  "b0111": "item",
+  "b0113": "item",
+  "b0115": "item",
+  "b0106": "price",
+  "b0108": "price",
+  "b0110": "price",
+  "b0112": "price",
+  "b0114": "price",
+  "b0116": "price",
+  "b0119": "item",
+  "b0120": "price",
+  "b0121": "description",
+  "b0122": "item",
+  "b0123": "price",
+  "b0124": "description",
+  "b0125": "item",
+  "b0127": "item",
+  "b0129": "item",
+  "b0131": "item",
+  "b0126": "price",
+  "b0128": "price",
+  "b0130": "price",
+  "b0132": "price",
+  "b0134": "item",
+  "b0136": "item",
+  "b0138": "item",
+  "b0140": "item",
+  "b0142": "item",
+  "b0144": "item",
+  "b0146": "item",
+  "b0148": "item",
+  "b0150": "item",
+  "b0135": "price",
+  "b0137": "price",
+  "b0139": "price",
+  "b0141": "price",
+  "b0143": "price",
+  "b0145": "price",
+  "b0147": "price",
+  "b0149": "price",
+  "b0151": "price",
+  "b0152": "description",
+  "b0154": "item",
+  "b0156": "item",
+  "b0158": "item",
+  "b0160": "item",
+  "b0162": "item",
+  "b0164": "item",
+  "b0166": "item",
+  "b0168": "item",
+  "b0170": "item",
+  "b0172": "item",
+  "b0174": "item",
+  "b0176": "item",
+  "b0155": "price",
+  "b0157": "price",
+  "b0159": "price",
+  "b0161": "price",
+  "b0163": "price",
+  "b0165": "price",
+  "b0167": "price",
+  "b0169": "price",
+  "b0171": "price",
+  "b0173": "price",
+  "b0175": "price",
+  "b0177": "price",
+  "b0179": "item",
+  "b0181": "item",
+  "b0183": "item",
+  "b0185": "item",
+  "b0187": "item",
+  "b0180": "price",
+  "b0182": "price",
+  "b0184": "price",
+  "b0186": "price",
+  "b0188": "price",
+  "b0190": "item",
+  "b0191": "price",
+  "b0192": "description",
+  "b0193": "item",
+  "b0194": "price",
+  "b0195": "item",
+  "b0196": "price",
+  "b0197": "item",
+  "b0198": "price",
+  "b0199": "description",
+  "b0200": "item",
+  "b0201": "price",
+  "b0202": "description",
+  "b0203": "item",
+  "b0204": "price",
+  "b0207": "item",
+  "b0208": "price",
+  "b0209": "item",
+  "b0210": "price",
+  "b0211": "item",
+  "b0212": "price",
+  "b0213": "description",
+  "b0214": "item",
+  "b0215": "price",
+  "b0216": "item",
+  "b0217": "price",
+  "b0218": "item",
+  "b0219": "price"
+ },
+ "items": [
+  {
+   "section": "Appetizers",
+   "name": "Lumpiang Shanghai",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.95",
+     "variant": "Single"
+    }
+   ],
+   "block": "b0034"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Crab Puffs",
+   "description": null,
+   "prices": [
+    {
+     "amount": "9.00",
+     "variant": "6 pcs"
+    }
+   ],
+   "block": "b0036"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Pork Dumplings",
+   "description": "Steamed or fried",
+   "prices": [
+    {
+     "amount": "9.50",
+     "variant": "10 pcs"
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Veggie Egg Rolls",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.95",
+     "variant": "2 pcs"
+    }
+   ],
+   "block": "b0041"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Fried Won Ton",
+   "description": null,
+   "prices": [
+    {
+     "amount": "4.95",
+     "variant": "6 pcs"
+    }
+   ],
+   "block": "b0043"
+  },
+  {
+   "section": "Soups",
+   "name": "Hot & Sour Soup",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.75",
+     "variant": null
+    },
+    {
+     "amount": "5.25",
+     "variant": null
+    },
+    {
+     "amount": "7.95",
+     "variant": null
+    }
+   ],
+   "block": "b0046"
+  },
+  {
+   "section": "Soups",
+   "name": "Wonton Soup",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.75",
+     "variant": null
+    },
+    {
+     "amount": "5.25",
+     "variant": null
+    },
+    {
+     "amount": "7.95",
+     "variant": null
+    }
+   ],
+   "block": "b0048"
+  },
+  {
+   "section": "Soups",
+   "name": "Egg Drop Soup",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.75",
+     "variant": null
+    },
+    {
+     "amount": "5.25",
+     "variant": null
+    },
+    {
+     "amount": "7.95",
+     "variant": null
+    }
+   ],
+   "block": "b0050"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Crispy Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.95",
+     "variant": "Half"
+    },
+    {
+     "amount": "22.95",
+     "variant": "Whole"
+    }
+   ],
+   "block": "b0053"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Crispy Pata",
+   "description": null,
+   "prices": [
+    {
+     "amount": "22.95",
+     "variant": "Medium"
+    },
+    {
+     "amount": "26.50",
+     "variant": "Large"
+    },
+    {
+     "amount": "29.95",
+     "variant": "X-Large"
+    }
+   ],
+   "block": "b0055"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Sizzling Pork Sisig",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.50",
+     "variant": null
+    },
+    {
+     "amount": "18.95",
+     "variant": "WE"
+    }
+   ],
+   "block": "b0057"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Tokwa't Baboy",
+   "description": "Deep-fried pork belly and tofu with vinegar & onion sauce on the side.",
+   "prices": [
+    {
+     "amount": "17.50",
+     "variant": null
+    }
+   ],
+   "block": "b0059"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Lechon Kawali",
+   "description": "Deep-fried select pork belly, crispy skin on, and very tender meat.",
+   "prices": [
+    {
+     "amount": "18.95",
+     "variant": null
+    }
+   ],
+   "block": "b0062"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Pancit Bihon",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    },
+    {
+     "amount": "18.00",
+     "variant": "C"
+    }
+   ],
+   "block": "b0065"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Beef Kare - Kare",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.50",
+     "variant": null
+    },
+    {
+     "amount": "18.95",
+     "variant": "WT"
+    }
+   ],
+   "block": "b0067"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Lumpiang Shanghai",
+   "description": "Filipino-influenced fried pork egg rolls served with sweet and sour sauce.",
+   "prices": [
+    {
+     "amount": "9.95",
+     "variant": "6 pcs"
+    }
+   ],
+   "block": "b0069"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Beef Caldereta",
+   "description": "Tender beef stewed in tomato paste and a light liver sauce with carrots and potatoes.",
+   "prices": [
+    {
+     "amount": "18.95",
+     "variant": null
+    }
+   ],
+   "block": "b0072"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Sizzling Pork BBQ",
+   "description": null,
+   "prices": [
+    {
+     "amount": "18.95",
+     "variant": null
+    }
+   ],
+   "block": "b0075"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Sizzling Chicken BBQ",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0077"
+  },
+  {
+   "section": "Filipino Favorites",
+   "name": "Nilasing na Hipon",
+   "description": "Seasoned & battered crispy shrimp (head-on)",
+   "prices": [
+    {
+     "amount": "19.50",
+     "variant": "12 pcs"
+    }
+   ],
+   "block": "b0079"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "Sesame Chicken",
+   "description": "Scrumptious strips of all-white-meat chicken coated in garlic crumb, fried crispy, then tossed in a sweet, savory sesame glaze, with sesame seeds sprinkled on top.",
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0083"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "Sesame Beef",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.50",
+     "variant": null
+    }
+   ],
+   "block": "b0086"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "Sesame Shrimp",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.50",
+     "variant": null
+    }
+   ],
+   "block": "b0088"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "Orange Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0090"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "General Tso's Chicken",
+   "description": "We can't explain the legend of the general, but we know this dish must be on the menu | Enjoy.",
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0092"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "Chef's Tangy Spicy Orange Beef",
+   "description": "Lightly battered slices of black angus choice flank steak are fried crispy and quickly tossed over tangy, spicy, sweet orange sauce.",
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0095"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "Beef & Shrimp in Sizzling Oyster Sauce",
+   "description": "Tender-sliced USDA choice steak and shrimp tossed table-side with scallion greens in scalding mushroom oyster sauce.",
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0098"
+  },
+  {
+   "section": "Chinese Favorites",
+   "name": "Peppery Shrimp",
+   "description": "A group of jumbo shrimp is tossed in fine spices, chopped ginger & scallion, sliced jalapeno, & fresh garlic | Served on a bed of refreshing julienne lettuce leaves.",
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0101"
+  },
+  {
+   "section": "Veggie & Tofu",
+   "name": "Sesame Tofu",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0105"
+  },
+  {
+   "section": "Veggie & Tofu",
+   "name": "Kung Pao Tofu",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0107"
+  },
+  {
+   "section": "Veggie & Tofu",
+   "name": "Spicy Green Bean",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0109"
+  },
+  {
+   "section": "Veggie & Tofu",
+   "name": "Broccoli in Garlic Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0111"
+  },
+  {
+   "section": "Veggie & Tofu",
+   "name": "Buddha Delight",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0113"
+  },
+  {
+   "section": "Veggie & Tofu",
+   "name": "Spicy Crispy Tofu with Broccoli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0115"
+  },
+  {
+   "section": "Rice & Noodle",
+   "name": "Traditional Style Fried Rice",
+   "description": "Soy sauce base, choice of chicken, beef, pork, or vegetable.",
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0119"
+  },
+  {
+   "section": "Rice & Noodle",
+   "name": "Lo Mein",
+   "description": "Spaghetti-style soft noodle, choice of chicken, beef, pork, or vegetable.",
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0122"
+  },
+  {
+   "section": "Rice & Noodle",
+   "name": "Shrimp Fried Rice",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0125"
+  },
+  {
+   "section": "Rice & Noodle",
+   "name": "Deluxe Fried Rice",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0127"
+  },
+  {
+   "section": "Rice & Noodle",
+   "name": "Shrimp Lo Mein",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0129"
+  },
+  {
+   "section": "Rice & Noodle",
+   "name": "Deluxe Lo Mein",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0131"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Pepper Steak",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0134"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Kung Pao Beef",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0136"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Beef with Snow Peas",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0138"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Pork in Garlic Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0140"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Beef with Broccoli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0142"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Beef in Garlic Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0144"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Mongolian Beef",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0146"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Pork with Scallion",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0148"
+  },
+  {
+   "section": "Pork & Beef",
+   "name": "Moo Shu Pork",
+   "description": "Served with crepes, no rice.",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0150"
+  },
+  {
+   "section": "Chicken",
+   "name": "Chicken Lemongrass",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0154"
+  },
+  {
+   "section": "Chicken",
+   "name": "Moo Goo Gai Pan",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0156"
+  },
+  {
+   "section": "Chicken",
+   "name": "Spicy Green Bean Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0158"
+  },
+  {
+   "section": "Chicken",
+   "name": "Chicken in Garlic Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0160"
+  },
+  {
+   "section": "Chicken",
+   "name": "Sweet & Sour Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0162"
+  },
+  {
+   "section": "Chicken",
+   "name": "Jalapeño Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0164"
+  },
+  {
+   "section": "Chicken",
+   "name": "Mongolian Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0166"
+  },
+  {
+   "section": "Chicken",
+   "name": "Lemon Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0168"
+  },
+  {
+   "section": "Chicken",
+   "name": "Kung Pao Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0170"
+  },
+  {
+   "section": "Chicken",
+   "name": "Chicken with Broccoli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0172"
+  },
+  {
+   "section": "Chicken",
+   "name": "Chicken Delight",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0174"
+  },
+  {
+   "section": "Chicken",
+   "name": "Sweet & Spicy Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0176"
+  },
+  {
+   "section": "Shrimp",
+   "name": "Sweet & Sour Shrimp",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.50",
+     "variant": null
+    }
+   ],
+   "block": "b0179"
+  },
+  {
+   "section": "Shrimp",
+   "name": "Shrimp Lemongrass",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.50",
+     "variant": null
+    }
+   ],
+   "block": "b0181"
+  },
+  {
+   "section": "Shrimp",
+   "name": "Kung Pao Shrimp",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.50",
+     "variant": null
+    }
+   ],
+   "block": "b0183"
+  },
+  {
+   "section": "Shrimp",
+   "name": "Shrimp in Garlic Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.50",
+     "variant": null
+    }
+   ],
+   "block": "b0185"
+  },
+  {
+   "section": "Shrimp",
+   "name": "Shrimp Veggie Delight",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.50",
+     "variant": null
+    }
+   ],
+   "block": "b0187"
+  },
+  {
+   "section": "Sides",
+   "name": "Steamed Greens",
+   "description": "Broccoli, snow peas, or mixed veggies.",
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0190"
+  },
+  {
+   "section": "Sides",
+   "name": "Cup of Steamed / Fried Rice",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.50",
+     "variant": null
+    }
+   ],
+   "block": "b0193"
+  },
+  {
+   "section": "Sides",
+   "name": "Brown Rice",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.75",
+     "variant": null
+    }
+   ],
+   "block": "b0195"
+  },
+  {
+   "section": "Sides",
+   "name": "Cup of Sauce on the Side",
+   "description": "Sesame, kung pao, garlic, orange, etc.",
+   "prices": [
+    {
+     "amount": "2.75",
+     "variant": null
+    }
+   ],
+   "block": "b0197"
+  },
+  {
+   "section": "Sides",
+   "name": "Side of Noodle",
+   "description": "Vermicelli or LoMein",
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0200"
+  },
+  {
+   "section": "Sides",
+   "name": "Special Siopao",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0203"
+  },
+  {
+   "section": "Vermicelli Bowl",
+   "name": "Beef Vermicelli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0207"
+  },
+  {
+   "section": "Vermicelli Bowl",
+   "name": "Pork Vermicelli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0209"
+  },
+  {
+   "section": "Vermicelli Bowl",
+   "name": "Vegetable Vermicelli",
+   "description": "With or without tofu.",
+   "prices": [
+    {
+     "amount": "14.25",
+     "variant": null
+    }
+   ],
+   "block": "b0211"
+  },
+  {
+   "section": "Vermicelli Bowl",
+   "name": "Shrimp Vermicelli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0214"
+  },
+  {
+   "section": "Vermicelli Bowl",
+   "name": "Combination of Chicken, Beef & Shrimp Vermicelli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.50",
+     "variant": null
+    }
+   ],
+   "block": "b0216"
+  },
+  {
+   "section": "Vermicelli Bowl",
+   "name": "Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.25",
+     "variant": null
+    }
+   ],
+   "block": "b0218"
+  }
+ ],
+ "note": "name div + price div/p (+ desc p); variant price lines; same item name in two sections at different prices; +$2.00 add-on is not an item price"
+}

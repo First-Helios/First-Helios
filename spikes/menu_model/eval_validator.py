@@ -116,6 +116,7 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
             kind: str,
             legit: list[set[Decimal]],
             blocks: list[Block] = blocks,
+            pid: str = pid,
         ) -> None:
             vs = validate(blocks, corrupt, fuzzy=fuzzy)
             for k, i in enumerate(at):
@@ -127,8 +128,11 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
                 )
                 if ok:
                     caught[kind] += 1
-                elif parse_amount(corrupt[i].amount) in legit[k]:
+                    continue
+                if parse_amount(corrupt[i].amount) in legit[k]:
                     indist[kind] += 1
+                if "--show-misses" in sys.argv:
+                    print("MISS", pid, kind, corrupt[i], vs[i].price_evidence)
 
         def own_prices(i: int, rows: list[Row] = rows) -> set[Decimal]:
             name = rows[i].item

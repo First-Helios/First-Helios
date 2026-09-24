@@ -43,3 +43,47 @@ prices b0050=SM:6.25,LG:9.75
 prices b0052=Small:7.99,Large:9.99
 prices b0057=-:11.99,SUB SHRIMP:12.99
 prices b0058=-:11.99,SUB SHRIMP:12.99
+
+page cbcdb04ffbe0 menu html_list | SpotHopper-style name/price div pairs; tab labels are noise, generic "List" headings are the sections
+region b0035 b0065
+fix b0035..b0065=noise b0035=section b0048=section b0051=section
+fix b0036..b0046%2=item b0037..b0047%2=price b0049=item b0050=price b0052..b0064%2=item b0053..b0065%2=price
+
+page abefb3029e57 menu html_list | name div + price div/p (+ desc p); variant price lines; same item name in two sections at different prices; +$2.00 add-on is not an item price
+region b0033 b0219
+fix b0033..b0219=noise
+fix b0033=section b0045=section b0052=section b0082=section b0104=section b0117=section b0133=section b0153=section b0178=section b0189=section b0205=section
+fix b0034=item b0035=price b0036=item b0037=price b0038=item b0039=price b0040=description b0041=item b0042=price b0043=item b0044=price
+fix b0046=item b0047=price b0048=item b0049=price b0050=item b0051=price
+fix b0053=item b0054=price b0055=item b0056=price b0057=item b0058=price b0059=item b0060=price b0061=description b0062=item b0063=price b0064=description
+fix b0065=item b0066=price b0067=item b0068=price b0069=item b0070=price b0071=description b0072=item b0073=price b0074=description
+fix b0075=item b0076=price b0077=item b0078=price b0079=item b0080=price b0081=description
+fix b0083=item b0084=price b0085=description b0086=item b0087=price b0088=item b0089=price b0090=item b0091=price b0092=item b0093=price b0094=description
+fix b0095=item b0096=price b0097=description b0098=item b0099=price b0100=description b0101=item b0102=price b0103=description
+fix b0105..b0116%2=item b0106..b0116%2=price
+fix b0119=item b0120=price b0121=description b0122=item b0123=price b0124=description b0125..b0132%2=item b0126..b0132%2=price
+fix b0134..b0151%2=item b0135..b0151%2=price b0152=description
+fix b0154..b0177%2=item b0155..b0177%2=price b0179..b0188%2=item b0180..b0188%2=price
+fix b0190=item b0191=price b0192=description b0193=item b0194=price b0195=item b0196=price b0197=item b0198=price b0199=description b0200=item b0201=price b0202=description b0203=item b0204=price
+fix b0207=item b0208=price b0209=item b0210=price b0211=item b0212=price b0213=description b0214=item b0215=price b0216=item b0217=price b0218=item b0219=price
+prices b0053=Half:14.95,Whole:22.95
+prices b0055=Medium:22.95,Large:26.50,X-Large:29.95
+prices b0057=-:17.50,WE:18.95
+prices b0065=-:17.00,C:18.00
+prices b0067=-:17.50,WT:18.95
+
+page 1b6233a80694 menu html_cards | item names are <h2> like section names; price 1-3 blocks after the name behind an icon-legend block; wing sauces labeled modifier (unpriced choices)
+region b0020 b0342
+fix b0020..b0342=noise
+fix b0020=section b0021=section b0031=section b0042=section b0053=section b0105=section b0135=section
+fix b0022=modifier b0027=modifier b0032=modifier b0037=modifier b0043=modifier b0048=modifier b0054=modifier b0058=modifier b0063=modifier b0068=modifier b0073=modifier b0078=modifier b0083=modifier
+fix b0088=modifier b0092=modifier b0096=modifier b0101=modifier b0106=modifier b0111=modifier b0116=modifier b0121=modifier b0126=modifier b0131=modifier b0136=modifier b0140=modifier b0144=modifier
+fix b0148=section b0189=section b0214=section b0235=section b0256=section b0293=section b0314=section b0330=section
+fix b0149..b0187%4=item b0150..b0187%4=description b0151..b0187%4=price
+fix b0190..b0213%4=item b0191..b0213%4=description b0193..b0213%4=price
+fix b0215..b0234%4=item b0216..b0234%4=description b0218..b0234%4=price
+fix b0236..b0255%4=item b0237..b0255%4=description b0239..b0255%4=price
+fix b0257..b0292%4=item b0258..b0292%4=description b0260..b0292%4=price
+fix b0294..b0313%4=item b0295..b0313%4=description b0297..b0313%4=price
+fix b0315..b0329%3=item b0317..b0329%3=price
+fix b0331..b0342%4=item b0332..b0342%4=description b0334..b0342%4=price
