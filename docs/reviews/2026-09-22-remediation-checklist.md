@@ -38,10 +38,10 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
 | 🚦 | **Pi gate:** OK to run `resolve_urls` on the Pi again after S2, S3, S4, S6 are merged | | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
-| 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 open, owner review |
-| 9 | S9 API polish | D7 | M | [ ] |
-| 10 | S10 Test hardening sweep | — | S | [X] #31 open |
-| 11 | S11 Menu selector semantics ⚠ | D5 | M | [ ] |
+| 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 |
+| 9 | S9 API polish | D7 | M | [X] #32 |
+| 10 | S10 Test hardening sweep | — | S | [X] #31 |
+| 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 draft, owner review |
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [ ] |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
 | 🚦 | **Phase 5 gate:** start menu extraction after S7, S11, S12, S13 are merged | | | [ ] |
@@ -669,15 +669,15 @@ Branch: `test/hardening` · Tests only.
 Hand-off prompt: `Do session S11 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/menu-selector` · ADR-0005 behaviour: owner review (per D5.5).
 
-- [ ] R03 Menu content survives when the chain menu it depends on is withdrawn (prices don't)
-- [ ] R22 Two different chain-menu pins treated as the same item
-- [ ] R23 Two nodes with the same path in one page → result depends on row order
-- [ ] R24 History queries show chain "head" prices observed after the cutoff
-- [ ] R31 (selector half) Missing tests: base remap/retire, revival under cutoff, tie-break, channel wildcard, different bases, suppression, replacement
-- [ ] R64 Replay can falsely conflict because of Decimal formatting
-- [ ] R65 Tie-break compares string reprs and a surrogate id
-- [ ] R67 "withdrawn" reported too eagerly
-- [ ] R68 Selection requests not validated (naive timezones)
+- [X] R03 Menu content survives when the chain menu it depends on is withdrawn (prices don't)
+- [X] R22 Two different chain-menu pins treated as the same item
+- [X] R23 Two nodes with the same path in one page → result depends on row order
+- [X] R24 History queries show chain "head" prices observed after the cutoff
+- [X] R31 (selector half) Missing tests: base remap/retire, revival under cutoff, tie-break, channel wildcard, different bases, suppression, replacement
+- [X] R64 Replay can falsely conflict because of Decimal formatting
+- [X] R65 Tie-break compares string reprs and a surrogate id
+- [X] R67 "withdrawn" reported too eagerly
+- [X] R68 Selection requests not validated (naive timezones)
 
 **Recommended approach**
 - Write the missing M-rule scenario tests first (each maps to an ADR-0005 decision);
@@ -823,4 +823,7 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
 | 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Draft, awaiting owner acceptance of ADR-0011 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
 | 2026-09-23 | S7 | fix/gold-refresh | #28 | Merged (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
-| 2026-09-23 | S8 | fix/identity-locks | #30 | Open, owner review (concurrency-sensitive) | — (D6.1 answered on `main`. Lock order documented in `identity/commands.py`; the resolver plans without locks, then locks and re-checks inside a savepoint and retries once (`ResolutionConflictError`). R61 fixed for the stale read only; Establishment demotion is left to ADR-0012 (D6.4). Transactions that run several commands (discovery batches, URL resolve-then-assign) can still deadlock; this is documented, not fixed) |
+| 2026-09-23 | S8 | fix/identity-locks | #30 | Merged (concurrency-sensitive) | — (D6.1 answered on `main`. Lock order documented in `identity/commands.py`; the resolver plans without locks, then locks and re-checks inside a savepoint and retries once (`ResolutionConflictError`). R61 fixed for the stale read only; Establishment demotion is left to ADR-0012 (D6.4). Transactions that run several commands (discovery batches, URL resolve-then-assign) can still deadlock; this is documented, not fixed) |
+| 2026-09-24 | S9 | fix/api-polish | #32 | Merged | — (row added by S11; S9 left no log row) |
+| 2026-09-24 | S10 | test/hardening | #31 | Merged | — (ran in parallel with S9; `seed_sample_venues` gone since S1, so R29 covers discovery + URL paths; forged `subject_id=None` raises `22023`, now pinned. Row restored by S11: the S8 merge dropped it) |
+| 2026-09-24 | S11 | fix/menu-selector | #33 | Draft, owner review (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |

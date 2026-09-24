@@ -8,6 +8,7 @@ SQLSTATE 40001/40P01 requires rollback and retry of the WHOLE transaction.
 from __future__ import annotations
 
 from dataclasses import asdict, fields
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select, text
@@ -55,6 +56,7 @@ _PARTS = (
     ("modifiers", "modifier", MenuModifier, ModifierInput),
     ("prices", "price", PriceObservation, PriceInput),
 )
+_CONFIDENCE_SCALE = Decimal("0.0001")
 
 
 def _canonical(session: Session, aggregate: MenuAggregate) -> dict[str, Any]:
@@ -75,6 +77,11 @@ def _canonical(session: Session, aggregate: MenuAggregate) -> dict[str, Any]:
             )
             if row.get("dietary_tags") is not None:
                 row["dietary_tags"] = tuple(sorted(row["dietary_tags"]))
+            # One spelling per stored NUMERIC(5,4) value, so 0.1 and 0.1000
+            # sort members identically below and replay cannot falsely conflict.
+            for name, field in row.items():
+                if isinstance(field, Decimal):
+                    row[name] = field.quantize(_CONFIDENCE_SCALE)
         if part != "page":
             value[part] = sorted(members, key=lambda row: repr(sorted(row.items())))
     return value

@@ -360,6 +360,25 @@ def test_duplicate_bronze_business_identity_replays_without_new_ids(
             )
 
 
+def test_replay_member_order_ignores_decimal_scale(
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture],
+) -> None:
+    # R64: 0.1 and 0.10 are the same confidence, stored as 0.1000. Formatting
+    # must not reorder members and turn an exact replay into a conflict.
+    from decimal import Decimal
+
+    factory, scope = menu_scopes
+    value = aggregate(scope)
+    later = replace(value.prices[0], observation_key="p-z", confidence=Decimal("0.1"))
+    earlier = replace(value.prices[0], observation_key="p-a", confidence=Decimal("0.10"))
+    value = replace(value, prices=(later, earlier))
+    with factory.begin() as writer:
+        first = persist_menu(writer, value)
+    with factory.begin() as writer:
+        replay = persist_menu(writer, value)
+    assert replay.replayed and replay.page_id == first.page_id and replay.members == first.members
+
+
 def test_reference_error_rolls_back_supported_prefix(
     menu_scopes: tuple[sessionmaker[Session], ScopeFixture],
 ) -> None:
