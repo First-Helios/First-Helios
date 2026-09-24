@@ -16,6 +16,7 @@ from packages.helios_core.identity import (
     DecisionMetadata,
     Organization,
     Place,
+    ResolutionConflictError,
     ResolutionEvent,
     Subject,
     SubjectNotEligibleError,
@@ -30,6 +31,7 @@ from packages.helios_core.identity import (
     resolve_source_record_observation,
     unassign_source_record,
 )
+from packages.helios_core.identity import commands as identity_commands
 from packages.helios_core.provenance import (
     BronzeObservation,
     Capture,
@@ -39,6 +41,7 @@ from packages.helios_core.provenance import (
     SourceRecordVersion,
     canonicalize_http_url,
 )
+from packages.helios_core.provenance.contracts import find_source_record_id
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -684,6 +687,138 @@ def test_retired_exact_key_without_unique_successor_needs_review(
         None,
     )
     assert len(resolved.appended_event_ids) == 1
+
+
+def test_reobservation_reads_trigger_maintained_projection_not_identity_map(
+    session: Session,
+) -> None:
+    """R25: a caller-held projection object must not drive re-observation."""
+    observation = _observation(
+        namespace=f"step4-stale-projection-{uuid4().hex}",
+        external_key="restaurant-key",
+    )
+    first = resolve_source_record_observation(
+        session,
+        observation=observation,
+        decided_at=datetime.now(UTC),
+    )
+    # Holding the ORM object keeps it in the identity map while triggers,
+    # which the ORM never sees, move the projection to ``resolved``.
+    held = session.get(CurrentResolution, first.source_record_id)
+    assert held is not None
+    assert held.state == "unresolved"
+    place = create_place(session)
+    assign_source_record(
+        session,
+        source_record_id=first.source_record_id,
+        to_subject_id=place.id,
+        decision=_decision("human-assign"),
+        evidence_ids=[first.evidence_id],
+    )
+
+    reobserved = resolve_source_record_observation(
+        session,
+        observation=replace(
+            observation,
+            observed_at=observation.observed_at + timedelta(minutes=1),
+        ),
+        decided_at=datetime.now(UTC),
+    )
+
+    assert (reobserved.state, reobserved.subject_id, reobserved.match_basis) == (
+        "resolved",
+        place.id,
+        "external_key",
+    )
+    assert reobserved.appended_event_ids == ()
+    unassigned = session.scalar(
+        select(func.count())
+        .select_from(ResolutionEvent)
+        .where(
+            ResolutionEvent.source_record_id == first.source_record_id,
+            ResolutionEvent.operation == "unassign",
+        )
+    )
+    assert unassigned == 0
+
+
+def test_resolution_that_never_sees_a_stable_plan_rolls_back_and_raises(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    namespace = f"step4-unstable-{uuid4().hex}"
+    real_plan = identity_commands._read_resolution_plan
+    reads = iter(range(1, 100))
+
+    def ever_changing_plan(*args: Any) -> Any:
+        return replace(real_plan(*args), url_source_record_ids=(next(reads),))
+
+    monkeypatch.setattr(identity_commands, "_read_resolution_plan", ever_changing_plan)
+    with pytest.raises(ResolutionConflictError):
+        resolve_source_record_observation(
+            session,
+            observation=_observation(namespace=namespace, external_key="key"),
+            decided_at=datetime.now(UTC),
+        )
+    # Two attempts, each an unlocked read and a locked re-read.
+    assert next(reads) == 5
+    # Each attempt's savepoint took its Bronze writes (and locks) with it.
+    assert session.scalar(select(Source.id).where(Source.namespace == namespace)) is None
+
+    monkeypatch.undo()
+    retried = resolve_source_record_observation(
+        session,
+        observation=_observation(namespace=namespace, external_key="key"),
+        decided_at=datetime.now(UTC),
+    )
+    assert retried.state == "unresolved"
+
+
+def test_record_created_after_planning_is_planned_again(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observation = _observation(
+        namespace=f"step4-late-record-{uuid4().hex}",
+        external_key="restaurant-key",
+    )
+    first = resolve_source_record_observation(
+        session, observation=observation, decided_at=datetime.now(UTC)
+    )
+    place = create_place(session)
+    assign_source_record(
+        session,
+        source_record_id=first.source_record_id,
+        to_subject_id=place.id,
+        decision=_decision(),
+        evidence_ids=[first.evidence_id],
+    )
+    # Simulate a concurrent first observer: the plan is read before the
+    # record exists, but persistence then finds it.
+    finds: list[int | None] = []
+
+    def find_after_planning(*args: Any) -> int | None:
+        found = find_source_record_id(*args) if finds else None
+        finds.append(found)
+        return found
+
+    monkeypatch.setattr(identity_commands, "find_source_record_id", find_after_planning)
+    reobserved = resolve_source_record_observation(
+        session,
+        observation=replace(
+            observation,
+            observed_at=observation.observed_at + timedelta(minutes=1),
+        ),
+        decided_at=datetime.now(UTC),
+    )
+
+    assert finds == [None, first.source_record_id]
+    assert (reobserved.state, reobserved.subject_id, reobserved.match_basis) == (
+        "resolved",
+        place.id,
+        "external_key",
+    )
+    assert reobserved.appended_event_ids == ()
 
 
 def test_source_namespace_kind_and_endpoint_ownership_are_stable(

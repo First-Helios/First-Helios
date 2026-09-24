@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 
 from packages.helios_core.provenance import (
     Capture,
@@ -17,6 +17,7 @@ from packages.helios_core.provenance import (
     SourceRecord,
     SourceRecordVersion,
 )
+from test.guard_support import raises_guard
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -100,8 +101,8 @@ def _assert_rejects(session: Session, obj: Any) -> None:
     session.rollback()
 
 
-def _assert_sql_rejects(session: Session, statement: str, **params: object) -> None:
-    with pytest.raises(DBAPIError):
+def _assert_sql_rejects(session: Session, statement: str, message: str, **params: object) -> None:
+    with raises_guard(message):
         session.execute(text(statement), params)
         session.commit()
     session.rollback()
@@ -294,17 +295,20 @@ def test_source_endpoint_and_record_identity_keys_reject_updates(session: Sessio
     _assert_sql_rejects(
         session,
         "UPDATE bronze.source SET namespace = 'renamed' WHERE id = :id",
+        r"bronze\.source\.namespace is immutable",
         id=source.id,
     )
     _assert_sql_rejects(
         session,
         "UPDATE bronze.source_endpoint SET canonical_uri = :uri WHERE id = :id",
+        r"bronze\.source_endpoint\.canonical_uri is immutable",
         id=endpoint.id,
         uri="https://example.test/renamed",
     )
     _assert_sql_rejects(
         session,
         "UPDATE bronze.source_record SET external_key = 'place/999' WHERE id = :id",
+        r"bronze\.source_record\.external_key is immutable",
         id=record.id,
     )
 
@@ -325,16 +329,19 @@ def test_capture_version_and_evidence_reject_updates(session: Session) -> None:
     _assert_sql_rejects(
         session,
         "UPDATE bronze.capture SET outcome = 'failed' WHERE id = :id",
+        r"bronze\.capture is immutable and cannot be updated",
         id=capture.id,
     )
     _assert_sql_rejects(
         session,
         "UPDATE bronze.source_record_version SET content_hash = 'changed' WHERE id = :id",
+        r"bronze\.source_record_version is immutable and cannot be updated",
         id=version.id,
     )
     _assert_sql_rejects(
         session,
         "UPDATE bronze.evidence SET locator = '$.other' WHERE id = :id",
+        r"bronze\.evidence is immutable and cannot be updated",
         id=evidence.id,
     )
 
@@ -365,5 +372,6 @@ def test_every_bronze_provenance_row_rejects_delete(session: Session) -> None:
         _assert_sql_rejects(
             session,
             f"DELETE FROM bronze.{table_name} WHERE id = :id",
+            rf"bronze\.{table_name} is immutable and cannot be deleted",
             id=row_id,
         )

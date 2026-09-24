@@ -37,8 +37,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
 | 🚦 | **Pi gate:** OK to run `resolve_urls` on the Pi again after S2, S3, S4, S6 are merged | | | [ ] |
-| 7 | S7 Gold refresh fix | D5 | M | [X] #28 open, owner review |
-| 8 | S8 Identity lock order + guard tests | D6 | M | [ ] |
+| 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
+| 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 open, owner review |
 | 9 | S9 API polish | D7 | M | [ ] |
 | 10 | S10 Test hardening sweep | — | S | [X] #31 open |
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [ ] |
@@ -584,13 +584,13 @@ Branch: `fix/gold-refresh` · No stop-and-ask path, but changes accepted ADR-000
 Hand-off prompt: `Do session S8 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/identity-locks` · Concurrency-sensitive accepted code: owner review.
 
-- [ ] R12 Two identity write paths lock in opposite order → deadlock (per D6.1)
-- [ ] R25 Stale cached row can unassign a valid mapping in the same transaction
-- [ ] R27 "Rejects delete" tests pass via FK errors (would pass with triggers removed)
-- [ ] R28 Missing tests: identity TRUNCATE, projection tampering, remap rules
-- [ ] R30 Concurrency tests count deadlocks as success
-- [ ] R61 Readiness refresh can be stale and only covers Organizations
-- [ ] R62 Readiness refresh adds a second lock-order risk
+- [X] R12 Two identity write paths lock in opposite order → deadlock (per D6.1)
+- [X] R25 Stale cached row can unassign a valid mapping in the same transaction
+- [X] R27 "Rejects delete" tests pass via FK errors (would pass with triggers removed)
+- [X] R28 Missing tests: identity TRUNCATE, projection tampering, remap rules
+- [X] R30 Concurrency tests count deadlocks as success
+- [X] R61 Readiness refresh can be stale and only covers Organizations (stale read fixed; Establishment demotion left to ADR-0012 per D6.4, see #30)
+- [X] R62 Readiness refresh adds a second lock-order risk
 
 **Recommended approach**
 - Turn the review appendix's R12 reproduction into a concurrency test first.
@@ -822,5 +822,5 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S3 | fix/url-pipeline | #25 | Merged | — (D3.7–3.9 asked and answered at session start) |
 | 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
 | 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Draft, awaiting owner acceptance of ADR-0011 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
-| 2026-09-23 | S7 | fix/gold-refresh | #28 | Open, owner review (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
-| 2026-09-24 | S10 | test/hardening | #31 | Open | — (ran in parallel with S9; `seed_sample_venues` gone since S1, so R29 covers discovery + URL paths; forged `subject_id=None` raises `22023`, now pinned) |
+| 2026-09-23 | S7 | fix/gold-refresh | #28 | Merged (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
+| 2026-09-23 | S8 | fix/identity-locks | #30 | Open, owner review (concurrency-sensitive) | — (D6.1 answered on `main`. Lock order documented in `identity/commands.py`; the resolver plans without locks, then locks and re-checks inside a savepoint and retries once (`ResolutionConflictError`). R61 fixed for the stale read only; Establishment demotion is left to ADR-0012 (D6.4). Transactions that run several commands (discovery batches, URL resolve-then-assign) can still deadlock; this is documented, not fixed) |
