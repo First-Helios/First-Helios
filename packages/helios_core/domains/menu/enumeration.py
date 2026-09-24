@@ -39,12 +39,12 @@ from packages.helios_core.domains.menu.selection import (
     TargetRef,
     _canonical_native_path,
     _contains_instant,
+    _current_gate,
     _effective_context,
     _graph,
-    _live_scope,
-    _operating_ok,
     _price_target_column,
     _stream_heads,
+    _subject_heads,
 )
 
 if TYPE_CHECKING:
@@ -82,9 +82,10 @@ def enumerate_current_requests(
     """Enumerate current-mode requests for the whole priced catalog at ``E``.
 
     For every source-local family, the current stream heads select the scope
-    subjects; each scope is admitted through the same live-Identity/operating
-    gate the selector uses, and only its priced targets whose effective window
-    contains ``E`` become grain-unique :class:`SelectionRequest` values. The
+    subjects; each scope is checked with the same read-only live-Identity/
+    operating gate the selector uses (over all of the subject's heads), and
+    only its priced targets whose effective window contains ``E`` become
+    grain-unique :class:`SelectionRequest` values. The
     result is deterministic given committed Bronze/Identity/Menu.
     """
     session.flush()
@@ -115,16 +116,12 @@ def enumerate_current_requests(
             continue
         subjects = {(page.subject_id, page.subject_kind) for page in heads.values()}
         for subject_id, subject_kind in sorted(subjects):
-            gate_head = min(
-                (page for page in heads.values() if page.subject_id == subject_id),
-                key=lambda page: page.id,
-            )
-            scope = _live_scope(session, gate_head)
-            if scope is None or not _operating_ok(scope, effective_instant):
+            owned = _subject_heads(heads, subject_id)
+            if _current_gate(session, owned, effective_instant) is not None:
                 continue  # broken mapping or not operating at E: excluded from current
             scope_kind = cast("_Scope", subject_kind)
-            for page in heads.values():
-                if page.operation == "withdrawal" or page.subject_id != subject_id:
+            for page in owned.values():
+                if page.operation == "withdrawal":
                     continue
                 graph = _graph(session, page.id)
                 for price in session.scalars(

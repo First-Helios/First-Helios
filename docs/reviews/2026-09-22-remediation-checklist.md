@@ -554,15 +554,15 @@ Branch: `fix/platform-menu-urls` · Not Pi-gating.
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/gold-refresh` · No stop-and-ask path, but changes accepted ADR-0006 behaviour: owner review.
 
-- [ ] R01 Full Gold refresh crashes after any identity correction (missing savepoint)
-- [ ] R02 Selector can show a retired venue's prices under its successor
-- [ ] R11 Tests pass only in file order; a rerun on the same DB fails
-- [ ] R19 Which head gets checked depends on database row order
-- [ ] R20 Bounded refresh leaves stale rows for scopes that closed (per D5.2)
-- [ ] R21 Reads take write locks (per D5.1)
-- [ ] R26 Import-boundary test doesn't check Gold
-- [ ] R31 (Gold half) Missing tests: retired/remapped/pending exclusion, stale-scope removal, org-scoped rows
-- [ ] R70 History-mode requests written into the "current" table (per D5.3)
+- [X] R01 Full Gold refresh crashes after any identity correction (missing savepoint)
+- [X] R02 Selector can show a retired venue's prices under its successor
+- [X] R11 Tests pass only in file order; a rerun on the same DB fails
+- [X] R19 Which head gets checked depends on database row order
+- [X] R20 Bounded refresh leaves stale rows for scopes that closed (per D5.2)
+- [X] R21 Reads take write locks (per D5.1)
+- [X] R26 Import-boundary test doesn't check Gold
+- [X] R31 (Gold half) Missing tests: retired/remapped/pending exclusion, stale-scope removal, org-scoped rows
+- [X] R70 History-mode requests written into the "current" table (per D5.3)
 
 **Recommended approach**
 - Start with the regression test from the review appendix:

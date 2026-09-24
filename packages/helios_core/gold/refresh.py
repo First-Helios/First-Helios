@@ -3,11 +3,12 @@
 The accepted pure Menu selector is the single definition of "current": for each
 caller-supplied :class:`SelectionRequest` this records ``select_price``'s result
 as one ``gold.current_menu`` row. The refresh is a full rebuild over a bounded
-input set of scopes -- it deletes the projection for every requested family and
+input set of scopes -- it deletes every row of each requested scope and
 re-inserts -- so a lost table is reconstructed from Identity + Menu (+ Bronze
-provenance) without mutating them. Full-catalog enumeration is deferred
-(ADR-0006 Owner decision). Selection precedence, lifecycle, applicability and
-no-inferred-price rules are never re-implemented here.
+provenance) without mutating them. The whole-catalog rebuild lives in
+:mod:`packages.helios_core.gold.catalog`. Selection precedence, lifecycle,
+applicability and no-inferred-price rules are never re-implemented here. The
+table holds current answers only, so history-mode requests are rejected.
 
 Business columns are a deterministic function of committed input and the
 request; ``refreshed_at`` is the only non-deterministic column and is excluded
@@ -87,30 +88,29 @@ def refresh_current_menu(
     session: Session,
     requests: Iterable[SelectionRequest],
     *,
+    subject_ids: Iterable[int] = (),
     refreshed_at: datetime | None = None,
 ) -> int:
     """Rebuild ``gold.current_menu`` for the requested bounded scope set.
 
-    Every ``(subject, source record, root)`` family named by ``requests`` is
-    fully cleared first, then one row per request is inserted from the selector
-    result. Returns the number of rows written. Requests must be grain-unique;
-    a duplicate grain is a caller error the unique constraint rejects.
+    Every scope (subject) named by ``subject_ids`` or by a request is fully
+    cleared first -- all of its rows, from every family -- then one row per
+    request is inserted from the selector result. A scope that has left the
+    current catalog (closed, retired, remapped away, or with no priced target
+    left) yields no request; name it in ``subject_ids`` so its stale rows go
+    too. Returns the number of rows written. Requests must be grain-unique; a
+    duplicate grain is a caller error the unique constraint rejects. A request
+    with a knowledge or observation cutoff is rejected before any write: the
+    table records neither cutoff, so it holds current answers only.
     """
     ordered = list(requests)
+    if any(r.knowledge_cutoff is not None or r.observation_cutoff is not None for r in ordered):
+        raise ValueError("gold.current_menu holds current answers only; cutoff requests rejected")
     stamp = refreshed_at if refreshed_at is not None else datetime.now(UTC)
 
-    families = sorted(
-        {(r.subject_id, r.subject_kind, r.source_record_id, r.root_key) for r in ordered}
-    )
-    for subject_id, subject_kind, source_record_id, root_key in families:
-        session.execute(
-            delete(CurrentMenu).where(
-                CurrentMenu.subject_id == subject_id,
-                CurrentMenu.subject_kind == subject_kind,
-                CurrentMenu.source_record_id == source_record_id,
-                CurrentMenu.root_key == root_key,
-            )
-        )
+    scopes = sorted({*subject_ids, *(r.subject_id for r in ordered)})
+    if scopes:
+        session.execute(delete(CurrentMenu).where(CurrentMenu.subject_id.in_(scopes)))
     session.flush()
 
     rows = [_row_values(request, select_price(session, request), stamp) for request in ordered]

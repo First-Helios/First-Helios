@@ -34,6 +34,15 @@ from test.import_boundaries import boundary_violations
         ("db/model_registry.py", "from ..identity.commands import create_place"),
         ("db/model_registry.py", "import apps.api"),
         ("db/model_registry.py", "from ..domains.menu.commands import write_menu"),
+        ("gold/refresh.py", "import apps.api"),
+        ("gold/refresh.py", "from ..db import model_registry"),
+        ("gold/refresh.py", "from ..identity.models import Subject"),
+        ("gold/refresh.py", "from ..identity import Subject"),
+        ("gold/refresh.py", "from ..provenance import models"),
+        ("gold/refresh.py", "from ..domains.menu.models import MenuPage"),
+        ("gold/refresh.py", "from ..domains.menu.commands import persist_menu"),
+        ("gold/refresh.py", "from ..domains import menu"),
+        ("gold/internal/helper.py", "from ...domains.menu import models"),
     ],
 )
 def test_forbidden_foundation_imports(path: str, source: str) -> None:
@@ -62,6 +71,13 @@ def test_forbidden_foundation_imports(path: str, source: str) -> None:
         ("db/model_registry.py", "from ..domains.menu.models import MenuPage"),
         ("db/model_registry.py", "from ..gold import models"),
         ("identity/commands.py", "import apps_extra, sqlalchemy_utils"),
+        ("gold/refresh.py", "from ..domains.menu.selection import select_price"),
+        ("gold/catalog.py", "from ..domains.menu.enumeration import enumerate_current_requests"),
+        ("gold/refresh.py", "from ..domains.menu.contracts import NodeKind"),
+        ("gold/refresh.py", "from ..identity.contracts import ResolvedScope"),
+        ("gold/refresh.py", "from ..provenance.contracts import get_record_version"),
+        ("gold/models.py", "from ..db.base import Base"),
+        ("gold/catalog.py", "from .refresh import refresh_current_menu"),
     ],
 )
 def test_allowed_foundation_imports(path: str, source: str) -> None:

@@ -232,6 +232,17 @@ builds on. See the
 API, and deployment remain unauthorized and still require their own owner-accepted
 ADR/decision.
 
+**Refresh semantics clarified (owner decisions D5.1–D5.3, 2026-09-23; remediation
+S7).** (1) Selection and enumeration check current eligibility with Identity's
+read-only `current_resolved_scopes` (no locks, never aborts the transaction);
+writers keep the locking `require_resolved_scopes` guard. (2) The bounded
+`refresh_current_menu` replaces **every row of each requested scope** (subject),
+not per family; a scope that no longer yields any request is named through
+`subject_ids` so its stale rows are removed. (3) Requests with a knowledge or
+observation cutoff are rejected: `gold.current_menu` holds current answers only.
+In current mode only the requested subject's own stream heads count, and every
+one of them must still be live.
+
 ## References
 
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) — Gold
