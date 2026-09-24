@@ -1,6 +1,6 @@
 # Spike: on-device menu model (classify, extract, validate)
 
-**Status:** In progress — step B (waiting on owner's 20% spot-check)
+**Status:** In progress — step C next (A and B done)
 **Opened:** 2026-09-23 by the owner
 **Feeds:** the Phase 5 menu-extraction ADR (menu-page classifier per
 [ADR-0010 Amendment 3](../../adr/0010-website-and-menu-url-resolution.md#amendment-3-2026-09-23-menu-page-verification-and-platform-sites),
@@ -101,7 +101,7 @@ the false-reject rate.
 ## Progress
 
 - [x] A. Sample: owner-exported candidate list; about 60 pages fetched (≈40 real menus in varied formats: HTML list, table, PDF, image-only or JS-only noted; ≈20 non-menus: home, about, catering, ordering platforms)
-- [ ] B. Labels: page labels, block labels, and gold items + prices for the menu pages; owner spot-checks 20%
+- [x] B. Labels: page labels, block labels, and gold items + prices for the menu pages; owner spot-checks 20%
 - [ ] C. Baselines: JSON-LD/platform parse coverage; S4 pre-filter precision/recall
 - [ ] D. [1]+[3] classifiers: embedding + logistic regression, cross-validated; timed on the Pi
 - [ ] E. [4] extractor: `llama.cpp` + a small (1.5B–8B) instruct model with a JSON-only grammar; timed on the Pi
@@ -130,6 +130,7 @@ _To be filled in._
 | 2026-09-23 | A-2 | spike/menu-model | Pi access: `ssh orangepi@192.168.1.219` (password auth, fish login shell: wrap remote commands in `bash -s`). Pi: aarch64, 8 cores, 31 GB RAM, 192 GB free, Python 3.10, gcc/g++/make/uv present, **cmake missing**, no `ensurepip` (use `uv venv`). Created `~/menu-model-spike/` with `export_candidates.sql`. Helios stack on the Pi was stopped (not touched). Wrote `spikes/menu_model/fetch_sample.py` (stratified pick + SiteFetcher fetch of homepage / S4 verdict / menu anchors / platform link / one non-menu link). | Still waiting on `candidates.csv`. Then: `MENU_SPIKE_DATA=<main checkout>/var/spikes/menu-model uv run python -m spikes.menu_model.fetch_sample`. llama.cpp needs cmake → ask owner before stage E (`uv pip install cmake` in the spike venv is the no-sudo option). |
 | 2026-09-23 | B/F-1 | spike/menu-model | Fetch of all 150 candidates via `SiteFetcher` running (≈120/150). Built stage [2] segmenter (stdlib), stage [5] validator + corruption-injection eval, labeling tool with an auditable review file (`spikes/menu_model/labels/review.txt`). 17 pages labeled so far (16 menus). **Validator v1** (frozen at `77aef1d`, dev = first 6 pages): dev FR 0/215, catch 274/276. **v1 held-out** (8 pages, 777 rows): FR 6.7% (48 = one template page whose price sits 9-12 blocks after the name, beyond the fixed 4-block window; 3 = same dish in two sections flagged duplicate; 1 = `Half $20.95/ Whole $41.95` suffix misread), catch 327/334 = 97.9% (6 swaps between unlabeled size prices are indistinguishable by text; 1 = price-only `<h4>` misread as a section heading). | Next: validator v2 (nearest-price-run region, heading-with-words shared price, per-section duplicates, strict `/label` suffix), freeze, evaluate on pages labeled after v2 (held-out-2). |
 | 2026-09-24 | B-1 | spike/menu-model | **A done.** 150 candidates exported by owner; all 150 venues fetched via `SiteFetcher` (219 pages with a 200 or labeled; 20 robots-blocked/failed, 10×403). Page labels for all 219 pages: 48 menu, 131 not_menu (incl. menu hubs), 32 js_only, 8 empty; 1 image-only menu; PDF menus linked from ≥6 sites (not fetched: `SiteFetcher` decodes bodies to text). Block + gold labels on 25 menus: 3,548 blocks, 1,400 items, 1,555 prices (review record: `spikes/menu_model/labels/review.txt`). **Validator v2** (frozen `9e6bc87`) on held-out-2 (10 pages, 563 rows): FR 11.2% (bare-number prices "11hh/12", "11 / 44"; heading-only shared prices with two time labels; dietary marks glued to names; one-decimal "$19.5"; mixed variant/add-on price lines), catch 98.3% (all misses indistinguishable). CAVEAT: validator metrics were computed before the owner spot-check; recompute after corrections. | Waiting on owner to review `spikes/menu_model/labels/spotcheck.md` (46 page labels + 5 menus' blocks/items). Then: apply corrections to `review.txt`, `labeltool apply`, re-run `eval_validator --split=ho2` (and dev/ho1), then stage C baselines. |
+| 2026-09-24 | B-2 | spike/menu-model | Owner reviewed the spot-check (queried Consuelo's gold: the sample shows 20% of items, full gold has all 7 Breakfast Plates; add-ons are `modifier` by design) and accepted: "okay so it seems to work". No label corrections, so the validator v2 numbers above stand unchanged. | Next session: stage C (JSON-LD/platform baseline; S4 precision/recall against the page labels), then D-E on the Pi, F write-up, H. Data lives in the main checkout's `var/spikes/menu-model/` (`MENU_SPIKE_DATA`). |
 
 ## Hand-off prompt
 
