@@ -243,7 +243,7 @@ page 2ff14a66b0df not_menu location | chain locations directory
 page 66deb2223bd4 not_menu location | chain locations directory
 page 50cf711fa64c not_menu home | homepage
 page 5724eae2a973 menu html_cards | unpriced menu (build-your-own)
-page 4849a1750755 js_only toast | Toast ordering page
+page 4849a1750755 js_only toast | Toast rewards-signup URL (client-rendered; not a menu) accepted by S4 as the platform menu
 page a8116c5ffb6b not_menu about | about
 page e25475507eb8 not_menu location | chain location page
 page ed699a9a906f menu html_cards | unpriced chain menu
@@ -438,3 +438,64 @@ fix b0067..b0516=noise b0068=section b0069=item b0070=description b0071=price b0
 prices b0264=happy hour:11,-:12
 prices b0269=happy hour:13,-:14
 prices b0274=happy hour:7,-:8
+
+# ---- page-level labels, venues 121-150 ----
+page ec3039e541e9 not_menu home | homepage
+page 5e09b32616c3 js_only other | /menu client-rendered
+page 75c3ee37940d not_menu other | contact
+page a548024ee330 empty none | 200 with no text
+page 3e61a467ecb8 not_menu home | homepage with featured tacos
+page 9c6d4f4df372 not_menu other | SEO prose about dish types, no item list
+page b3382a8ab799 not_menu other | contact
+page f41f149ad942 js_only clover | Clover online ordering
+page 2284fc5e9b87 js_only clover | Clover single-item page
+page 4dd3d0c0625d not_menu home | homepage
+page a72da5b5d56f not_menu hub | menu landing linking PDF menus (4 PDFs, not fetched)
+page 62d5e5f60d9d not_menu about | about
+page a327b4d38c54 not_menu home | homepage (Overture website is an Amherst NY business)
+page ff9e184bc72e menu html_cards | menu of the wrong (NY) business; partially priced
+page 1cf69aeeae45 menu html_cards | pizza menu category page, partially priced
+page bb4e4991b0ad not_menu other | specials page linking a PDF lunch menu
+page 1b9ea4658cf5 not_menu location | chain location page
+page da1fd8fe650e not_menu location | chain location page
+page 7b83378ae6f2 not_menu home | homepage
+page 4817157debb7 not_menu other | 2019 press release accepted by S4 as a menu
+page 3d5c71b32afb menu html_cards | unpriced kids menu
+page d3af46c8798e menu html_cards | unpriced breakfast menu
+page 70057a8f5fd9 empty none | 200 with no text
+page ffb0e3323693 not_menu home | homepage; menus are 8 linked PDFs (not fetched)
+page 26e57357a8b5 not_menu other | photographs
+page e41875bd4fa1 not_menu home | homepage
+page e041acd0bd20 js_only other | homepage, nav only
+page 348727579cd5 js_only other | index, nav only
+page a8d796c42c3f not_menu other | unrelated poetry forum
+
+page 53172819459a menu html_list | <h3> name, "$15.00" div, description <p>; h2+h1 repeat each section; soups "Chicken (Cup) $5.00" variant lines; "$19.5" one-decimal prices
+region b0009 b0280
+recipe h2=section h1=noise h3=item price=price other=description
+fix b0052=noise b0070=noise b0141=noise b0202=noise b0211=noise b0212=modifier
+prices b0071=-:19.50
+prices b0074=-:19.50
+prices b0193=-:16.50
+
+page 496d56c7dbb3 menu html_list | <h3> name, "Glass $7"/"Bottle $26"/"Refillable $3.25" variant lines, "$5.5" one-decimal beer prices
+region b0009 b0090
+recipe h2=section h1=noise h3=item price=price other=description
+fix b0066=noise
+prices b0070=-:5.50
+prices b0072=-:5.50
+prices b0074=-:5.50
+prices b0076=-:5.50
+
+page c1e1d9d7d9a6 menu html_list | name <p>, description <p>(s), price in <section>: "$11.85", "-OR- with bacon or sausage $10.25", "Shortstack(2)$8.15 Fullstack(3)$9.20", "$3.85 add raisins $1.70", three unlabeled sizes; add-on price lists
+region b0022 b0153
+recipe h2=section h3=noise section=price other=description
+fix b0023..b0055%3=item b0057=noise b0058..b0064=modifier b0066=noise b0067=item b0073..b0097%3=item b0099..b0100=modifier b0103=item b0104..b0105=modifier
+fix b0110..b0126%2=item b0129=item b0132=item b0135=item b0138..b0152%2=item
+prices b0067=-:8.25,with bacon or sausage:10.25
+prices b0088=-:3.85
+prices b0110=-:4.75,1/2 order:3.70
+prices b0116=-:3.15,with cream cheese:4.00
+prices b0126=-:3.70,with queso:7.90
+prices b0129=-:3.65
+prices b0138=-:3.10

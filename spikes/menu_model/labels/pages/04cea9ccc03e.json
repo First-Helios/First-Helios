@@ -382,7 +382,7 @@
     },
     {
      "amount": "54.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0076"
@@ -398,7 +398,7 @@
     },
     {
      "amount": "54.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0079"
@@ -414,7 +414,7 @@
     },
     {
      "amount": "54.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0082"
@@ -430,7 +430,7 @@
     },
     {
      "amount": "62.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0086"
@@ -446,7 +446,7 @@
     },
     {
      "amount": "54.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0089"
@@ -462,7 +462,7 @@
     },
     {
      "amount": "62.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0092"
@@ -478,7 +478,7 @@
     },
     {
      "amount": "54.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0096"
@@ -494,7 +494,7 @@
     },
     {
      "amount": "54.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0099"
@@ -510,7 +510,7 @@
     },
     {
      "amount": "54.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0104"
@@ -526,7 +526,7 @@
     },
     {
      "amount": "90.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0107"
@@ -542,7 +542,7 @@
     },
     {
      "amount": "48.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0110"
@@ -558,7 +558,7 @@
     },
     {
      "amount": "46.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0114"
@@ -598,7 +598,7 @@
     },
     {
      "amount": "44.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0123"
@@ -614,7 +614,7 @@
     },
     {
      "amount": "46.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0126"
@@ -642,7 +642,7 @@
     },
     {
      "amount": "38.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0133"
@@ -658,7 +658,7 @@
     },
     {
      "amount": "38.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0137"
@@ -686,7 +686,7 @@
     },
     {
      "amount": "88.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0143"
@@ -702,7 +702,7 @@
     },
     {
      "amount": "46.00",
-     "variant": "/"
+     "variant": null
     }
    ],
    "block": "b0146"

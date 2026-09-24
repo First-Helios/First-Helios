@@ -1,0 +1,460 @@
+{
+ "page_id": "496d56c7dbb3",
+ "url": "https://www.thaispoonrestaurant.com/beverage-menu/",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0009",
+   "b0090"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0009": "section",
+  "b0011": "item",
+  "b0012": "price",
+  "b0013": "description",
+  "b0014": "item",
+  "b0015": "price",
+  "b0016": "price",
+  "b0017": "description",
+  "b0018": "item",
+  "b0019": "price",
+  "b0020": "price",
+  "b0021": "item",
+  "b0022": "price",
+  "b0023": "description",
+  "b0024": "item",
+  "b0025": "price",
+  "b0026": "item",
+  "b0027": "price",
+  "b0028": "item",
+  "b0029": "price",
+  "b0030": "description",
+  "b0031": "item",
+  "b0032": "price",
+  "b0033": "description",
+  "b0034": "item",
+  "b0035": "price",
+  "b0036": "description",
+  "b0037": "item",
+  "b0038": "price",
+  "b0039": "section",
+  "b0041": "section",
+  "b0042": "item",
+  "b0043": "price",
+  "b0044": "item",
+  "b0045": "price",
+  "b0046": "price",
+  "b0047": "item",
+  "b0048": "price",
+  "b0049": "price",
+  "b0050": "item",
+  "b0051": "price",
+  "b0052": "price",
+  "b0053": "item",
+  "b0054": "price",
+  "b0055": "price",
+  "b0056": "section",
+  "b0057": "item",
+  "b0058": "price",
+  "b0059": "price",
+  "b0060": "item",
+  "b0061": "price",
+  "b0062": "price",
+  "b0063": "item",
+  "b0064": "price",
+  "b0065": "price",
+  "b0067": "section",
+  "b0069": "section",
+  "b0070": "item",
+  "b0071": "price",
+  "b0072": "item",
+  "b0073": "price",
+  "b0074": "item",
+  "b0075": "price",
+  "b0076": "item",
+  "b0077": "price",
+  "b0078": "section",
+  "b0079": "item",
+  "b0080": "price",
+  "b0081": "item",
+  "b0082": "price",
+  "b0083": "section",
+  "b0084": "item",
+  "b0085": "price",
+  "b0086": "price",
+  "b0087": "item",
+  "b0088": "price",
+  "b0089": "item",
+  "b0090": "price"
+ },
+ "items": [
+  {
+   "section": "Beverages",
+   "name": "Soda",
+   "description": "(Coke, Dite Coke, Sprite, Dr.Pepper, Rootbeer)",
+   "prices": [
+    {
+     "amount": "3.25",
+     "variant": "Refillable"
+    }
+   ],
+   "block": "b0011"
+  },
+  {
+   "section": "Beverages",
+   "name": "Iced Tea",
+   "description": "(Unsweet Tea, Sweet Lemon Tea)",
+   "prices": [
+    {
+     "amount": "3.25",
+     "variant": "Refillable"
+    },
+    {
+     "amount": "3.75",
+     "variant": "Green Ice Tea"
+    }
+   ],
+   "block": "b0014"
+  },
+  {
+   "section": "Beverages",
+   "name": "Thai Tea, Thai Coffee",
+   "description": null,
+   "prices": [
+    {
+     "amount": "4.50",
+     "variant": null
+    },
+    {
+     "amount": "5.00",
+     "variant": "Without Ice"
+    }
+   ],
+   "block": "b0018"
+  },
+  {
+   "section": "Beverages",
+   "name": "Chrysanthemum Iced Tea",
+   "description": "(Sweetened)",
+   "prices": [
+    {
+     "amount": "3.75",
+     "variant": null
+    }
+   ],
+   "block": "b0021"
+  },
+  {
+   "section": "Beverages",
+   "name": "Shirley Temple",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.75",
+     "variant": null
+    }
+   ],
+   "block": "b0024"
+  },
+  {
+   "section": "Beverages",
+   "name": "Milk",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0026"
+  },
+  {
+   "section": "Beverages",
+   "name": "S. Pellegrino",
+   "description": "(Bottle)",
+   "prices": [
+    {
+     "amount": "3.75",
+     "variant": null
+    }
+   ],
+   "block": "b0028"
+  },
+  {
+   "section": "Beverages",
+   "name": "Juice",
+   "description": "(Apple, Orange, Lemonade)",
+   "prices": [
+    {
+     "amount": "3.75",
+     "variant": null
+    }
+   ],
+   "block": "b0031"
+  },
+  {
+   "section": "Beverages",
+   "name": "Hot Tea (by pot)",
+   "description": "Jasmine Tea, Green Tea or Oolong Tea",
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0034"
+  },
+  {
+   "section": "Beverages",
+   "name": "Hot Coffee",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0037"
+  },
+  {
+   "section": "White Wine",
+   "name": "Cup cake Moscato, Italy",
+   "description": null,
+   "prices": [
+    {
+     "amount": "6.00",
+     "variant": "Glass"
+    }
+   ],
+   "block": "b0042"
+  },
+  {
+   "section": "White Wine",
+   "name": "Canyon Road Chardonnay, CA",
+   "description": null,
+   "prices": [
+    {
+     "amount": "7.00",
+     "variant": "Glass"
+    },
+    {
+     "amount": "26.00",
+     "variant": "Bottle"
+    }
+   ],
+   "block": "b0044"
+  },
+  {
+   "section": "White Wine",
+   "name": "Dark Horse Pinot Grigio, CA",
+   "description": null,
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": "Glass"
+    },
+    {
+     "amount": "24.00",
+     "variant": "Bottle"
+    }
+   ],
+   "block": "b0047"
+  },
+  {
+   "section": "White Wine",
+   "name": "Ponga Sauvignon Blanc, New Zealand",
+   "description": null,
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": "Glass"
+    },
+    {
+     "amount": "36.00",
+     "variant": "Bottle"
+    }
+   ],
+   "block": "b0050"
+  },
+  {
+   "section": "White Wine",
+   "name": "Josh Cellars Chardonnay, CA",
+   "description": null,
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": "Glass"
+    },
+    {
+     "amount": "38.00",
+     "variant": "Bottle"
+    }
+   ],
+   "block": "b0053"
+  },
+  {
+   "section": "Red Wine",
+   "name": "Hess Select Pinot Noir, CA",
+   "description": null,
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": "Glass"
+    },
+    {
+     "amount": "42.00",
+     "variant": "Bottle"
+    }
+   ],
+   "block": "b0057"
+  },
+  {
+   "section": "Red Wine",
+   "name": "Natura Cabernet Sauvignon, Chile",
+   "description": null,
+   "prices": [
+    {
+     "amount": "30.00",
+     "variant": "Bottle"
+    },
+    {
+     "amount": "8.00",
+     "variant": "Glass"
+    }
+   ],
+   "block": "b0060"
+  },
+  {
+   "section": "Red Wine",
+   "name": "Riberty School Cabernet Sauvignon, CA",
+   "description": null,
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": "Glass"
+    },
+    {
+     "amount": "38.00",
+     "variant": "Bottle"
+    }
+   ],
+   "block": "b0063"
+  },
+  {
+   "section": "Asian Import",
+   "name": "Singha",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0070"
+  },
+  {
+   "section": "Asian Import",
+   "name": "Chang",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0072"
+  },
+  {
+   "section": "Asian Import",
+   "name": "Sapporo",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0074"
+  },
+  {
+   "section": "Asian Import",
+   "name": "Kirin Ichiban",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0076"
+  },
+  {
+   "section": "Other Import and Domestic",
+   "name": "Dos Equis",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0079"
+  },
+  {
+   "section": "Other Import and Domestic",
+   "name": "Michelob Ultra",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0081"
+  },
+  {
+   "section": "Sake",
+   "name": "Gekkeikan Hot Sake",
+   "description": null,
+   "prices": [
+    {
+     "amount": "6.00",
+     "variant": "Small 6 oz"
+    },
+    {
+     "amount": "10.00",
+     "variant": "Large 10 oz"
+    }
+   ],
+   "block": "b0084"
+  },
+  {
+   "section": "Sake",
+   "name": "Hakutsuru Junmai Ginjo",
+   "description": null,
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": "300 ML"
+    }
+   ],
+   "block": "b0087"
+  },
+  {
+   "section": "Sake",
+   "name": "Sho Chiku Bai Nigori, Unfiltered",
+   "description": null,
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": "300 ML"
+    }
+   ],
+   "block": "b0089"
+  }
+ ],
+ "note": "<h3> name, \"Glass $7\"/\"Bottle $26\"/\"Refillable $3.25\" variant lines, \"$5.5\" one-decimal beer prices"
+}

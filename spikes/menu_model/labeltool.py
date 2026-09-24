@@ -129,8 +129,8 @@ def _amounts(text: str, *, labels: bool) -> list[dict[str, str | None]]:
         if t.kind != "money":
             continue
         variant = price_label(text, toks, t) if labels else ""
-        if len(variant.split()) > 3:  # noqa: PLR2004 - a description, not a size label
-            variant = ""
+        if len(variant.split()) > 3 or not re.search(r"\w", variant):  # noqa: PLR2004
+            variant = ""  # a description or a bare separator ("$10 / $17"), not a size label
         out.append({"amount": f"{t.amount:.2f}", "variant": variant or None})
     return out
 
@@ -309,6 +309,7 @@ def _apply_recipe(page_id: str, recipe: dict[str, str]) -> None:
             labels[b.id] = recipe["other"]
         if labels[b.id] == "noise":
             del labels[b.id]  # absent = noise, same as ``fix b..=noise``
+    label["items"] = _derive_items(blocks_of(page_id), labels)
     _save_label(path, label)
 
 

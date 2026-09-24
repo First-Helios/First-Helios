@@ -103,9 +103,25 @@
  },
  "items": [
   {
-   "section": "MARKET FISH SELECTION*",
-   "name": "chef's choice",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "MARKET FISH SELECTION*",
+   "description": "chef's choice",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    },
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0022"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "MAGURO*",
+   "description": "bigeye tuna",
    "prices": [
     {
      "amount": "8.00",
@@ -113,15 +129,15 @@
     },
     {
      "amount": "15.00",
-     "variant": "/"
+     "variant": null
     }
    ],
-   "block": "b0024"
+   "block": "b0025"
   },
   {
-   "section": "MAGURO*",
-   "name": "bigeye tuna",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "SAKE*",
+   "description": "atlantic salmon",
    "prices": [
     {
      "amount": "7.00",
@@ -129,15 +145,15 @@
     },
     {
      "amount": "14.00",
-     "variant": "/"
+     "variant": null
     }
    ],
-   "block": "b0027"
+   "block": "b0028"
   },
   {
-   "section": "SAKE*",
-   "name": "atlantic salmon",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "MADAI*",
+   "description": "japanese sea bream",
    "prices": [
     {
      "amount": "8.00",
@@ -145,186 +161,322 @@
     },
     {
      "amount": "15.00",
-     "variant": "/"
+     "variant": null
     }
    ],
-   "block": "b0030"
+   "block": "b0031"
   },
   {
-   "section": "MADAI*",
-   "name": "japanese sea bream",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "HIRAMASA SERRANO*",
+   "description": "yellowtail, asian pear, coconut ponzu",
    "prices": [
     {
      "amount": "14.00",
      "variant": null
     }
    ],
-   "block": "b0033"
+   "block": "b0035"
   },
   {
-   "section": "HIRAMASA SERRANO*",
-   "name": "yellowtail, asian pear, coconut ponzu",
+   "section": "Happy Hour Menu",
+   "name": "SAKURA MASU*",
    "description": "tasmanian ocean trout, passion fruit zu, coconut taro puree, toasted capers",
    "prices": [
     {
      "amount": "15.00",
      "variant": null
-    },
-    {
-     "amount": "9.00",
-     "variant": null
-    },
-    {
-     "amount": "8.00",
-     "variant": null
-    },
-    {
-     "amount": "6.00",
-     "variant": null
     }
    ],
-   "block": "b0037"
+   "block": "b0038"
   },
   {
-   "section": "EDAMAME (v)",
-   "name": "steamed soybeans, sea salt",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "KINOKO (v)",
+   "description": "hi-fi mushroom, marinated daikon, avocado, mushroom \"bacon,\" soy paper, yuzu aioli",
    "prices": [
     {
      "amount": "9.00",
      "variant": null
     }
    ],
-   "block": "b0051"
+   "block": "b0042"
   },
   {
-   "section": "WAGYU HOT ROCK*",
-   "name": "texas wagyu, ponzu, negi",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "PRIME DRY AGED MAKI*",
+   "description": "chef's choice market fish, avocado, yuzu kosho, green onion, sesame",
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    }
+   ],
+   "block": "b0045"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "EDAMAME (v)",
+   "description": "steamed soybeans, sea salt",
+   "prices": [
+    {
+     "amount": "6.00",
+     "variant": null
+    }
+   ],
+   "block": "b0049"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "WAGYU HOT ROCK*",
+   "description": "texas wagyu, ponzu, negi",
+   "prices": [
+    {
+     "amount": "9.00",
+     "variant": null
+    }
+   ],
+   "block": "b0052"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "SPINACH & SHIITAKE DUMPLINGS (v)",
+   "description": "cashew cheese, red curry oil, cilantro",
    "prices": [
     {
      "amount": "7.00",
      "variant": null
     }
    ],
-   "block": "b0054"
+   "block": "b0055"
   },
   {
-   "section": "SPINACH & SHIITAKE DUMPLINGS (v)",
-   "name": "cashew cheese, red curry oil, cilantro",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "BRUSSELS SPROUTS (v)",
+   "description": "crisped brussels sprouts, lemongrass soy",
    "prices": [
     {
      "amount": "8.00",
      "variant": null
     }
    ],
-   "block": "b0057"
+   "block": "b0058"
   },
   {
-   "section": "BRUSSELS SPROUTS (v)",
-   "name": "crisped brussels sprouts, lemongrass soy",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "CHICKEN KARAAGE",
+   "description": "shiso, red onion, ponzu verde",
    "prices": [
     {
      "amount": "10.00",
      "variant": null
     }
    ],
-   "block": "b0060"
+   "block": "b0061"
   },
   {
-   "section": "CHICKEN KARAAGE",
-   "name": "shiso, red onion, ponzu verde",
+   "section": "Happy Hour Menu",
+   "name": "MISO-CURED SWORDFISH",
    "description": "grilled dry-aged swordfish, aji panca butter, leek confit",
    "prices": [
     {
      "amount": "14.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0064"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "YUZU PIE",
+   "description": "graham cracker, toasted marshmallow meringue, yuzu, blueberry, candied pecans",
+   "prices": [
     {
      "amount": "8.00",
      "variant": null
-    },
-    {
-     "amount": "9.00",
-     "variant": null
-    },
-    {
-     "amount": "9.00",
-     "variant": null
     }
    ],
-   "block": "b0063"
+   "block": "b0068"
   },
   {
-   "section": "CUCUMBER REFRESHER",
-   "name": "sake, cucumber, mint, lime",
-   "description": null,
+   "section": "Happy Hour Menu",
+   "name": "POMEGRANATE MULE",
+   "description": "jasmine infused sake, pomegranate, cinnamon, lime, ginger beer",
    "prices": [
     {
      "amount": "9.00",
      "variant": null
     }
    ],
-   "block": "b0077"
+   "block": "b0072"
   },
   {
-   "section": "CHERRY DAIQUIRI",
-   "name": "sake, cherry juice, lime",
+   "section": "Happy Hour Menu",
+   "name": "CUCUMBER REFRESHER",
+   "description": "sake, cucumber, mint, lime",
+   "prices": [
+    {
+     "amount": "9.00",
+     "variant": null
+    }
+   ],
+   "block": "b0075"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "CHERRY DAIQUIRI",
+   "description": "sake, cherry juice, lime",
+   "prices": [
+    {
+     "amount": "9.00",
+     "variant": null
+    }
+   ],
+   "block": "b0078"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "BLUEBERRY YUZU",
    "description": null,
    "prices": [
     {
      "amount": "30.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0082"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "WATERMELON MINT",
+   "description": null,
+   "prices": [
     {
      "amount": "30.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0084"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "GUAVA ORANGE",
+   "description": "Sake",
+   "prices": [
     {
      "amount": "30.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0086"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "SOUTHERN BEAUTY (300mL)",
+   "description": null,
+   "prices": [
     {
      "amount": "25.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0089"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "CHRYSANTHEMUM MIST (300mL)",
+   "description": null,
+   "prices": [
     {
      "amount": "33.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0091"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "TARU (300mL)",
+   "description": null,
+   "prices": [
     {
      "amount": "23.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0093"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "MOONLIGHT (300mL)",
+   "description": null,
+   "prices": [
     {
      "amount": "24.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0095"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "FISHING CAT (180mL)",
+   "description": "Wine",
+   "prices": [
     {
      "amount": "18.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0097"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "MARTIN RAY SAUVIGNON BLANC",
+   "description": null,
+   "prices": [
     {
      "amount": "8.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0100"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "DIVISION PINOT NOIR",
+   "description": null,
+   "prices": [
     {
      "amount": "10.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0102"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "LUNARIA SPARKLING PINOT GRIGIO PET NAT",
+   "description": "Beer",
+   "prices": [
     {
      "amount": "9.00",
      "variant": null
-    },
+    }
+   ],
+   "block": "b0104"
+  },
+  {
+   "section": "Happy Hour Menu",
+   "name": "ASAHI SUPER DRY",
+   "description": null,
+   "prices": [
     {
      "amount": "6.00",
      "variant": null
     }
    ],
-   "block": "b0080"
+   "block": "b0107"
   }
  ],
  "note": "happy-hour menu: <h4> name, \"$10 / $17\" (two unlabeled portions) or \"$8\" <p>, description <p>"

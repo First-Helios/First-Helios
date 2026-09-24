@@ -44,6 +44,127 @@
   "b0048": "item",
   "b0049": "price"
  },
- "items": [],
+ "items": [
+  {
+   "section": "Brunch Menu",
+   "name": "SWEET POTATO HASH",
+   "description": "japanese sweet potato, pork sausage, poached eggs, aji amarillo hollandaise",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0020"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "BREKKY BAO BUN",
+   "description": "soy-braised pork belly, spicy hoisin, fried egg, house pickles",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0023"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "LUCKY WAFFLES",
+   "description": "spiced maple syrup, mascarpone, tropical fruit",
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0026"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "NOMNOMIYAKI",
+   "description": "japanese savory cabbage pancake, pork belly, napa cabbage, sunny side up egg",
+   "prices": [
+    {
+     "amount": "18.00",
+     "variant": null
+    }
+   ],
+   "block": "b0029"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "PORK CHASHU FRIED RICE",
+   "description": "shoyu glazed pork rib,, shiitake mushroom, shrimp, fried egg",
+   "prices": [
+    {
+     "amount": "24.00",
+     "variant": null
+    }
+   ],
+   "block": "b0032"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "ROBOT RAMEN",
+   "description": "pork shoyu broth, chashu pork, ajitama egg, wood ear mushroom, menma, rayu",
+   "prices": [
+    {
+     "amount": "18.00",
+     "variant": null
+    }
+   ],
+   "block": "b0035"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "CHIRASHI BOT",
+   "description": "tuna, salmon, australian yellowtail, and japanese sea bream sashimi over sushi rice, avocado, cucumber, sesame, 144F egg",
+   "prices": [
+    {
+     "amount": "28.00",
+     "variant": null
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "TOYOSU CHIRASHI BOT",
+   "description": "ocean trout and 3 types of daily market sashimi over sushi rice, avocado, cucumber, sesame, 144F egg",
+   "prices": [
+    {
+     "amount": "32.00",
+     "variant": null
+    }
+   ],
+   "block": "b0041"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "SAKE COCKTAIL PITCHERS",
+   "description": "blueberry yuzu, watermelon basil, guava orange",
+   "prices": [
+    {
+     "amount": "45.00",
+     "variant": null
+    }
+   ],
+   "block": "b0045"
+  },
+  {
+   "section": "Brunch Menu",
+   "name": "THIRD COAST FRENCH PRESS",
+   "description": null,
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    }
+   ],
+   "block": "b0048"
+  }
+ ],
  "note": "brunch menu: <h4> name, \"$16\" <p>, description <p>"
 }

@@ -6,6 +6,6 @@
  "items": [],
  "page_label": "js_only",
  "format": "toast",
- "note": "Toast ordering page",
+ "note": "Toast rewards-signup URL (client-rendered; not a menu) accepted by S4 as the platform menu",
  "reviewed": true
 }

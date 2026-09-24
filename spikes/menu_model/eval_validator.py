@@ -36,7 +36,14 @@ if TYPE_CHECKING:
     from spikes.menu_model.segment import Block
 
 SEED = 7
-# Pages whose results shaped the validator (dev); everything else is held out.
+# Pages whose results shaped validator v1 (dev); HELDOUT_1 evaluated v1 and then
+# shaped v2; everything labeled after v2 was frozen (9e6bc87) is held-out-2.
+HELDOUT_1 = frozenset(
+    {
+        "2bfd0cdf0f6e", "a647f424c99e", "6a788f7d3b50", "a37310ea6a20",
+        "4598f318ba72", "200000724aa0", "7e3a83b84a97", "0bf6f5017a83",
+    }
+)  # fmt: skip
 DEV_PAGES = frozenset(
     {"f298109dce7a", "dc96fa2f50f3", "0580f923bc5e", "cbcdb04ffbe0", "abefb3029e57", "1b6233a80694"}
 )
@@ -92,8 +99,12 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
     split = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--split=")), "all")
     if split == "dev":
         gold = {k: v for k, v in gold.items() if k in DEV_PAGES}
-    elif split == "heldout":
+    elif split == "heldout":  # v1 held-out (sets 1 + 2)
         gold = {k: v for k, v in gold.items() if k not in DEV_PAGES}
+    elif split == "ho1":
+        gold = {k: v for k, v in gold.items() if k in HELDOUT_1}
+    elif split == "ho2":  # v2 held-out: labeled after v2 was frozen
+        gold = {k: v for k, v in gold.items() if k not in DEV_PAGES | HELDOUT_1}
     all_names = [(pid, r.item) for pid, lab in gold.items() for r in gold_rows(lab)]
     fr = Counter[str]()
     caught = Counter[str]()
