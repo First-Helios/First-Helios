@@ -1,0 +1,749 @@
+{
+ "page_id": "40ceefcbb6e6",
+ "url": "https://consueloskitchen.com/menu-la-cocina-de-consuelo/",
+ "page_label": "menu",
+ "format": "html_inline",
+ "menu_regions": [
+  [
+   "b0014",
+   "b0138"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0014": "section",
+  "b0018": "item",
+  "b0019": "description",
+  "b0021": "item",
+  "b0022": "description",
+  "b0024": "item",
+  "b0025": "description",
+  "b0027": "item",
+  "b0028": "description",
+  "b0029": "modifier",
+  "b0031": "section",
+  "b0034": "item",
+  "b0035": "description",
+  "b0036": "item",
+  "b0037": "description",
+  "b0038": "item",
+  "b0039": "description",
+  "b0040": "modifier",
+  "b0041": "modifier",
+  "b0042": "item",
+  "b0043": "description",
+  "b0044": "item",
+  "b0045": "description",
+  "b0046": "item",
+  "b0047": "description",
+  "b0048": "item",
+  "b0049": "description",
+  "b0050": "modifier",
+  "b0051": "description",
+  "b0052": "section",
+  "b0053": "item",
+  "b0054": "item",
+  "b0055": "item",
+  "b0056": "description",
+  "b0057": "item",
+  "b0058": "description",
+  "b0059": "section",
+  "b0060": "item",
+  "b0061": "item",
+  "b0062": "item",
+  "b0063": "item",
+  "b0064": "item",
+  "b0065": "description",
+  "b0066": "modifier",
+  "b0067": "modifier",
+  "b0068": "modifier",
+  "b0069": "section",
+  "b0072": "item",
+  "b0073": "description",
+  "b0074": "description",
+  "b0075": "modifier",
+  "b0076": "item",
+  "b0077": "description",
+  "b0078": "modifier",
+  "b0079": "item",
+  "b0080": "description",
+  "b0081": "modifier",
+  "b0082": "item",
+  "b0083": "description",
+  "b0084": "modifier",
+  "b0085": "item",
+  "b0086": "description",
+  "b0087": "item",
+  "b0088": "description",
+  "b0089": "modifier",
+  "b0090": "item",
+  "b0091": "description",
+  "b0092": "modifier",
+  "b0093": "modifier",
+  "b0094": "item",
+  "b0095": "description",
+  "b0096": "item",
+  "b0097": "description",
+  "b0098": "item",
+  "b0099": "description",
+  "b0100": "item",
+  "b0101": "description",
+  "b0102": "item",
+  "b0103": "description",
+  "b0104": "section",
+  "b0105": "item",
+  "b0106": "description",
+  "b0107": "item",
+  "b0108": "description",
+  "b0109": "item",
+  "b0110": "description",
+  "b0111": "item",
+  "b0112": "description",
+  "b0113": "item",
+  "b0114": "description",
+  "b0115": "item",
+  "b0116": "description",
+  "b0117": "section",
+  "b0122": "item",
+  "b0123": "item",
+  "b0124": "description",
+  "b0125": "item",
+  "b0126": "description",
+  "b0127": "item",
+  "b0128": "description",
+  "b0129": "item",
+  "b0130": "description",
+  "b0131": "section",
+  "b0132": "item",
+  "b0133": "item",
+  "b0134": "item",
+  "b0135": "item",
+  "b0136": "item",
+  "b0137": "item",
+  "b0138": "item",
+  "b0033": "modifier"
+ },
+ "items": [
+  {
+   "section": "Breakfast Burritos",
+   "name": "Machacado Burrito",
+   "description": "Machacado (dry spiced beef), egg, pico de gallo.",
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    }
+   ],
+   "block": "b0018"
+  },
+  {
+   "section": "Breakfast Burritos",
+   "name": "Barbacoa Burrito",
+   "description": "Slow-simmered beef. Pico de gallo upon request.",
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    }
+   ],
+   "block": "b0021"
+  },
+  {
+   "section": "Breakfast Burritos",
+   "name": "Migas Burrito",
+   "description": "Scrambled eggs mixed with tortilla chips, pico de gallo, ancho sauce, topped with Monterey Jack cheese.",
+   "prices": [
+    {
+     "amount": "7.50",
+     "variant": null
+    }
+   ],
+   "block": "b0024"
+  },
+  {
+   "section": "Breakfast Burritos",
+   "name": "Build Your Own Breakfast Burrito",
+   "description": "(Pick 3 Ingredients) Egg, Potato, Turkey Bacon, Beef Chorizo, Avocado, Fresh Cut Tomatoes, Black Beans, Refried Beans, Mexican Rice, Pico de Gallo, Cheddar Cheese, Monterey Jack Cheese, Queso Fresco, Rajas (tomato, onion, grilled poblano pepper strips), Nopalitos (cactus).",
+   "prices": [
+    {
+     "amount": "6.50",
+     "variant": null
+    }
+   ],
+   "block": "b0027"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Barbacoa Plate",
+   "description": "Slow-simmered beef. Served with rice instead of breakfast potatoes.",
+   "prices": [
+    {
+     "amount": "13.99",
+     "variant": null
+    }
+   ],
+   "block": "b0034"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Machacado Plate",
+   "description": "Machacado (dry spiced beef), egg, and pico de gallo.",
+   "prices": [
+    {
+     "amount": "13.99",
+     "variant": null
+    }
+   ],
+   "block": "b0036"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Chilaquiles",
+   "description": "Tortilla chips with ancho chili sauce, pico de gallo and queso fresco.",
+   "prices": [
+    {
+     "amount": "11.50",
+     "variant": null
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Migas Plate",
+   "description": "Scrambled egg mixed with tortilla chips, pico de gallo, ancho chili sauce, topped with Monterey Jack cheese.",
+   "prices": [
+    {
+     "amount": "11.50",
+     "variant": null
+    }
+   ],
+   "block": "b0042"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Huevos Rancheros Plate*",
+   "description": "Eggs sunny side up your style, topped with salsa.",
+   "prices": [
+    {
+     "amount": "11.50",
+     "variant": null
+    }
+   ],
+   "block": "b0044"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Huevos a la Mexicana",
+   "description": "Scrambled eggs mixed with pico de gallo.",
+   "prices": [
+    {
+     "amount": "11.50",
+     "variant": null
+    }
+   ],
+   "block": "b0046"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Chorizo Con Huevo Plate",
+   "description": "Scrambled eggs mixed with beef chorizo.",
+   "prices": [
+    {
+     "amount": "11.50",
+     "variant": null
+    }
+   ],
+   "block": "b0048"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Guacamole for 2",
+   "description": null,
+   "prices": [
+    {
+     "amount": "7.00",
+     "variant": null
+    }
+   ],
+   "block": "b0053"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Queso for 2",
+   "description": null,
+   "prices": [
+    {
+     "amount": "7.00",
+     "variant": null
+    }
+   ],
+   "block": "b0054"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Queso Especial",
+   "description": "Queso with a dollop of guacamole.",
+   "prices": [
+    {
+     "amount": "9.50",
+     "variant": null
+    }
+   ],
+   "block": "b0055"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Chori-Queso",
+   "description": "Queso with beef chorizo served with 3 corn tortillas.",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0057"
+  },
+  {
+   "section": "Quesadillas & Nachos",
+   "name": "Cheese Quesadilla",
+   "description": null,
+   "prices": [
+    {
+     "amount": "7.00",
+     "variant": null
+    }
+   ],
+   "block": "b0060"
+  },
+  {
+   "section": "Quesadillas & Nachos",
+   "name": "Spinach & Mushroom Quesadilla",
+   "description": null,
+   "prices": [
+    {
+     "amount": "9.00",
+     "variant": null
+    }
+   ],
+   "block": "b0061"
+  },
+  {
+   "section": "Quesadillas & Nachos",
+   "name": "Shredded Chicken Quesadilla",
+   "description": null,
+   "prices": [
+    {
+     "amount": "9.25",
+     "variant": null
+    }
+   ],
+   "block": "b0062"
+  },
+  {
+   "section": "Quesadillas & Nachos",
+   "name": "Beef or Chicken Fajita Quesadilla",
+   "description": null,
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0063"
+  },
+  {
+   "section": "Quesadillas & Nachos",
+   "name": "Nachos Compuestos",
+   "description": "Tortilla chips topped with refried beans, cheddar cheese, jalapeños and sour cream.",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0064"
+  },
+  {
+   "section": "Plates",
+   "name": "Enchiladas Plate",
+   "description": "Two enchiladas of the same kind. Choose from: cheddar cheese with red sauce, spinach & mushroom with verde sauce, queso fresco with ancho chili sauce, or",
+   "prices": [
+    {
+     "amount": "14.99",
+     "variant": null
+    }
+   ],
+   "block": "b0072"
+  },
+  {
+   "section": "Plates",
+   "name": "Beef or Chicken Enchiladas Plate",
+   "description": "Two enchiladas of the same kind. Choose from: beef enchilada with chili con carne sauce or chicken enchilada with verde sauce.",
+   "prices": [
+    {
+     "amount": "15.99",
+     "variant": null
+    }
+   ],
+   "block": "b0076"
+  },
+  {
+   "section": "Plates",
+   "name": "Taco Plate",
+   "description": "Two tacos (crispy or soft) of the same kind. Choice of: beef picadillo, shredded chicken, or avocado. Topped with lettuce, tomatoes and cheese.",
+   "prices": [
+    {
+     "amount": "13.99",
+     "variant": null
+    }
+   ],
+   "block": "b0079"
+  },
+  {
+   "section": "Plates",
+   "name": "Fajita Taco Plate*",
+   "description": "Two fajita soft tacos (corn or flour) of the same kind. Choice of beef or chicken grilled with poblano peppers and onions. Topped with lettuce, tomatoes, and cheese.",
+   "prices": [
+    {
+     "amount": "16.99",
+     "variant": null
+    }
+   ],
+   "block": "b0082"
+  },
+  {
+   "section": "Plates",
+   "name": "Combo Plate",
+   "description": "Two enchiladas of the same kind and one crispy beef taco. Served with a dollop of guacamole.",
+   "prices": [
+    {
+     "amount": "17.99",
+     "variant": null
+    }
+   ],
+   "block": "b0085"
+  },
+  {
+   "section": "Plates",
+   "name": "Tostada Plate",
+   "description": "Two crispy corn tostadas of the same kind. Choice of: beef picadillo, shredded chicken, or avocado. Topped with refried beans, lettuce, tomatoes and cheese.",
+   "prices": [
+    {
+     "amount": "13.99",
+     "variant": null
+    }
+   ],
+   "block": "b0087"
+  },
+  {
+   "section": "Plates",
+   "name": "Chicken Flautas Plate",
+   "description": "Three chicken flautas served on a bed of lettuce with sour cream and cheese.",
+   "prices": [
+    {
+     "amount": "13.99",
+     "variant": null
+    }
+   ],
+   "block": "b0090"
+  },
+  {
+   "section": "Plates",
+   "name": "Pollo a la Monterrey*",
+   "description": "Chicken breast grilled with onions and topped with salsa verde and Monterey Jack cheese.",
+   "prices": [
+    {
+     "amount": "16.99",
+     "variant": null
+    }
+   ],
+   "block": "b0094"
+  },
+  {
+   "section": "Plates",
+   "name": "Bistec a la Mexicana*",
+   "description": "Beef steak grilled with serrano peppers, tomatoes, and onions and your choice of flour or corn tortillas.",
+   "prices": [
+    {
+     "amount": "16.99",
+     "variant": null
+    }
+   ],
+   "block": "b0096"
+  },
+  {
+   "section": "Plates",
+   "name": "Tacos Campesinos*",
+   "description": "Three beef fajita tacos sautéed with onions and served on corn tortillas.",
+   "prices": [
+    {
+     "amount": "16.99",
+     "variant": null
+    }
+   ],
+   "block": "b0098"
+  },
+  {
+   "section": "Plates",
+   "name": "Tacos al Pastor*",
+   "description": "Three beef tacos on corn tortillas. Beef is marinated with Achiote chile then grilled to perfection with pineapple and onions.",
+   "prices": [
+    {
+     "amount": "16.99",
+     "variant": null
+    }
+   ],
+   "block": "b0100"
+  },
+  {
+   "section": "Plates",
+   "name": "Fish Tacos*",
+   "description": "Three grilled tilapia fish fillets served on corn tortilla with special sauce and cilantro.",
+   "prices": [
+    {
+     "amount": "16.99",
+     "variant": null
+    }
+   ],
+   "block": "b0102"
+  },
+  {
+   "section": "Soups y más",
+   "name": "Chicken Tortilla Soup",
+   "description": "Soup with light shredded chicken, carrots, and celery. Topped with Monterey Jack cheese, tortilla chips, and avocado.",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0105"
+  },
+  {
+   "section": "Soups y más",
+   "name": "Chicken Tortilla Soup and Taco Combo",
+   "description": "Bowl of chicken tortilla soup and one taco of your choice: beef picadillo or shredded chicken.",
+   "prices": [
+    {
+     "amount": "13.99",
+     "variant": null
+    }
+   ],
+   "block": "b0107"
+  },
+  {
+   "section": "Soups y más",
+   "name": "Bowl of Fideo",
+   "description": "Vermicelli topped with picadillo.",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0109"
+  },
+  {
+   "section": "Soups y más",
+   "name": "Taco Salad",
+   "description": "Tostado chips topped with black beans, Monterey Jack cheese, lettuce, and tomatoes. Your choice of: beef picadillo, shredded chicken or avocado and ranch or balsamic vinaigrette dressing.",
+   "prices": [
+    {
+     "amount": "12.50",
+     "variant": null
+    }
+   ],
+   "block": "b0111"
+  },
+  {
+   "section": "Soups y más",
+   "name": "Torta",
+   "description": "Choice of beef fajitas, chicken fajitas, or al pastor served on bolillo bread and topped with refried beans, avocado, lettuce, tomatoes, jalapeños, and sour cream. Served with a side of fideo.",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0113"
+  },
+  {
+   "section": "Soups y más",
+   "name": "Stuffed Burrito",
+   "description": "Large home-made flour tortilla stuffed with your choice of: beef picadillo, shredded chicken, or avocado and filled with refried beans, rice, lettuce, tomatoes and cheddar cheese.",
+   "prices": [
+    {
+     "amount": "11.99",
+     "variant": null
+    }
+   ],
+   "block": "b0115"
+  },
+  {
+   "section": "Daily Lunch Specials 11AM to 2PM - 11.99",
+   "name": "Monday - Chicken Flautas",
+   "description": null,
+   "prices": [
+    {
+     "amount": "11.99",
+     "variant": "11AM to 2PM"
+    },
+    {
+     "amount": "13.99",
+     "variant": "After 2PM"
+    }
+   ],
+   "block": "b0122"
+  },
+  {
+   "section": "Daily Lunch Specials 11AM to 2PM - 11.99",
+   "name": "Tuesday - Carne Guisada Plate",
+   "description": "(choice of corn or flour tortilla)",
+   "prices": [
+    {
+     "amount": "11.99",
+     "variant": "11AM to 2PM"
+    },
+    {
+     "amount": "13.99",
+     "variant": "After 2PM"
+    }
+   ],
+   "block": "b0123"
+  },
+  {
+   "section": "Daily Lunch Specials 11AM to 2PM - 11.99",
+   "name": "Wednesday - Chicken Mole Plate",
+   "description": "(choice of corn or flour tortilla)",
+   "prices": [
+    {
+     "amount": "11.99",
+     "variant": "11AM to 2PM"
+    },
+    {
+     "amount": "13.99",
+     "variant": "After 2PM"
+    }
+   ],
+   "block": "b0125"
+  },
+  {
+   "section": "Daily Lunch Specials 11AM to 2PM - 11.99",
+   "name": "Thursday - Chicken Tortilla Soup & Taco Combo",
+   "description": "(sides not included)",
+   "prices": [
+    {
+     "amount": "11.99",
+     "variant": "11AM to 2PM"
+    },
+    {
+     "amount": "13.99",
+     "variant": "After 2PM"
+    }
+   ],
+   "block": "b0127"
+  },
+  {
+   "section": "Daily Lunch Specials 11AM to 2PM - 11.99",
+   "name": "Friday - Chile Relleno Plate",
+   "description": "Choice of: beef picadillo, chicken in salsa roja, or queso fresco in verde sauce and corn or flour tortilla.",
+   "prices": [
+    {
+     "amount": "11.99",
+     "variant": "11AM to 2PM"
+    },
+    {
+     "amount": "13.99",
+     "variant": "After 2PM"
+    }
+   ],
+   "block": "b0129"
+  },
+  {
+   "section": "Beverages",
+   "name": "Coffee",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0132"
+  },
+  {
+   "section": "Beverages",
+   "name": "Apple Juice or Orange Juice",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0133"
+  },
+  {
+   "section": "Beverages",
+   "name": "Bottle of water",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0134"
+  },
+  {
+   "section": "Beverages",
+   "name": "Sodas",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0135"
+  },
+  {
+   "section": "Beverages",
+   "name": "Tea",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0136"
+  },
+  {
+   "section": "Beverages",
+   "name": "Fresh Limeade or Agua de Jamaica",
+   "description": null,
+   "prices": [
+    {
+     "amount": "4.00",
+     "variant": null
+    }
+   ],
+   "block": "b0137"
+  },
+  {
+   "section": "Beverages",
+   "name": "Jarritos Mexican bottled sodas",
+   "description": null,
+   "prices": [
+    {
+     "amount": "4.00",
+     "variant": null
+    }
+   ],
+   "block": "b0138"
+  }
+ ],
+ "note": "\"Name 8.00\" divs (no $), description <p>, many \"Add ... 2.00\" modifiers; burritos repeat the name in a block above; weekday lunch specials priced only in the section heading (two time-of-day prices)"
+}

@@ -119,10 +119,18 @@ def _amounts(text: str, *, labels: bool) -> list[dict[str, str | None]]:
         0
     ]
     out: list[dict[str, str | None]] = []
+    if labels and not any(t.kind == "money" for t in toks):
+        # a price block with bare numbers ("10", "11 / 44", "11hh/12"): every number
+        return [
+            {"amount": f"{float(m):.2f}", "variant": None}
+            for m in re.findall(r"(?<![\w.])(\d{1,3}(?:\.\d{2})?)(?!\d)", text)
+        ]
     for t in toks:
         if t.kind != "money":
             continue
         variant = price_label(text, toks, t) if labels else ""
+        if len(variant.split()) > 3:  # noqa: PLR2004 - a description, not a size label
+            variant = ""
         out.append({"amount": f"{t.amount:.2f}", "variant": variant or None})
     return out
 

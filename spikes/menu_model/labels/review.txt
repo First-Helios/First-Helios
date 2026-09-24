@@ -306,7 +306,6 @@ page 2b49a13d1bb6 not_menu home | a /pdf/...menu URL that serves the homepage HT
 page 640ccbcec82c not_menu about | about (serves homepage)
 page d72ac126103b not_menu home | homepage
 page 5dfc645a3a45 not_menu hub | /menu landing linking sub-menus
-page 71fdf61513f9 menu html_list | brunch menu
 page 35fd5a636a15 not_menu home | homepage
 page 14fb3f6b00e4 menu html_cards | unpriced menu
 page 9ccf96a12e1d not_menu location | locations
@@ -351,3 +350,91 @@ page 3bf5847db119 not_menu home | homepage
 page 11d03cffdeef not_menu about | about
 page 122734ef3906 not_menu other | hijacked domain (gambling spam)
 page 5a5e396ae860 not_menu other | hijacked domain (gambling spam)
+
+# ---- held-out-2 for validator v2 (frozen at 9e6bc87) from here on ----
+
+page 40ceefcbb6e6 menu html_inline | "Name 8.00" divs (no $), description <p>, many "Add ... 2.00" modifiers; burritos repeat the name in a block above; weekday lunch specials priced only in the section heading (two time-of-day prices)
+region b0014 b0138
+recipe h2=section h5=noise h6=noise price=item other=description
+fix b0017=noise b0020=noise b0023=noise b0026=noise b0029=modifier b0030=noise b0033=modifier b0040..b0041=modifier b0050=modifier
+fix b0066..b0068=modifier b0075=modifier b0078=modifier b0081=modifier b0084=modifier b0089=modifier b0092..b0093=modifier b0118=noise
+fix b0122=item b0123=item b0125=item b0127=item b0129=item
+prices b0122=11AM to 2PM:11.99,After 2PM:13.99
+prices b0123=11AM to 2PM:11.99,After 2PM:13.99
+prices b0125=11AM to 2PM:11.99,After 2PM:13.99
+prices b0127=11AM to 2PM:11.99,After 2PM:13.99
+prices b0129=11AM to 2PM:11.99,After 2PM:13.99
+name b0122=Monday - Chicken Flautas
+name b0123=Tuesday - Carne Guisada Plate
+name b0125=Wednesday - Chicken Mole Plate
+name b0127=Thursday - Chicken Tortilla Soup & Taco Combo
+name b0129=Friday - Chile Relleno Plate
+
+page 5c3f3d78246a menu html_inline | church cafe drink list: "Latte $3/$4" (two unnamed sizes), ALL-CAPS div sections, flavor lines, "$.50" extras; same name in two sections (Mocha)
+region b0085 b0127
+recipe price=item other=section
+fix b0087=description b0093=modifier b0100=modifier b0102=modifier b0104=modifier b0112=modifier b0117=modifier b0119=modifier b0123..b0127=modifier
+
+page 04cea9ccc03e menu html_list | <h4> names and <h4> sub-sections, "$14" / "$14/$54" (glass/bottle, unlabeled) price <p>, description <p>
+region b0018 b0160
+recipe h2=section h3=noise h4=item price=price other=description
+fix b0075=section b0085=section b0095=section b0103=section b0113=section b0129=section b0136=section b0149=section
+
+page 71fdf61513f9 menu html_list | brunch menu: <h4> name, "$16" <p>, description <p>
+region b0018 b0049
+recipe h2=section h4=item price=price other=description
+
+page 0824dfcdd900 menu html_list | happy-hour menu: <h4> name, "$10 / $17" (two unlabeled portions) or "$8" <p>, description <p>
+region b0018 b0108
+recipe h2=section h3=noise h4=item price=price other=description
+
+page 4905f16602b5 menu html_list | name <p> then "description / 17.95" <p>; dietary marks glued to names by the segmenter ("Classicv", "Snapper Crudo*gf") - gold uses the clean printed name
+region b0028 b0117
+recipe h2=section h3=section price=price other=item
+fix b0029=noise b0031=noise
+name b0032=FALAFEL SANDWICH
+name b0034=BRAISED SHORT RIB SANDWICH
+name b0036=PRIME STEAK SANDWICH
+name b0038=AHI TUNA POKE BOWL
+name b0041=Classic
+name b0043=Spicy
+name b0045=Sweet Corn
+name b0047=Pumpkin
+name b0049=Lamb Ragu
+name b0052=Charred Eggplant
+name b0054=Spicy Whipped Feta
+name b0056=Roasted Walnut
+name b0058=Moroccan Onion Dip
+name b0061=Snapper Crudo
+name b0063=Octopus Carpaccio
+name b0065=Tuna & Watermelon
+name b0067=Hamachi
+name b0070=Brussels Sprouts & Honey Crisp Apple
+name b0072=Lemon Caesar
+name b0074=California Chopped
+name b0076=Greek Village
+name b0079=Brussels Sprouts
+name b0081=Sweet Potato Latkes
+name b0083=Blistered Green Beans
+name b0085=Roasted Autumn Squash
+name b0088=Crispy Potatoes
+name b0090=Green Falafel
+name b0092=Mushroom "Escargot"
+name b0094=Hot Honey Halloumi
+name b0097=Grilled Cauliflower
+name b0099=Grilled Chicken
+name b0101=Spicy Brisket Kefta
+name b0103=Faroe Islands Salmon
+name b0105=Grilled Oishii Shrimp
+name b0108=Alaskan Halibut
+name b0110=Grilled Branzino
+name b0112=Spiced Chicken Thigh
+name b0114=Slow-Braised Short Rib
+name b0116=Grilled Prime Skirt Steak
+
+page 07a94b267993 menu html_list | location page embedding the full menu (S4 picked a Toast signup page instead): name div, description div(s), bare-number price div ("6.99", "10", "11 / 44" glass/bottle, "11hh/12" happy hour/regular); unpriced beers; whiskey teaser below is noise
+region b0067 b0516
+fix b0067..b0516=noise b0068=section b0069=item b0070=description b0071=price b0072=item b0073=description b0074=price b0075=item b0076=description b0077=price b0078=item b0079=description b0080=price b0081=item b0082=description b0083=price b0084=item b0085=description b0086=price b0087=item b0088=description b0090=price b0091=item b0092=description b0093=price b0094=item b0095=description b0096=price b0097=item b0098=description b0099=price b0100=item b0101=price b0102=price b0104=section b0105=item b0106=description b0107=price b0108=item b0109=description b0110=price b0111=item b0112=description b0113=price b0114=item b0115=description b0116=price b0117=item b0118=description b0119=price b0120=item b0121=description b0122=price b0123=item b0124=description b0125=price b0126=item b0127=description b0128=price b0129=item b0130=description b0131=price b0132=item b0133=description b0134=modifier b0135=modifier b0136=price b0137=price b0139=section b0140=item b0141=description b0142=price b0143=item b0144=description b0145=price b0146=item b0147=description b0148=price b0149=item b0150=description b0151=price b0152=item b0153=description b0154=price b0155=item b0156=description b0157=price b0158=item b0159=description b0160=price b0161=item b0162=description b0163=price b0164=item b0165=description b0166=price b0167=item b0168=description b0169=price b0170=item b0171=description b0172=price b0173=item b0174=description b0175=price b0177=section b0178=item b0179=description b0180=description b0181=price b0182=item b0183=description b0184=description b0185=price b0186=item b0187=description b0188=description b0189=price b0191=section b0192=item b0193=description b0194=price b0195=item b0196=description b0197=price b0198=item b0199=description b0200=price b0201=item b0202=description b0203=price b0204=item b0205=description b0206=price b0207=item b0208=description b0209=price b0211=section b0212=item b0213=description b0214=price b0215=item b0216=description b0217=price b0218=item b0219=description b0220=price b0221=item b0222=description b0223=price b0224=item b0225=description b0226=price b0228=section b0230=item b0231=description b0232=description b0233=description b0234=price b0235=item b0236=description b0237=description b0238=description b0239=price b0241=section b0243=item b0244=description b0245=description b0246=description b0247=price b0248=item b0249=description b0250=description b0251=description b0252=price b0253=item b0254=description b0255=description b0256=price b0257=item b0258=description b0259=description b0260=price b0261=item b0262=description b0263=price b0264=item b0265=description b0266=description b0267=description b0268=price b0269=item b0270=description b0271=description b0272=description b0273=price b0274=item b0275=description b0276=description b0277=price b0279=section b0280=item b0281=description b0282=price b0283=item b0284=price b0285=item b0286=price b0287=item b0288=description b0289=price b0290=item b0291=description b0292=price b0293=item b0294=description b0295=price b0296=item b0297=description b0298=price b0299=item b0300=description b0301=price b0302=item b0303=description b0304=price b0305=item b0306=description b0307=price b0308=item b0309=description b0310=modifier b0311=price b0312=item b0313=description b0314=price b0315=item b0316=description b0317=price b0318=item b0319=description b0320=price b0321=item b0322=description b0323=price b0324=item b0325=description b0326=price b0327=item b0328=description b0329=price b0331=section b0332=item b0333=description b0334=price b0335=item b0336=description b0337=price b0338=item b0339=description b0340=price b0341=item b0342=description b0343=price b0344=item b0345=description b0346=price b0347=item b0348=description b0349=price b0350=item b0351=description b0352=price b0353=item b0354=description b0355=price b0356=item b0357=description b0358=price b0359=item b0360=description b0361=price b0363=section b0364=item b0365=description b0366=price b0367=item b0368=description b0369=price b0370=item b0371=description b0372=price b0373=item b0374=description b0375=price b0376=item b0377=description b0378=price b0379=item b0380=description b0381=price b0382=item b0383=description b0384=price b0386=section b0387=item b0388=description b0389=description b0390=price b0391=item b0392=description b0393=description b0394=price b0395=item b0396=description b0397=description b0398=price b0399=item b0400=description b0401=description b0402=price b0403=item b0404=description b0405=description b0406=price b0407=item b0408=description b0409=description b0410=price b0411=item b0412=description b0413=description b0414=price b0415=item b0416=description b0417=description b0418=price b0419=item b0420=description b0421=description b0422=price b0423=item b0424=description b0425=description b0426=price b0427=item b0428=description b0429=description b0430=price b0431=item b0432=description b0433=description b0434=price b0435=item b0436=description b0437=description b0438=price b0439=item b0440=description b0441=description b0442=price b0443=item b0444=description b0445=description b0446=price b0447=item b0448=description b0449=description b0450=price b0451=item b0452=description b0453=description b0454=price b0455=item b0456=description b0457=description b0458=price b0459=item b0460=description b0461=description b0462=price b0463=item b0464=description b0465=description b0466=price b0467=item b0468=description b0469=description b0470=price b0472=section b0473=item b0474=description b0475=item b0476=description b0477=item b0478=description b0479=item b0480=description b0481=item b0482=description b0483=item b0484=description b0485=item b0486=item b0487=item b0488=item b0489=item b0490=item b0491=item b0492=item b0493=item b0494=item b0495=item b0496=item b0497=item b0498=item b0499=item b0500=description b0502=section b0503=item b0504=description b0505=price b0506=item b0507=description b0508=price b0509=item b0510=description b0511=price b0512=item b0513=description b0514=price b0515=item b0516=price
+prices b0264=happy hour:11,-:12
+prices b0269=happy hour:13,-:14
+prices b0274=happy hour:7,-:8

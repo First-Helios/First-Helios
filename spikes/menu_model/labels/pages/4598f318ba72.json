@@ -467,7 +467,7 @@
     },
     {
      "amount": "1.00",
-     "variant": "apple, almondmilk, banana, blueberry, cherry, peanut butter, spirulina, pick your protein: pea, hemp, whey (+"
+     "variant": null
     }
    ],
    "block": "b0090"
@@ -591,7 +591,7 @@
     },
     {
      "amount": "1.00",
-     "variant": "almondmilk, banana, cacao, date, pick your protein: pea, hemp, whey (+"
+     "variant": null
     }
    ],
    "block": "b0142"
@@ -655,7 +655,7 @@
     },
     {
      "amount": "1.00",
-     "variant": "coconut, almondmilk, banana, blueberry, cherry, almond, cacao, coconut oil, vanilla, cinnamon, pick your protein: pea, hemp, whey (+"
+     "variant": null
     }
    ],
    "block": "b0169"
@@ -1713,7 +1713,7 @@
     },
     {
      "amount": "5.95",
-     "variant": "(M) Honey Beary, Wundershowzen or Home Run + any *Toasted Wrap | 21 – 38g protein. *"
+     "variant": null
     }
    ],
    "block": "b0735"

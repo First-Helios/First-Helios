@@ -1,0 +1,331 @@
+{
+ "page_id": "0824dfcdd900",
+ "url": "https://www.luckyrobotatx.com/happy-hour/",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0018",
+   "b0108"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0018": "section",
+  "b0021": "description",
+  "b0022": "item",
+  "b0023": "price",
+  "b0024": "description",
+  "b0025": "item",
+  "b0026": "price",
+  "b0027": "description",
+  "b0028": "item",
+  "b0029": "price",
+  "b0030": "description",
+  "b0031": "item",
+  "b0032": "price",
+  "b0033": "description",
+  "b0034": "description",
+  "b0035": "item",
+  "b0036": "price",
+  "b0037": "description",
+  "b0038": "item",
+  "b0039": "price",
+  "b0040": "description",
+  "b0041": "description",
+  "b0042": "item",
+  "b0043": "price",
+  "b0044": "description",
+  "b0045": "item",
+  "b0046": "price",
+  "b0047": "description",
+  "b0048": "description",
+  "b0049": "item",
+  "b0050": "price",
+  "b0051": "description",
+  "b0052": "item",
+  "b0053": "price",
+  "b0054": "description",
+  "b0055": "item",
+  "b0056": "price",
+  "b0057": "description",
+  "b0058": "item",
+  "b0059": "price",
+  "b0060": "description",
+  "b0061": "item",
+  "b0062": "price",
+  "b0063": "description",
+  "b0064": "item",
+  "b0065": "price",
+  "b0066": "description",
+  "b0067": "description",
+  "b0068": "item",
+  "b0069": "price",
+  "b0070": "description",
+  "b0071": "description",
+  "b0072": "item",
+  "b0073": "price",
+  "b0074": "description",
+  "b0075": "item",
+  "b0076": "price",
+  "b0077": "description",
+  "b0078": "item",
+  "b0079": "price",
+  "b0080": "description",
+  "b0081": "description",
+  "b0082": "item",
+  "b0083": "price",
+  "b0084": "item",
+  "b0085": "price",
+  "b0086": "item",
+  "b0087": "price",
+  "b0088": "description",
+  "b0089": "item",
+  "b0090": "price",
+  "b0091": "item",
+  "b0092": "price",
+  "b0093": "item",
+  "b0094": "price",
+  "b0095": "item",
+  "b0096": "price",
+  "b0097": "item",
+  "b0098": "price",
+  "b0099": "description",
+  "b0100": "item",
+  "b0101": "price",
+  "b0102": "item",
+  "b0103": "price",
+  "b0104": "item",
+  "b0105": "price",
+  "b0106": "description",
+  "b0107": "item",
+  "b0108": "price"
+ },
+ "items": [
+  {
+   "section": "MARKET FISH SELECTION*",
+   "name": "chef's choice",
+   "description": null,
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    },
+    {
+     "amount": "15.00",
+     "variant": "/"
+    }
+   ],
+   "block": "b0024"
+  },
+  {
+   "section": "MAGURO*",
+   "name": "bigeye tuna",
+   "description": null,
+   "prices": [
+    {
+     "amount": "7.00",
+     "variant": null
+    },
+    {
+     "amount": "14.00",
+     "variant": "/"
+    }
+   ],
+   "block": "b0027"
+  },
+  {
+   "section": "SAKE*",
+   "name": "atlantic salmon",
+   "description": null,
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    },
+    {
+     "amount": "15.00",
+     "variant": "/"
+    }
+   ],
+   "block": "b0030"
+  },
+  {
+   "section": "MADAI*",
+   "name": "japanese sea bream",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0033"
+  },
+  {
+   "section": "HIRAMASA SERRANO*",
+   "name": "yellowtail, asian pear, coconut ponzu",
+   "description": "tasmanian ocean trout, passion fruit zu, coconut taro puree, toasted capers",
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    },
+    {
+     "amount": "9.00",
+     "variant": null
+    },
+    {
+     "amount": "8.00",
+     "variant": null
+    },
+    {
+     "amount": "6.00",
+     "variant": null
+    }
+   ],
+   "block": "b0037"
+  },
+  {
+   "section": "EDAMAME (v)",
+   "name": "steamed soybeans, sea salt",
+   "description": null,
+   "prices": [
+    {
+     "amount": "9.00",
+     "variant": null
+    }
+   ],
+   "block": "b0051"
+  },
+  {
+   "section": "WAGYU HOT ROCK*",
+   "name": "texas wagyu, ponzu, negi",
+   "description": null,
+   "prices": [
+    {
+     "amount": "7.00",
+     "variant": null
+    }
+   ],
+   "block": "b0054"
+  },
+  {
+   "section": "SPINACH & SHIITAKE DUMPLINGS (v)",
+   "name": "cashew cheese, red curry oil, cilantro",
+   "description": null,
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    }
+   ],
+   "block": "b0057"
+  },
+  {
+   "section": "BRUSSELS SPROUTS (v)",
+   "name": "crisped brussels sprouts, lemongrass soy",
+   "description": null,
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0060"
+  },
+  {
+   "section": "CHICKEN KARAAGE",
+   "name": "shiso, red onion, ponzu verde",
+   "description": "grilled dry-aged swordfish, aji panca butter, leek confit",
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    },
+    {
+     "amount": "8.00",
+     "variant": null
+    },
+    {
+     "amount": "9.00",
+     "variant": null
+    },
+    {
+     "amount": "9.00",
+     "variant": null
+    }
+   ],
+   "block": "b0063"
+  },
+  {
+   "section": "CUCUMBER REFRESHER",
+   "name": "sake, cucumber, mint, lime",
+   "description": null,
+   "prices": [
+    {
+     "amount": "9.00",
+     "variant": null
+    }
+   ],
+   "block": "b0077"
+  },
+  {
+   "section": "CHERRY DAIQUIRI",
+   "name": "sake, cherry juice, lime",
+   "description": null,
+   "prices": [
+    {
+     "amount": "30.00",
+     "variant": null
+    },
+    {
+     "amount": "30.00",
+     "variant": null
+    },
+    {
+     "amount": "30.00",
+     "variant": null
+    },
+    {
+     "amount": "25.00",
+     "variant": null
+    },
+    {
+     "amount": "33.00",
+     "variant": null
+    },
+    {
+     "amount": "23.00",
+     "variant": null
+    },
+    {
+     "amount": "24.00",
+     "variant": null
+    },
+    {
+     "amount": "18.00",
+     "variant": null
+    },
+    {
+     "amount": "8.00",
+     "variant": null
+    },
+    {
+     "amount": "10.00",
+     "variant": null
+    },
+    {
+     "amount": "9.00",
+     "variant": null
+    },
+    {
+     "amount": "6.00",
+     "variant": null
+    }
+   ],
+   "block": "b0080"
+  }
+ ],
+ "note": "happy-hour menu: <h4> name, \"$10 / $17\" (two unlabeled portions) or \"$8\" <p>, description <p>"
+}
