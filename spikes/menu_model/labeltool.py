@@ -75,7 +75,7 @@ def cmd_show(page_id: str, lo: str | None, hi: str | None) -> None:
         if lo and hi and not (lo <= b.id <= hi):
             continue
         mark = ("H" if b.heading else "") + ("c" if b.in_chrome else "")
-        print(f"{b.id} {b.tag:6} {mark:2} {b.text[:110]}")
+        print(f"{b.id} {b.tag:6} {mark:2} {b.text[:400]}")
 
 
 def _draft_label(b: Block) -> str:
@@ -131,6 +131,13 @@ def _derive_items(blocks: list[Block], labels: dict[str, str]) -> list[dict[str,
 
 
 def cmd_draft(page_id: str, bounds: list[str]) -> None:
+    labels = _draft(page_id, bounds)
+    for b in blocks_of(page_id):
+        if b.id in labels:
+            print(f"{b.id} {labels[b.id][:4]:4} {b.text[:100]}")
+
+
+def _draft(page_id: str, bounds: list[str]) -> dict[str, str]:
     regions = list(zip(bounds[::2], bounds[1::2], strict=True))
     blocks = blocks_of(page_id)
     labels = {b.id: _draft_label(b) for b in blocks if any(lo <= b.id <= hi for lo, hi in regions)}
@@ -148,9 +155,7 @@ def cmd_draft(page_id: str, bounds: list[str]) -> None:
     path = LABELS / "pages" / f"{page_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    for b in blocks:
-        if b.id in labels:
-            print(f"{b.id} {labels[b.id][:4]:4} {b.text[:100]}")
+    return labels
 
 
 def _load_label(page_id: str) -> tuple[Path, dict[str, object]]:
@@ -164,7 +169,7 @@ def _save_label(path: Path, label: dict[str, object]) -> None:
 
 
 def cmd_fix(page_id: str, edits: list[str]) -> None:
-    """Apply reviewed corrections: ``b0012=noise`` or a range ``b0012..b0020=noise``.
+    """Apply reviewed corrections: ``b0012=noise``, ``b0012..b0020=noise``, ``b0012..b0020%2=item``.
 
     Gold items are re-derived from the corrected block labels; item-level edits
     (variants, split names) are applied afterwards with ``items`` patches in the JSON.
@@ -175,13 +180,14 @@ def cmd_fix(page_id: str, edits: list[str]) -> None:
     assert isinstance(labels, dict)
     for edit in edits:
         target, value = edit.split("=", 1)
+        target, _, step = target.partition("%")  # b0054..b0098%2 = every 2nd block
         lo, _, hi = target.partition("..")
-        for b in blocks:
-            if lo <= b.id <= (hi or lo):
-                if value == "noise":
-                    labels.pop(b.id, None)
-                else:
-                    labels[b.id] = value
+        in_range = [b for b in blocks if lo <= b.id <= (hi or lo)]
+        for b in in_range[:: int(step or 1)]:
+            if value == "noise":
+                labels.pop(b.id, None)
+            else:
+                labels[b.id] = value
     items = _derive_items(blocks, labels)
     label |= {"items": items, "reviewed": True}
     _save_label(path, label)
@@ -201,6 +207,72 @@ def cmd_setpage(page_id: str, page_label: str, fmt: str, note: str) -> None:
     _save_label(path, label)
 
 
+def _override_items(page_id: str, names: dict[str, str], prices: dict[str, str]) -> None:
+    """Item-level review edits keyed by the item's name block.
+
+    ``name b0015=Mexican Gelatine`` fixes a name that shares its block with a
+    description; ``prices b0050=SM:6.25,LG:9.75`` replaces the price list
+    (``variant:amount``, ``-`` for no variant; empty = no price on the page).
+    """
+    path, label = _load_label(page_id)
+    items = label["items"]
+    assert isinstance(items, list)
+    for it in items:
+        if it["block"] in names:
+            it["name"] = names[it["block"]].strip()
+        if it["block"] in prices:
+            spec = prices[it["block"]].strip()
+            it["prices"] = [
+                {"amount": f"{float(a):.2f}", "variant": None if v == "-" else v}
+                for v, a in (p.rsplit(":", 1) for p in spec.split(",") if p)
+            ]
+    _save_label(path, label)
+
+
+def cmd_apply(review: Path) -> None:
+    """Rebuild every label from the review file (idempotent; the auditable record).
+
+    ::
+
+        page <page_id> <menu|not_menu> <format> | free-text note
+        region b0054 b0099 [b0120 b0150 ...]
+        fix b0054..b0098%2=item b0100=section ...
+        name b0015=Mexican Gelatine
+        prices b0050=SM:6.25,LG:9.75
+    """
+    current: list[str] = []
+
+    def flush() -> None:
+        if not current:
+            return
+        head, *rest = current
+        meta, _, note = head.partition("|")
+        _, pid, page_label, fmt = meta.split()
+        regions = [ln.split()[1:] for ln in rest if ln.startswith("region ")]
+        fixes = [e for ln in rest if ln.startswith("fix ") for e in ln.split()[1:]]
+        names = dict(ln[5:].split("=", 1) for ln in rest if ln.startswith("name "))
+        prices = dict(ln[7:].split("=", 1) for ln in rest if ln.startswith("prices "))
+        path = LABELS / "pages" / f"{pid}.json"
+        path.unlink(missing_ok=True)
+        if regions:
+            _draft(pid, [b for r in regions for b in r])
+        if fixes:
+            cmd_fix(pid, fixes)
+        if names or prices:
+            _override_items(pid, names, prices)
+        cmd_setpage(pid, page_label, fmt, note.strip())
+        current.clear()
+
+    for raw in review.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("page "):
+            flush()
+        current.append(line)
+    flush()
+
+
 def main() -> None:
     cmd, *args = sys.argv[1:]
     if cmd == "pages":
@@ -209,6 +281,8 @@ def main() -> None:
         cmd_show(args[0], *(args[1:3] if len(args) >= 3 else (None, None)))  # noqa: PLR2004
     elif cmd == "draft":
         cmd_draft(args[0], args[1:])
+    elif cmd == "apply":
+        cmd_apply(LABELS / "review.txt")
     elif cmd == "fix":
         cmd_fix(args[0], args[1:])
     elif cmd == "setpage":

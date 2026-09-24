@@ -1,0 +1,45 @@
+# Step B review record: one entry per labeled page (see labeltool.cmd_apply).
+# Labels drafted by the spike session reading every in-region block; `fix` lines are
+# the reviewed corrections over the heuristic pre-label. Outside regions = noise.
+
+page f298109dce7a menu html_list | name/price div pairs; seasonal pick-up order menu; filter UI is noise
+region b0054 b0099
+fix b0054..b0098%2=item
+
+page dc96fa2f50f3 menu html_list | Wix: name/desc/price then an image-alt block repeating the name (noise)
+region b0007 b0045
+fix b0007=section b0020=section b0033=section
+fix b0008..b0019%4=item b0009..b0019%4=description b0010..b0019%4=price b0011..b0019%4=noise
+fix b0021..b0032%4=item b0022..b0032%4=description b0023..b0032%4=price b0024..b0032%4=noise
+fix b0034..b0045%4=item b0035..b0045%4=description b0036..b0045%4=price b0037..b0045%4=noise
+
+page 0580f923bc5e menu html_inline | Wix: "Name Description 9.99" in one <p>; SM/LG variant price lines; SUB SHRIMP variant; shared-price agua fresca flavors
+region b0013 b0059
+fix b0013..b0059=noise b0013=section b0017=section b0024=section b0028=section b0036=section b0049=section
+fix b0015..b0016=item b0019..b0023=item b0026..b0027=item b0029=item b0031=item b0033=item b0035=item
+fix b0037..b0043=item b0044..b0047=modifier b0050=item b0051=price b0052=item b0053=price b0054..b0058=item b0059=price
+name b0015=Mexican Gelatine
+name b0016=Tres Leches Cake
+name b0019=Enchilada Plate
+name b0020=Crispy Taco Plate
+name b0021=Kid's Quesadilla
+name b0022=Grilled Cheese Sandwich
+name b0023=Chicken Tenders
+name b0026=Hamburger Combo
+name b0027=Double Meat Double Cheese Burger Combo
+name b0029=Veggie Tacos
+name b0031=Spinach Enchiladas
+name b0033=Veggie Quesadilla
+name b0035=Veggie Stuffed Avocado
+name b0043=Agua Frescas
+name b0050=Queso
+name b0052=Queso Compuesto
+name b0054=Cheese Quesadilla
+name b0055=Happy Nachos
+name b0056=Beans and Cheese Nachos
+name b0057=Fajita Nachos
+name b0058=Fajita Quesadilla
+prices b0050=SM:6.25,LG:9.75
+prices b0052=Small:7.99,Large:9.99
+prices b0057=-:11.99,SUB SHRIMP:12.99
+prices b0058=-:11.99,SUB SHRIMP:12.99

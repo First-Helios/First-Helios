@@ -22,7 +22,8 @@ Checks (tracker §[5]):
    preceding section heading (a shared "all tacos $3" price).
 3. **Binding** — the price occurrence chosen is the nearest matching one in
    document order, and one occurrence is bound to one item only, unless it sits
-   in a heading/section block (a deliberate shared price).
+   in a heading/section block (a deliberate shared price). A row with a variant
+   ("SM", "Large") must have that label printed just before the price.
 4. **Sanity** — USD only; 0.10 ≤ amount ≤ 500; no duplicate (item, variant,
    price) rows; each accepted field records its evidence locator
    ``(block_id, start, end)``.
@@ -153,6 +154,19 @@ def _is_price_only(block: Block, toks: list[PriceToken]) -> bool:
     return bool(toks) and len(re.findall(r"[^\W\d_]", rest)) <= 12  # noqa: PLR2004 - "Small", "Lg"
 
 
+def _variant_before(
+    blocks: list[Block], prices: list[list[PriceToken]], tok: PriceToken, variant: str | None
+) -> bool:
+    """A variant label ("SM", "Large", "sub shrimp") must be printed just before its
+    price: between the previous price in that block (or the block start) and it.
+    """
+    if not variant:
+        return True
+    prev_end = max((t.end for t in prices[tok.block_index] if t.end <= tok.start), default=0)
+    context = set(norm_tokens(blocks[tok.block_index].text[prev_end : tok.start]))
+    return set(norm_tokens(variant)) <= context
+
+
 def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's check list
     blocks: list[Block], rows: list[Row], *, fuzzy: bool = False
 ) -> list[Verdict]:
@@ -183,6 +197,10 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
     for row, nb in zip(rows, name_block, strict=True):
         if nb is not None:
             starts_in.setdefault(nb, []).append(_name_span(blocks[nb], norm_tokens(row.item))[0])
+
+    variants_of: dict[str, set[str | None]] = {}
+    for row in rows:
+        variants_of.setdefault(" ".join(norm_tokens(row.item)), set()).add(row.variant)
 
     verdicts: list[Verdict] = []
     bound: dict[tuple[int, int], int] = {}  # price occurrence -> row index
@@ -239,7 +257,23 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
                 shared = [t for t in prices[j] if t.kind == "money"]
                 break
 
-        match = next((t for t in region if t.amount == amount), None)
+        other_variants = variants_of[key[0]] - {row.variant}
+        same = [
+            t
+            for t in region
+            if t.amount == amount
+            and not any(_variant_before(blocks, prices, t, o) for o in other_variants if o)
+        ]
+        if not same and any(t.amount == amount for t in region):
+            v.decision = "downgrade"
+            v.reasons.append("price_belongs_to_other_variant")
+            continue
+        match = next((t for t in same if _variant_before(blocks, prices, t, row.variant)), None)
+        if match is None and same and row.variant:
+            v.decision = "downgrade"
+            v.reasons.append("variant_not_grounded")
+            continue
+        match = match or (same[0] if same else None)
         is_shared = False
         if match is None:
             match = next((t for t in shared if t.amount == amount), None)
