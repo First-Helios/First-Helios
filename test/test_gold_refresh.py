@@ -232,7 +232,7 @@ def test_refresh_is_idempotent(
         refresh_current_menu(session, [request])
     with factory() as session:
         first = _business(session, request)
-    # Re-running clears the family and re-inserts; business columns are stable
+    # Re-running clears the scope and re-inserts; business columns are stable
     # and no duplicate row accumulates.
     with factory.begin() as session:
         assert refresh_current_menu(session, [request]) == 1

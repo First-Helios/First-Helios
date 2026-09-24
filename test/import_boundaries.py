@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 
 _CORE = "packages.helios_core"
 _REGISTRY = f"{_CORE}.db.model_registry"
+# ADR-0006 §5/§7: Gold reads vertical contracts plus the accepted read-side
+# selector and its enumeration, never vertical ORM or write commands.
+_GOLD_DOMAIN_READS = frozenset({"contracts", "selection", "enumeration"})
 
 
 def _within(name: str, package: str) -> bool:
@@ -63,6 +66,14 @@ def boundary_violations(source: str, path: Path) -> list[str]:
             for provider in ("identity", "provenance"):
                 if _within(target, f"{_CORE}.{provider}"):
                     forbidden |= not _within(target, f"{_CORE}.{provider}.contracts")
+        elif _within(owner, f"{_CORE}.gold"):
+            forbidden = any(_within(target, package) for package in ("apps", _REGISTRY))
+            for provider in ("identity", "provenance"):
+                if _within(target, f"{_CORE}.{provider}"):
+                    forbidden |= not _within(target, f"{_CORE}.{provider}.contracts")
+            if _within(target, f"{_CORE}.domains"):
+                parts = target.split(".")
+                forbidden |= len(parts) < 5 or parts[4] not in _GOLD_DOMAIN_READS
         elif any(_within(owner, f"{_CORE}.{part}") for part in ("db", "provenance", "identity")):
             forbidden = any(
                 _within(target, package)

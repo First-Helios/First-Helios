@@ -37,7 +37,7 @@ def refresh_full_catalog(
     """Rebuild the whole ``gold.current_menu`` catalog as of ``effective_instant``.
 
     Enumerates the current priced catalog, drops every existing projection row
-    (whole-table replacement, unlike the bounded per-family refresh), then
+    (whole-table replacement, unlike the bounded per-scope refresh), then
     records the deterministic ``select_price`` result for each enumerated
     request. Returns the number of rows written. Enumeration is a deterministic
     function of committed Bronze/Identity/Menu, so a rebuild over unchanged

@@ -190,6 +190,20 @@ def pending_change(
     return change
 
 
+def held_write_locks(session: Session) -> list[tuple[str, str]]:
+    """Locks this backend holds beyond plain reads (row, advisory, xid locks)."""
+    return [
+        (row.locktype, row.mode)
+        for row in session.execute(
+            text(
+                "SELECT locktype, mode FROM pg_locks WHERE pid = pg_backend_pid() "
+                "AND locktype <> 'virtualxid' AND mode <> 'AccessShareLock' "
+                "ORDER BY locktype, mode"
+            )
+        )
+    ]
+
+
 def raw_admit(session: Session, *requests: ResolvedScopeRequest) -> list[dict[str, object]]:
     return [
         dict(row)

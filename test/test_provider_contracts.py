@@ -25,6 +25,7 @@ from packages.helios_core.identity import (
 )
 from packages.helios_core.identity.contracts import (
     ResolvedScopeRequest,
+    current_resolved_scopes,
     require_resolved_scopes,
     subject_meets_readiness_policy,
 )
@@ -37,6 +38,7 @@ from packages.helios_core.provenance.contracts import (
 from test.provider_support import (
     ScopeFixture,
     decision,
+    held_write_locks,
     migrate,
     pending_change,
     raw_admit,
@@ -57,6 +59,8 @@ def scopes(disposable_database_engine: Engine) -> tuple[sessionmaker[Session], S
 
 
 def assert_rejected(session: Session, request: ResolvedScopeRequest) -> None:
+    # The read-only check must agree with the guard on every rejection.
+    assert current_resolved_scopes(session, (request,)) == (None,)
     with pytest.raises(SubjectNotEligibleError), session.begin_nested():
         require_resolved_scopes(session, (request,))
     with pytest.raises(DBAPIError) as error, session.begin_nested():
@@ -72,6 +76,7 @@ def test_batch_python_sql_parity_and_parent_expansion(
         requests = (fixture.establishment, fixture.organization, fixture.establishment)
         results = require_resolved_scopes(session, requests)
         assert [asdict(r) for r in results] == raw_admit(session, *requests)
+        assert current_resolved_scopes(session, requests) == results
         assert results[0].organization_subject_id == fixture.organization.subject_id
         assert results[0].place_subject_id == fixture.place_id
         assert results[0].operating_status == "closed"  # Closure is not retirement.
@@ -337,7 +342,10 @@ def test_remap_ordering_preserves_prior_admission(
         assert_rejected(session, new_request)
         session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     with factory() as session:
-        assert require_resolved_scopes(session, (new_request,))
+        assert current_resolved_scopes(session, (fixture.establishment,)) == (None,)
+        admitted = require_resolved_scopes(session, (new_request,))
+        assert admitted
+        assert current_resolved_scopes(session, (new_request,)) == admitted
 
 
 @pytest.mark.parametrize(
@@ -565,3 +573,30 @@ def test_split_same_transaction_ordering_with_forced_checks(
         assert_rejected(session, fixture.establishment)
         session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         assert_rejected(session, fixture.establishment)
+
+
+def test_read_only_scope_check_takes_no_locks(
+    scopes: tuple[sessionmaker[Session], ScopeFixture],
+) -> None:
+    """The selection-side check runs in a READ ONLY transaction, takes no
+    row/advisory locks, and reports each request independently in order.
+    """
+    factory, fixture = scopes
+    missing = replace(fixture.establishment, subject_id=9223372036854775807)
+    with factory() as session:
+        session.execute(text("SET TRANSACTION READ ONLY"))
+        results = current_resolved_scopes(
+            session, (missing, fixture.establishment, fixture.organization)
+        )
+        assert results[0] is None
+        assert results[1] is not None
+        assert results[1].subject_id == fixture.establishment.subject_id
+        assert results[1].operating_status == "closed"  # Closure is not retirement.
+        assert results[2] is not None
+        assert results[2].subject_id == fixture.organization.subject_id
+        assert held_write_locks(session) == []
+        assert current_resolved_scopes(session, ()) == ()
+    with factory() as session:
+        admitted = require_resolved_scopes(session, (fixture.establishment,))
+        assert held_write_locks(session) != []  # the writer guard does lock
+    assert (results[1],) == admitted

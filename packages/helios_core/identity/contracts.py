@@ -199,3 +199,70 @@ def require_resolved_scopes(
             raise SubjectNotEligibleError("scope batch failed current admission") from exc
         raise
     return tuple(ResolvedScope(**row) for row in rows)
+
+
+# The admission predicate of ``identity.require_resolved_scopes`` evaluated per
+# request as a plain read: the same STABLE helper functions, no lock step, no
+# RAISE. ``txid_current_if_assigned`` (unlike ``txid_current``) never assigns a
+# transaction ID, so the check also works in a read-only transaction.
+_CURRENT_SCOPES_SQL = text("""
+    SELECT r.ordinal, s.id AS subject_id, s.kind::text AS kind,
+           r.record_id AS source_record_id, r.event_id AS resolution_event_id,
+           e.organization_subject_id, e.place_subject_id,
+           e.valid_from, e.valid_to, e.operating_status::text AS operating_status
+    FROM unnest(CAST(:subjects AS bigint[]), CAST(:records AS bigint[]),
+                CAST(:events AS bigint[])) WITH ORDINALITY
+         AS r(subject_id, record_id, event_id, ordinal)
+    JOIN identity.subject s ON s.id = r.subject_id
+    LEFT JOIN identity.establishment e ON e.subject_id = s.id
+    WHERE s.kind IN ('organization', 'establishment')
+      AND s.readiness = 'eligible'
+      AND identity.subject_feature_ready(s.id)
+      AND NOT identity.has_pending_lineage(identity.scope_dependencies(ARRAY[s.id]))
+      AND EXISTS (
+          SELECT 1 FROM identity.current_resolution c
+          JOIN identity.resolution_event ev ON ev.id = c.last_event_id
+          WHERE c.subject_id = s.id
+            AND c.source_record_id = r.record_id AND c.state = 'resolved'
+            AND c.last_event_id = r.event_id
+            AND ev.source_record_id = r.record_id
+            AND ev.to_subject_id = r.subject_id
+            AND ev.created_transaction_id IS DISTINCT FROM txid_current_if_assigned()
+      )
+""")
+
+
+def current_resolved_scopes(
+    session: Session, requests: Collection[ResolvedScopeRequest]
+) -> tuple[ResolvedScope | None, ...]:
+    """Read-only per-request eligibility for selection, in caller request order.
+
+    Each entry is the ``ResolvedScope`` that :func:`require_resolved_scopes`
+    would admit for that request alone, or ``None`` when the exact
+    subject/record/event mapping is not current and eligible (remap, retirement,
+    pending lineage, or an ineligible parent). It takes no locks and never
+    raises on ineligibility, so a read path can neither abort its transaction
+    nor block Identity writers. It grants no write admission: a vertical write
+    must still go through :func:`require_resolved_scopes`.
+    """
+    batch = tuple(requests)
+    if not batch:
+        return ()
+    session.flush()
+    rows = (
+        session.execute(
+            _CURRENT_SCOPES_SQL,
+            {
+                "subjects": [r.subject_id for r in batch],
+                "records": [r.source_record_id for r in batch],
+                "events": [r.resolution_event_id for r in batch],
+            },
+        )
+        .mappings()
+        .all()
+    )
+    by_ordinal = {
+        row["ordinal"]: ResolvedScope(**{k: v for k, v in row.items() if k != "ordinal"})
+        for row in rows
+    }
+    return tuple(by_ordinal.get(ordinal) for ordinal in range(1, len(batch) + 1))

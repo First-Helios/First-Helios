@@ -45,8 +45,7 @@ from packages.helios_core.domains.menu.models import (
 from packages.helios_core.identity.contracts import (
     ResolvedScope,
     ResolvedScopeRequest,
-    SubjectNotEligibleError,
-    require_resolved_scopes,
+    current_resolved_scopes,
 )
 from packages.helios_core.provenance.contracts import get_record_version
 
@@ -389,13 +388,16 @@ def _stream_heads(
 
     The head is the greatest stream revision whose ``accepted_at <= K`` (all
     committed rows in current mode). Lifecycle is resolved here, before O/E/
-    context filtering, so a later filter never resurrects a predecessor.
+    context filtering, so a later filter never resurrects a predecessor. Rows
+    are read in ``(stream_revision, id)`` order so the result, including its
+    iteration order, never depends on the query plan.
     """
     stmt = select(MenuPage).where(
         MenuPage.source_record_id == source_record_id, MenuPage.root_key == root_key
     )
     if cutoff is not None:
         stmt = stmt.where(MenuPage.accepted_at <= cutoff)
+    stmt = stmt.order_by(MenuPage.stream_revision, MenuPage.id)
     heads: dict[str, MenuPage] = {}
     for page in session.scalars(stmt):
         current = heads.get(page.source_kind)
@@ -463,25 +465,20 @@ def _base_withdrawn(session: Session, base: MenuPage, cutoff: datetime | None) -
     return session.scalar(stmt.limit(1)) is not None
 
 
+def _scope_request(page: MenuPage) -> ResolvedScopeRequest:
+    return ResolvedScopeRequest(page.subject_id, page.source_record_id, page.resolution_event_id)
+
+
 def _live_scope(session: Session, page: MenuPage) -> ResolvedScope | None:
-    """Re-admit one page's accepted scope through the published Identity guard.
+    """Re-check one page's accepted scope through Identity's read-only check.
 
     Returns the current ``ResolvedScope`` when the same subject/record/event
     mapping is still live and eligible, else ``None``. Reasons (remap, retire,
     pending lineage) stay inside Identity; the vertical only learns pass/fail.
+    The check takes no locks and never aborts the caller's transaction, so a
+    read can neither block nor break an Identity or Menu writer.
     """
-    try:
-        scopes = require_resolved_scopes(
-            session,
-            [
-                ResolvedScopeRequest(
-                    page.subject_id, page.source_record_id, page.resolution_event_id
-                )
-            ],
-        )
-    except SubjectNotEligibleError:
-        return None
-    return scopes[0]
+    return current_resolved_scopes(session, [_scope_request(page)])[0]
 
 
 def _base_valid(
@@ -807,11 +804,16 @@ def select_price(session: Session, request: SelectionRequest) -> Selection:
         session, request.source_record_id, request.root_key, request.knowledge_cutoff
     )
 
-    # Current mode gates on live Identity/operating before any factual read.
-    if mode == "current" and heads:
-        gate = _current_gate(session, request, heads)
-        if gate is not None:
-            return Selection(mode, None, PriceResult(gate, request.subject_id), ())
+    if mode == "current":
+        # Heads are chosen over the whole family first, then only the requested
+        # subject's own heads count: a remapped or retired predecessor's page
+        # never supplies a successor's current value (ADR-0004 §5).
+        heads = _subject_heads(heads, request.subject_id)
+        # Current mode gates on live Identity/operating before any factual read.
+        if heads:
+            gate = _current_gate(session, heads, request.effective_instant)
+            if gate is not None:
+                return Selection(mode, None, PriceResult(gate, request.subject_id), ())
 
     content = _select_content(session, request, heads)
     local_price = _select_local_price(session, request, heads)
@@ -829,22 +831,31 @@ def _has_withdrawn_head(heads: dict[str, MenuPage]) -> bool:
     return any(page.operation == "withdrawal" for page in heads.values())
 
 
-def _current_gate(
-    session: Session, request: SelectionRequest, heads: dict[str, MenuPage]
-) -> LocalState | None:
-    """Live Identity + operating checks shared by content and price in current
-    mode. Returns the failure reason, or ``None`` when the scope is usable.
+def _subject_heads(heads: dict[str, MenuPage], subject_id: int) -> dict[str, MenuPage]:
+    """The family's stream heads owned by one subject, in head iteration order."""
+    return {kind: page for kind, page in heads.items() if page.subject_id == subject_id}
 
-    The accepted head's own subject/record/event mapping is re-admitted through
-    the published scope guard, so a remap, retirement, or pending lineage that
-    breaks that exact mapping withholds the current value.
+
+def _current_gate(
+    session: Session, heads: dict[str, MenuPage], instant: datetime
+) -> LocalState | None:
+    """Live Identity + operating checks over one subject's current heads.
+
+    Shared by the selector and full-catalog enumeration so both admit exactly
+    the same scopes. Every head's own subject/record/event mapping must still
+    be current and eligible, so a remap, retirement, or pending lineage that
+    breaks any accepted head's mapping withholds the current value, whatever
+    order the heads were read in. Returns the failure reason, or ``None`` when
+    the scope is usable at ``instant``.
     """
-    head = next((page for page in heads.values() if page.subject_id == request.subject_id), None)
-    if head is None:
-        return None
-    scope = _live_scope(session, head)
-    if scope is None:
+    requests = sorted(
+        {_scope_request(page) for page in heads.values()},
+        key=lambda r: (r.subject_id, r.source_record_id, r.resolution_event_id),
+    )
+    scopes = current_resolved_scopes(session, requests)
+    live = [scope for scope in scopes if scope is not None]
+    if len(live) != len(scopes):
         return "unresolved_scope"
-    if not _operating_ok(scope, request.effective_instant):
+    if not all(_operating_ok(scope, instant) for scope in live):
         return "not_operating"
     return None
