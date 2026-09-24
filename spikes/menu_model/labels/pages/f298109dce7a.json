@@ -61,7 +61,7 @@
  "items": [
   {
    "section": null,
-   "name": "Marble Pound Cake - Slice (Individually Wrapped)",
+   "name": "Marble Pound Cake",
    "description": null,
    "prices": [
     {
@@ -73,7 +73,7 @@
   },
   {
    "section": null,
-   "name": "Sour Cream Pound Cake - Slice (Individually Wrapped)",
+   "name": "Sour Cream Pound Cake",
    "description": null,
    "prices": [
     {
@@ -109,7 +109,7 @@
   },
   {
    "section": null,
-   "name": "Lemon Poppy Seed Pound Cake - Slice (Individually Wrapped)",
+   "name": "Lemon Poppy Seed Pound Cake",
    "description": null,
    "prices": [
     {
@@ -121,7 +121,7 @@
   },
   {
    "section": null,
-   "name": "Gluten-free Carrot Bread - Slice (Individually Wrapped)",
+   "name": "Gluten-free Carrot Bread",
    "description": null,
    "prices": [
     {

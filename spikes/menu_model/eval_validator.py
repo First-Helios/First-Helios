@@ -36,6 +36,10 @@ if TYPE_CHECKING:
     from spikes.menu_model.segment import Block
 
 SEED = 7
+# Pages whose results shaped the validator (dev); everything else is held out.
+DEV_PAGES = frozenset(
+    {"f298109dce7a", "dc96fa2f50f3", "0580f923bc5e", "cbcdb04ffbe0", "abefb3029e57", "1b6233a80694"}
+)
 PER_TYPE_PER_PAGE = 10
 
 
@@ -85,6 +89,11 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
     fuzzy = "--fuzzy" in sys.argv
     rng = random.Random(SEED)
     gold = load_gold()
+    split = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--split=")), "all")
+    if split == "dev":
+        gold = {k: v for k, v in gold.items() if k in DEV_PAGES}
+    elif split == "heldout":
+        gold = {k: v for k, v in gold.items() if k not in DEV_PAGES}
     all_names = [(pid, r.item) for pid, lab in gold.items() for r in gold_rows(lab)]
     fr = Counter[str]()
     caught = Counter[str]()
@@ -101,6 +110,8 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
             if v.decision != "accept":
                 fr["false_reject"] += 1
                 fr[f"reason:{','.join(v.reasons)}"] += 1
+                if "--show-misses" in sys.argv:
+                    print("FALSE_REJECT", pid, v.row, v.reasons)
         accepted_price = {
             i: parse_amount(r.amount)
             for i, (r, v) in enumerate(zip(rows, verdicts, strict=True))
@@ -188,7 +199,7 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
             c[i] = Row(rows[i].item, rows[j].amount, rows[i].variant, rows[i].section)
             run(c, [i], "other_section_price", [own_prices(i)])
 
-    print(f"pages={len(gold)} fuzzy={fuzzy}")
+    print(f"split={split} pages={len(gold)} fuzzy={fuzzy}")
     rows_n = fr["rows"] or 1
     print(
         f"correct rows={fr['rows']} false_reject={fr['false_reject']} rate={fr['false_reject'] / rows_n:.3f}"

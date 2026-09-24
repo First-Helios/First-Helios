@@ -118,7 +118,11 @@ def _derive_items(blocks: list[Block], labels: dict[str, str]) -> list[dict[str,
         if lab == "section":
             section = b.text
         elif lab == "item":
-            name = PRICE_RE.sub("", b.text).strip(" -–—.:|")
+            # inline "Name – description – $9" / "Name ~ description 9.99": the name leads
+            bare = PRICE_RE.sub("", b.text)
+            head, *rest = re.split(r"\s*[–—~]\s|\s-\s", bare, maxsplit=1)
+            desc_like = bool(rest) and len(rest[0].split()) >= 3  # noqa: PLR2004
+            name = (head if desc_like else bare).strip(" -–—.:|~/,")
             items.append(
                 {
                     "section": section,
@@ -236,6 +240,27 @@ def _override_items(page_id: str, names: dict[str, str], prices: dict[str, str])
     _save_label(path, label)
 
 
+def _apply_recipe(page_id: str, recipe: dict[str, str]) -> None:
+    """Relabel a regular platform layout inside the regions: ``h2=section h3=item``
+    by tag, then ``price=`` for blocks carrying a $ price and ``other=`` for the rest.
+    Exceptions follow as ``fix`` lines; the result is still read block by block.
+    """
+    path, label = _load_label(page_id)
+    labels = label["blocks"]
+    assert isinstance(labels, dict)
+    for b in blocks_of(page_id):
+        if b.id not in labels:
+            continue
+        has_price = any(t.kind == "money" for t in price_tokens([b])[0])
+        if b.tag in recipe:
+            labels[b.id] = recipe[b.tag]
+        elif has_price and "price" in recipe:
+            labels[b.id] = recipe["price"]
+        elif "other" in recipe:
+            labels[b.id] = recipe["other"]
+    _save_label(path, label)
+
+
 def cmd_apply(review: Path) -> None:
     """Rebuild every label from the review file (idempotent; the auditable record).
 
@@ -243,6 +268,7 @@ def cmd_apply(review: Path) -> None:
 
         page <page_id> <menu|not_menu> <format> | free-text note
         region b0054 b0099 [b0120 b0150 ...]
+        recipe h2=section h3=item price=price other=description
         fix b0054..b0098%2=item b0100=section ...
         name b0015=Mexican Gelatine
         prices b0050=SM:6.25,LG:9.75
@@ -256,6 +282,7 @@ def cmd_apply(review: Path) -> None:
         meta, _, note = head.partition("|")
         _, pid, page_label, fmt = meta.split()
         regions = [ln.split()[1:] for ln in rest if ln.startswith("region ")]
+        recipe = [e for ln in rest if ln.startswith("recipe ") for e in ln.split()[1:]]
         fixes = [e for ln in rest if ln.startswith("fix ") for e in ln.split()[1:]]
         names = dict(ln[5:].split("=", 1) for ln in rest if ln.startswith("name "))
         prices = dict(ln[7:].split("=", 1) for ln in rest if ln.startswith("prices "))
@@ -263,6 +290,8 @@ def cmd_apply(review: Path) -> None:
         path.unlink(missing_ok=True)
         if regions:
             _draft(pid, [b for r in regions for b in r])
+        if recipe:
+            _apply_recipe(pid, dict(e.split("=", 1) for e in recipe))
         if fixes:
             cmd_fix(pid, fixes)
         if names or prices:

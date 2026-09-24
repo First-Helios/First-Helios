@@ -87,3 +87,44 @@ fix b0257..b0292%4=item b0258..b0292%4=description b0260..b0292%4=price
 fix b0294..b0313%4=item b0295..b0313%4=description b0297..b0313%4=price
 fix b0315..b0329%3=item b0317..b0329%3=price
 fix b0331..b0342%4=item b0332..b0342%4=description b0334..b0342%4=price
+
+# ---- held-out for the validator from here on (validator frozen at 77aef1d) ----
+
+page 2bfd0cdf0f6e menu html_list | <h3> names, price div after; "$7.50/Medium" + "$9.25/Large" size lines; one "Medium $x | Large $y • options" line
+region b0037 b0224
+fix b0037..b0224=noise
+fix b0037=section b0082=section b0095=section b0098=section b0132=section b0142=section b0176=section b0183=section b0186=section b0190=section b0212=section
+fix b0038..b0081%2=item b0039..b0081%2=price b0083..b0094%2=item b0084..b0094%2=price b0096=item b0097=price
+fix b0099..b0131%3=item b0100..b0131%3=price b0101..b0131%3=price
+fix b0133..b0141%3=item b0134..b0141%3=price b0135..b0141%3=price
+fix b0143..b0175%3=item b0144..b0175%3=price b0145..b0175%3=price
+fix b0177..b0182%3=item b0178..b0182%3=price b0179..b0182%3=price
+fix b0184=item b0185=price b0187=item b0188=price b0189=description
+fix b0191..b0211%3=item b0192..b0211%3=price b0193..b0211%3=price
+fix b0213..b0224%3=item b0214..b0224%3=price b0215..b0224%3=description
+prices b0096=Medium:6.50,Large:8.25
+
+page a647f424c99e menu html_list | same platform as the drink menu: <h2> sections, <h3> names, price div, optional description div; items repeated across sections
+region b0037 b0557
+recipe h2=section h3=item price=price other=description
+fix b0075..b0076=noise
+
+page 6a788f7d3b50 menu html_inline | one <p> per item "Name 中文 – desc – $9.95"; "$5.95/11.95" size pairs; combo plates split over two <p>; market-price and unpriced drinks. NOTE: Overture website points to a Cambridge MA restaurant, not the Austin venue
+region b0021 b0326
+fix b0038=noise b0058=item b0059=price b0109=item b0152=item b0202..b0204=noise b0223=section b0255=section b0235..b0236=noise b0267=noise
+fix b0227=item b0228=description b0229=item b0230=description b0232=item b0233=description
+fix b0259=item b0260=description b0261=item b0262=description b0264=item b0265=description b0292..b0326=item
+name b0058=Moo Shi
+prices b0058=-:14.95
+prices b0124=Half:20.95,Whole:41.95
+prices b0125=Half:20.95,Whole:41.95
+prices b0126=Half:25.95
+prices b0227=-:16.55
+prices b0229=-:12.25
+prices b0232=-:14.50
+prices b0259=-:16.55
+prices b0261=-:14.95
+prices b0264=-:15.95
+name b0109=Lobster (Ginger & Scallion or Cantonese style)
+name b0126=Braised Duck Over Black Mushrooms 小北菇扒鸭
+name b0152=Hong Kong Steak 香港市的
