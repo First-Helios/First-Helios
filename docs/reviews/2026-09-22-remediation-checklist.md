@@ -40,7 +40,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 open, owner review |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [ ] |
 | 9 | S9 API polish | D7 | M | [ ] |
-| 10 | S10 Test hardening sweep | — | S | [ ] |
+| 10 | S10 Test hardening sweep | — | S | [X] #31 open |
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [ ] |
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [ ] |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
@@ -822,3 +822,4 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
 | 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Draft, awaiting owner acceptance of ADR-0011 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
 | 2026-09-23 | S7 | fix/gold-refresh | #28 | Open, owner review (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
+| 2026-09-24 | S10 | test/hardening | #31 | Open | — (ran in parallel with S9; `seed_sample_venues` gone since S1, so R29 covers discovery + URL paths; forged `subject_id=None` raises `22023`, now pinned) |
