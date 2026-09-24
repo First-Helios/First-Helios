@@ -38,10 +38,10 @@ LEGACY_TABLES = (
 )
 
 
-def _run_alembic(*arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def _run_alembic(*arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["alembic", "-c", str(ALEMBIC_INI), *arguments],
-        check=check,
+        check=True,
         cwd=REPO_ROOT,
         env={**os.environ, "DATABASE_URL": get_database_url()},
         capture_output=True,
@@ -426,5 +426,7 @@ def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
                 schema: _schema_row_counts(connection, schema) for schema in ("bronze", "identity")
             } == foundation_rows
     finally:
-        _run_alembic("downgrade", "base", check=False)
-        _run_alembic("upgrade", "head", check=False)
+        # Restore to head and fail loudly if that breaks: a silently half-migrated
+        # database would surface as unrelated failures in later tests.
+        _run_alembic("downgrade", "base")
+        _run_alembic("upgrade", "head")

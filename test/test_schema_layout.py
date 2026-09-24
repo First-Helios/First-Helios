@@ -255,6 +255,8 @@ def test_transaction_commands_flush_but_never_commit() -> None:
         root / "identity" / "commands.py",
         root / "provenance" / "contracts.py",
         root / "domains" / "menu" / "commands.py",
+        root / "gold" / "catalog.py",
+        root / "gold" / "refresh.py",
     )
     commits: list[str] = []
     for path in command_paths:
@@ -271,9 +273,16 @@ def test_transaction_commands_flush_but_never_commit() -> None:
 
 def test_parser_package_remains_orm_free_when_it_lands() -> None:
     root = Path(__file__).resolve().parents[1]
+    parser_root = root / "packages" / "helios_parsing"
+    if not parser_root.is_dir():
+        # Skip visibly rather than pass over zero files; the rule itself is
+        # covered by test_import_boundaries. Runs once the ROADMAP package lands.
+        pytest.skip("packages/helios_parsing has not landed yet")
+    paths = list(parser_root.rglob("*.py"))
+    assert paths, "packages/helios_parsing exists but has no modules to check"
     violations = [
         violation
-        for path in (root / "packages" / "helios_parsing").rglob("*.py")
+        for path in paths
         for violation in boundary_violations(path.read_text(), path.relative_to(root))
     ]
     assert not violations, "Parser imports ORM/application modules: " + str(violations)

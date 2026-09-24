@@ -96,25 +96,29 @@ def test_conflicting_replay_payload(
         persist_menu(writer, conflict)
 
 
+_HEAD_RULE = "successor requires the committed head and explicit lifecycle"
+
+
+# Every lifecycle defect shares ck_menu_lifecycle, so the message names the rule.
 @pytest.mark.parametrize(
-    "defect",
+    ("defect", "message"),
     [
-        "fork",
-        "skip_stream",
-        "skip_version",
-        "same_tx",
-        "wrong_stream",
-        "duplicate_initial",
-        "old_observation",
-        "restoration_without_withdrawal",
+        ("fork", _HEAD_RULE),
+        ("skip_stream", _HEAD_RULE),
+        ("skip_version", "incorrect version interpretation revision"),
+        ("same_tx", _HEAD_RULE),
+        ("wrong_stream", "stream must start with initial revision 1"),
+        ("duplicate_initial", _HEAD_RULE),
+        ("old_observation", "observation requires unused later Bronze input"),
+        ("restoration_without_withdrawal", _HEAD_RULE),
     ],
 )
 def test_lifecycle_intent_rejected(
-    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], defect: str
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], defect: str, message: str
 ) -> None:
     from sqlalchemy.exc import DBAPIError
 
-    from test.menu_support import raw_page
+    from test.menu_support import raw_page, rejected
 
     factory, scope = menu_scopes
     value = aggregate(scope)
@@ -138,8 +142,10 @@ def test_lifecycle_intent_rejected(
             intent = replace(intent, page=replace(intent.page, operation="observation"))
         elif defect == "restoration_without_withdrawal":
             intent = replace(intent, page=replace(intent.page, operation="restoration"))
-        with pytest.raises(DBAPIError):
+        with pytest.raises(DBAPIError) as error:
             raw_page(writer, intent)
+        rejected(error, "ck_menu_lifecycle")
+        assert error.value.orig.diag.message_primary == message  # type: ignore[union-attr]
         writer.rollback()
 
 

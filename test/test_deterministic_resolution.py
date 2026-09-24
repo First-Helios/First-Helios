@@ -215,6 +215,29 @@ def test_external_key_reuses_stable_bronze_and_identity_rows(
     )
 
 
+def _bronze_counts(session: Session, namespace: str) -> tuple[int, int, int]:
+    """Capture, version and Evidence counts for one Source only.
+
+    Whole-table counts break on a reused ``*_test`` database, where committed
+    tests leave Bronze rows behind (R11).
+    """
+    source_id = session.scalar(select(Source.id).where(Source.namespace == namespace))
+    captures = select(Capture.id).where(Capture.source_id == source_id)
+    versions = select(SourceRecordVersion.id).where(SourceRecordVersion.source_id == source_id)
+    return (
+        session.scalar(select(func.count()).select_from(captures.subquery())) or 0,
+        session.scalar(select(func.count()).select_from(versions.subquery())) or 0,
+        session.scalar(
+            select(func.count())
+            .select_from(Evidence)
+            .where(
+                Evidence.source_record_version_id.in_(versions) | Evidence.capture_id.in_(captures)
+            )
+        )
+        or 0,
+    )
+
+
 def test_identical_observation_retry_reuses_immutable_bronze_rows(
     session: Session,
 ) -> None:
@@ -245,9 +268,7 @@ def test_identical_observation_retry_reuses_immutable_bronze_rows(
         first.source_record_version_id,
         first.evidence_id,
     )
-    assert session.scalar(select(func.count()).select_from(Capture)) == 1
-    assert session.scalar(select(func.count()).select_from(SourceRecordVersion)) == 1
-    assert session.scalar(select(func.count()).select_from(Evidence)) == 1
+    assert _bronze_counts(session, observation.source_namespace) == (1, 1, 1)
 
     later = replace(observation, observed_at=observation.observed_at + timedelta(minutes=1))
     new_observation = resolve_source_record_observation(
@@ -257,7 +278,7 @@ def test_identical_observation_retry_reuses_immutable_bronze_rows(
     )
     assert new_observation.observation_created
     assert new_observation.source_record_version_id != first.source_record_version_id
-    assert session.scalar(select(func.count()).select_from(SourceRecordVersion)) == 2
+    assert _bronze_counts(session, observation.source_namespace)[1] == 2
 
 
 def test_unique_canonical_url_assigns_without_using_name_as_identity(

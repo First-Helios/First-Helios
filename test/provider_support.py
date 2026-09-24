@@ -7,6 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -56,6 +57,7 @@ HEAD = "b72e6a90c431"
 # Offline (`--sql`) generation needs a dialect, never a connection, so SQL
 # artifact tests run without a database. DATABASE_URL itself has no default.
 _OFFLINE_SQL_URL = "postgresql+psycopg://offline@offline.invalid/offline_sql"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def migrate(*args: str) -> str:
@@ -63,7 +65,12 @@ def migrate(*args: str) -> str:
     if "--sql" in args:
         env.setdefault("DATABASE_URL", _OFFLINE_SQL_URL)
     return subprocess.run(
-        ["alembic", *args], env=env, check=True, capture_output=True, text=True
+        ["alembic", "-c", str(_REPO_ROOT / "alembic.ini"), *args],
+        env=env,
+        cwd=_REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
 
 

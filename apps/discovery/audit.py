@@ -282,6 +282,20 @@ def duplicate_rate(confirmed_duplicates: int, total_venues: int) -> float:
     return 0.0 if total_venues == 0 else confirmed_duplicates / total_venues
 
 
+def _geocode_flag_dict(check: GeoCrossCheck) -> dict[str, Any]:
+    # A far geocode suggests wrong coordinates; no geocode at all only says the
+    # address didn't resolve, so a reviewer decides.
+    suggested = "wrong" if check.distance_m is not None else "review"
+    return {
+        "id": check.venue.subject_id,
+        "name": check.venue.name,
+        "address": check.venue.address,
+        "distance_m": check.distance_m,
+        "suggested": suggested,
+        "label": suggested,  # a reviewer edits this to "wrong" or "ok"
+    }
+
+
 def _candidate_dict(candidate: DupCandidate) -> dict[str, Any]:
     return {
         "distance_m": candidate.distance_m,
@@ -333,17 +347,7 @@ def main() -> None:
         "sample_size": len(sample),
         "structural_flags": [v.subject_id for v in structural],
         "dup_candidates": [_candidate_dict(c) for c in candidates],
-        "geocode_flags": [
-            {
-                "id": check.venue.subject_id,
-                "name": check.venue.name,
-                "address": check.venue.address,
-                "distance_m": check.distance_m,
-                "label": "wrong" if check.flagged else "ok",
-            }
-            for check in geo_checks
-            if check.flagged
-        ],
+        "geocode_flags": [_geocode_flag_dict(check) for check in geo_checks if check.flagged],
     }
     args.worksheet.parent.mkdir(parents=True, exist_ok=True)
     args.worksheet.write_text(json.dumps(worksheet, indent=2), encoding="utf-8")
