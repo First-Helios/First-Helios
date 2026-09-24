@@ -29,6 +29,7 @@ from packages.helios_core.identity import (
     DecisionMetadata,
     ResolutionEvent,
     ResolutionEvidence,
+    Subject,
     SubjectChange,
     SubjectChangeEvidence,
     SubjectChangeMember,
@@ -41,8 +42,10 @@ from packages.helios_core.identity import (
     mark_subject_eligible,
     rebuild_identity_projections,
     record_subject_change,
+    remap_source_record,
     require_eligible_subject,
     resolve_source_record_observation,
+    unassign_source_record,
 )
 from packages.helios_core.provenance import (
     BronzeObservation,
@@ -133,6 +136,32 @@ def _bronze_observation(
     )
 
 
+def _outcome(exc: Exception) -> str:
+    """Classify a failed attempt without folding database errors into rejection.
+
+    A command's own validation raises ``ValueError`` ("rejected"). Anything the
+    database raised is reported by SQLSTATE, so a deadlock (``40P01``) or lock
+    timeout (``55P03``) can never satisfy an expected rejection.
+    """
+    if isinstance(exc, DBAPIError):
+        return str(getattr(exc.orig, "sqlstate", None))
+    return "rejected"
+
+
+def _wait_for_lock_wait(observer: Session, pid: int, *, timeout: float = 5) -> bool:
+    """Return once backend ``pid`` is waiting on a heavyweight lock."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        wait_event_type = observer.scalar(
+            text("SELECT wait_event_type FROM pg_stat_activity WHERE pid = :pid"),
+            {"pid": pid},
+        )
+        if wait_event_type == "Lock":
+            return True
+        time.sleep(0.01)
+    return False
+
+
 def test_competing_assignments_serialize_on_source_record(
     concurrent_sessions: sessionmaker[Session],
 ) -> None:
@@ -166,9 +195,9 @@ def test_competing_assignments_serialize_on_source_record(
                     evidence_ids=[evidence_id],
                 )
                 worker.commit()
-            except (DBAPIError, ValueError):
+            except (DBAPIError, ValueError) as exc:
                 worker.rollback()
-                return "rejected"
+                return _outcome(exc)
             return "committed"
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -367,8 +396,7 @@ def test_overlapping_subject_changes_lock_members_in_stable_order(
 ) -> None:
     with concurrent_sessions() as setup:
         first = create_place(setup)
-        shared = create_place(setup)
-        third = create_place(setup)
+        second = create_place(setup)
         first_adjudication = create_adjudication(
             setup,
             actor="reviewer-one",
@@ -382,13 +410,15 @@ def test_overlapping_subject_changes_lock_members_in_stable_order(
             decided_at=datetime.now(UTC),
         )
         setup.commit()
-        first_id, shared_id, third_id = first.id, shared.id, third.id
+        first_id, second_id = first.id, second.id
         adjudication_ids = (first_adjudication.id, second_adjudication.id)
 
     barrier = Barrier(2)
+    # Both merges share two members and name them in opposite orders, so
+    # locking in caller order (rather than ID order) would form a cycle.
     changes = (
-        ([first_id, shared_id], [first_id], adjudication_ids[0]),
-        ([shared_id, third_id], [third_id], adjudication_ids[1]),
+        ([first_id, second_id], [first_id], adjudication_ids[0]),
+        ([second_id, first_id], [second_id], adjudication_ids[1]),
     )
 
     def merge(args: tuple[list[int], list[int], int]) -> str:
@@ -405,9 +435,9 @@ def test_overlapping_subject_changes_lock_members_in_stable_order(
                     adjudication_id=adjudication_id,
                 )
                 worker.commit()
-            except (DBAPIError, ValueError):
+            except (DBAPIError, ValueError) as exc:
                 worker.rollback()
-                return "rejected"
+                return _outcome(exc)
             return "committed"
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -420,10 +450,9 @@ def test_overlapping_subject_changes_lock_members_in_stable_order(
             .select_from(SubjectChange)
             .where(SubjectChange.adjudication_id.in_(adjudication_ids))
         )
-        shared_currentness = verify.get(SubjectCurrentness, shared_id)
+        currentness = [verify.get(SubjectCurrentness, i) for i in (first_id, second_id)]
         assert change_count == 1
-        assert shared_currentness is not None
-        assert not shared_currentness.is_current
+        assert sorted(row.is_current for row in currentness if row is not None) == [False, True]
 
 
 def test_raw_overlapping_subject_changes_serialize_without_lock_upgrade_deadlock(
@@ -431,8 +460,7 @@ def test_raw_overlapping_subject_changes_serialize_without_lock_upgrade_deadlock
 ) -> None:
     with concurrent_sessions() as setup:
         first = create_place(setup)
-        shared = create_place(setup)
-        third = create_place(setup)
+        second = create_place(setup)
         adjudications = [
             create_adjudication(
                 setup,
@@ -443,13 +471,14 @@ def test_raw_overlapping_subject_changes_serialize_without_lock_upgrade_deadlock
             for index in (1, 2)
         ]
         setup.commit()
-        first_id, shared_id, third_id = first.id, shared.id, third.id
+        first_id, second_id = first.id, second.id
         adjudication_ids = [adjudication.id for adjudication in adjudications]
 
     barrier = Barrier(2)
+    # Two shared members named in opposite orders: see the command-path test.
     changes = (
-        ([first_id, shared_id], first_id, adjudication_ids[0]),
-        ([shared_id, third_id], third_id, adjudication_ids[1]),
+        ([first_id, second_id], first_id, adjudication_ids[0]),
+        ([second_id, first_id], second_id, adjudication_ids[1]),
     )
 
     def raw_merge(args: tuple[list[int], int, int]) -> str:
@@ -586,13 +615,14 @@ def test_eligibility_gate_locks_subject_against_retirement(
                         adjudication_id=adjudication_id,
                     )
                     worker.commit()
-                except DBAPIError:
+                except (DBAPIError, ValueError) as exc:
                     worker.rollback()
-                    return "blocked"
+                    return _outcome(exc)
                 return "committed"
 
+        # 55P03 is lock_not_available: the lock_timeout fired, nothing else.
         with ThreadPoolExecutor(max_workers=1) as pool:
-            assert pool.submit(attempt_retirement).result(timeout=5) == "blocked"
+            assert pool.submit(attempt_retirement).result(timeout=5) == "55P03"
 
 
 def test_eligibility_gate_locks_typed_features(
@@ -622,13 +652,13 @@ def test_eligibility_gate_locks_typed_features(
                         {"subject_id": guarded_id},
                     )
                     worker.commit()
-                except DBAPIError:
+                except DBAPIError as exc:
                     worker.rollback()
-                    return "blocked"
+                    return _outcome(exc)
                 return "committed"
 
         with ThreadPoolExecutor(max_workers=1) as pool:
-            assert pool.submit(remove_only_feature).result(timeout=5) == "blocked"
+            assert pool.submit(remove_only_feature).result(timeout=5) == "55P03"
 
 
 def test_decision_members_reject_late_insert_after_commit(
@@ -968,3 +998,229 @@ def test_url_resolution_serializes_against_explicit_same_url_assignment(
         current = verify.get(CurrentResolution, result[2])
         assert current is not None
         assert (current.state, current.subject_id) == ("unresolved", None)
+
+
+def _lock_like_explicit_decision(session: Session, subject_ids: list[int]) -> None:
+    """Take the prefix every explicit resolution command takes before its record."""
+    session.execute(text("SELECT pg_advisory_xact_lock_shared(48454, 2)"))
+    session.execute(
+        select(Subject.id)
+        .where(Subject.id.in_(sorted(subject_ids)))
+        .order_by(Subject.id)
+        .with_for_update()
+    )
+
+
+def _reobserve_in_thread(
+    concurrent_sessions: sessionmaker[Session],
+    observation: BronzeObservation,
+    pid_ready: Event,
+    pids: list[int],
+) -> tuple[str, int | None] | str:
+    with concurrent_sessions() as worker:
+        backend_pid = worker.scalar(select(func.pg_backend_pid()))
+        assert backend_pid is not None
+        pids.append(backend_pid)
+        pid_ready.set()
+        try:
+            result = resolve_source_record_observation(
+                worker,
+                observation=observation,
+                decided_at=datetime.now(UTC),
+            )
+            worker.commit()
+        except (DBAPIError, ValueError) as exc:
+            worker.rollback()
+            return _outcome(exc)
+        return (result.state, result.subject_id)
+
+
+@pytest.mark.parametrize("operation", ["remap", "unassign"])
+def test_reobservation_takes_subject_locks_before_its_source_record(
+    concurrent_sessions: sessionmaker[Session],
+    operation: str,
+) -> None:
+    """R12: re-observation and remap/unassign of one record share one lock order."""
+    namespace = f"concurrent-lock-order-{uuid4().hex}"
+    with concurrent_sessions() as setup:
+        observed = resolve_source_record_observation(
+            setup,
+            observation=_bronze_observation(namespace, "record"),
+            decided_at=datetime.now(UTC),
+        )
+        current = create_organization(setup, canonical_name="Current", name_fingerprint="current")
+        target = create_organization(setup, canonical_name="Target", name_fingerprint="target")
+        assign_source_record(
+            setup,
+            source_record_id=observed.source_record_id,
+            to_subject_id=current.id,
+            decision=_decision(),
+            evidence_ids=[observed.evidence_id],
+        )
+        setup.commit()
+        record_id, evidence_id = observed.source_record_id, observed.evidence_id
+        current_id, target_id = current.id, target.id
+
+    pid_ready = Event()
+    pids: list[int] = []
+    with concurrent_sessions() as explicit:
+        _lock_like_explicit_decision(explicit, [current_id, target_id])
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                _reobserve_in_thread,
+                concurrent_sessions,
+                _bronze_observation(namespace, "record"),
+                pid_ready,
+                pids,
+            )
+            assert pid_ready.wait(timeout=5)
+            assert _wait_for_lock_wait(explicit, pids[0]), "re-observation never waited"
+            try:
+                if operation == "remap":
+                    remap_source_record(
+                        explicit,
+                        source_record_id=record_id,
+                        from_subject_id=current_id,
+                        to_subject_id=target_id,
+                        decision=_decision(),
+                        evidence_ids=[evidence_id],
+                    )
+                else:
+                    unassign_source_record(
+                        explicit,
+                        source_record_id=record_id,
+                        from_subject_id=current_id,
+                        decision=_decision(),
+                        evidence_ids=[evidence_id],
+                    )
+                explicit.commit()
+                explicit_outcome = "committed"
+            except (DBAPIError, ValueError) as exc:
+                explicit.rollback()
+                explicit_outcome = _outcome(exc)
+            resolver_outcome = future.result(timeout=15)
+
+    assert explicit_outcome == "committed"
+    if operation == "remap":
+        assert resolver_outcome == ("resolved", target_id)
+    else:
+        assert resolver_outcome == ("needs_review", None)
+
+
+def test_reobservation_and_sibling_readiness_refresh_share_one_lock_order(
+    concurrent_sessions: sessionmaker[Session],
+) -> None:
+    """R62: refreshing an Organization locks its sibling records after the Subject."""
+    namespace = f"concurrent-sibling-{uuid4().hex}"
+    with concurrent_sessions() as setup:
+        shared = create_organization(setup, canonical_name="Shared", name_fingerprint="shared")
+        other = create_organization(setup, canonical_name="Other", name_fingerprint="other")
+        observed = {}
+        for key in ("moving", "sibling"):
+            observed[key] = resolve_source_record_observation(
+                setup,
+                observation=_bronze_observation(namespace, key),
+                decided_at=datetime.now(UTC),
+            )
+            assign_source_record(
+                setup,
+                source_record_id=observed[key].source_record_id,
+                to_subject_id=shared.id,
+                decision=_decision(),
+                evidence_ids=[observed[key].evidence_id],
+            )
+        setup.commit()
+        shared_id, other_id = shared.id, other.id
+
+    pid_ready = Event()
+    pids: list[int] = []
+    with concurrent_sessions() as explicit:
+        _lock_like_explicit_decision(explicit, [shared_id, other_id])
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                _reobserve_in_thread,
+                concurrent_sessions,
+                _bronze_observation(namespace, "sibling"),
+                pid_ready,
+                pids,
+            )
+            assert pid_ready.wait(timeout=5)
+            assert _wait_for_lock_wait(explicit, pids[0]), "re-observation never waited"
+            try:
+                # Refreshing ``shared`` readiness locks every record still
+                # resolved to it, including the one being re-observed.
+                remap_source_record(
+                    explicit,
+                    source_record_id=observed["moving"].source_record_id,
+                    from_subject_id=shared_id,
+                    to_subject_id=other_id,
+                    decision=_decision(),
+                    evidence_ids=[observed["moving"].evidence_id],
+                )
+                explicit.commit()
+                explicit_outcome = "committed"
+            except (DBAPIError, ValueError) as exc:
+                explicit.rollback()
+                explicit_outcome = _outcome(exc)
+            resolver_outcome = future.result(timeout=15)
+
+    assert explicit_outcome == "committed"
+    assert resolver_outcome == ("resolved", shared_id)
+
+
+def test_readiness_refresh_reads_subject_committed_by_another_transaction(
+    concurrent_sessions: sessionmaker[Session],
+) -> None:
+    """R61: a caller-held Subject must not hide a concurrent demotion."""
+    namespace = f"concurrent-readiness-{uuid4().hex}"
+    with concurrent_sessions() as setup:
+        kept = resolve_source_record_observation(
+            setup,
+            observation=_bronze_observation(namespace, "kept"),
+            decided_at=datetime.now(UTC),
+        )
+        added = resolve_source_record_observation(
+            setup,
+            observation=_bronze_observation(namespace, "added"),
+            decided_at=datetime.now(UTC),
+        )
+        organization = create_organization(
+            setup, canonical_name="Readiness", name_fingerprint="readiness"
+        )
+        assign_source_record(
+            setup,
+            source_record_id=kept.source_record_id,
+            to_subject_id=organization.id,
+            decision=_decision(),
+            evidence_ids=[kept.evidence_id],
+        )
+        setup.commit()
+        organization_id = organization.id
+
+    with concurrent_sessions() as stale, concurrent_sessions() as other:
+        held = stale.get(Subject, organization_id)
+        assert held is not None
+        assert held.readiness == "eligible"
+
+        unassign_source_record(
+            other,
+            source_record_id=kept.source_record_id,
+            from_subject_id=organization_id,
+            decision=_decision(),
+            evidence_ids=[kept.evidence_id],
+        )
+        other.commit()
+
+        assign_source_record(
+            stale,
+            source_record_id=added.source_record_id,
+            to_subject_id=organization_id,
+            decision=_decision(),
+            evidence_ids=[added.evidence_id],
+        )
+        stale.commit()
+
+    with concurrent_sessions() as verify:
+        refreshed = verify.get(Subject, organization_id)
+        assert refreshed is not None
+        assert refreshed.readiness == "eligible"

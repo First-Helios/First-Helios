@@ -18,6 +18,7 @@ from packages.helios_core.identity.commands import (
 from packages.helios_core.identity.contracts import (
     DeterministicResolutionResult,
     EligibleSubject,
+    ResolutionConflictError,
     ResolvedScope,
     ResolvedScopeRequest,
     SubjectNotEligibleError,
@@ -51,6 +52,7 @@ __all__ = [
     "DecisionMetadata",
     "DeterministicResolutionResult",
     "EligibleSubject",
+    "ResolutionConflictError",
     "ResolvedScope",
     "ResolvedScopeRequest",
     "Establishment",
