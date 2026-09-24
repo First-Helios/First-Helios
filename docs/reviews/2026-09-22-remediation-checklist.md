@@ -32,9 +32,10 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 1 | S1 Guardrails (DB target, CI gates, CLAUDE.md) ⚠ | D1 | M | [X] #23 |
 | 2 | S2 Crawler etiquette ⚠ (protego) | D2 | M | [X] #24 |
 | 3 | S3 URL pipeline logic | D3 | M | [X] #25 |
-| 4 | S4 Menu-URL quality | D3 | S | [ ] #26 open |
-| 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [ ] |
+| 4 | S4 Menu-URL quality | D3 | S | [X] #26 |
+| 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 draft, awaiting acceptance |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] |
+| 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
 | 🚦 | **Pi gate:** OK to run `resolve_urls` on the Pi again after S2, S3, S4, S6 are merged | | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [ ] |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [ ] |
@@ -218,12 +219,31 @@ explains it. When a group is done, its sessions are ready to hand off.
   - [ ] ⭐ Leave them; document them as pre-ADR history
   - [X] We are in early development, if something is done wrong and the data is malformed, or not needed/is in the way of a fix and preserving data adds complexiry we can delete it. especally old legacy data that can add confusion to the system as it cannot be traced. In fact once we are at the pont where we are at produciton, we should do a full data purge and attempt to rebuild everything from scratch.
   - *Why:* they're immutable anyway; documenting avoids later confusion.
+  - *S5 (2026-09-23):* handled as a **database rebuild**, not row deletion (Bronze
+    triggers block `DELETE`, Identity blocks `TRUNCATE`): S6's migration refuses to
+    run on pre-ADR rows, and the owner rebuilds the Pi DB (drop volume, `compose up`,
+    re-run discovery). Venues get new Subject ids; re-run the precision audit. See
+    ADR-0011 §8.
 - **4.4 Evidence locators become real field paths (e.g. `$.websites[0]`)**
   - [X] ⭐ Yes  - [ ] No
   - *Why:* evidence becomes checkable without reading pipeline code.
 - **4.5 Add a server "ingested at" timestamp to Bronze** (R101)
   - [X] ⭐ Yes, in the same migration as 4.2  - [ ] No
   - *Why:* the only way to know when a row arrived; free if migrating anyway.
+- **4.6 Platform menu URLs alongside the site's own menu** (D3.5 carry-over; asked in
+  S5, answer when accepting ADR-0011). ADR-0011 §7: the contract allows several menu
+  URLs per venue, one record per (venue, menu source), keys `<gers>` and
+  `<gers>|<platform host>`, site preferred on read.
+  - [X] ⭐ S6 adopts only the key rule; collecting platform links even when a site
+    menu verifies is a follow-up session S6b (not Pi-gating)
+  - [ ] Do both in S6
+  - *Why:* keeps S6's review on the contract and migration (the expensive-to-reverse
+    part); a Pi run before S6b only collects fewer platform menus, and a later run adds them.
+- **4.7 Don't re-crawl a site whose last menu-discovery attempt failed or was skipped
+  for …** (asked in S5; ADR-0011 §4)
+  - [X] ⭐ 20 days  - [ ] Other: ____
+  - *Why:* a chunked run spread over days never re-crawls a dead site, and the next
+    monthly run still retries it.
 
 ### D5 — Gold and menu selection → unlocks S7, S11
 
@@ -477,7 +497,7 @@ Branch: `fix/menu-url-quality`
 Hand-off prompt: `Do session S5 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `docs/adr-0011-evidence-endpoints` · Output: an ADR proposal; no code. Stops for your acceptance.
 
-- [ ] ADR-0011 drafted covering R06, R17, R58, R101 (per D4)
+- [X] ADR-0011 drafted covering R06, R17, R58, R101 (per D4)
 
 **Recommended approach**
 - Title: "Provenance endpoints vs identity match keys". Record the D4 answers as
@@ -513,6 +533,20 @@ Branch: `fix/evidence-endpoints` · Stops for review: provenance contract; migra
   `docs/reviews/sql/` with a byte-compare test, as Steps 5 and 6 did.
 - Test: for each namespace, walk Evidence → Version → Capture → Endpoint and get the
   original URL back.
+
+### S6b — Platform menu URLs alongside site menus · size S · needs S6 merged (D4.6 = S6b)
+Hand-off prompt: `Do session S6b from docs/reviews/2026-09-22-remediation-checklist.md.`
+Branch: `fix/platform-menu-urls` · Not Pi-gating.
+
+- [ ] Collect ordering-platform menu URLs from the homepage even when an own-site menu
+  verifies; persist each as `<gers>|<host>` (ADR-0011 §7)
+
+**Recommended approach**
+- `discover_menu_url` returns the own-site result plus verified platform results (one
+  per host, capped by `MAX_PLATFORM_CANDIDATES`); social links and platform roots stay
+  excluded (ADR-0010 Amendment 3).
+- Test: a homepage with a site menu and a Toast link writes both records; a re-run
+  writes nothing.
 
 🚦 **Pi gate** — after S2, S3, S4, S6 are merged, it's safe to run `resolve_urls` on the Pi again.
 
@@ -782,4 +816,5 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S1 | fix/guardrails | #23 | Merged | — (ticks recorded by S2; #22 wasn't on `main` yet) |
 | 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Merged | — |
 | 2026-09-23 | S3 | fix/url-pipeline | #25 | Merged | — (D3.7–3.9 asked and answered at session start) |
-| 2026-09-23 | S4 | fix/menu-url-quality | #26 | Open, awaiting owner review | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
+| 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
+| 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Draft, awaiting owner acceptance of ADR-0011 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
