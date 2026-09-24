@@ -281,8 +281,8 @@ becomes **one Source Record per (venue, menu source)**:
 
 S6 adopts the key rule, so no platform URL is written under a bare `<gers>`
 key after S6. Collecting platform links **even when an own-site menu
-verifies** is a discovery-logic change, proposed as follow-up session **S6b**
-(D4.6). It doesn't gate the Pi run: a run before S6b just collects platform
+verifies** is a discovery-logic change, follow-up session **S6b**
+(D4.6, owner-approved). It doesn't gate the Pi run: a run before S6b just collects platform
 menus for fewer venues, and a later run adds the rest.
 
 ### 8. Existing rows: purge and rebuild (D4.3)
@@ -443,10 +443,10 @@ the real pipeline on fixtures and gets back the expected endpoint, kind,
 
 ## For review (owner)
 
-- **D4.6** When to collect platform menus alongside an own-site menu: follow-up
-  **S6b** (⭐; S6 only adopts the `<gers>|<host>` key rule) or inside S6.
-- **D4.7** Re-crawl window after a failed/skipped attempt: ⭐ 20 days, or another
-  value.
+- **D4.6** *Answered 2026-09-23:* S6 adopts only the `<gers>|<host>` key rule;
+  collecting platform menus alongside an own-site menu is follow-up **S6b**.
+- **D4.7** *Answered 2026-09-23:* re-crawl window after a failed/skipped attempt
+  is **20 days**.
 - The `repo:` scheme for registry-origin rows, and the website endpoint being
   the upstream Overture release rather than the website itself (a deliberate
   departure from the checklist's S5 sketch, see §3).
