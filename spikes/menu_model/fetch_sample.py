@@ -38,7 +38,7 @@ from apps.discovery.web_client import FetchResult, SiteFetcher
 DATA = Path(os.environ.get("MENU_SPIKE_DATA", "var/spikes/menu-model"))
 USER_AGENT = "helios-v2-menu-spike/0.1 (+https://github.com/First-Helios/First-Helios)"
 SEED = 20260923
-TARGET_VENUES = 70  # overshoot: robots blocks and dead sites drop some
+TARGET_VENUES = int(os.environ.get("MENU_SPIKE_VENUES", "70"))  # overshoot for blocks/dead sites
 
 # Coarse strata over Overture's primary_category, first match wins.
 STRATA: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -47,7 +47,7 @@ STRATA: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("american_bbq", ("american", "bbq", "barbecue", "diner", "steak", "southern")),
     ("bar", ("bar", "pub", "brewery", "winery", "lounge")),
     ("fast_food", ("fast_food", "burger", "sandwich", "chicken", "hot_dog")),
-    ("mexican_latin", ("mexican", "tex_mex", "latin", "taco")),
+    ("mexican_latin", ("mexican", "texmex", "tex_mex", "latin", "taco")),
     ("asian", ("asian", "chinese", "japanese", "sushi", "thai", "vietnamese", "korean", "indian")),
     ("pizza_italian", ("pizza", "italian")),
 )
@@ -122,6 +122,11 @@ def page_flags(result: FetchResult) -> dict[str, object]:
         "is_pdf": False,
         "text_chars": scan.text_chars,
         "prices_seen": len(re.findall(r"\$\s?\d{1,3}(?:[.,]\d{2})?\b", result.text)),
+        # Noted, not fetched: SiteFetcher decodes bodies to text, which breaks PDF bytes.
+        "pdf_links": sum(1 for h in scan.links if re.search(r"\.pdf($|\?)", h, re.IGNORECASE)),
+        "menu_pdf_links": sum(
+            1 for h in scan.links if re.search(r"menu[^/]*\.pdf($|\?)", h, re.IGNORECASE)
+        ),
         # Heuristics, reviewed by hand during labeling:
         "js_only": scan.text_chars < 300 and scan.scripts >= 3,
         "image_only": scan.text_chars < 600 and scan.menu_imgs > 0,
