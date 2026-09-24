@@ -1,6 +1,6 @@
 # Spike: on-device menu model (classify, extract, validate)
 
-**Status:** Not started
+**Status:** In progress — step A (waiting on owner's candidate export)
 **Opened:** 2026-09-23 by the owner
 **Feeds:** the Phase 5 menu-extraction ADR (menu-page classifier per
 [ADR-0010 Amendment 3](../../adr/0010-website-and-menu-url-resolution.md#amendment-3-2026-09-23-menu-page-verification-and-platform-sites),
@@ -126,6 +126,7 @@ _To be filled in._
 | Date | Session | Branch | What happened | Resume notes |
 |---|---|---|---|---|
 | 2026-09-23 | setup | docs/menu-model-spike | Tracker and hand-off prompt created | — |
+| 2026-09-23 | A-1 | spike/menu-model | Wrote read-only candidate export `spikes/menu_model/sql/export_candidates.sql` (current Overture-seeded Establishments with a website; ≤2 per host, ≤12 per primary category, 150 rows, seeded order). Verified on a throwaway migrated `*_test` DB seeded through the real discovery code (`seed_check.py`), with and without `resolve_urls` records. SSH to the Pi as `fortune@192.168.1.219` is refused (publickey); no `~/.ssh/config`. | Waiting on owner to run the SELECT on the Pi and drop the CSV at `var/spikes/menu-model/candidates.csv` (main checkout, gitignored). Next: stratified ~60-page sample + fetch via `SiteFetcher`. Before stage D: get the Pi SSH user/key from owner. |
 
 ## Hand-off prompt
 
