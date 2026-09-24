@@ -641,14 +641,14 @@ Branch: `fix/api-polish` · OpenAPI snapshot changes: owner review.
 Hand-off prompt: `Do session S10 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `test/hardening` · Tests only.
 
-- [ ] R29 Discovery/URL/seed writes never tested with a real commit
-- [ ] R59 Menu TRUNCATE test can't detect a missing trigger
-- [ ] R77 Golden-set test re-implements the match rule
-- [ ] R78 Audit report label is always "wrong"
-- [ ] R81 Menu rejection tests accept too many error types
-- [ ] R82 Migration test cleanup swallows errors; alembic helper depends on cwd
-- [ ] R83 Parser-isolation guard checks nothing; Gold refresh missing from no-commit test
-- [ ] S7-found (not in review) `test_deterministic_resolution.py::test_identical_observation_retry_reuses_immutable_bronze_rows`
+- [X] R29 Discovery/URL/seed writes never tested with a real commit
+- [X] R59 Menu TRUNCATE test can't detect a missing trigger
+- [X] R77 Golden-set test re-implements the match rule
+- [X] R78 Audit report label is always "wrong"
+- [X] R81 Menu rejection tests accept too many error types
+- [X] R82 Migration test cleanup swallows errors; alembic helper depends on cwd
+- [X] R83 Parser-isolation guard checks nothing; Gold refresh missing from no-commit test
+- [X] S7-found (not in review) `test_deterministic_resolution.py::test_identical_observation_retry_reuses_immutable_bronze_rows`
   counts whole Bronze tables (`== 1`), so a full rerun on a used `*_test` DB fails
   (`assert 706 == 1`); scope the counts to its own source record (R11 class)
 

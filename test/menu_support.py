@@ -21,6 +21,8 @@ from packages.helios_core.domains.menu.models import EvidenceLink, MenuPage
 from packages.helios_core.provenance.contracts import get_record_version
 
 if TYPE_CHECKING:
+    import pytest
+    from sqlalchemy.exc import DBAPIError
     from sqlalchemy.orm import Session
 
     from test.provider_support import ScopeFixture
@@ -116,6 +118,19 @@ def raw_page_support(session: Session, page: int, evidence: int) -> None:
     session.execute(
         insert(EvidenceLink).values(page_id=page, page_target=True, evidence_id=evidence)
     )
+
+
+def rejected(
+    error: pytest.ExceptionInfo[DBAPIError], constraint: str | None, sqlstate: str = "23514"
+) -> None:
+    """Assert the exact SQLSTATE and constraint, so a test can't pass on the wrong guard.
+
+    ``constraint`` is ``None`` only for errors PostgreSQL raises without one
+    (NOT NULL, type input, range).
+    """
+    orig = error.value.orig
+    assert getattr(orig, "sqlstate", None) == sqlstate, str(orig)
+    assert orig.diag.constraint_name == constraint, str(orig)  # type: ignore[union-attr]
 
 
 def force(session: Session) -> None:
