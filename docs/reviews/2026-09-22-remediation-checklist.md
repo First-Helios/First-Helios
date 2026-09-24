@@ -609,19 +609,20 @@ Branch: `fix/identity-locks` · Concurrency-sensitive accepted code: owner revie
 Hand-off prompt: `Do session S9 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/api-polish` · OpenAPI snapshot changes: owner review.
 
-- [ ] R37 OpenAPI documents the wrong error shape
-- [ ] R38 No database connect/pool timeouts (per D7.4)
-- [ ] R41 Huge id or cursor → 500 instead of 400/404
-- [ ] R42 500 errors missing request-id and CORS headers
-- [ ] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
-- [ ] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
-- [ ] R45 CORS wildcard allowed via environment (per D7.3)
-- [ ] R46 `X-Request-ID` not readable by browser JavaScript
-- [ ] R47 Deprecated 422 constant; TestClient `httpx` deprecation
-- [ ] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
-- [ ] R49 API error tests all require a database
-- [ ] R50 Timestamps not forced to UTC
-- [ ] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
+- [X] R37 OpenAPI documents the wrong error shape
+- [X] R38 No database connect/pool timeouts (per D7.4)
+- [X] R41 Huge id or cursor → 500 instead of 400/404
+- [X] R42 500 errors missing request-id and CORS headers
+- [X] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
+- [X] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
+- [X] R45 CORS wildcard allowed via environment (per D7.3)
+- [X] R46 `X-Request-ID` not readable by browser JavaScript
+- [X] R47 Deprecated 422 constant; TestClient `httpx` deprecation (constant fixed;
+  the `httpx`→`httpx2` swap is deliberately left — see PR)
+- [X] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
+- [X] R49 API error tests all require a database
+- [X] R50 Timestamps not forced to UTC
+- [X] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
 
 **Recommended approach**
 - Catch unhandled exceptions inside the request middleware and render the envelope
