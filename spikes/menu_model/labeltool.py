@@ -218,7 +218,19 @@ def cmd_setpage(page_id: str, page_label: str, fmt: str, note: str) -> None:
     _save_label(path, label)
 
 
-def _override_items(page_id: str, names: dict[str, str], prices: dict[str, str]) -> None:
+def _parse_prices(spec: str) -> list[dict[str, str | None]]:
+    return [
+        {"amount": f"{float(a):.2f}", "variant": None if v == "-" else v}
+        for v, a in (p.rsplit(":", 1) for p in spec.strip().split(",") if p)
+    ]
+
+
+def _override_items(
+    page_id: str,
+    names: dict[str, str],
+    prices: dict[str, str],
+    extra: list[list[str]] | None = None,
+) -> None:
     """Item-level review edits keyed by the item's name block.
 
     ``name b0015=Mexican Gelatine`` fixes a name that shares its block with a
@@ -232,17 +244,27 @@ def _override_items(page_id: str, names: dict[str, str], prices: dict[str, str])
         if it["block"] in names:
             it["name"] = names[it["block"]].strip()
         if it["block"] in prices:
-            spec = prices[it["block"]].strip()
-            it["prices"] = [
-                {"amount": f"{float(a):.2f}", "variant": None if v == "-" else v}
-                for v, a in (p.rsplit(":", 1) for p in spec.split(",") if p)
-            ]
+            it["prices"] = _parse_prices(prices[it["block"]])
+    for block_id, spec in extra or []:  # a second item printed in the same block
+        name, _, price_spec = spec.partition("|")
+        section = next((it["section"] for it in items if it["block"] == block_id), None)
+        items.append(
+            {
+                "section": section,
+                "name": name.strip(),
+                "description": None,
+                "prices": _parse_prices(price_spec),
+                "block": block_id,
+            }
+        )
+    items.sort(key=lambda it: str(it["block"]))
     _save_label(path, label)
 
 
 def _apply_recipe(page_id: str, recipe: dict[str, str]) -> None:
     """Relabel a regular platform layout inside the regions: ``h2=section h3=item``
-    by tag, then ``price=`` for blocks carrying a $ price and ``other=`` for the rest.
+    by tag, then ``price=`` for blocks carrying a $ price, ``long=`` for 6+ word
+    blocks, and ``other=`` for the rest.
     Exceptions follow as ``fix`` lines; the result is still read block by block.
     """
     path, label = _load_label(page_id)
@@ -256,8 +278,12 @@ def _apply_recipe(page_id: str, recipe: dict[str, str]) -> None:
             labels[b.id] = recipe[b.tag]
         elif has_price and "price" in recipe:
             labels[b.id] = recipe["price"]
+        elif "long" in recipe and len(b.text.split()) >= 6:  # noqa: PLR2004
+            labels[b.id] = recipe["long"]
         elif "other" in recipe:
             labels[b.id] = recipe["other"]
+        if labels[b.id] == "noise":
+            del labels[b.id]  # absent = noise, same as ``fix b..=noise``
     _save_label(path, label)
 
 
@@ -272,6 +298,7 @@ def cmd_apply(review: Path) -> None:
         fix b0054..b0098%2=item b0100=section ...
         name b0015=Mexican Gelatine
         prices b0050=SM:6.25,LG:9.75
+        additem b0027=1/2 Sheets|-:95
     """
     current: list[str] = []
 
@@ -286,6 +313,7 @@ def cmd_apply(review: Path) -> None:
         fixes = [e for ln in rest if ln.startswith("fix ") for e in ln.split()[1:]]
         names = dict(ln[5:].split("=", 1) for ln in rest if ln.startswith("name "))
         prices = dict(ln[7:].split("=", 1) for ln in rest if ln.startswith("prices "))
+        extra = [ln[8:].split("=", 1) for ln in rest if ln.startswith("additem ")]
         path = LABELS / "pages" / f"{pid}.json"
         path.unlink(missing_ok=True)
         if regions:
@@ -294,8 +322,8 @@ def cmd_apply(review: Path) -> None:
             _apply_recipe(pid, dict(e.split("=", 1) for e in recipe))
         if fixes:
             cmd_fix(pid, fixes)
-        if names or prices:
-            _override_items(pid, names, prices)
+        if names or prices or extra:
+            _override_items(pid, names, prices, extra)
         cmd_setpage(pid, page_label, fmt, note.strip())
         current.clear()
 

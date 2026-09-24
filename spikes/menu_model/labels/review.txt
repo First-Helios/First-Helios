@@ -128,3 +128,57 @@ prices b0264=-:15.95
 name b0109=Lobster (Ginger & Scallion or Cantonese style)
 name b0126=Braised Duck Over Black Mushrooms 小北菇扒鸭
 name b0152=Hong Kong Steak 香港市的
+
+page a37310ea6a20 menu html_cards | web template: <h3> names, "from $4.49" price, allergen/nutrition noise, image-alt div names from a pizza template (noise); descriptions are template leftovers that do not match the items
+region b0036 b0655
+recipe h3=item price=price other=noise
+fix b0045=description b0058=description b0071=description b0084=description b0096=description b0109=description b0122=description b0135=description b0147=description b0160=description b0172=description b0185=description b0198=description b0211=description b0224=description b0237=description b0250=description b0263=description b0276=description b0289=description b0302=description b0315=description b0328=description b0341=description b0354=description b0367=description b0380=description b0393=description b0406=description b0419=description b0432=description b0445=description b0458=description b0471=description b0484=description b0497=description b0510=description b0523=description b0536=description b0549=description b0562=description b0575=description b0588=description b0601=description b0614=description b0626=description b0639=description b0652=description
+
+page 4598f318ba72 menu html_cards | <h3> names (also <h3> sub-sections), 1-3 unlabeled size prices as separate divs, ingredient list; unpriced wellness shots; badge/"What's this?" noise
+region b0055 b0737
+recipe h2=section h3=item price=price other=noise
+fix b0056=section b0141=section b0203=section b0250=section b0251=section b0256=section b0261=section b0328=section b0400=section b0458=section b0464=section b0470=section b0476=section b0482=section b0488=section b0494=section b0500=section b0506=section b0646=section b0710=section
+fix b0061=description b0067=description b0076=description b0085=description b0103=description b0112=description b0121=description b0127=description b0136=description b0155=description b0164=description b0182=description b0189=description b0198=description b0208=description b0217=description b0226=description b0235=description b0244=description b0269=description b0276=description b0284=description b0291=description b0299=description b0307=description b0321=description b0341=description b0350=description b0359=description b0368=description b0377=description b0386=description b0395=description b0403=description b0410=description b0417=description b0424=description b0431=description b0438=description b0445=description b0452=description b0514=description b0521=description b0528=description b0537=description b0545=description b0552=description b0556=description b0563=description b0570=description b0577=description b0584=description b0591=description b0598=description b0605=description b0612=description b0619=description b0626=description b0633=description b0640=description b0649=description b0656=description b0661=description b0666=description b0670=description b0675=description b0680=description b0685=description b0690=description b0695=description b0699=description b0703=description b0707=description b0713=description b0717=description b0721=description b0725=description b0729=description b0733=description
+fix b0458=item b0464=item b0470=item b0476=item b0482=item b0488=item b0494=item b0500=item b0506=item b0312=item
+fix b0459=description b0465=description b0471=description b0477=description b0483=description b0489=description b0495=description b0501=description b0507=description b0313=description b0245=description
+fix b0252=modifier b0257=modifier b0262=modifier b0646=noise b0710=noise
+
+page 200000724aa0 menu html_list | one-page site: homepage IS the menu. <h3> names, <h4> prices, <p> descriptions; "Name | $3.25" lines; extras "$.50" (no leading digit)
+region b0026 b0078
+recipe h1=section h3=item price=price other=description
+fix b0054=section b0059=section b0065=section b0071=section b0055..b0058=modifier b0060..b0064=modifier b0066..b0070=item b0072..b0078=item
+
+page 62c001df2971 menu html_cards | unpriced chain menu landing: item cards (name printed twice + "Order Now"), category tiles below; $ amounts on page are shipping promos
+region b0156 b0218
+fix b0156..b0218=noise b0156=section b0159..b0216%3=item
+
+page 7e3a83b84a97 menu html_cards | best-sellers subset of the chain menu: image alt text, <h3> name, size prices, ingredients
+region b0049 b0113
+recipe h3=item price=price other=noise
+fix b0051=description b0061=description b0071=description b0079=description b0086=description b0096=description b0106=description b0113=description
+
+page 0bf6f5017a83 menu price_list | custom-cake price list: "per serving" prices, two items in one line, "and up"/"start at" prices, add-on fillings
+region b0008 b0033
+fix b0008..b0033=noise b0008=section b0009=item b0010=description b0011=item b0012=description b0013=section b0014..b0015=modifier b0016=modifier b0017..b0019=modifier
+fix b0020=section b0021..b0022=modifier b0023=item b0024=description b0025=price b0026=section b0027..b0032=item
+name b0009=Classic Flavors
+name b0011=Gourmet Flavors
+name b0023=Fondant Iced cakes
+prices b0023=-:6.50
+name b0027=1/4 Sheets
+prices b0027=-:60
+additem b0027=1/2 Sheets|-:95
+name b0028=Full Sheets
+prices b0028=-:150
+additem b0028=Cupcakes|-:2.50
+name b0029=Baby Smash Cakes
+prices b0029=-:25
+additem b0029=6" 1st Anniv. Past Brides|-:25
+name b0030=Wedding Cupcakes
+prices b0030=-:2.75,filled:3.25
+name b0031=Dipped Strawberries
+prices b0031=-:2,Tuxedos or rolled:3
+name b0032=Groom's Cakes
+prices b0032=-:5.50
+
+page 9f1d355106a1 not_menu location | chain location page: hours, address, happy-hour deals with prices (not a menu)
