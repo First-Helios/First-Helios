@@ -182,3 +182,172 @@ name b0032=Groom's Cakes
 prices b0032=-:5.50
 
 page 9f1d355106a1 not_menu location | chain location page: hours, address, happy-hour deals with prices (not a menu)
+
+# ---- page-level labels only (no block labels). menu = main content lists the venue's items (priced or not);
+# ---- not_menu formats: home, location, about, hub (menu landing with only category links), other.
+# ---- js_only / empty = nothing server-rendered: excluded from classifier metrics, counted separately.
+page 62699b3f5eb3 menu html_cards | unpriced chain menu (item cards); PDF link
+page d0fec1f624fd js_only square | Square Online site, client-rendered
+page 188736e8d8da empty none | 200 with no text
+page 8b4c04e59220 not_menu home | homepage (flavor teaser)
+page ea8d6364f770 not_menu other | cakes/products landing
+page 5ea373c2004f not_menu location | location page
+page 9bfda1d98238 js_only square | Square Online site
+page a11868a773a4 not_menu location | chain location page ("Explore Our Menu" link only)
+page 0b6023bbdc89 js_only clover | Clover online ordering
+page de694984a273 not_menu other | employment page
+page 12fb88721351 js_only chain | store locator
+page 6305c59d3166 js_only chain | chain /menu, client-rendered
+page d1f37cadd5e3 empty none | 200 with no text
+page c5426673fb1d not_menu home | homepage
+page a818b8e6fbf4 not_menu location | locations directory titled "Locations + Menus"
+page 35a58f20715b not_menu other | email signup
+page 16443b60d53f not_menu home | homepage
+page 72940930f472 menu html_cards | unpriced chain menu
+page a0f382a174e1 menu html_cards | same page as 72940930f472 (fragment URL)
+page c61d591a7cab menu html_cards | same page as 72940930f472
+page 7d6d13cede0a not_menu about | about
+page ee4d793982eb not_menu home | homepage
+page 5240814213c9 not_menu hub | /menus landing with no items
+page 90f43f8dbc50 not_menu other | reservations
+page 8ec0a10d4bd1 not_menu home | brewery homepage
+page 5b6cbe51fcfd not_menu other | error page
+page 0d8787b1374d not_menu other | parked domain for sale
+page ab6d6fa89377 not_menu other | parked-domain terms
+page fb5e9f9b6600 not_menu home | SEO prose homepage
+page a05be799c6b0 not_menu location | chain location page
+page 9ca7dab259e3 not_menu location | locations directory
+page 78909c3eedb8 js_only other | client-rendered homepage
+page 3bbc2e9c38c1 js_only other | online menu, client-rendered
+page 5b37d3abad59 not_menu home | homepage with featured items
+page 575abefd2796 menu html_cards | unpriced chain menu; PDF links
+page a7c77c2f7794 not_menu location | locator
+page 720f16002cee not_menu home | homepage
+page 738f4b8c106a not_menu about | about
+page 57d686d44a8c not_menu location | chain location page with deals
+page eff0e61ac915 not_menu other | coffee-bean e-commerce homepage
+page 27b97250c722 not_menu other | cart
+page 4c70bea975da js_only chain | client-rendered homepage
+page 4cd3c0cf0597 js_only chain | chain /menu, client-rendered
+page c78123008f71 not_menu location | chain location page
+page 717bb6190eec not_menu location | locations directory
+page c062e4dfb8c5 not_menu home | homepage with signature dishes
+page 91dabe47afda menu html_list | unpriced full menu
+page f78f7e304456 menu html_list | same page as 91dabe47afda (fragment URL)
+page f874f91a263d js_only clover | Clover online ordering
+page 4c566c560935 not_menu home | homepage
+page 2e34a8748520 not_menu home | homepage
+page 9b993ac3df46 js_only other | /menu with only nav in HTML
+page cecc55c031c5 not_menu about | history
+page 2ff14a66b0df not_menu location | chain locations directory
+page 66deb2223bd4 not_menu location | chain locations directory
+page 50cf711fa64c not_menu home | homepage
+page 5724eae2a973 menu html_cards | unpriced menu (build-your-own)
+page 4849a1750755 js_only toast | Toast ordering page
+page a8116c5ffb6b not_menu about | about
+page e25475507eb8 not_menu location | chain location page
+page ed699a9a906f menu html_cards | unpriced chain menu
+page 408223de1c4d not_menu home | homepage
+page c227b1254dd2 not_menu home | homepage
+page fdf27fe66f8b not_menu other | accessibility statement
+page e501d2b29ea4 not_menu home | homepage
+page 3cc7760ea65f menu html_cards | unpriced chain menu
+page 1540344d4d2a not_menu location | locations
+page 1e95075cc2c8 not_menu home | homepage
+page 9b7e2f1d7177 not_menu home | homepage (index.html)
+page cff17f75beaf not_menu home | homepage; menu is a linked PDF (not fetched)
+page 4f18accaa7e2 not_menu home | homepage
+page ab87893f0d87 not_menu other | catering
+page 686f78f60aa3 not_menu home | homepage
+page 895200ada49f not_menu other | cart
+page 1ca1c597af91 not_menu home | homepage
+page bb36a62d58d7 not_menu other | shop cart
+page 8000c1341d9b js_only chain | client-rendered homepage
+page ab195d033737 js_only chain | chain /menu, client-rendered
+page 28349c831324 not_menu location | chain location page
+page ebe301813b91 not_menu location | chain location page of ANOTHER city (Huntsville AL) accepted by S4
+page f419e0846b77 not_menu location | chain location page
+page fa8f58bb2f8b not_menu location | locations directory
+page 48a6e093aa2a not_menu location | chain location page
+page 6a3d65a05b96 not_menu location | locations directory
+page 39b99130fdfc js_only chain | client-rendered homepage
+page 298df6c37c93 not_menu home | retail homepage
+page b481b890244a not_menu other | accessibility policy
+page 5f62f1e2e5ab not_menu home | homepage with specialties teaser
+page 617ea8f8f7e7 not_menu other | cart
+page 5b31daf72142 not_menu home | homepage
+page d690fee10afc not_menu hub | /menus landing with no items
+page e95a14deccdb not_menu other | catering
+page f8149603bdbb empty none | 200 with no text
+page c5e7ef9fc149 not_menu home | homepage
+page 372d1da8aa25 menu html_cards | unpriced chain menu
+page 33b376078b33 menu html_cards | same page as 372d1da8aa25
+page 76d2dddecb4b not_menu location | locations
+page 8b2b97ec5af8 not_menu home | church homepage (Overture website for a church cafe)
+page d9602d8cd5c6 not_menu other | online services
+page d53a8ae9470c js_only chain | store locator
+page 13af46798dc6 not_menu home | homepage
+page 50fe88910db3 not_menu hub | chain /menu category hub, no items
+page b6303f017b48 not_menu hub | same hub as 50fe88910db3
+page 1874a5b2fcc9 js_only chain | client-rendered
+page e430c362439a not_menu other | delivery info
+page 51a8e169a778 not_menu home | homepage
+page a7cda93a4f25 menu image_only | menu is banner images only (no item text)
+page 841619a28218 not_menu about | about
+page 1339e803b889 js_only other | Overture website is a POS vendor, not the venue
+page 066f50152f54 not_menu home | homepage
+page 684e203a8ab6 menu html_cards | unpriced menu
+page 19b79ff22898 menu html_cards | same page as 684e203a8ab6
+page 3e2413b903ee not_menu other | Toast payroll job listings accepted by S4 as a platform menu
+page 21f76d5a8349 not_menu about | our story
+page b25e4772f915 not_menu home | homepage (closed permanently)
+page 4b2fd6b55bcc not_menu home | homepage (index.php)
+page 2b49a13d1bb6 not_menu home | a /pdf/...menu URL that serves the homepage HTML
+page 640ccbcec82c not_menu about | about (serves homepage)
+page d72ac126103b not_menu home | homepage
+page 5dfc645a3a45 not_menu hub | /menu landing linking sub-menus
+page 71fdf61513f9 menu html_list | brunch menu
+page 35fd5a636a15 not_menu home | homepage
+page 14fb3f6b00e4 menu html_cards | unpriced menu
+page 9ccf96a12e1d not_menu location | locations
+page c2847461b316 empty none | 200 with no text
+page 30335fb38ae4 not_menu home | homepage with popular items
+page 625b7b8dd832 js_only other | cart
+page 0a80ed7acb39 not_menu other | registrar parking page
+page 92cda0c18a0d not_menu home | location homepage
+page 1fb69653934c not_menu other | generic /menu of a multi-city site: one by-the-pound price, no items
+page 8d02fd690571 menu html_list | same page as 4905f16602b5
+page 0ba742340d15 not_menu home | multi-city homepage
+page ddab11b1b1f9 not_menu home | homepage
+page 5ecba4ca5a02 menu html_cards | unpriced menu
+page 091635632d7b not_menu other | alerts
+page 0a9e5730d5e9 not_menu home | homepage with happy-hour teaser prices
+page bc120a2868b9 not_menu other | Toast marketing signup accepted by S4 as a platform menu
+page 072a8040fbf0 not_menu home | homepage
+page 867021d81dfd not_menu hub | /menu with only a "View Full Menu" link
+page 1efe159b6c4b not_menu other | cart
+page 51e84c29ba54 not_menu home | homepage
+page 295dac75322d menu html_cards | unpriced chain menu
+page aad1981c887c not_menu home | homepage
+page e03fa713e8d4 not_menu other | "Menu" page with prose only, no items
+page c2cecf903438 not_menu about | about
+page 0872d28d84b5 empty none | 200 with no text
+page 216e4ad8c36b not_menu location | chain location page
+page 786bad8e4f8a js_only grubhub | Grubhub page
+page 8b59b8a10ed7 not_menu location | locator
+page 7f4f9c3301bb js_only chain | client-rendered location page
+page 4ab4f83d2184 empty none | 200 with no text
+page 68e6becff088 not_menu other | blog post about dishes accepted by S4 as a menu
+page 67274dd06424 js_only other | client-rendered
+page a2996d1add85 js_only other | /menu client-rendered
+page bb41fcc1bad5 js_only other | /menu client-rendered
+page 58257a415eaa js_only other | client-rendered
+page 307f9a3c17ee not_menu home | homepage
+page d885b46d246b js_only other | /menu client-rendered
+page 41e5718104f0 js_only other | cart
+page 8c4ef7ce191f not_menu home | homepage
+page a2806eca35e0 not_menu other | cart
+page 3bf5847db119 not_menu home | homepage
+page 11d03cffdeef not_menu about | about
+page 122734ef3906 not_menu other | hijacked domain (gambling spam)
+page 5a5e396ae860 not_menu other | hijacked domain (gambling spam)

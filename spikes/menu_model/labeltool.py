@@ -71,6 +71,23 @@ def cmd_pages() -> None:
         )
 
 
+def cmd_peek() -> None:
+    """One line per not-yet-labeled page: title, first headings, first body text."""
+    done = {p.stem for p in (LABELS / "pages").glob("*.json")}
+    for p in load_pages():
+        pid = str(p["page_id"])
+        if pid in done:
+            continue
+        blocks = [b for b in blocks_of(pid) if not b.in_chrome]
+        heads = [b.text[:28] for b in blocks if b.heading][:6]
+        body = [b.text[:28] for b in blocks if not b.heading and len(b.text) > 3][:4]  # noqa: PLR2004
+        print(
+            f"{pid} {str(p['role'])[:6]:6} J={int(bool(p.get('js_only')))} n={len(blocks):3} "
+            f"pdf={p.get('pdf_links', 0)} {str(p['url'])[8:55]:47} | {_title(pid)[:35]} "
+            f"| H:{heads} | B:{body}"
+        )
+
+
 def cmd_show(page_id: str, lo: str | None, hi: str | None) -> None:
     for b in blocks_of(page_id):
         if lo and hi and not (lo <= b.id <= hi):
@@ -341,6 +358,8 @@ def main() -> None:
     cmd, *args = sys.argv[1:]
     if cmd == "pages":
         cmd_pages()
+    elif cmd == "peek":
+        cmd_peek()
     elif cmd == "show":
         cmd_show(args[0], *(args[1:3] if len(args) >= 3 else (None, None)))  # noqa: PLR2004
     elif cmd == "draft":
