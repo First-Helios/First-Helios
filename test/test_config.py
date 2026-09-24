@@ -9,8 +9,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import ValidationError
 
-from packages.helios_core.config import DatabaseUrlNotSetError, get_database_url, get_settings
+from packages.helios_core.config import (
+    DatabaseUrlNotSetError,
+    Settings,
+    get_database_url,
+    get_settings,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -43,6 +49,26 @@ def test_set_database_url_is_normalized(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db.example:5432/helios_test")
 
     assert get_database_url() == "postgresql+psycopg://u:p@db.example:5432/helios_test"
+
+
+def test_wildcard_cors_origin_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ADR-0008: CORS is locked to named origins, never "*" (R45).
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", '["*"]')
+    with pytest.raises(ValidationError, match="wildcard"):
+        Settings()
+
+
+def test_wildcard_among_other_cors_origins_is_still_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", '["http://localhost:5173", "*"]')
+    with pytest.raises(ValidationError, match="wildcard"):
+        Settings()
+
+
+def test_named_cors_origins_are_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", '["http://localhost:5173"]')
+    assert Settings().cors_allow_origins == ["http://localhost:5173"]
 
 
 def test_alembic_refuses_to_run_without_database_url() -> None:

@@ -5,6 +5,9 @@ the owner on 2026-09-20**; all four open conventions confirmed as-implemented (s
 [Owner decision](#owner-decision)). Unit B (staging deploy) not done — a separate
 reviewed unit.
 **Date:** 2026-09-20
+**Amended:** 2026-09-23 — error `code` enum, `/readyz` envelope, CORS/timeouts/
+request-id hardening, see [Amendment 1](#amendment-1-2026-09-23-api-polish)
+(review session S9; owner decisions D7)
 **Closes:** the web-framework deferral in
 [ADR-0001](./0001-stack-choice.md) ("Web framework (Phase 7+): not yet chosen in
 code … reaffirmed or revised in a dedicated ADR once `apps/api/` exists").
@@ -240,6 +243,53 @@ section now records that owner disposition, not merely the delegated build.
 Green tests, CI, or the presence of this document are **not** owner acceptance
 (CLAUDE.md; ADR-0006/0007 precedent); this disposition is that explicit owner
 acceptance, recorded here rather than inferred from the passing build.
+
+## Amendment 1 (2026-09-23): API polish
+
+The 2026-09-22 codebase review (R37, R38, R41-R50, R99) found several gaps
+between this ADR's conventions and the shipped code. Owner decisions D7
+(remediation checklist) settle:
+
+- **Error `code` enum grows by two** (D7.1). The set in Decision point 4 above
+  was `{not_found, validation_error, invalid_cursor, internal_error}`; it is
+  now `{not_found, validation_error, invalid_cursor, method_not_allowed,
+  service_unavailable, internal_error}`. A `405` reports `method_not_allowed`
+  (with an `Allow` header) instead of `internal_error`; any other unmapped 4xx
+  reports `validation_error` instead of `internal_error`; a `/readyz` failure
+  reports `service_unavailable` (next point).
+- **`/readyz` returns the standard envelope** (D7.2), not the ad hoc
+  `{"status": "unavailable"}` body: `503 {detail, code: "service_unavailable",
+  trace_id}`, and the failure is logged.
+- **CORS never accepts a wildcard** (D7.3): `CORS_ALLOW_ORIGINS` containing
+  `"*"` now fails Settings validation at startup instead of being silently
+  accepted. `expose_headers=["X-Request-ID"]` was also added, so cross-origin
+  JavaScript can read the header the ADR already promised in error bodies as
+  `trace_id`.
+- **DB connect/pool timeouts** (D7.4): `connect_timeout=5s`, `pool_timeout=10s`,
+  `pool_pre_ping=True` on the engine, so a black-holed database fails fast
+  instead of holding a worker thread per request for psycopg's ~130s default.
+- **Inbound `X-Request-ID` is validated, not trusted verbatim** (D7.5): only
+  ≤64 characters from `[A-Za-z0-9._-]` are echoed back; anything else (oversize,
+  control/CRLF characters) is replaced with a freshly minted id.
+- **Unhandled exceptions are caught by the request-id middleware itself**, not
+  an app-level `Exception` handler, so a `500`'s response still carries
+  `X-Request-ID` and CORS headers (previously it carried neither: FastAPI
+  routes a bare `Exception` handler through Starlette's `ServerErrorMiddleware`,
+  which sits outside every user middleware).
+- **Overflowing ids/cursors are rejected, not 500'd.** `venue_id` and a decoded
+  cursor are bounded to the Postgres `BIGINT` range (`400`/`422`), instead of
+  reaching a `::BIGINT` comparison and raising a driver error.
+- **The published OpenAPI documents the real contract**: every route declares
+  `responses=` with `ErrorResponse` (not FastAPI's default
+  `HTTPValidationError`/`ValidationError`), and `code` is a Literal enum in the
+  schema. The committed snapshot was regenerated; see PR for the diff.
+- **Timestamps are enforced UTC on the wire** regardless of the DB session's
+  `TimeZone` setting, via an explicit serializer rather than relying on server
+  configuration.
+- **Left alone:** the `httpx` → `httpx2` TestClient deprecation warning
+  (Decision point 4's `httpx2` note was already reversed in the owner
+  disposition below; `httpx2` is not a real, usable replacement — swapping
+  back was out of scope for this session and is not a one-line change).
 
 ## References
 

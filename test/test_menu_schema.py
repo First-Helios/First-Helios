@@ -31,7 +31,7 @@ from packages.helios_core.domains.menu.models import (
 )
 from packages.helios_core.identity import SubjectChangeMember, SubjectNotEligibleError
 from packages.helios_core.provenance import Evidence, SourceRecordVersion
-from test.menu_support import aggregate, force, inherited, raw_page, raw_page_support
+from test.menu_support import aggregate, force, inherited, raw_page, raw_page_support, rejected
 from test.provider_support import pending_change
 from test.test_menu_replay import menu_scopes as menu_scopes
 from test.test_provider_concurrency import mutate
@@ -40,19 +40,6 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
     from test.provider_support import ScopeFixture
-
-
-def rejected(error: pytest.ExceptionInfo[DBAPIError], constraint: str | None = None) -> None:
-    assert getattr(error.value.orig, "sqlstate", None) in {
-        "23514",
-        "23503",
-        "23505",
-        "23502",
-        "22P02",
-        "22003",
-    }
-    if constraint:
-        assert error.value.orig.diag.constraint_name == constraint  # type: ignore[union-attr]
 
 
 @pytest.mark.parametrize(
@@ -77,29 +64,39 @@ def test_scope_rejected_at_insert(
     factory, scope = menu_scopes
     with factory.begin() as writer:
         mutate(writer, scope, change)
-    with factory() as writer, pytest.raises((DBAPIError, SubjectNotEligibleError)):
-        (raw_page if raw else persist_menu)(writer, aggregate(scope))
+    with factory() as writer:
+        if raw:
+            with pytest.raises(DBAPIError) as error:
+                raw_page(writer, aggregate(scope))
+            rejected(error, "ck_resolved_scope_admission")
+        else:
+            with pytest.raises(SubjectNotEligibleError, match="failed current admission"):
+                persist_menu(writer, aggregate(scope))
 
 
 @pytest.mark.parametrize(
-    "overrides",
+    ("overrides", "constraint", "sqlstate"),
     [
-        {"subject_kind": "place"},
-        {"subject_kind": None},
-        {"subject_id": None},
-        {"subject_kind": "organization"},
-        {"resolution_event_id": 9223372036854775807},
-        {"observed_at": datetime(2000, 1, 1, tzinfo=UTC)},
-        {"created_transaction_id": 1},
-        {"accepted_at": datetime(2000, 1, 1, tzinfo=UTC)},
+        ({"subject_kind": "place"}, "ck_menu_scope", "23514"),
+        ({"subject_kind": None}, "ck_menu_scope", "23514"),
+        ({"subject_id": None}, None, "22023"),
+        ({"subject_kind": "organization"}, "ck_menu_scope", "23514"),
+        ({"resolution_event_id": 9223372036854775807}, "ck_resolved_scope_admission", "23514"),
+        ({"observed_at": datetime(2000, 1, 1, tzinfo=UTC)}, "ck_menu_version", "23514"),
+        ({"created_transaction_id": 1}, "ck_menu_stamp", "23514"),
+        ({"accepted_at": datetime(2000, 1, 1, tzinfo=UTC)}, "ck_menu_stamp", "23514"),
     ],
 )
 def test_forged_page_rejected(
-    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], overrides: dict[str, Any]
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture],
+    overrides: dict[str, Any],
+    constraint: str | None,
+    sqlstate: str,
 ) -> None:
     factory, scope = menu_scopes
-    with factory() as writer, pytest.raises(DBAPIError):
+    with factory() as writer, pytest.raises(DBAPIError) as error:
         raw_page(writer, aggregate(scope), **overrides)
+    rejected(error, constraint, sqlstate)
 
 
 @pytest.mark.parametrize("boundary", ["forced", "commit"])
@@ -271,10 +268,50 @@ def test_every_table_is_immutable(
         if operation == "UPDATE"
         else f"{operation} {'FROM ' if operation == 'DELETE' else ''}menu.{table}"
     )
+    with factory() as reader:
+        referenced = reader.scalar(
+            text("SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE confrelid = :t ::regclass)"),
+            {"t": f"menu.{table}"},
+        )
     with factory() as writer, pytest.raises(DBAPIError) as error:
         writer.execute(text(statement))
-    # PostgreSQL can reject TRUNCATE of an FK provider before its trigger runs.
-    assert getattr(error.value.orig, "sqlstate", None) in {"23514", "0A000"}
+    if operation == "TRUNCATE" and referenced:
+        # PostgreSQL rejects TRUNCATE of an FK provider before its trigger runs;
+        # test_every_table_has_a_truncate_trigger proves the trigger is there.
+        assert getattr(error.value.orig, "sqlstate", None) == "0A000"
+    else:
+        rejected(error, "ck_menu_immutable")
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "currency",
+        "menu_page",
+        "menu_section",
+        "menu_item",
+        "menu_variant",
+        "menu_modifier",
+        "menu_applicability",
+        "price_observation",
+        "evidence_link",
+    ],
+)
+def test_every_table_has_a_truncate_trigger(
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], table: str
+) -> None:
+    factory, _ = menu_scopes
+    with factory() as reader:
+        trigger = reader.execute(
+            text(
+                "SELECT t.tgenabled, t.tgtype, p.oid::regprocedure::text FROM pg_trigger t"
+                " JOIN pg_proc p ON p.oid = t.tgfoid"
+                " WHERE t.tgrelid = :t ::regclass AND t.tgname = 'trg_menu_no_truncate'"
+            ),
+            {"t": f"menu.{table}"},
+        ).one_or_none()
+    # tgtype 34 = TRIGGER_TYPE_BEFORE (2) | TRIGGER_TYPE_TRUNCATE (32), statement level.
+    assert trigger is not None and tuple(trigger) == ("O", 34, "menu.reject_mutation()")
 
 
 @pytest.mark.parametrize("kind", ["node", "link"])
@@ -501,19 +538,19 @@ def test_structural_grouping_and_individual_modifiers(
         assert read_aggregate(reader, result.page_id)[0] == value
 
 
-@pytest.mark.parametrize(
-    "defect",
-    [
-        "copied_payload",
-        "wrong_parent",
-        "duplicate_base",
-        "suppressed_child",
-        "suppressed_price",
-        "native_path",
-        "empty_structural",
-        "structural_evidence",
-    ],
-)
+_GRAPH_DEFECTS = {
+    "copied_payload": ("ck_menu_item_shape", "23514"),
+    "wrong_parent": ("ck_menu_base_parent", "23514"),
+    "duplicate_base": ("uq_menu_item_base", "23505"),
+    "suppressed_child": ("ck_menu_graph", "23514"),
+    "suppressed_price": ("ck_menu_graph", "23514"),
+    "native_path": ("ck_menu_native_path", "23514"),
+    "empty_structural": ("ck_menu_support", "23514"),
+    "structural_evidence": ("ck_menu_support", "23514"),
+}
+
+
+@pytest.mark.parametrize("defect", list(_GRAPH_DEFECTS))
 def test_graph_shapes_and_base_correspondence(
     menu_scopes: tuple[sessionmaker[Session], ScopeFixture], defect: str
 ) -> None:
@@ -582,12 +619,18 @@ def test_graph_shapes_and_base_correspondence(
         )
     with factory() as writer, pytest.raises(DBAPIError) as error:
         persist_menu(writer, value)
-    rejected(error)
+    rejected(error, *_GRAPH_DEFECTS[defect])
 
 
-@pytest.mark.parametrize("case", ["cross_page", "cycle"])
+@pytest.mark.parametrize(
+    ("case", "constraint", "sqlstate"),
+    [("cross_page", "fk_menu_item_section_id", "23503"), ("cycle", "ck_menu_graph", "23514")],
+)
 def test_raw_graph_fails_deferred_boundary(
-    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], case: str
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture],
+    case: str,
+    constraint: str,
+    sqlstate: str,
 ) -> None:
     factory, scope = menu_scopes
     with factory.begin() as setup:
@@ -634,7 +677,7 @@ def test_raw_graph_fails_deferred_boundary(
         )
         with pytest.raises(DBAPIError) as error:
             force(writer)
-        rejected(error)
+        rejected(error, constraint, sqlstate)
 
 
 @pytest.mark.parametrize("amount", [1.5, True, Decimal("1"), 2**63])
@@ -657,22 +700,25 @@ def test_money_dto_never_coerces(amount: Any) -> None:
 
 
 @pytest.mark.parametrize(
-    "patch",
+    ("patch", "constraint", "sqlstate"),
     [
-        {"amount_minor": -1},
-        {"price_state": "unknown"},
-        {"price_state": "unavailable"},
-        {"amount_minor": None},
-        {"currency_code": "EUR"},
-        {"currency_code": None},
-        {"confidence": Decimal("NaN")},
-        {"amount_minor": "1.5"},
-        {"amount_minor": 2**63},
-        {"price_kind": "delta"},
+        ({"amount_minor": -1}, "ck_menu_price_shape", "23514"),
+        ({"price_state": "unknown"}, "ck_menu_price_state", "23514"),
+        ({"price_state": "unavailable"}, "ck_menu_price_state", "23514"),
+        ({"amount_minor": None}, "ck_menu_price_state", "23514"),
+        ({"currency_code": "EUR"}, "fk_menu_price_currency", "23503"),
+        ({"currency_code": None}, None, "23502"),
+        ({"confidence": Decimal("NaN")}, "ck_menu_price_confidence", "23514"),
+        ({"amount_minor": "1.5"}, None, "22P02"),
+        ({"amount_minor": 2**63}, None, "22003"),
+        ({"price_kind": "delta"}, "ck_menu_price_shape", "23514"),
     ],
 )
 def test_raw_money_shape(
-    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], patch: dict[str, Any]
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture],
+    patch: dict[str, Any],
+    constraint: str | None,
+    sqlstate: str,
 ) -> None:
     factory, scope = menu_scopes
     with factory() as writer:
@@ -693,7 +739,7 @@ def test_raw_money_shape(
         values.update(patch)
         with pytest.raises(DBAPIError) as error:
             writer.execute(insert(PriceObservation).values(**values))
-        rejected(error)
+        rejected(error, constraint, sqlstate)
 
 
 @pytest.mark.parametrize("conflict", ["channel", "period", "empty", "unspecified", "duplicate"])
@@ -740,7 +786,10 @@ def test_context_intersects_full_ancestor_path(
     )
     with factory() as writer, pytest.raises(DBAPIError) as error:
         persist_menu(writer, value)
-    rejected(error)
+    if conflict == "duplicate":
+        rejected(error, "uq_menu_context", "23505")
+    else:
+        rejected(error, "ck_menu_context_intersection")
 
 
 @pytest.mark.parametrize(
@@ -938,16 +987,16 @@ def test_complete_local_then_base_withdrawal_is_history(
 
 
 @pytest.mark.parametrize(
-    "patch",
+    ("patch", "constraint"),
     [
-        {"valid_from": "infinity"},
-        {"valid_to": "-infinity"},
-        {"service_period": " "},
-        {"channel": "delivery"},
+        ({"valid_from": "infinity"}, "ck_menu_context_window"),
+        ({"valid_to": "-infinity"}, "ck_menu_context_window"),
+        ({"service_period": " "}, "ck_menu_context_keys"),
+        ({"channel": "delivery"}, "ck_menu_context_channel"),
     ],
 )
 def test_raw_nonfinite_and_invalid_context_rejected(
-    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], patch: dict[str, Any]
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], patch: dict[str, Any], constraint: str
 ) -> None:
     factory, scope = menu_scopes
     with factory() as writer:
@@ -956,7 +1005,7 @@ def test_raw_nonfinite_and_invalid_context_rejected(
         values.update(patch)
         with pytest.raises(DBAPIError) as error:
             writer.execute(insert(MenuApplicability).values(**values))
-        rejected(error)
+        rejected(error, constraint)
 
 
 def test_compatible_narrowed_contexts_and_reordered_replay(

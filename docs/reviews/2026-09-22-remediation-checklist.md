@@ -40,7 +40,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 open, owner review |
 | 9 | S9 API polish | D7 | M | [ ] |
-| 10 | S10 Test hardening sweep | — | S | [ ] |
+| 10 | S10 Test hardening sweep | — | S | [X] #31 open |
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [ ] |
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [ ] |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
@@ -609,19 +609,20 @@ Branch: `fix/identity-locks` · Concurrency-sensitive accepted code: owner revie
 Hand-off prompt: `Do session S9 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/api-polish` · OpenAPI snapshot changes: owner review.
 
-- [ ] R37 OpenAPI documents the wrong error shape
-- [ ] R38 No database connect/pool timeouts (per D7.4)
-- [ ] R41 Huge id or cursor → 500 instead of 400/404
-- [ ] R42 500 errors missing request-id and CORS headers
-- [ ] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
-- [ ] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
-- [ ] R45 CORS wildcard allowed via environment (per D7.3)
-- [ ] R46 `X-Request-ID` not readable by browser JavaScript
-- [ ] R47 Deprecated 422 constant; TestClient `httpx` deprecation
-- [ ] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
-- [ ] R49 API error tests all require a database
-- [ ] R50 Timestamps not forced to UTC
-- [ ] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
+- [X] R37 OpenAPI documents the wrong error shape
+- [X] R38 No database connect/pool timeouts (per D7.4)
+- [X] R41 Huge id or cursor → 500 instead of 400/404
+- [X] R42 500 errors missing request-id and CORS headers
+- [X] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
+- [X] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
+- [X] R45 CORS wildcard allowed via environment (per D7.3)
+- [X] R46 `X-Request-ID` not readable by browser JavaScript
+- [X] R47 Deprecated 422 constant; TestClient `httpx` deprecation (constant fixed;
+  the `httpx`→`httpx2` swap is deliberately left — see PR)
+- [X] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
+- [X] R49 API error tests all require a database
+- [X] R50 Timestamps not forced to UTC
+- [X] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
 
 **Recommended approach**
 - Catch unhandled exceptions inside the request middleware and render the envelope
@@ -641,14 +642,14 @@ Branch: `fix/api-polish` · OpenAPI snapshot changes: owner review.
 Hand-off prompt: `Do session S10 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `test/hardening` · Tests only.
 
-- [ ] R29 Discovery/URL/seed writes never tested with a real commit
-- [ ] R59 Menu TRUNCATE test can't detect a missing trigger
-- [ ] R77 Golden-set test re-implements the match rule
-- [ ] R78 Audit report label is always "wrong"
-- [ ] R81 Menu rejection tests accept too many error types
-- [ ] R82 Migration test cleanup swallows errors; alembic helper depends on cwd
-- [ ] R83 Parser-isolation guard checks nothing; Gold refresh missing from no-commit test
-- [ ] S7-found (not in review) `test_deterministic_resolution.py::test_identical_observation_retry_reuses_immutable_bronze_rows`
+- [X] R29 Discovery/URL/seed writes never tested with a real commit
+- [X] R59 Menu TRUNCATE test can't detect a missing trigger
+- [X] R77 Golden-set test re-implements the match rule
+- [X] R78 Audit report label is always "wrong"
+- [X] R81 Menu rejection tests accept too many error types
+- [X] R82 Migration test cleanup swallows errors; alembic helper depends on cwd
+- [X] R83 Parser-isolation guard checks nothing; Gold refresh missing from no-commit test
+- [X] S7-found (not in review) `test_deterministic_resolution.py::test_identical_observation_retry_reuses_immutable_bronze_rows`
   counts whole Bronze tables (`== 1`), so a full rerun on a used `*_test` DB fails
   (`assert 706 == 1`); scope the counts to its own source record (R11 class)
 

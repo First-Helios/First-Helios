@@ -9,16 +9,16 @@ never mutates them.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session  # noqa: TC002 - FastAPI resolves this at runtime for Depends
 
 from apps.api.db import get_session
 from apps.api.errors import NotFoundError
-from apps.api.pagination import DEFAULT_LIMIT, MAX_LIMIT, decode_cursor, encode_cursor
-from apps.api.schemas import VenueList, VenueResponse
+from apps.api.pagination import BIGINT_MAX, DEFAULT_LIMIT, MAX_LIMIT, decode_cursor, encode_cursor
+from apps.api.schemas import ErrorResponse, VenueList, VenueResponse
 from packages.helios_core.identity.models import (
     Establishment,
     Organization,
@@ -30,6 +30,17 @@ if TYPE_CHECKING:
     from sqlalchemy import Select
 
 router = APIRouter(prefix="/venues", tags=["venues"])
+
+# Documented per ADR-0008 SS4 error contract (R37): a malformed/overflowing
+# ``cursor`` maps to 400, and both routes' query/path validation maps to 422.
+_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"model": ErrorResponse, "description": "The cursor is malformed."},
+    422: {"model": ErrorResponse, "description": "A query parameter failed validation."},
+}
+_GET_RESPONSES: dict[int | str, dict[str, Any]] = {
+    404: {"model": ErrorResponse, "description": "No current venue has this id."},
+    422: {"model": ErrorResponse, "description": "venue_id is out of range."},
+}
 
 
 def _to_venue(
@@ -58,7 +69,12 @@ def _current_venue_select() -> Select[tuple[Establishment, Organization, Place]]
     )
 
 
-@router.get("", response_model=VenueList, summary="List venues (cursor-paginated)")
+@router.get(
+    "",
+    response_model=VenueList,
+    summary="List venues (cursor-paginated)",
+    responses=_LIST_RESPONSES,
+)
 def list_venues(
     session: Annotated[Session, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -81,9 +97,14 @@ def list_venues(
     return VenueList(items=items, next_cursor=next_cursor)
 
 
-@router.get("/{venue_id}", response_model=VenueResponse, summary="Get one venue by id")
+@router.get(
+    "/{venue_id}",
+    response_model=VenueResponse,
+    summary="Get one venue by id",
+    responses=_GET_RESPONSES,
+)
 def get_venue(
-    venue_id: int,
+    venue_id: Annotated[int, Path(ge=0, le=BIGINT_MAX)],
     session: Annotated[Session, Depends(get_session)],
 ) -> VenueResponse:
     """Return a single current venue, or 404 if no such current Establishment."""
