@@ -39,6 +39,16 @@ class Settings(BaseSettings):
             return None
         return normalize_database_url(value)
 
+    @field_validator("cors_allow_origins")
+    @classmethod
+    def _reject_wildcard_origin(cls, value: list[str]) -> list[str]:
+        if "*" in value:
+            raise ValueError(
+                "CORS_ALLOW_ORIGINS must not contain '*' (ADR-0008: never a wildcard "
+                "origin); list the exact frontend origin(s) instead."
+            )
+        return value
+
 
 @lru_cache
 def get_settings() -> Settings:
