@@ -105,6 +105,7 @@ SYSTEM_V2 = (
     'printed, "p": price copied exactly as printed, digits only (e.g. 12.50), "" if no price '
     'is printed for it, "v": size/variant word printed next to that price (e.g. "Large", '
     '"Glass"), only if there is one}. An item with several prices gets one entry per price. '
+    "The price may be printed on the line after the item name. "
     "Do not invent items or prices, do not convert or compute prices, skip section headings, "
     "descriptions, navigation, hours, addresses, reviews and add-on/extra lines. "
     "If the text contains no menu items, return no sections. "
@@ -189,12 +190,12 @@ def token_cap(text: str) -> int:
     return min(MAX_TOKENS, per_line * (text.count("\n") + 1) + 64)
 
 
-def extract_chunk(server: str, text: str) -> dict[str, Any]:
+def _extract_once(server: str, text: str, nudge: str = "") -> dict[str, Any]:
     v2 = PROCESS == "v2"
     body = {
         "messages": [
             {"role": "system", "content": SYSTEM_V2 if v2 else SYSTEM},
-            {"role": "user", "content": text},
+            {"role": "user", "content": text + nudge},
         ],
         "temperature": 0,
         "max_tokens": token_cap(text),
@@ -232,6 +233,39 @@ def extract_chunk(server: str, text: str) -> dict[str, Any]:
         "raw": content,
         "out": parse_output(content),
     }
+
+
+_PRICE_IN_LINE = re.compile(
+    r"(?<![\w.])\$\s?\d{1,3}(?:[.,]\d{2})?(?!\d)|(?<![\w.$])\d{1,3}[.,]\d{2}(?!\d)"
+)
+SPARSE_MIN_PRICES = 3  # v2.2 retry trigger: a chunk printing at least this many prices ...
+SPARSE_RATIO = 1 / 3  # ... whose output holds fewer priced rows than this share of them
+
+
+def extract_chunk(server: str, text: str) -> dict[str, Any]:
+    """One chunk; v2.2 re-asks once when a priced chunk comes back (nearly) empty.
+
+    The grammar lets a model close the item list at once, and a mid-section chunk sometimes
+    did exactly that. The trigger is deterministic (printed prices in the chunk's block lines
+    vs priced rows returned); the retry is recorded as ``retry`` with the first attempt kept.
+    """
+    res = _extract_once(server, text)
+    if PROCESS != "v2" or res["finish"] == "error":
+        return res
+    n_prices = sum(
+        len(_PRICE_IN_LINE.findall(line)) for line in text.splitlines() if line.startswith("b")
+    )
+    priced = sum(1 for sec in res["out"].get("sections", []) for r in sec.get("rows", []) if r[2])
+    if n_prices >= SPARSE_MIN_PRICES and priced < SPARSE_RATIO * n_prices:
+        nudge = (
+            f"\n\n(This text prints {n_prices} prices. List every sold item in it with its price; "
+            "the price is often on the line after the name.)"
+        )
+        second = _extract_once(server, text, nudge)
+        second["retry"] = {"first": res, "n_prices": n_prices, "first_priced_rows": priced}
+        second["wall_s"] = round(second["wall_s"] + res["wall_s"], 2)
+        return second
+    return res
 
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
@@ -421,6 +455,7 @@ def cmd_score(
         gens.append(sum(int(ch["timings"].get("predicted_n", 0)) for ch in result["chunks"]))
         c["truncated_chunks"] += sum(1 for ch in result["chunks"] if ch["finish"] == "length")
         c["error_chunks"] += sum(1 for ch in result["chunks"] if ch["finish"] == "error")
+        c["retried_chunks"] += sum(1 for ch in result["chunks"] if "retry" in ch)
         c["recovered_chunks"] += sum(
             1 for ch in result["chunks"] if "raw" in ch and parse_output(ch["raw"]).get("recovered")
         )

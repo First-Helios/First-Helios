@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v2.1 quality re-check on the micro-bench dev pages: Q4_K_M and Q4_0, 2 slots.
+# v2.2 quality re-check (+ Phi-4-mini) on the micro-bench dev pages: Q4_K_M and Q4_0, 2 slots.
 set -u
 cd ~/menu-model-spike
 export MENU_SPIKE_DATA=$HOME/menu-model-spike/data PYTHONPATH=. MENU_SPIKE_PROCESS=v2
@@ -16,6 +16,7 @@ run() {  # TAG MODEL
   kill $spid; wait $spid 2>/dev/null
 }
 : > logs/recheck.log
-run v21-km gguf/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
-run v21-q40 gguf/Qwen3-4B-Instruct-2507-Q4_0.gguf
+run v22-km gguf/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+run v22-q40 gguf/Qwen3-4B-Instruct-2507-Q4_0.gguf
+run v22-phi4 gguf/Phi-4-mini-instruct-Q4_K_M.gguf
 echo RECHECK-DONE >> logs/recheck.log
