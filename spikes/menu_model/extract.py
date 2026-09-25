@@ -116,11 +116,18 @@ def _post(server: str, body: dict[str, Any]) -> dict[str, Any]:
         return result
 
 
+def token_cap(text: str) -> int:
+    """Runaway guard (added after the 1.5B run): ~30 output tokens per input line."""
+    if os.environ.get("MENU_SPIKE_NO_CAP"):
+        return MAX_TOKENS
+    return min(MAX_TOKENS, 30 * (text.count("\n") + 1) + 64)
+
+
 def extract_chunk(server: str, text: str) -> dict[str, Any]:
     body = {
         "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}],
         "temperature": 0,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": token_cap(text),
         "response_format": {"type": "json_schema", "json_schema": {"schema": SCHEMA}},
         "chat_template_kwargs": {"enable_thinking": False},
         "cache_prompt": False,
