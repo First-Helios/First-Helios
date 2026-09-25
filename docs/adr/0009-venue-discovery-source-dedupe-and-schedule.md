@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune
+**Amended:** 2026-09-24 — name fingerprint keeps every script's letters, see [Amendment 1](#amendment-1-2026-09-24-name-fingerprint-normalization) (review session S12; owner decision D6.2)
 **Phase:** 4 (Venue Discovery, Identity & Geocoding)
 
 ## Context
@@ -259,6 +260,38 @@ discovery design must respect now so viewing is not blocked later:
 6. **Ingest bbox = Travis + Williamson** (lat `30.02 .. 30.85`,
    lon `-98.17 .. -97.37`).
 7. **Dedupe auto-merge = name fingerprint match + coordinates within 50 m.**
+
+## Amendment 1 (2026-09-24): name fingerprint normalization
+
+Review finding R18: the §2 fingerprint kept only `[0-9a-z]` after NFKD, so any
+non-Latin letter vanished (`Chinese Restaurant 金龍` and `Chinese Restaurant 福州`
+both became `chinese restaurant`; `Đông` became `ong`), and two such venues
+within 50 m auto-merged. Names with no ASCII letters fell back to the raw,
+unnormalized string. The rule is unchanged (fingerprint match **and** 50 m);
+only what "normalized name" means changes:
+
+- NFKD, casefold, then drop **accents** (marks with a non-zero combining class).
+  Letters NFKD cannot split fold by table (`đ ð→d`, `ø→o`, `ł→l`, `æ→ae`,
+  `œ→oe`, `ß→ss`, `ı→i`, `þ→th`, `ħ→h`, `ŧ→t`).
+- Letters, digits and remaining marks of **every script** are kept (spacing
+  vowel signs belong to their letter). Invisible format characters (soft
+  hyphen, ZWJ) are dropped; everything else is a word break.
+- Apostrophe variants, including U+02BC/U+02BB (which Unicode classes as
+  letters) and `´`, are elided rather than breaking the word.
+- A name with no letters or digits has no match key and is **skipped** before
+  Bronze, like a blank name; there is no raw-string fallback. If ADR-0011 is
+  accepted, S6 records these the way it records blank names (a `rejected`
+  Capture, never passed to Identity).
+
+Owner decision D6.2 (confirmed in session): no recompute script for stored
+fingerprints. The Pi database is purged and rebuilt (ADR-0011 §8 / D4.3),
+which re-mints every Organization with the new fingerprint. Until then, do not
+run incremental discovery against the current Pi database: known POIs resolve
+by GERS id before a fingerprint is computed, so stored fingerprints never
+change, and new non-ASCII names would miss dedupe against them (duplicates, not
+wrong merges). ASCII-only names fingerprint exactly as before. The geocoder
+cache key (`normalize_address`) shares the rule, so non-ASCII addresses get
+new cache keys (one extra lookup each).
 
 ## References
 
