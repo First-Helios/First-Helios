@@ -21,15 +21,22 @@ Workload, same for every candidate, same order:
 
 ## Candidates
 
-Fixed after the throughput micro-bench (`throughput.sh`); expected shape:
+Updated after the micro-bench and quality re-checks (2026-09-25):
 
-1. **Baseline:** Qwen3-4B-Instruct-2507 Q4_K_M, process v1 (positional rows, 3k chunks, 1 slot).
-2. **Optimized:** same model, process v2 + the best lossless/near-lossless throughput
-   settings from the micro-bench (slots, speculative decoding, quant).
-3. **Alternative model family** for quality: Phi-4-mini-instruct Q4_K_M (MIT), process v2,
-   same throughput settings as 2.
+- **v1 baseline dropped from the run:** ~30 min per page (2,509 s for 3 dev pages) means about
+  50 days of Pi time for a monthly pass over ~2,300 menu pages, so it fails Gate O outright.
+  Its quality on the pages already measured stays the reference (dev 3 pages: item recall
+  0.984, price recall 0.833; ho2 5 pages: item recall 0.918).
+- **Finalists (two, ~8-9 h each):** picked from the v2.2 re-check on 3 dev pages among
+  Qwen3-4B-Instruct-2507 Q4_K_M, Qwen3-4B-Instruct-2507 Q4_0 (ARM repack, 16-30 % faster, outputs
+  differ) and Phi-4-mini-instruct Q4_K_M (MIT); all with process v2.2 and 2 slots.
+- Dropped by measurement: speculative decoding (lossless but 30-40 % slower on 4 shared cores),
+  more than 2 slots (≤ 8 % gain), the NPU (4B does not load on rknpu 0.9.6; 1.5B quality fails).
 
-The NPU is out: the 4B does not load on driver 0.9.6, and 1.5B quality failed.
+The page gate uses the stage [1] classifier's **out-of-fold** predictions from step D (potion
+emb+hand, nested P≥0.95 threshold): 41 pages pass (40 menu, 1 not_menu); it drops 2 gold pages
+(159 of 1,380 gold items). Both views are reported: extractor quality on all 24 gold pages
+(Gate Q) and end-to-end quality through the gate.
 
 ## Decision rule (quality first)
 
