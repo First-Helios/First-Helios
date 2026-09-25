@@ -2,7 +2,7 @@
 
     # llama-server -m MODEL.gguf --host 127.0.0.1 --port 8080 -c 8192 ...
     MENU_SPIKE_DATA=... python -m spikes.menu_model.extract run --tag TAG [--server URL] [PAGE ...]
-    MENU_SPIKE_DATA=... python -m spikes.menu_model.extract score --tag TAG [--split=all|dev|ho1|ho2]
+    MENU_SPIKE_DATA=... python -m spikes.menu_model.extract score --tag TAG [--split=all|dev|ho1|ho2] [--repair]
 
 ``run`` sends each gold menu page's non-chrome blocks, one ``bNNNN | text`` line
 each, in chunks of at most :data:`CHUNK_CHARS`, to llama-server's OpenAI-style
@@ -173,13 +173,24 @@ def parse_output(content: str) -> dict[str, Any]:
     return {"sections": sections, "recovered": True}
 
 
-def rows_of(result: dict[str, Any]) -> list[Row]:
+_AMOUNT_ONLY = re.compile(r"^\$?\s?\d{1,4}(?:[.,]\d{1,2})?$")
+
+
+def rows_of(result: dict[str, Any], *, repair: bool = False) -> list[Row]:
+    """Extracted rows; ``repair`` applies two deterministic, counted fixes (see ``score``).
+
+    1. price printed in the variant slot and the price slot empty -> swap (small models
+       lose the positional order of ``[block, name, price, variant]``);
+    2. exact duplicate rows (same item, variant, price, section) collapse to one.
+    """
     rows: list[Row] = []
     for ch in result["chunks"]:
         out = parse_output(ch["raw"]) if "raw" in ch else ch["out"]
         for sec in out.get("sections", []):
             for r in sec.get("rows", []):
                 block, name, price, variant = (str(x).strip() for x in r)
+                if repair and not price and _AMOUNT_ONLY.match(variant):
+                    price, variant = variant, ""
                 if name:
                     rows.append(
                         Row(
@@ -190,6 +201,15 @@ def rows_of(result: dict[str, Any]) -> list[Row]:
                             claimed_block=block or None,
                         )
                     )
+    if repair:
+        seen: set[tuple[str, str | None, str | None, str | None]] = set()
+        unique = []
+        for row in rows:
+            key = (" ".join(norm_tokens(row.item)), row.variant, row.amount, row.section)
+            if key not in seen:
+                seen.add(key)
+                unique.append(row)
+        rows = unique
     return rows
 
 
@@ -229,7 +249,7 @@ def _match(row: Row, gold_items: list[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
-def cmd_score(tag: str, split: str) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915 - flat scoring pass
+def cmd_score(tag: str, split: str, *, repair: bool = False) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915 - flat scoring pass
     gold = load_gold()
     pages = {
         "all": set(gold),
@@ -252,7 +272,12 @@ def cmd_score(tag: str, split: str) -> dict[str, Any]:  # noqa: C901, PLR0912, P
             1 for ch in result["chunks"] if "raw" in ch and parse_output(ch["raw"]).get("recovered")
         )
         items: list[dict[str, Any]] = gold[pid]["items"]  # type: ignore[assignment]
-        rows = rows_of(result)
+        raw_rows = rows_of(result)
+        rows = rows_of(result, repair=repair)
+        c["rows_raw"] += len(raw_rows)
+        c["repair_price_from_variant"] += sum(
+            1 for r in raw_rows if not r.amount and r.variant and _AMOUNT_ONLY.match(r.variant)
+        )
         verdicts = validate(blocks_of(pid), rows)
         found_raw: set[int] = set()
         found_kept: set[int] = set()
@@ -305,6 +330,7 @@ def cmd_score(tag: str, split: str) -> dict[str, Any]:  # noqa: C901, PLR0912, P
     summary: dict[str, Any] = {
         "tag": tag,
         "split": split,
+        "repair": repair,
         "pages": len(walls),
         "item_recall_raw": rate("found_raw", "gold_items"),
         "item_recall_kept": rate("found_kept", "gold_items"),
@@ -337,8 +363,9 @@ def main() -> None:
         cmd_run(tag, server, [a for a in args[1:] if not a.startswith("--") and a not in skip])
     else:
         split = next((a.split("=", 1)[1] for a in args if a.startswith("--split=")), "all")
-        summary = cmd_score(tag, split)
-        (DATA / "extract" / tag / f"score-{split}.json").write_text(
+        repair = "--repair" in args
+        summary = cmd_score(tag, split, repair=repair)
+        (DATA / "extract" / tag / f"score-{split}{'-repair' if repair else ''}.json").write_text(
             json.dumps(summary, indent=1, default=str), encoding="utf-8"
         )
 
