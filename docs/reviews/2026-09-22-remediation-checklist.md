@@ -41,8 +41,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 |
 | 9 | S9 API polish | D7 | M | [X] #32 |
 | 10 | S10 Test hardening sweep | — | S | [X] #31 |
-| 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 draft, owner review |
-| 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [ ] |
+| 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 |
+| 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 draft, ADR-0012 awaiting acceptance |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
 | 🚦 | **Phase 5 gate:** start menu extraction after S7, S11, S12, S13 are merged | | | [ ] |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [ ] |
@@ -277,6 +277,11 @@ explains it. When a group is done, its sessions are ready to hand off.
   - [X] ⭐ Keep non-English letters (strip accents only)
   - [ ]  No, this wastes tokens, in dev mode its better to not need one off conversion when a rerun fix will be sufficent. if i misunderstood this push back ⭐ Recompute stored fingerprints on the Pi (agent writes the script, you run it)
   - [ ] ⭐ Don't auto-merge existing venues after the recompute
+  - *Answered 2026-09-24 (S12, confirmed with owner):* **no recompute script.** The
+    ADR-0011 §8 / D4.3 Pi purge + rebuild re-mints every Organization with the new
+    fingerprint. An *incremental* rerun would not: known POIs resolve by GERS id before
+    a fingerprint is computed. So don't run incremental discovery on the current Pi DB
+    before the rebuild. The auto-merge item is N/A (nothing is recomputed).
   - *Why:* today different bilingual names merge; recomputing keeps old and new
     fingerprints comparable; auto-merging is irreversible.
 - **6.3 Venue lifecycle** (re-seen venues never update; closed venues never retire)
@@ -697,8 +702,8 @@ Branch: `fix/menu-selector` · ADR-0005 behaviour: owner review (per D5.5).
 Hand-off prompt: `Do session S12 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/identity-matching` · Matching-policy change + Pi data script (you run it) + ADR stop.
 
-- [ ] R18 Name fingerprint drops non-English letters → wrong merges (per D6.2; include recompute script)
-- [ ] ADR-0012 drafted for venue lifecycle: R36, R98, R105, R106 (per D6.3, D6.4) — then stop
+- [X] R18 Name fingerprint drops non-English letters → wrong merges (per D6.2; no recompute script, owner chose the Pi rebuild, see D6.2)
+- [X] ADR-0012 drafted for venue lifecycle: R36, R98, R105, R106 (per D6.3, D6.4) — then stop
 
 **Recommended approach**
 - Normalize: casefold → NFKD → drop combining marks → map letters NFKD can't split
@@ -826,4 +831,5 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S8 | fix/identity-locks | #30 | Merged (concurrency-sensitive) | — (D6.1 answered on `main`. Lock order documented in `identity/commands.py`; the resolver plans without locks, then locks and re-checks inside a savepoint and retries once (`ResolutionConflictError`). R61 fixed for the stale read only; Establishment demotion is left to ADR-0012 (D6.4). Transactions that run several commands (discovery batches, URL resolve-then-assign) can still deadlock; this is documented, not fixed) |
 | 2026-09-24 | S9 | fix/api-polish | #32 | Merged | — (row added by S11; S9 left no log row) |
 | 2026-09-24 | S10 | test/hardening | #31 | Merged | — (ran in parallel with S9; `seed_sample_venues` gone since S1, so R29 covers discovery + URL paths; forged `subject_id=None` raises `22023`, now pinned. Row restored by S11: the S8 merge dropped it) |
-| 2026-09-24 | S11 | fix/menu-selector | #33 | Draft, owner review (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |
+| 2026-09-24 | S11 | fix/menu-selector | #33 | Merged (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |
+| 2026-09-24 | S12 | fix/identity-matching | #34 | Draft, ADR-0012 Proposed, awaiting owner acceptance | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 waits on ADR-0012 acceptance, with a pick per §1–§5) |

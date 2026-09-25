@@ -279,7 +279,9 @@ only what "normalized name" means changes:
 - Apostrophe variants, including U+02BC/U+02BB (which Unicode classes as
   letters) and `´`, are elided rather than breaking the word.
 - A name with no letters or digits has no match key and is **skipped** before
-  Bronze, like a blank name; there is no raw-string fallback.
+  Bronze, like a blank name; there is no raw-string fallback. If ADR-0011 is
+  accepted, S6 records these the way it records blank names (a `rejected`
+  Capture, never passed to Identity).
 
 Owner decision D6.2 (confirmed in session): no recompute script for stored
 fingerprints. The Pi database is purged and rebuilt (ADR-0011 §8 / D4.3),
