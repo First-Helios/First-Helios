@@ -34,6 +34,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -106,44 +107,27 @@ SYSTEM_V2 = (
     '"Glass"), only if there is one}. An item with several prices gets one entry per price. '
     "Do not invent items or prices, do not convert or compute prices, skip section headings, "
     "descriptions, navigation, hours, addresses, reviews and add-on/extra lines. "
-    "If the text contains no menu items, return no sections."
+    "If the text contains no menu items, return no sections. "
+    "Output compact JSON on a single line with no spaces or newlines, exactly like: "
+    '{"sections":[{"section":"Tacos","items":[{"b":"b0012","n":"Carne Asada Taco","p":"3.50"},'
+    '{"b":"b0020","n":"Horchata","p":"2.50","v":"Small"},{"b":"b0020","n":"Horchata","p":"3.50",'
+    '"v":"Large"}]},{"section":"Sides","items":[{"b":"b0031","n":"Chips and Salsa","p":"4"}]}]}'
 )
 
-SCHEMA_V2: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "sections": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "section": {"type": "string"},
-                    "items": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "b": {"type": "string", "pattern": "^b[0-9]{4}$"},
-                                "n": {"type": "string"},
-                                "p": {
-                                    "type": "string",
-                                    "pattern": "^([0-9]{1,4}([.,][0-9]{1,2})?)?$",
-                                },
-                                "v": {"type": "string", "pattern": '^[^0-9]*[A-Za-z][^"]*$'},
-                            },
-                            "required": ["b", "n", "p"],
-                            "additionalProperties": False,
-                        },
-                    },
-                },
-                "required": ["section", "items"],
-                "additionalProperties": False,
-            },
-        }
-    },
-    "required": ["sections"],
-    "additionalProperties": False,
-}
+# v2 output grammar, passed to llama-server as GBNF (not a JSON schema): compact JSON with no
+# whitespace at all (pretty-printed v1 output spent a large share of its tokens on newlines
+# and indentation), keyed items, a digits-only price, and a variant that must hold a letter.
+# The first v2 attempt used a JSON schema with "pattern"s, which the server did not enforce.
+GRAMMAR_V2 = r"""
+root    ::= "{\"sections\":[" ( section ( "," section )* )? "]}"
+section ::= "{\"section\":" str ",\"items\":[" ( item ( "," item )* )? "]}"
+item    ::= "{\"b\":\"b" [0-9] [0-9] [0-9] [0-9] "\",\"n\":" str ",\"p\":\"" price "\"" ( ",\"v\":" vstr )? "}"
+price   ::= ( [0-9] [0-9]? [0-9]? [0-9]? ( [.,] [0-9] [0-9]? )? )?
+str     ::= "\"" chr{0,160} "\""
+vstr    ::= "\"" vchr{0,30} [A-Za-z] vchr{0,30} "\""
+chr     ::= [^"\\\x00-\x1f] | "\\" ["\\/nt]
+vchr    ::= [^"\\\x00-\x1f]
+"""
 
 
 def chunks(page_id: str) -> list[str]:
@@ -178,7 +162,7 @@ def token_cap(text: str) -> int:
     """Runaway guard (added after the 1.5B run): ~30 output tokens per input line."""
     if os.environ.get("MENU_SPIKE_NO_CAP"):
         return MAX_TOKENS
-    per_line = 40 if PROCESS == "v2" else 30  # keyed rows cost ~10 more tokens
+    per_line = 40 if PROCESS == "v2" else 30  # headroom for keyed rows
     return min(MAX_TOKENS, per_line * (text.count("\n") + 1) + 64)
 
 
@@ -191,15 +175,30 @@ def extract_chunk(server: str, text: str) -> dict[str, Any]:
         ],
         "temperature": 0,
         "max_tokens": token_cap(text),
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {"schema": SCHEMA_V2 if v2 else SCHEMA},
-        },
         "chat_template_kwargs": {"enable_thinking": False},
         "cache_prompt": v2,  # v2 reuses the system-prompt KV prefix across chunks
     }
+    if v2:
+        body["grammar"] = GRAMMAR_V2
+    else:
+        body["response_format"] = {"type": "json_schema", "json_schema": {"schema": SCHEMA}}
     t0 = time.perf_counter()
-    resp = _post(server, body)
+    try:
+        resp = _post(server, body)
+    except (urllib.error.URLError, TimeoutError) as exc:  # one bad chunk must not end the run
+        detail = (
+            exc.read().decode(errors="replace")[:300]
+            if isinstance(exc, urllib.error.HTTPError)
+            else ""
+        )
+        return {
+            "wall_s": round(time.perf_counter() - t0, 2),
+            "finish": "error",
+            "timings": {},
+            "raw": "",
+            "error": f"{exc} {detail}",
+            "out": {"sections": []},
+        }
     wall = time.perf_counter() - t0
     content = resp["choices"][0]["message"]["content"]
     return {
@@ -395,6 +394,7 @@ def cmd_score(
         walls.append(result["wall_s"])
         gens.append(sum(int(ch["timings"].get("predicted_n", 0)) for ch in result["chunks"]))
         c["truncated_chunks"] += sum(1 for ch in result["chunks"] if ch["finish"] == "length")
+        c["error_chunks"] += sum(1 for ch in result["chunks"] if ch["finish"] == "error")
         c["recovered_chunks"] += sum(
             1 for ch in result["chunks"] if "raw" in ch and parse_output(ch["raw"]).get("recovered")
         )
