@@ -71,9 +71,8 @@ SCHEMA: dict[str, Any] = {
                     "rows": {
                         "type": "array",
                         "items": {
-                            "type": "array",
-                            "prefixItems": [{"type": "string"}] * 4,
-                            "items": False,
+                            "type": "array",  # [block_id, name, price, variant]
+                            "items": {"type": "string"},
                             "minItems": 4,
                             "maxItems": 4,
                         },
