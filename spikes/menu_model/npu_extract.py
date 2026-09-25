@@ -133,7 +133,16 @@ CALLBACK = C.CFUNCTYPE(C.c_int, C.POINTER(Result), C.c_void_p, C.c_int)
 
 
 class Rkllm:
-    def __init__(self, lib: str, model: str, *, max_context: int, cpus_mask: int) -> None:
+    def __init__(  # noqa: PLR0913 - one keyword per runtime knob
+        self,
+        lib: str,
+        model: str,
+        *,
+        max_context: int,
+        cpus_mask: int,
+        embed_flash: int = 0,
+        domain: int = 0,
+    ) -> None:
         self.lib = C.CDLL(lib)
         self.lib.rkllm_createDefaultParam.restype = Param
         self.lib.rkllm_init.argtypes = [C.POINTER(C.c_void_p), C.POINTER(Param), CALLBACK]
@@ -162,7 +171,10 @@ class Rkllm:
         p.presence_penalty = 0.0
         p.skip_special_token = True
         p.is_async = False
-        p.extend_param.base_domain_id = 0
+        p.extend_param.base_domain_id = domain  # a second IOMMU domain for large models
+        p.extend_param.embed_flash = (
+            embed_flash  # embedding table read from storage, not NPU memory
+        )
         p.extend_param.enabled_cpus_num = bin(cpus_mask).count("1")
         p.extend_param.enabled_cpus_mask = cpus_mask
         p.extend_param.n_batch = 1
@@ -221,7 +233,7 @@ def main() -> None:
     args = sys.argv[1:]
     opt = {
         k: args[args.index(k) + 1]
-        for k in ("--lib", "--model", "--tag", "--ctx", "--cpus")
+        for k in ("--lib", "--model", "--tag", "--ctx", "--cpus", "--embed-flash", "--domain")
         if k in args
     }
     skip = set(opt.values()) | set(opt)
@@ -231,6 +243,8 @@ def main() -> None:
         opt["--model"],
         max_context=int(opt.get("--ctx", "8192")),
         cpus_mask=int(opt.get("--cpus", "0xF0"), 16),  # the four A76 cores (CPU4-7)
+        embed_flash=int(opt.get("--embed-flash", "0")),
+        domain=int(opt.get("--domain", "0")),
     )
     out_dir = DATA / "extract" / opt["--tag"]
     out_dir.mkdir(parents=True, exist_ok=True)
