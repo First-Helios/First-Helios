@@ -2,7 +2,7 @@
 
     # llama-server -m MODEL.gguf --host 127.0.0.1 --port 8080 -c 8192 ...
     MENU_SPIKE_DATA=... python -m spikes.menu_model.extract run --tag TAG [--server URL] [PAGE ...]
-    MENU_SPIKE_DATA=... python -m spikes.menu_model.extract score --tag TAG [--split=all|dev|ho1|ho2] [--repair]
+    MENU_SPIKE_DATA=... python -m spikes.menu_model.extract score --tag TAG [--split=all|dev|ho1|ho2] [--repair] [--ref TAG]
 
 ``run`` sends each gold menu page's non-chrome blocks, one ``bNNNN | text`` line
 each, in chunks of at most :data:`CHUNK_CHARS`, to llama-server's OpenAI-style
@@ -373,7 +373,9 @@ def _match(row: Row, gold_items: list[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
-def cmd_score(tag: str, split: str, *, repair: bool = False) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915 - flat scoring pass
+def cmd_score(
+    tag: str, split: str, *, repair: bool = False, ref: str | None = None
+) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915 - flat scoring pass
     gold = load_gold()
     pages = {
         "all": set(gold),
@@ -384,6 +386,7 @@ def cmd_score(tag: str, split: str, *, repair: bool = False) -> dict[str, Any]: 
     c: Counter[str] = Counter()
     reasons: Counter[str] = Counter()
     walls, gens, per_page = [], [], []
+    by_format: dict[str, Counter[str]] = {}
     for pid in sorted(pages):
         path = DATA / "extract" / tag / f"{pid}.json"
         if not path.exists() or "chunks" not in json.loads(path.read_text(encoding="utf-8")):
@@ -445,6 +448,25 @@ def cmd_score(tag: str, split: str, *, repair: bool = False) -> dict[str, Any]: 
         c["found_raw"] += len(found_raw)
         c["found_kept"] += len(found_kept)
         c["found_price"] += len(found_price)
+        fmt = str(gold[pid].get("format"))
+        f = by_format.setdefault(fmt, Counter())
+        f["pages"] += 1
+        f["gold_items"] += n_gold
+        f["found_raw"] += len(found_raw)
+        f["gold_prices"] += n_gold_prices
+        f["found_price"] += len(found_price)
+        if ref is not None:
+            ref_path = DATA / "extract" / ref / f"{pid}.json"
+            if ref_path.exists():
+                mine = [ch.get("raw") for ch in result["chunks"]]
+                theirs = [
+                    ch.get("raw")
+                    for ch in json.loads(ref_path.read_text(encoding="utf-8"))["chunks"]
+                ]
+                c["ref_chunks"] += len(mine)
+                c["ref_identical_chunks"] += sum(
+                    1 for a, b in zip(mine, theirs, strict=False) if a == b
+                )
         per_page.append((pid, n_gold, len(found_raw), len(found_kept), result["wall_s"]))
 
     def rate(a: str, b: str) -> float:
@@ -465,6 +487,17 @@ def cmd_score(tag: str, split: str, *, repair: bool = False) -> dict[str, Any]: 
         "median_page_s": walls[len(walls) // 2] if walls else None,
         "max_page_s": walls[-1] if walls else None,
         "gen_tokens_total": sum(gens),
+        "by_format": {
+            k: {
+                "pages": v["pages"],
+                "item_recall_raw": v["found_raw"] / v["gold_items"] if v["gold_items"] else None,
+                "price_recall_accepted": v["found_price"] / v["gold_prices"]
+                if v["gold_prices"]
+                else None,
+            }
+            for k, v in sorted(by_format.items())
+        },
+        "output_identical_to_ref": rate("ref_identical_chunks", "ref_chunks") if ref else None,
         "counts": dict(c),
         "false_reject_reasons": dict(reasons),
         "per_page": per_page,
@@ -491,7 +524,8 @@ def main() -> None:
     else:
         split = next((a.split("=", 1)[1] for a in args if a.startswith("--split=")), "all")
         repair = "--repair" in args
-        summary = cmd_score(tag, split, repair=repair)
+        ref = args[args.index("--ref") + 1] if "--ref" in args else None
+        summary = cmd_score(tag, split, repair=repair, ref=ref)
         (DATA / "extract" / tag / f"score-{split}{'-repair' if repair else ''}.json").write_text(
             json.dumps(summary, indent=1, default=str), encoding="utf-8"
         )
