@@ -202,8 +202,10 @@ def run_discovery(
         if on_batch is not None and report.fetched and report.fetched % batch_size == 0:
             on_batch()
         report.fetched += 1
-        name = poi.name.strip()
-        if not name:
+        # A name with no letters or digits has no match key; skip it rather than
+        # fall back to the raw string, which would bypass normalization (R18).
+        fingerprint = name_fingerprint(poi.name)
+        if not fingerprint:
             report.skipped += 1
             continue
 
@@ -219,7 +221,6 @@ def run_discovery(
             report.needs_review += 1
             continue
 
-        fingerprint = name_fingerprint(name) or name
         latitude, longitude, geocoded = _resolve_coordinates(poi, geocoder)
         if geocoded:
             report.geocoded += 1

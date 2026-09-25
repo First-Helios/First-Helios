@@ -169,8 +169,8 @@ def _golden_poi(row: dict[str, Any]) -> OverturePoi:
 def _pair_is_deduped(session: Session, a: dict[str, Any], b: dict[str, Any]) -> bool:
     """Run ``a`` then ``b`` through discovery; True when ``b`` joins ``a``'s venue.
 
-    Uses the pipeline itself (fingerprint with its name fallback, coordinate
-    quantization, ``_dedupe_candidates``) rather than a copy of its rule (R77).
+    Uses the pipeline itself (fingerprint, coordinate quantization,
+    ``_dedupe_candidates``) rather than a copy of its rule (R77).
     Each pair runs in its own savepoint so pairs never see each other's rows.
     """
     savepoint = session.begin_nested()
@@ -218,8 +218,12 @@ def test_golden_matcher_precision(session: Session) -> None:
         ("Radius Grill", "Radius Grill", 0.000495, False),  # just outside 50 m
         ("Taco Deli", "Torchy's Tacos", 0.0, False),  # same spot, different names
         ("Café Nuevo", "Cafe Nuevo", 0.0001, True),  # accents fold together
-        ("!!!", "!!!", 0.0001, True),  # empty fingerprint falls back to the name
-        ("!!!", "???", 0.0001, False),  # ...so two different symbol names stay apart
+        # R18: non-English letters are kept, so bilingual names stay apart...
+        ("Chinese Restaurant 金龍", "Chinese Restaurant 福州", 0.0001, False),
+        ("Đông Phương", "Ông Phương", 0.0001, False),
+        # ...while accents and apostrophe variants still fold together.
+        ("Đông Phương", "Dong Phuong", 0.0001, True),
+        ("Torchyʼs Tacos", "Torchy's Tacos", 0.0001, True),
     ],
 )
 def test_matcher_hard_cases_near_the_boundary(

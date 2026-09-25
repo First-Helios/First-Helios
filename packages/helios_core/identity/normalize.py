@@ -13,29 +13,67 @@ import re
 import unicodedata
 
 # Apostrophes are elided, not treated as a word break, so "Torchy's" -> "torchys"
-# rather than "torchy s". Everything else non-alphanumeric becomes a break.
-_APOSTROPHES = re.compile(r"['‘’`]")
-_NON_ALNUM = re.compile(r"[^0-9a-z]+")
+# rather than "torchy s". Includes the modifier-letter forms (U+02BC, U+02BB,
+# U+02B9), which are letters to Unicode and would otherwise be kept, and the
+# acute/fullwidth forms that NFKD would turn into a space or an ASCII quote.
+_APOSTROPHES = re.compile("['`‘’‛′´ʹʻʼ＇]")
+
+# Latin letters that NFKD cannot split into base + accent; without this map they
+# would survive as distinct letters ("đ" != "d") while their accented cousins fold.
+_UNSPLITTABLE = str.maketrans(
+    {
+        "đ": "d",
+        "ð": "d",
+        "ø": "o",
+        "ł": "l",
+        "æ": "ae",
+        "œ": "oe",
+        "ß": "ss",
+        "ı": "i",
+        "þ": "th",
+        "ħ": "h",
+        "ŧ": "t",
+    }
+)
 
 # Mean Earth radius (metres), the standard value for haversine distance.
 _EARTH_RADIUS_M = 6_371_008.8
 
 
-def _strip_accents(value: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", value)
-    return "".join(char for char in decomposed if not unicodedata.combining(char))
+def _fold(value: str) -> str:
+    """Compatibility-decompose, casefold, and drop accents (non-zero combining class)."""
+    # NFKD before casefold catches compatibility uppercase (e.g. fullwidth "Ａ");
+    # the second NFKD decomposes anything casefold composed.
+    decomposed = unicodedata.normalize("NFKD", unicodedata.normalize("NFKD", value).casefold())
+    stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return stripped.translate(_UNSPLITTABLE)
+
+
+def _token_char(char: str) -> str:
+    category = unicodedata.category(char)
+    if category[0] in "LNM":
+        # Letters and digits of any script. Marks left after _fold have combining
+        # class 0 (e.g. Indic vowel signs): part of the letter, not an accent.
+        return char
+    if category == "Cf":
+        return ""  # invisible format characters (soft hyphen, ZWJ) join, not break
+    return " "
 
 
 def normalize_name(name: str) -> str:
     """Casefold, de-accent, and collapse a display name to a stable token string.
 
-    ``"Torchy's Tacos"`` -> ``"torchys tacos"``. Punctuation becomes a word
-    break; runs of whitespace collapse to one space. Deliberately conservative:
-    it does not drop stop words or legal suffixes, because over-normalizing
-    merges genuinely distinct names.
+    ``"Torchy's Tacos"`` -> ``"torchys tacos"``; ``"Đông Phương"`` ->
+    ``"dong phuong"``; ``"金龍"`` -> ``"金龍"``. Letters and digits of every
+    script are kept; only accents are stripped. Punctuation and symbols become a
+    word break; runs of whitespace collapse to one space. Deliberately
+    conservative: it does not drop stop words or legal suffixes, because
+    over-normalizing merges genuinely distinct names.
     """
-    folded = _APOSTROPHES.sub("", _strip_accents(name).casefold())
-    return _NON_ALNUM.sub(" ", folded).strip()
+    # Elide before folding (NFKD turns "´" into a space) and after (it turns
+    # "ŉ" into "ʼn").
+    folded = _APOSTROPHES.sub("", _fold(_APOSTROPHES.sub("", name)))
+    return " ".join("".join(_token_char(char) for char in folded).split())
 
 
 def name_fingerprint(name: str) -> str:
