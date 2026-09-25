@@ -15,8 +15,8 @@ Workload, same for every candidate, same order:
 - **Quality set:** all 24 gold menu pages (1,380 items, 1,555 prices; formats: html_list,
   html_cards, html_inline, price_list). Held-out-2 (10 pages) is also reported on its own,
   since dev/ho1 pages shaped the prompts and the validator.
-- **Load set:** the other 24 menu-labeled pages (no gold: throughput, stability, RAM only)
-  plus every not_menu page, which the page classifier should stop before the LLM.
+- **Load set:** every other page the page gate passes (18 more menu pages without gold and
+  1 not_menu false positive; throughput, stability, RAM only). 43 pages per candidate in all.
 - Monitor (`monitor.sh`, 10 s): temperatures, CPU/NPU clocks, free RAM, load.
 
 ## Candidates
