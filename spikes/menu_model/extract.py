@@ -36,6 +36,7 @@ import sys
 import time
 import urllib.request
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -89,13 +90,70 @@ SCHEMA: dict[str, Any] = {
 }
 
 
+# Process v2 (after the mini tests, see the tracker log E-3): keyed rows so small models
+# cannot swap price and variant, a digits-only price and a letter-bearing variant enforced
+# by the grammar, smaller chunks (decode slows as context grows), a cached system-prompt
+# prefix, and chunks sent concurrently to a multi-slot llama-server.
+PROCESS = os.environ.get("MENU_SPIKE_PROCESS", "v1")
+CHUNK_CHARS_V2 = 1500
+
+SYSTEM_V2 = (
+    "You extract restaurant menus. Input lines are 'BLOCK_ID | text' in page order. "
+    "Return every menu item that is sold, grouped by the menu section it is under. "
+    'Each item is {"b": block id where its name appears, "n": item name copied exactly as '
+    'printed, "p": price copied exactly as printed, digits only (e.g. 12.50), "" if no price '
+    'is printed for it, "v": size/variant word printed next to that price (e.g. "Large", '
+    '"Glass"), only if there is one}. An item with several prices gets one entry per price. '
+    "Do not invent items or prices, do not convert or compute prices, skip section headings, "
+    "descriptions, navigation, hours, addresses, reviews and add-on/extra lines. "
+    "If the text contains no menu items, return no sections."
+)
+
+SCHEMA_V2: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "section": {"type": "string"},
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "b": {"type": "string", "pattern": "^b[0-9]{4}$"},
+                                "n": {"type": "string"},
+                                "p": {
+                                    "type": "string",
+                                    "pattern": "^([0-9]{1,4}([.,][0-9]{1,2})?)?$",
+                                },
+                                "v": {"type": "string", "pattern": '^[^0-9]*[A-Za-z][^"]*$'},
+                            },
+                            "required": ["b", "n", "p"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["section", "items"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["sections"],
+    "additionalProperties": False,
+}
+
+
 def chunks(page_id: str) -> list[str]:
+    chunk_chars = CHUNK_CHARS_V2 if PROCESS == "v2" else CHUNK_CHARS
     lines = [f"{b.id} | {b.text[:BLOCK_CHARS]}" for b in blocks_of(page_id) if not b.in_chrome]
     out: list[str] = []
     cur: list[str] = []
     size = 0
     for line in lines:
-        if cur and size + len(line) + 1 > CHUNK_CHARS:
+        if cur and size + len(line) + 1 > chunk_chars:
             out.append("\n".join(cur))
             cur, size = [], 0
         cur.append(line)
@@ -120,17 +178,25 @@ def token_cap(text: str) -> int:
     """Runaway guard (added after the 1.5B run): ~30 output tokens per input line."""
     if os.environ.get("MENU_SPIKE_NO_CAP"):
         return MAX_TOKENS
-    return min(MAX_TOKENS, 30 * (text.count("\n") + 1) + 64)
+    per_line = 40 if PROCESS == "v2" else 30  # keyed rows cost ~10 more tokens
+    return min(MAX_TOKENS, per_line * (text.count("\n") + 1) + 64)
 
 
 def extract_chunk(server: str, text: str) -> dict[str, Any]:
+    v2 = PROCESS == "v2"
     body = {
-        "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}],
+        "messages": [
+            {"role": "system", "content": SYSTEM_V2 if v2 else SYSTEM},
+            {"role": "user", "content": text},
+        ],
         "temperature": 0,
         "max_tokens": token_cap(text),
-        "response_format": {"type": "json_schema", "json_schema": {"schema": SCHEMA}},
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"schema": SCHEMA_V2 if v2 else SCHEMA},
+        },
         "chat_template_kwargs": {"enable_thinking": False},
-        "cache_prompt": False,
+        "cache_prompt": v2,  # v2 reuses the system-prompt KV prefix across chunks
     }
     t0 = time.perf_counter()
     resp = _post(server, body)
@@ -147,6 +213,7 @@ def extract_chunk(server: str, text: str) -> dict[str, Any]:
 
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
+_ITEM = re.compile(r'\{\s*"b"\s*:[^{}]*\}')
 _ROW = re.compile(
     r'\[\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*\]'
 )
@@ -161,23 +228,43 @@ def parse_output(content: str) -> dict[str, Any]:
     """
     try:
         parsed: dict[str, Any] = json.loads(content)
-        return parsed
+        return _rows_form(parsed)
     except ValueError:
         pass
     sections: list[dict[str, Any]] = []
     events = sorted(
         [(m.start(), "s", m) for m in _SECTION.finditer(content)]
-        + [(m.start(), "r", m) for m in _ROW.finditer(content)],
+        + [(m.start(), "r", m) for m in _ROW.finditer(content)]
+        + [(m.start(), "i", m) for m in _ITEM.finditer(content)],
         key=lambda e: e[0],
     )
     for _, kind, m in events:
         if kind == "s":
             sections.append({"section": json.loads(m.group(1)), "rows": []})
-        else:
-            if not sections:
-                sections.append({"section": "", "rows": []})
+            continue
+        if not sections:
+            sections.append({"section": "", "rows": []})
+        if kind == "r":
             sections[-1]["rows"].append([json.loads(g) for g in m.groups()])
+        else:
+            try:
+                it = json.loads(m.group(0))
+            except ValueError:
+                continue
+            sections[-1]["rows"].append(_row_of_item(it))
     return {"sections": sections, "recovered": True}
+
+
+def _row_of_item(it: dict[str, Any]) -> list[str]:
+    return [str(it.get("b", "")), str(it.get("n", "")), str(it.get("p", "")), str(it.get("v", ""))]
+
+
+def _rows_form(parsed: dict[str, Any]) -> dict[str, Any]:
+    """Process v2 keyed ``items`` -> the v1 ``rows`` form, so scoring has one shape."""
+    for sec in parsed.get("sections", []):
+        if isinstance(sec, dict) and "items" in sec and "rows" not in sec:
+            sec["rows"] = [_row_of_item(it) for it in sec.pop("items") if isinstance(it, dict)]
+    return parsed
 
 
 _AMOUNT_ONLY = re.compile(r"^\$?\s?\d{1,4}(?:[.,]\d{1,2})?$")
@@ -220,23 +307,53 @@ def rows_of(result: dict[str, Any], *, repair: bool = False) -> list[Row]:
     return rows
 
 
-def cmd_run(tag: str, server: str, page_ids: list[str]) -> None:
+def cmd_run(tag: str, server: str, page_ids: list[str], workers: int = 1) -> None:
+    """Extract pages; with ``workers`` > 1 all (page, chunk) jobs share a pool of that size.
+
+    A page's ``wall_s`` is then first-chunk-start to last-chunk-end (pages overlap), and
+    ``run.json`` records the run's total wall time, the honest throughput number.
+    """
     out_dir = DATA / "extract" / tag
     out_dir.mkdir(parents=True, exist_ok=True)
     gold = load_gold()
-    for pid in page_ids or sorted(gold):
-        path = out_dir / f"{pid}.json"
-        if path.exists():
-            continue
+    todo = [pid for pid in (page_ids or sorted(gold)) if not (out_dir / f"{pid}.json").exists()]
+    jobs = [(pid, i, c) for pid in todo for i, c in enumerate(chunks(pid))]
+    n_chunks = Counter(pid for pid, _, _ in jobs)
+    done: dict[str, dict[int, dict[str, Any]]] = {pid: {} for pid in todo}
+    t_run = time.perf_counter()
+
+    def job(pid: str, i: int, text: str) -> tuple[str, int, dict[str, Any], float, float]:
         t0 = time.perf_counter()
-        results = [extract_chunk(server, c) for c in chunks(pid)]
-        rec = {"page_id": pid, "wall_s": round(time.perf_counter() - t0, 2), "chunks": results}
-        path.write_text(json.dumps(rec, indent=1), encoding="utf-8")
-        gen = sum(int(c["timings"].get("predicted_n", 0)) for c in results)
-        print(
-            f"{pid} chunks={len(results)} rows={len(rows_of(rec))} gen_tokens={gen} wall={rec['wall_s']}s",
-            flush=True,
-        )
+        res = extract_chunk(server, text)
+        return pid, i, res, t0, time.perf_counter()
+
+    span: dict[str, list[float]] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for fut in as_completed([pool.submit(job, *j) for j in jobs]):
+            pid, i, res, t0, t1 = fut.result()
+            done[pid][i] = res
+            lo_hi = span.setdefault(pid, [t0, t1])
+            lo_hi[0], lo_hi[1] = min(lo_hi[0], t0), max(lo_hi[1], t1)
+            if len(done[pid]) == n_chunks[pid]:
+                results = [done[pid][k] for k in sorted(done[pid])]
+                rec = {"page_id": pid, "wall_s": round(lo_hi[1] - lo_hi[0], 2), "chunks": results}
+                (out_dir / f"{pid}.json").write_text(json.dumps(rec, indent=1), encoding="utf-8")
+                gen = sum(int(c["timings"].get("predicted_n", 0)) for c in results)
+                print(
+                    f"{pid} chunks={len(results)} rows={len(rows_of(rec))} gen_tokens={gen} "
+                    f"wall={rec['wall_s']}s",
+                    flush=True,
+                )
+    total = round(time.perf_counter() - t_run, 2)
+    run = {
+        "process": PROCESS,
+        "workers": workers,
+        "pages": len(todo),
+        "chunks": len(jobs),
+        "total_wall_s": total,
+    }
+    (out_dir / "run.json").write_text(json.dumps(run), encoding="utf-8")
+    print(f"RUN {run}", flush=True)
 
 
 def _key(name: str) -> frozenset[str]:
@@ -269,7 +386,7 @@ def cmd_score(tag: str, split: str, *, repair: bool = False) -> dict[str, Any]: 
     walls, gens, per_page = [], [], []
     for pid in sorted(pages):
         path = DATA / "extract" / tag / f"{pid}.json"
-        if not path.exists():
+        if not path.exists() or "chunks" not in json.loads(path.read_text(encoding="utf-8")):
             continue
         result = json.loads(path.read_text(encoding="utf-8"))
         walls.append(result["wall_s"])
@@ -366,8 +483,11 @@ def main() -> None:
     tag = args[args.index("--tag") + 1]
     if args[0] == "run":
         server = args[args.index("--server") + 1] if "--server" in args else "http://127.0.0.1:8080"
-        skip = {tag, server}
-        cmd_run(tag, server, [a for a in args[1:] if not a.startswith("--") and a not in skip])
+        workers = int(args[args.index("--workers") + 1]) if "--workers" in args else 1
+        skip = {tag, server, str(workers)}
+        cmd_run(
+            tag, server, [a for a in args[1:] if not a.startswith("--") and a not in skip], workers
+        )
     else:
         split = next((a.split("=", 1)[1] for a in args if a.startswith("--split=")), "all")
         repair = "--repair" in args
