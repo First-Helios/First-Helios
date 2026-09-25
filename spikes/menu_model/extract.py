@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -128,23 +129,55 @@ def extract_chunk(server: str, text: str) -> dict[str, Any]:
     resp = _post(server, body)
     wall = time.perf_counter() - t0
     content = resp["choices"][0]["message"]["content"]
-    try:
-        parsed = json.loads(content)
-    except ValueError:
-        parsed = {"sections": [], "parse_error": content[-200:]}
     return {
         "wall_s": round(wall, 2),
         "finish": resp["choices"][0].get("finish_reason"),
         "timings": resp.get("timings", {}),
         "usage": resp.get("usage", {}),
-        "out": parsed,
+        "raw": content,
+        "out": parse_output(content),
     }
+
+
+_SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
+_ROW = re.compile(
+    r'\[\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*\]'
+)
+
+
+def parse_output(content: str) -> dict[str, Any]:
+    """The JSON object, or (truncated / malformed output) every complete row recovered in order.
+
+    A runaway generation that hits the token cap leaves unterminated JSON; the
+    rows it completed before that are still real extractions, so they are kept
+    and the chunk is flagged ``recovered``.
+    """
+    try:
+        parsed: dict[str, Any] = json.loads(content)
+        return parsed
+    except ValueError:
+        pass
+    sections: list[dict[str, Any]] = []
+    events = sorted(
+        [(m.start(), "s", m) for m in _SECTION.finditer(content)]
+        + [(m.start(), "r", m) for m in _ROW.finditer(content)],
+        key=lambda e: e[0],
+    )
+    for _, kind, m in events:
+        if kind == "s":
+            sections.append({"section": json.loads(m.group(1)), "rows": []})
+        else:
+            if not sections:
+                sections.append({"section": "", "rows": []})
+            sections[-1]["rows"].append([json.loads(g) for g in m.groups()])
+    return {"sections": sections, "recovered": True}
 
 
 def rows_of(result: dict[str, Any]) -> list[Row]:
     rows: list[Row] = []
     for ch in result["chunks"]:
-        for sec in ch["out"].get("sections", []):
+        out = parse_output(ch["raw"]) if "raw" in ch else ch["out"]
+        for sec in out.get("sections", []):
             for r in sec.get("rows", []):
                 block, name, price, variant = (str(x).strip() for x in r)
                 if name:
@@ -215,7 +248,9 @@ def cmd_score(tag: str, split: str) -> dict[str, Any]:  # noqa: C901, PLR0912, P
         walls.append(result["wall_s"])
         gens.append(sum(int(ch["timings"].get("predicted_n", 0)) for ch in result["chunks"]))
         c["truncated_chunks"] += sum(1 for ch in result["chunks"] if ch["finish"] == "length")
-        c["unparsed_chunks"] += sum(1 for ch in result["chunks"] if "parse_error" in ch["out"])
+        c["recovered_chunks"] += sum(
+            1 for ch in result["chunks"] if "raw" in ch and parse_output(ch["raw"]).get("recovered")
+        )
         items: list[dict[str, Any]] = gold[pid]["items"]  # type: ignore[assignment]
         rows = rows_of(result)
         verdicts = validate(blocks_of(pid), rows)
