@@ -116,30 +116,53 @@ SYSTEM_V2 = (
 
 # v2 output grammar, passed to llama-server as GBNF (not a JSON schema): compact JSON with no
 # whitespace at all (pretty-printed v1 output spent a large share of its tokens on newlines
-# and indentation), keyed items, a digits-only price, and a variant that must hold a letter.
-# The first v2 attempt used a JSON schema with "pattern"s, which the server did not enforce.
+# and indentation), keyed items and a digits-only price (an optional "$" allowed: forbidding
+# it pushed "$70.00" into the variant). The first v2 attempt used a JSON schema with
+# "pattern"s, which the server did not enforce; a later rule forcing a letter into the variant
+# derailed the model into junk text, so variant cleanup is left to the deterministic repair.
 GRAMMAR_V2 = r"""
 root    ::= "{\"sections\":[" ( section ( "," section )* )? "]}"
 section ::= "{\"section\":" str ",\"items\":[" ( item ( "," item )* )? "]}"
 item    ::= "{\"b\":\"b" [0-9] [0-9] [0-9] [0-9] "\",\"n\":" str ",\"p\":\"" price "\"" ( ",\"v\":" vstr )? "}"
-price   ::= ( [0-9] [0-9]? [0-9]? [0-9]? ( [.,] [0-9] [0-9]? )? )?
+price   ::= ( "$"? [0-9] [0-9]? [0-9]? [0-9]? ( [.,] [0-9] [0-9]? )? )?
 str     ::= "\"" chr{0,160} "\""
-vstr    ::= "\"" vchr{0,30} [A-Za-z] vchr{0,30} "\""
+vstr    ::= "\"" vchr{0,40} "\""
 chr     ::= [^"\\\x00-\x1f] | "\\" ["\\/nt]
 vchr    ::= [^"\\\x00-\x1f]
 """
 
 
+CHUNK_SOFT_V2 = 1200  # v2.1: past this, cut before the next heading block
+
+
 def chunks(page_id: str) -> list[str]:
-    chunk_chars = CHUNK_CHARS_V2 if PROCESS == "v2" else CHUNK_CHARS
-    lines = [f"{b.id} | {b.text[:BLOCK_CHARS]}" for b in blocks_of(page_id) if not b.in_chrome]
+    """Non-chrome block lines, split into chunks.
+
+    v1: fixed 3,000-char chunks. v2.1: ~1,500-char chunks cut before a heading where one
+    comes after 1,200 chars, and every later chunk opens with a context line naming the
+    current section (a chunk that started mid-section with no heading was returned empty).
+    """
+    v2 = PROCESS == "v2"
+    blocks = [b for b in blocks_of(page_id) if not b.in_chrome]
     out: list[str] = []
     cur: list[str] = []
     size = 0
-    for line in lines:
-        if cur and size + len(line) + 1 > chunk_chars:
+    section = ""
+    recent: list[str] = []  # texts of the last lines, carried as context (no block ids)
+    for b in blocks:
+        line = f"{b.id} | {b.text[:BLOCK_CHARS]}"
+        hard = size + len(line) + 1 > (CHUNK_CHARS_V2 if v2 else CHUNK_CHARS)
+        soft = v2 and b.heading and size > CHUNK_SOFT_V2
+        if cur and (hard or soft):
             out.append("\n".join(cur))
             cur, size = [], 0
+            if v2:
+                before = " / ".join(f"'{t}'" for t in recent[-3:])
+                ctx = f"(continued from earlier on this page; heading: '{section}'; it ended with: {before})"
+                cur, size = [ctx], len(ctx)
+        if b.heading:
+            section = b.text[:80]
+        recent.append(b.text[:80])
         cur.append(line)
         size += len(line) + 1
     if cur:
@@ -274,7 +297,8 @@ def rows_of(result: dict[str, Any], *, repair: bool = False) -> list[Row]:
 
     1. price printed in the variant slot and the price slot empty -> swap (small models
        lose the positional order of ``[block, name, price, variant]``);
-    2. exact duplicate rows (same item, variant, price, section) collapse to one.
+    2. exact duplicate rows (same item, variant, price, section) collapse to one;
+    3. a variant with no letters (e.g. "4") is dropped.
     """
     rows: list[Row] = []
     for ch in result["chunks"]:
@@ -284,6 +308,8 @@ def rows_of(result: dict[str, Any], *, repair: bool = False) -> list[Row]:
                 block, name, price, variant = (str(x).strip() for x in r)
                 if repair and not price and _AMOUNT_ONLY.match(variant):
                     price, variant = variant, ""
+                if repair and variant and not any(ch.isalpha() for ch in variant):
+                    variant = ""  # a bare number is not a size label
                 if name:
                     rows.append(
                         Row(
