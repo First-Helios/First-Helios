@@ -295,20 +295,20 @@ def test_source_endpoint_and_record_identity_keys_reject_updates(session: Sessio
     _assert_sql_rejects(
         session,
         "UPDATE bronze.source SET namespace = 'renamed' WHERE id = :id",
-        r"bronze\.source\.namespace is immutable",
+        r"bronze\.source is immutable and cannot be updated",
         id=source.id,
     )
     _assert_sql_rejects(
         session,
         "UPDATE bronze.source_endpoint SET canonical_uri = :uri WHERE id = :id",
-        r"bronze\.source_endpoint\.canonical_uri is immutable",
+        r"bronze\.source_endpoint is immutable and cannot be updated",
         id=endpoint.id,
         uri="https://example.test/renamed",
     )
     _assert_sql_rejects(
         session,
         "UPDATE bronze.source_record SET external_key = 'place/999' WHERE id = :id",
-        r"bronze\.source_record\.external_key is immutable",
+        r"bronze\.source_record is immutable and cannot be updated",
         id=record.id,
     )
 

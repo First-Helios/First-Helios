@@ -30,6 +30,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.helios_core.db.base import SCHEMA_BRONZE, SCHEMA_IDENTITY, Base
 
+# Python's ``str.strip()`` whitespace, and the zero-width characters a name
+# cannot consist of; see migration 12a76ebed458.
+WHITESPACE = f"{SCHEMA_BRONZE}.whitespace()"
+INVISIBLE = "U&'\\200B\\200C\\200D\\2060\\FEFF'"
+
 SUBJECT_KINDS = ("place", "organization", "establishment")
 SUBJECT_READINESS_STATES = ("provisional", "eligible")
 SUBJECT_NAME_KINDS = ("canonical", "alias")
@@ -53,11 +58,11 @@ def _decision_checks(prefix: str) -> tuple[CheckConstraint, ...]:
             name=f"ck_{prefix}_confidence",
         ),
         CheckConstraint(
-            "method = btrim(method) AND length(method) > 0",
+            f"method = btrim(method, {WHITESPACE}) AND length(method) > 0",
             name=f"ck_{prefix}_method_not_blank",
         ),
         CheckConstraint(
-            "method_version = btrim(method_version) AND length(method_version) > 0",
+            f"method_version = btrim(method_version, {WHITESPACE}) AND length(method_version) > 0",
             name=f"ck_{prefix}_method_version_not_blank",
         ),
         _in_check(
@@ -155,15 +160,16 @@ class Organization(Base):
             name="ck_organization_name_pair",
         ),
         CheckConstraint(
-            "canonical_name IS NULL OR length(btrim(canonical_name)) > 0",
+            f"canonical_name IS NULL OR length(btrim(canonical_name, {WHITESPACE} || {INVISIBLE})) > 0",
             name="ck_organization_name_not_blank",
         ),
         CheckConstraint(
-            "name_fingerprint IS NULL OR length(btrim(name_fingerprint)) > 0",
+            f"name_fingerprint IS NULL OR length(btrim(name_fingerprint, {WHITESPACE})) > 0",
             name="ck_organization_fingerprint_not_blank",
         ),
         CheckConstraint(
-            "organization_kind = btrim(organization_kind) AND length(organization_kind) > 0",
+            f"organization_kind = btrim(organization_kind, {WHITESPACE})"
+            " AND length(organization_kind) > 0",
             name="ck_organization_kind_not_blank",
         ),
         ForeignKeyConstraint(
@@ -297,11 +303,11 @@ class SubjectName(Base):
         _in_check("subject_kind", SUBJECT_KINDS, "ck_subject_name_subject_kind"),
         _in_check("name_kind", SUBJECT_NAME_KINDS, "ck_subject_name_kind"),
         CheckConstraint(
-            "name = btrim(name) AND length(name) > 0",
+            f"name = btrim(name, {WHITESPACE}) AND length(name) > 0",
             name="ck_subject_name_not_blank",
         ),
         CheckConstraint(
-            "name_fingerprint = btrim(name_fingerprint) AND length(name_fingerprint) > 0",
+            f"name_fingerprint = btrim(name_fingerprint, {WHITESPACE}) AND length(name_fingerprint) > 0",
             name="ck_subject_name_fingerprint_not_blank",
         ),
         ForeignKeyConstraint(
@@ -342,11 +348,12 @@ class Adjudication(Base):
     __tablename__ = "adjudication"
     __table_args__: Any = (
         CheckConstraint(
-            "actor = btrim(actor) AND length(actor) > 0",
+            f"actor = btrim(actor, {WHITESPACE}) AND length(actor) > 0",
             name="ck_adjudication_actor_not_blank",
         ),
         CheckConstraint(
-            "rationale = btrim(rationale) AND length(rationale) > 0 AND length(rationale) <= 4000",
+            f"rationale = btrim(rationale, {WHITESPACE}) AND length(rationale) > 0"
+            " AND length(rationale) <= 4000",
             name="ck_adjudication_rationale_bounds",
         ),
         {"schema": SCHEMA_IDENTITY},
