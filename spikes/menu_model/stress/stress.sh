@@ -10,7 +10,7 @@ cd ~/menu-model-spike
 export MENU_SPIKE_DATA=$HOME/menu-model-spike/data PYTHONPATH=. MENU_SPIKE_PROCESS=v2
 PAGES=$(python3 -c "import json; print(' '.join(json.load(open('data/stress_pages.json'))))")
 cool() { for i in $(seq 1 90); do [ "$(cat /sys/class/thermal/thermal_zone0/temp)" -lt 55000 ] && break; sleep 10; done; }
-: > logs/stress.log
+touch logs/stress.log  # append: a resumed run must keep earlier candidates' timings
 spikes/menu_model/stress/monitor.sh logs/stress-monitor.csv & MON=$!
 for cand in "$@"; do
   read -r tag model np <<< "$cand"

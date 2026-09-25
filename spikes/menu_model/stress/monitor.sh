@@ -4,11 +4,13 @@
 # usage: monitor.sh OUT.csv
 out=$1
 zones=(/sys/class/thermal/thermal_zone*)
+[ -s "$out" ] || {  # header once: a restarted monitor appends to the same file
 {
   printf 'ts'
   for z in "${zones[@]}"; do printf ',%s_c' "$(cat "$z/type")"; done
   printf ',little_mhz,big0_mhz,big1_mhz,npu_mhz,mem_avail_mb,load1\n'
-} > "$out"
+} >> "$out"
+}
 while true; do
   {
     printf '%s' "$(date +%s)"
