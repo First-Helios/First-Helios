@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 
-from spikes.menu_model.eval_validator import DEV_PAGES, HELDOUT_1
+from spikes.menu_model.eval_validator import DEV_PAGES, HELDOUT_1, HELDOUT_3
 from spikes.menu_model.labeltool import LABELS, blocks_of
 
 
@@ -32,7 +32,15 @@ def main() -> None:
     rows = []
     for lab in gold:
         pid = lab["page_id"]
-        split = "dev" if pid in DEV_PAGES else "ho1" if pid in HELDOUT_1 else "ho2"
+        split = (
+            "dev"
+            if pid in DEV_PAGES
+            else "ho1"
+            if pid in HELDOUT_1
+            else "ho3"
+            if pid in HELDOUT_3
+            else "ho2"
+        )
         all_blocks = blocks_of(pid)
         blocks.update(lab["blocks"].get(b.id, "noise") for b in all_blocks)
         items = lab["items"]
