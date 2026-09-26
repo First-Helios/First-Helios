@@ -88,3 +88,13 @@ with Qwen3-8B Q4_K_M, 3k chunks, for pages whose label-free coverage (accepted p
 printed prices) is below **0.7**; the result with more accepted priced rows is kept. Pi runs:
 `st-v23` (all 43 stress pages), then the second pass on the flagged pages. ho2 is scored once,
 after both; held-out-3 (fresh labels) is scored once at the end.
+
+### Outcome (2026-09-27)
+
+Frozen at `e6e4e1f` (stitch v3, validator v3), then one post-held-out fix (`label-only run
+completion`, scorer nearest-copy match). Final, Pi `st-v23` outputs under the final rules:
+usable prices 0.837 on the 24 pages (baseline st-q40 0.705), 0.739 on ho2 (0.549), 0.764 on
+ho3 (local v2.2 baseline 0.598; seen data after the fix; the first frozen local ho3 score was
+0.766 at price accuracy 0.901); price accuracy 0.993 / 0.995 / 0.992; item recall 0.906.
+Throughput unchanged (7.8 pages/h). Role hints dropped (they cost item recall). The adaptive
+Qwen3-8B pass adds at most +0.006 and is optional. Details: tracker Results and Log U-1..U-4.
