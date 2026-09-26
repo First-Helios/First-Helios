@@ -499,3 +499,264 @@ prices b0116=-:3.15,with cream cheese:4.00
 prices b0126=-:3.70,with queso:7.90
 prices b0129=-:3.65
 prices b0138=-:3.10
+
+# Held-out-3 (usable-price session, 2026-09-26): 9 new venues from candidates batch 2.
+# Drafted from per-page specs in labels/ho3/*.spec (roles read block by block); every
+# in-region block's role is listed explicitly below. Owner 20% spot-check pending.
+
+page 0507748949ae menu html_list | h2 section, h4 item, price p (two unlabeled size prices "$2.85 | $3.65" for drinks); Add-ons list is modifiers; div card titles and a "Served until 11am" h4 are noise; unpriced per-item detail sections after the menu excluded
+region b0024 b0087
+fix b0024=section b0025=item b0026=price b0027=item b0028=price b0029=item b0030=price b0031=item
+fix b0032=price b0033=item b0034=price b0035=item b0036=price b0037=noise b0038=item b0039=price
+fix b0040=section b0041=item b0042=price b0043=item b0044=price b0045=item b0046=price b0047=item
+fix b0048=price b0049=item b0050=price b0051=section b0052..b0056=modifier b0057=section b0058=noise b0059=item
+fix b0060=price b0061=item b0062=price b0063=noise b0064=item b0065=price b0066=item b0067=price
+fix b0068=section b0069=item b0070=description b0071=price b0072=item b0073=description b0074=price b0075=item
+fix b0076=description b0077=price b0078=noise b0079=item b0080=description b0081=price b0082=item b0083=description
+fix b0084=price b0085=item b0086=description b0087=price
+
+page 0c51131daf93 menu html_list | name div, description div, price p; add-on lines (add/sub/xtra/toss in) with their own $ div are modifiers; '.' spacer lines and the happy-hour/burger intro paragraphs are noise
+region b0026 b0170
+fix b0026=section b0027=item b0028=description b0029=price b0030=noise b0031..b0034=modifier b0035=item b0036=description
+fix b0037=price b0038=item b0039=description b0040=price b0041=item b0042=description b0043=price b0044=noise
+fix b0045..b0046=modifier b0047=item b0048=description b0049=price b0050=item b0051=description b0052=price b0053=item
+fix b0054=description b0055=price b0056=item b0057=description b0058=price b0059=item b0060=description b0061=price
+fix b0062=noise b0063..b0068=modifier b0069=section b0070=noise b0071=item b0072=price b0073=item b0074=description
+fix b0075=price b0076=item b0077=price b0078=noise b0079..b0084=modifier b0085=item b0086=description b0087=price
+fix b0088=noise b0089..b0094=modifier b0095=item b0096=description b0097=price b0098=noise b0099..b0100=modifier b0101=item
+fix b0102=description b0103=price b0104=item b0105=description b0106=price b0107=item b0108=description b0109=price
+fix b0110=item b0111=description b0112=price b0113=item b0114=description b0115=price b0116..b0118=modifier b0119=item
+fix b0120=description b0121=price b0122=noise b0123..b0124=modifier b0125=item b0126=description b0127=price b0128=noise
+fix b0129..b0130=modifier b0131=item b0132=description b0133=price b0134=noise b0135..b0140=modifier b0141=item b0142=description
+fix b0143=price b0144=item b0145=description b0146=price b0147=item b0148=description b0149=price b0150=item
+fix b0151=description b0152=price b0153=section b0154=item b0155=price b0156=noise b0157..b0158=modifier b0159=item
+fix b0160=price b0161=item b0162=description b0163=price b0164=section b0165=item b0166=description b0167=price
+fix b0168=item b0169=description b0170=price
+name b0027=Chips & Queso
+
+page 1b1cc94460b3 menu html_cards | Square Online cards: h2 section, name p, description p, price p; daily-special card titles/availability divs are noise; Extras (sauces, dough ball, chips) are sold items
+region b0027 b0233
+fix b0027=section b0028=item b0029=description b0030=price b0031=section b0032=item b0033=price b0034=item
+fix b0035=price b0036=item b0037=price b0038=item b0039=price b0040=item b0041=price b0042=section
+fix b0043=noise b0044=item b0045=description b0046=price b0047=item b0048=description b0049=price b0050=section
+fix b0051..b0052=noise b0053=item b0054=description b0055=price b0056=section b0057=noise b0058=item b0059=description
+fix b0060=price b0061=section b0062..b0063=noise b0064=item b0065=description b0066=price b0067=section b0068..b0069=noise
+fix b0070=item b0071=description b0072=price b0073=section b0074..b0075=noise b0076=item b0077=description b0078=price
+fix b0079=section b0080..b0081=noise b0082=item b0083=description b0084=price b0085=section b0086..b0087=noise b0088=item
+fix b0089=price b0090=section b0091=item b0092=price b0093=item b0094=description b0095=price b0096=item
+fix b0097=description b0098=price b0099=item b0100=description b0101=price b0102=section b0103=item b0104=description
+fix b0105=price b0106=item b0107=description b0108=price b0109=item b0110=description b0111=price b0112=item
+fix b0113=description b0114=price b0115=item b0116=description b0117=price b0118=item b0119=description b0120=price
+fix b0121=item b0122=description b0123=price b0124=item b0125=description b0126=price b0127=item b0128=description
+fix b0129=price b0130=item b0131=description b0132=price b0133=item b0134=description b0135=price b0136=item
+fix b0137=description b0138=price b0139=item b0140=description b0141=price b0142=section b0143=item b0144=description
+fix b0145=price b0146=item b0147=description b0148=price b0149=item b0150=description b0151=price b0152=item
+fix b0153=description b0154=price b0155=item b0156=description b0157=price b0158=item b0159=description b0160=price
+fix b0161=item b0162=description b0163=price b0164=item b0165=description b0166=price b0167=item b0168=description
+fix b0169=price b0170=item b0171=description b0172=price b0173=item b0174=description b0175=price b0176=section
+fix b0177=item b0178=price b0179=item b0180=description b0181=price b0182=item b0183=description b0184=price
+fix b0185=item b0186=description b0187=price b0188=section b0189=item b0190=description b0191=price b0192=item
+fix b0193=description b0194=price b0195=section b0196=item b0197=price b0198=item b0199=price b0200=item
+fix b0201=price b0202=item b0203=price b0204=item b0205=price b0206=item b0207=description b0208=price
+fix b0209=item b0210=description b0211=price b0212=section b0213=item b0214=price b0215=item b0216=description
+fix b0217=price b0218=section b0219=item b0220=price b0221=item b0222=price b0223=item b0224=description
+fix b0225=price b0226=item b0227=description b0228=price b0229=section b0230=noise b0231=item b0232=description
+fix b0233=price
+
+page 3cd639cd8f00 menu html_cards | h2 section, h3 item, price div (inline size labels before the price, "/Pork", "/PP" suffixes), description div; some descriptions print more prices (wings with fries, quesataco fillings); catering per-person packages included, unpriced protein list excluded
+region b0040 b0137
+fix b0040=section b0041=item b0042=price b0043=item b0044=price b0045=item b0046=price b0047=item
+fix b0048=price b0049=item b0050=price b0051=section b0052=item b0053=price b0054=description b0055=item
+fix b0056=price b0057=description b0058=item b0059=price b0060=description b0061=item b0062=price b0063=description
+fix b0064=item b0065=price b0066=description b0067=item b0068=price b0069=description b0070=section b0071=item
+fix b0072..b0073=price b0074=description b0075=item b0076=price b0077=description b0078=item b0079=price b0080=description
+fix b0081=item b0082=price b0083=description b0084=item b0085=price b0086=description b0087=item b0088=price
+fix b0089=item b0090=price b0091=description b0092=item b0093=price b0094=description b0095=item b0096=price
+fix b0097=description b0098=section b0099=item b0100=price b0101=modifier b0102=item b0103=price b0104=description
+fix b0105=noise b0106=item b0107=price b0108=description b0109=item b0110=price b0111=description b0112=item
+fix b0113=price b0114=description b0115=item b0116=price b0117..b0122=noise b0123=section b0124=item b0125=price
+fix b0126=item b0127=price b0128=item b0129=price b0130=item b0131=price b0132=item b0133=price
+fix b0134=item b0135=price b0136=item b0137=price
+prices b0041=1/2 Pound:19,Pound:38
+prices b0043=Half:12,Plate with two small sides:18
+prices b0045=1/2 lb:16,Pound:32
+prices b0047=Link (1/4 lb):8,Pound:32
+prices b0049=1/2 lb:17,Pound:34
+prices b0071=Pork:15,Brisket:17
+prices b0087=Sandwich:14,Taco:7
+prices b0092=-:15,with fries:19
+prices b0095=Carnitas:6,Barbacoa:8,Brisket:8
+
+page 60014efbcff6 menu html_list | Wix-style name/desc/price divs; each section heading printed twice; pizza size label line before each price; toppings/extras are add-ons
+region b0010 b0299
+fix b0010=section b0011=noise b0012=item b0013=price b0014=item b0015=price b0016=item b0017=description
+fix b0018=price b0019=item b0020=description b0021=price b0022=item b0023=description b0024=price b0025=section
+fix b0026=noise b0027=item b0028=price b0029=noise b0030=item b0031=price b0032=item b0033=price
+fix b0034=item b0035=description b0036=price b0037=item b0038=price b0039=item b0040=price b0041=section
+fix b0042=item b0043=description b0044=price b0045=item b0046=description b0047=price b0048=section b0049=item
+fix b0050=price b0051=item b0052=price b0053=section b0054=noise b0055=item b0056=description b0057=price
+fix b0058=item b0059=description b0060=price b0061=item b0062=description b0063=price b0064=item b0065=description
+fix b0066=price b0067=item b0068=description b0069=price b0070=item b0071=description b0072=price b0073=item
+fix b0074=description b0075=price b0076=item b0077=description b0078=price b0079=item b0080=description b0081=price
+fix b0082=item b0083=description b0084=price b0085=item b0086=description b0087=price b0088=item b0089=description
+fix b0090=price b0091=item b0092=description b0093=price b0094=section b0095=noise b0096=item b0097=price
+fix b0098=item b0099=description b0100=price b0101=item b0102=description b0103=price b0104=item b0105=description
+fix b0106=price b0107=item b0108=description b0109=price b0110=item b0111=description b0112=price b0113=item
+fix b0114=description b0115=price b0116=item b0117=description b0118=price b0119=item b0120=description b0121=price
+fix b0122=item b0123=price b0124=item b0125=price b0126=item b0127=price b0128=section b0129=noise
+fix b0130=item b0131=description b0132..b0137=price b0138..b0141=modifier b0142=item b0143=description b0144..b0149=price b0150=item
+fix b0151..b0156=price b0157=item b0158..b0163=price b0164=item b0165..b0170=price b0171=item b0172=description b0173..b0178=price
+fix b0179=item b0180..b0185=price b0186..b0192=modifier b0193=item b0194..b0199=price b0200=section b0201=item b0202=price
+fix b0203=item b0204=price b0205=item b0206=price b0207=item b0208=price b0209=item b0210=price
+fix b0211=item b0212=price b0213=item b0214=price b0215=section b0216=noise b0217=item b0218=price
+fix b0219=item b0220=price b0221=item b0222=price b0223=item b0224=price b0225=item b0226=price
+fix b0227=section b0228=item b0229=price b0230=item b0231=price b0232=item b0233=price b0234=item
+fix b0235=description b0236=price b0237=item b0238=price b0239=section b0240=item b0241=price b0242=item
+fix b0243=description b0244=price b0245=item b0246=price b0247=item b0248=price b0249=item b0250=price
+fix b0251=item b0252=price b0253=section b0254=noise b0255=item b0256=description b0257=price b0258=item
+fix b0259=description b0260=price b0261=item b0262=description b0263=price b0264=item b0265=description b0266=price
+fix b0267=item b0268=price b0269=item b0270=description b0271=price b0272=item b0273=description b0274=price
+fix b0275=item b0276=description b0277=price b0278=item b0279=description b0280=price b0281=item b0282=description
+fix b0283=price b0284=item b0285=description b0286=price b0287=item b0288=description b0289=price b0290=item
+fix b0291=price b0292=item b0293=price b0294=item b0295=description b0296=price b0297=item b0298=description
+fix b0299=price
+prices b0130=12" Small:14.99,14" Medium:15.99,16" Large:16.99
+prices b0142=12" Small:12.99,14" Medium:13.99,16" Large:14.99
+prices b0150=12" Small:12.99,14" Medium:13.99,16" Large:14.99
+prices b0157=12" Small:12.99,14" Medium:13.99,16" Large:14.99
+prices b0164=12" Small:13.99,14" Medium:14.99,16" Large:15.99
+prices b0171=12" Small:12.99,14" Medium:13.99,16" Large:14.99
+prices b0179=12" Small:9.99,14" Medium:10.99,16" Large:11.99
+prices b0193=12" Small:13.99,14" Medium:14.99,16" Large:15.99
+
+page 630ef18b78a3 menu html_list | each price printed twice: before the name (noise duplicate) and after the description (price); '+' add-on line; unpriced cocktail list; wines print a glass price plus a 'Bottle NN' line, beers a size line; happy-hour/event headings and the FAQ are outside the region
+region b0034 b0203
+fix b0034=section b0035=noise b0036=item b0037=description b0038=price b0039=noise b0040=item b0041=description
+fix b0042=price b0043=noise b0044=item b0045=description b0046=price b0047=noise b0048=item b0049=description
+fix b0050=price b0051=noise b0052=item b0053=description b0054=price b0055=noise b0056=item b0057=description
+fix b0058=price b0059=noise b0060=item b0061=description b0062=price b0063=noise b0064=item b0065=description
+fix b0066=price b0067=section b0068=noise b0069=item b0070=description b0071=price b0072=noise b0073=item
+fix b0074=description b0075=price b0076=noise b0077=item b0078=description b0079=price b0080=noise b0081=item
+fix b0082=description b0083=price b0084=noise b0085=item b0086=description b0087=price b0088=noise b0089=item
+fix b0090=description b0091=price b0092=noise b0093=item b0094=description b0095=price b0096=noise b0097=item
+fix b0098=description b0099=price b0100..b0102=modifier b0103=section b0104=noise b0105=item b0106=description b0107=price
+fix b0108..b0115=noise b0116=section b0117=item b0118=description b0119=item b0120=description b0121=item b0122=description
+fix b0123=item b0124=description b0125=item b0126=description b0127=item b0128=description b0129=item b0130=description
+fix b0131=item b0132=description b0133=item b0134=description b0135=item b0136=description b0137=section b0138=noise
+fix b0139=item b0140=price b0141=noise b0142=item b0143=price b0144=noise b0145=item b0146=price
+fix b0147=noise b0148=item b0149=price b0150=noise b0151=item b0152=price b0153=noise b0154=item
+fix b0155..b0156=price b0157=noise b0158=item b0159..b0160=price b0161=section b0162=noise b0163=item b0164..b0165=price
+fix b0166=section b0167=noise b0168=item b0169..b0170=price b0171=noise b0172=item b0173..b0174=price b0175=noise
+fix b0176=item b0177..b0178=price b0179=noise b0180=item b0181..b0182=price b0183=section b0184=noise b0185=item
+fix b0186..b0187=price b0188=noise b0189=item b0190..b0191=price b0192=noise b0193=item b0194..b0195=price b0196=noise
+fix b0197=item b0198..b0199=price b0200=noise b0201=item b0202..b0203=price
+prices b0168=Glass:7,Bottle:22
+prices b0172=Glass:10,Bottle:32
+prices b0176=Glass:10,Bottle:32
+prices b0180=Glass:11,Bottle:34
+prices b0185=Glass:7,Bottle:22
+prices b0189=Glass:13,Bottle:40
+prices b0193=Glass:8,Bottle:25
+prices b0197=Glass:9,Bottle:28
+prices b0201=Glass:9,Bottle:40
+prices b0154=16oz can:5
+prices b0158=16oz can:4
+prices b0163=750ML:18
+
+page 8119034caa35 menu html_list | name/desc/price divs, many items then repeat their name (noise); topping and gluten-free upcharge lines are add-ons; desserts with Slice/Whole variant label lines; weekly promos are noise; wine/beer list unpriced (outside region)
+region b0021 b0216
+fix b0021=section b0022=noise b0023=item b0024=price b0025=noise b0026=item b0027=description b0028=price
+fix b0029=item b0030=price b0031=noise b0032=item b0033=description b0034=price b0035=noise b0036=item
+fix b0037=description b0038=price b0039=item b0040=price b0041=section b0042=item b0043=description b0044=price
+fix b0045=noise b0046=item b0047=description b0048=price b0049=noise b0050=item b0051=description b0052=price
+fix b0053=noise b0054=section b0055=item b0056=price b0057..b0060=modifier b0061=noise b0062=item b0063=price
+fix b0064..b0067=modifier b0068=noise b0069=item b0070=price b0071=item b0072=price b0073=item b0074=description
+fix b0075=price b0076..b0077=modifier b0078=item b0079=description b0080=price b0081=item b0082=description b0083=price
+fix b0084..b0085=modifier b0086=item b0087=description b0088=price b0089=item b0090=description b0091=price b0092=item
+fix b0093=description b0094=price b0095=item b0096=description b0097=price b0098=item b0099=description b0100=price
+fix b0101=section b0102=item b0103=description b0104=price b0105..b0106=modifier b0107=item b0108=description b0109=price
+fix b0110..b0111=modifier b0112=item b0113=description b0114=price b0115..b0116=modifier b0117=section b0118=noise b0119=item
+fix b0120=price b0121=item b0122=description b0123=price b0124=item b0125=description b0126=price b0127=item
+fix b0128=description b0129=price b0130=item b0131=description b0132=price b0133=item b0134=description b0135=price
+fix b0136=item b0137=description b0138=price b0139=item b0140=price b0141=item b0142=description b0143=price
+fix b0144=item b0145=description b0146=price b0147=item b0148=description b0149=price b0150=section b0151=item
+fix b0152=price b0153=item b0154=description b0155=price b0156=item b0157=description b0158=price b0159=item
+fix b0160=description b0161=price b0162=item b0163=price b0164=section b0165=noise b0166=item b0167=price
+fix b0168=item b0169=price b0170=item b0171=price b0172=item b0173=price b0174=item b0175=price
+fix b0176=item b0177=description b0178..b0181=price b0182=noise b0183=item b0184=price b0185=noise b0186=item
+fix b0187=description b0188..b0191=price b0192=noise b0193=item b0194=price b0195..b0197=noise b0198=item b0199=description
+fix b0200=price b0201..b0202=noise b0203=item b0204=description b0205=section b0206=item b0207..b0208=price b0209=item
+fix b0210=price b0211=item b0212=price b0213=item b0214=price b0215=item b0216=price
+prices b0176=Slice:10,Whole Cake:80
+prices b0186=Slice:10,Whole Tray 16 pieces:95
+prices b0206=Original:4
+
+page 9023e97772fa menu html_list | every price printed twice: before the name (noise duplicate) and after the description (price); "-Sub ...", "Add ... for 3" add-on lines; fajitas carry a bare-number protein price line
+region b0019 b0200
+fix b0019=section b0020=noise b0021=item b0022=description b0023=price b0024=noise b0025=item b0026=description
+fix b0027=price b0028=noise b0029=item b0030=description b0031=price b0032=noise b0033=item b0034=price
+fix b0035=section b0036=noise b0037=item b0038=description b0039=price b0040=noise b0041=item b0042=description
+fix b0043=price b0044=noise b0045=item b0046=description b0047=price b0048=noise b0049=item b0050=description
+fix b0051=price b0052=noise b0053=item b0054=description b0055=price b0056=noise b0057=item b0058=description
+fix b0059=price b0060=noise b0061=item b0062=description b0063=price b0064=noise b0065=item b0066=description
+fix b0067=price b0068=noise b0069=item b0070=description b0071=price b0072=noise b0073=item b0074=description
+fix b0075=price b0076=noise b0077=item b0078=description b0079=price b0080=noise b0081=item b0082=description
+fix b0083=price b0084=noise b0085=item b0086=description b0087=price b0088=noise b0089=item b0090=description
+fix b0091=price b0092=noise b0093=item b0094=description b0095=price b0096=noise b0097=item b0098=description
+fix b0099=price b0100=noise b0101=item b0102=description b0103=price b0104=section b0105=noise b0106=item
+fix b0107=description b0108=price b0109=noise b0110=item b0111=description b0112=price b0113=modifier b0114=noise
+fix b0115=item b0116=description b0117=price b0118=noise b0119=item b0120=description b0121=price b0122=section
+fix b0123=noise b0124=item b0125=description b0126=price b0127=modifier b0128=noise b0129=item b0130=description
+fix b0131=price b0132=modifier b0133=noise b0134=item b0135=description b0136=price b0137=section b0138=noise
+fix b0139=item b0140=description b0141=price b0142=modifier b0143=noise b0144=item b0145=description b0146=price
+fix b0147=noise b0148=item b0149=description b0150=price b0151=noise b0152=item b0153=description b0154=price
+fix b0155=noise b0156=item b0157=description b0158..b0159=price b0160=section b0161=noise b0162=item b0163=description
+fix b0164=price b0165=noise b0166=item b0167=description b0168=price b0169..b0171=modifier b0172=section b0173=noise
+fix b0174=item b0175=description b0176=price b0177=noise b0178=item b0179=description b0180=price b0181=noise
+fix b0182=item b0183=description b0184=price b0185=noise b0186=item b0187=description b0188=price b0189=noise
+fix b0190=item b0191=description b0192=price b0193=noise b0194=item b0195=description b0196=price b0197=noise
+fix b0198=item b0199=description b0200=price
+name b0174=Café de Olla
+prices b0156=-:35,Steak:38,Chicken:30,Shrimp:45
+
+page bf1cbf0a9e31 menu html_list | code + name line, short description/subtitle line, price, then dietary tag divs printed twice (noise); section intro lines are noise
+region b0006 b0422
+fix b0006=section b0007=item b0008=price b0009..b0012=noise b0013=item b0014=description b0015=price b0016..b0017=noise
+fix b0018=item b0019=description b0020=price b0021..b0024=noise b0025=item b0026=price b0027..b0030=noise b0031=item
+fix b0032=description b0033=price b0034=section b0035=noise b0036=item b0037=description b0038=price b0039..b0042=noise
+fix b0043=item b0044=description b0045=price b0046..b0047=noise b0048=item b0049=description b0050=price b0051..b0054=noise
+fix b0055=item b0056=description b0057=price b0058..b0061=noise b0062=item b0063=description b0064=price b0065..b0068=noise
+fix b0069=section b0070=noise b0071=item b0072=description b0073=price b0074..b0075=noise b0076=item b0077=description
+fix b0078=price b0079..b0080=noise b0081=item b0082=description b0083=price b0084..b0085=noise b0086=item b0087=description
+fix b0088=price b0089..b0092=noise b0093=item b0094=description b0095=price b0096..b0099=noise b0100=item b0101=description
+fix b0102=price b0103..b0106=noise b0107=item b0108=description b0109=price b0110..b0113=noise b0114=item b0115=description
+fix b0116=price b0117..b0118=noise b0119=item b0120=description b0121=price b0122..b0123=noise b0124=item b0125=description
+fix b0126=price b0127..b0128=noise b0129=item b0130=description b0131=price b0132..b0133=noise b0134=item b0135=description
+fix b0136=price b0137..b0138=noise b0139=item b0140=description b0141=price b0142..b0143=noise b0144=item b0145=description
+fix b0146=price b0147..b0148=noise b0149=item b0150=description b0151=price b0152..b0153=noise b0154=item b0155=description
+fix b0156=price b0157..b0158=noise b0159=item b0160=description b0161=price b0162..b0163=noise b0164=item b0165=description
+fix b0166=price b0167..b0168=noise b0169=item b0170=description b0171=price b0172..b0173=noise b0174=item b0175=description
+fix b0176=price b0177..b0178=noise b0179=item b0180=description b0181=price b0182..b0183=noise b0184=item b0185=description
+fix b0186=price b0187..b0188=noise b0189=section b0190=noise b0191=item b0192=description b0193=price b0194..b0195=noise
+fix b0196=item b0197=description b0198=price b0199..b0200=noise b0201=item b0202=description b0203=price b0204..b0205=noise
+fix b0206=item b0207=description b0208=price b0209..b0210=noise b0211=item b0212=description b0213=price b0214..b0215=noise
+fix b0216=item b0217=description b0218=price b0219..b0220=noise b0221=item b0222=description b0223=price b0224..b0225=noise
+fix b0226=item b0227=description b0228=price b0229..b0230=noise b0231=item b0232=description b0233=price b0234..b0235=noise
+fix b0236=item b0237=description b0238=price b0239..b0240=noise b0241=item b0242=description b0243=price b0244..b0245=noise
+fix b0246=item b0247=description b0248=price b0249..b0252=noise b0253=item b0254=description b0255=price b0256..b0257=noise
+fix b0258=item b0259=description b0260=price b0261..b0262=noise b0263=item b0264=description b0265=price b0266..b0267=noise
+fix b0268=item b0269=description b0270=price b0271..b0272=noise b0273=item b0274=description b0275=price b0276..b0277=noise
+fix b0278=section b0279=noise b0280=item b0281=description b0282=price b0283..b0284=noise b0285=item b0286=description
+fix b0287=price b0288..b0289=noise b0290=item b0291=description b0292=price b0293..b0294=noise b0295=item b0296=description
+fix b0297=price b0298..b0299=noise b0300=item b0301=description b0302=price b0303..b0304=noise b0305=item b0306=description
+fix b0307=price b0308..b0309=noise b0310=item b0311=description b0312=price b0313..b0314=noise b0315=item b0316=description
+fix b0317=price b0318..b0319=noise b0320=item b0321=description b0322=price b0323..b0324=noise b0325=item b0326=price
+fix b0327..b0328=noise b0329=item b0330=price b0331..b0332=noise b0333=section b0334=noise b0335=item b0336=price
+fix b0337..b0338=noise b0339=item b0340=price b0341..b0342=noise b0343=item b0344=price b0345..b0346=noise b0347=item
+fix b0348=price b0349..b0352=noise b0353=item b0354=price b0355..b0356=noise b0357=item b0358=price b0359..b0360=noise
+fix b0361=item b0362=price b0363..b0364=noise b0365=item b0366=price b0367..b0368=noise b0369=item b0370=price
+fix b0371..b0372=noise b0373=item b0374=price b0375..b0378=noise b0379=item b0380=price b0381..b0382=noise b0383=item
+fix b0384=price b0385..b0388=noise b0389=item b0390=price b0391..b0392=noise b0393=item b0394=price b0395..b0396=noise
+fix b0397=item b0398=price b0399..b0402=noise b0403=item b0404=price b0405=item b0406=price b0407=item
+fix b0408=price b0409=item b0410=price b0411=item b0412=price b0413=item b0414=price b0415=item
+fix b0416=price b0417=item b0418=price b0419=item b0420=price b0421=item b0422=price

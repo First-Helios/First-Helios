@@ -42,7 +42,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from spikes.menu_model.eval_validator import DEV_PAGES, HELDOUT_1, load_gold
+from spikes.menu_model.eval_validator import DEV_PAGES, HELDOUT_1, HELDOUT_3, load_gold
 from spikes.menu_model.labeltool import blocks_of
 from spikes.menu_model.stitch import stitch
 from spikes.menu_model.validator import Row, norm_tokens, parse_amount, validate
@@ -513,13 +513,18 @@ def _match(row: Row, gold_items: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def split_pages(gold: dict[str, Any], split: str) -> set[str]:
-    """Gold page ids of one split; ``tune`` = dev + ho1 (the pages prompts may be tuned on)."""
+    """Gold page ids of one split; ``tune`` = dev + ho1 (the pages prompts may be tuned on).
+
+    ``all`` stays the 24 pages of the stress test; ``every`` adds held-out-3.
+    """
     return {
-        "all": set(gold),
+        "all": set(gold) - HELDOUT_3,
+        "every": set(gold),
         "dev": set(gold) & DEV_PAGES,
         "ho1": set(gold) & HELDOUT_1,
         "tune": set(gold) & (DEV_PAGES | HELDOUT_1),
-        "ho2": set(gold) - DEV_PAGES - HELDOUT_1,
+        "ho2": set(gold) - DEV_PAGES - HELDOUT_1 - HELDOUT_3,
+        "ho3": set(gold) & HELDOUT_3,
     }[split]
 
 

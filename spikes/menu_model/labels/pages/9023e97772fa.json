@@ -1,0 +1,674 @@
+{
+ "page_id": "9023e97772fa",
+ "url": "https://www.mimadresrestaurant.com/breakfast-menu",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0019",
+   "b0200"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0019": "section",
+  "b0021": "item",
+  "b0022": "description",
+  "b0023": "price",
+  "b0025": "item",
+  "b0026": "description",
+  "b0027": "price",
+  "b0029": "item",
+  "b0030": "description",
+  "b0031": "price",
+  "b0033": "item",
+  "b0034": "price",
+  "b0035": "section",
+  "b0037": "item",
+  "b0038": "description",
+  "b0039": "price",
+  "b0041": "item",
+  "b0042": "description",
+  "b0043": "price",
+  "b0045": "item",
+  "b0046": "description",
+  "b0047": "price",
+  "b0049": "item",
+  "b0050": "description",
+  "b0051": "price",
+  "b0053": "item",
+  "b0054": "description",
+  "b0055": "price",
+  "b0057": "item",
+  "b0058": "description",
+  "b0059": "price",
+  "b0061": "item",
+  "b0062": "description",
+  "b0063": "price",
+  "b0065": "item",
+  "b0066": "description",
+  "b0067": "price",
+  "b0069": "item",
+  "b0070": "description",
+  "b0071": "price",
+  "b0073": "item",
+  "b0074": "description",
+  "b0075": "price",
+  "b0077": "item",
+  "b0078": "description",
+  "b0079": "price",
+  "b0081": "item",
+  "b0082": "description",
+  "b0083": "price",
+  "b0085": "item",
+  "b0086": "description",
+  "b0087": "price",
+  "b0089": "item",
+  "b0090": "description",
+  "b0091": "price",
+  "b0093": "item",
+  "b0094": "description",
+  "b0095": "price",
+  "b0097": "item",
+  "b0098": "description",
+  "b0099": "price",
+  "b0101": "item",
+  "b0102": "description",
+  "b0103": "price",
+  "b0104": "section",
+  "b0106": "item",
+  "b0107": "description",
+  "b0108": "price",
+  "b0110": "item",
+  "b0111": "description",
+  "b0112": "price",
+  "b0113": "modifier",
+  "b0115": "item",
+  "b0116": "description",
+  "b0117": "price",
+  "b0119": "item",
+  "b0120": "description",
+  "b0121": "price",
+  "b0122": "section",
+  "b0124": "item",
+  "b0125": "description",
+  "b0126": "price",
+  "b0127": "modifier",
+  "b0129": "item",
+  "b0130": "description",
+  "b0131": "price",
+  "b0132": "modifier",
+  "b0134": "item",
+  "b0135": "description",
+  "b0136": "price",
+  "b0137": "section",
+  "b0139": "item",
+  "b0140": "description",
+  "b0141": "price",
+  "b0142": "modifier",
+  "b0144": "item",
+  "b0145": "description",
+  "b0146": "price",
+  "b0148": "item",
+  "b0149": "description",
+  "b0150": "price",
+  "b0152": "item",
+  "b0153": "description",
+  "b0154": "price",
+  "b0156": "item",
+  "b0157": "description",
+  "b0158": "price",
+  "b0159": "price",
+  "b0160": "section",
+  "b0162": "item",
+  "b0163": "description",
+  "b0164": "price",
+  "b0166": "item",
+  "b0167": "description",
+  "b0168": "price",
+  "b0169": "modifier",
+  "b0170": "modifier",
+  "b0171": "modifier",
+  "b0172": "section",
+  "b0174": "item",
+  "b0175": "description",
+  "b0176": "price",
+  "b0178": "item",
+  "b0179": "description",
+  "b0180": "price",
+  "b0182": "item",
+  "b0183": "description",
+  "b0184": "price",
+  "b0186": "item",
+  "b0187": "description",
+  "b0188": "price",
+  "b0190": "item",
+  "b0191": "description",
+  "b0192": "price",
+  "b0194": "item",
+  "b0195": "description",
+  "b0196": "price",
+  "b0198": "item",
+  "b0199": "description",
+  "b0200": "price"
+ },
+ "items": [
+  {
+   "section": "APPETIZERS",
+   "name": "Saltillo Dip and Chips",
+   "description": "Creamy blend of beans, queso and taco meat topped with pico, jalapeños, avocado & sour cream",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0021"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Guacamole",
+   "description": "Creamy fresh avocados, cilantro & pico",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0025"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Queso And Chips",
+   "description": "Warm, creamy and the best queso in town",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0029"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Chips and Housemade Salsa",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0033"
+  },
+  {
+   "section": "Tacos",
+   "name": "#0 TACO",
+   "description": "Bacon, egg, potato & cheese",
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0037"
+  },
+  {
+   "section": "Tacos",
+   "name": "#1 TACO",
+   "description": "Sausage, egg, potato & cheese",
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0041"
+  },
+  {
+   "section": "Tacos",
+   "name": "#2 TACO",
+   "description": "Chorizo, egg, potato & cheese",
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0045"
+  },
+  {
+   "section": "Tacos",
+   "name": "#3 TACO",
+   "description": "Ground beef, Mexican rice & cheese",
+   "prices": [
+    {
+     "amount": "4.75",
+     "variant": null
+    }
+   ],
+   "block": "b0049"
+  },
+  {
+   "section": "Tacos",
+   "name": "#4 TACO",
+   "description": "Black bean, eggs & cheese",
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0053"
+  },
+  {
+   "section": "Tacos",
+   "name": "#5 TACO",
+   "description": "Mushroom,chipotle,grilled onions & bell peppers",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0057"
+  },
+  {
+   "section": "Tacos",
+   "name": "#6 TACO",
+   "description": "Potato & egg",
+   "prices": [
+    {
+     "amount": "4.50",
+     "variant": null
+    }
+   ],
+   "block": "b0061"
+  },
+  {
+   "section": "Tacos",
+   "name": "#7 TACO",
+   "description": "Carne guisada & cheese",
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0065"
+  },
+  {
+   "section": "Tacos",
+   "name": "#8 TACO",
+   "description": "Vegetarian migas & cheese",
+   "prices": [
+    {
+     "amount": "5.75",
+     "variant": null
+    }
+   ],
+   "block": "b0069"
+  },
+  {
+   "section": "Tacos",
+   "name": "#9 TACO",
+   "description": "House made machacado, eggs, & pico",
+   "prices": [
+    {
+     "amount": "5.95",
+     "variant": null
+    }
+   ],
+   "block": "b0073"
+  },
+  {
+   "section": "Tacos",
+   "name": "#10 TACO",
+   "description": "Refried bean & cheese",
+   "prices": [
+    {
+     "amount": "4.00",
+     "variant": null
+    }
+   ],
+   "block": "b0077"
+  },
+  {
+   "section": "Tacos",
+   "name": "#11 TACO",
+   "description": "Beef or chicken fajita, cheese, grilled peppers and onion",
+   "prices": [
+    {
+     "amount": "5.95",
+     "variant": null
+    }
+   ],
+   "block": "b0081"
+  },
+  {
+   "section": "Tacos",
+   "name": "#12 TACO",
+   "description": "Stewed chicken, lettuce tomato & cheese",
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0085"
+  },
+  {
+   "section": "Tacos",
+   "name": "#14 TACO",
+   "description": "Crispy meat taco, lettuce, tomato, & cheese",
+   "prices": [
+    {
+     "amount": "4.75",
+     "variant": null
+    }
+   ],
+   "block": "b0089"
+  },
+  {
+   "section": "Tacos",
+   "name": "#15 TACO",
+   "description": "Pork carnitas, avocado & cilantro",
+   "prices": [
+    {
+     "amount": "5.50",
+     "variant": null
+    }
+   ],
+   "block": "b0093"
+  },
+  {
+   "section": "Tacos",
+   "name": "#16 TACO",
+   "description": "Avocado, lettuce & tomato",
+   "prices": [
+    {
+     "amount": "4.50",
+     "variant": null
+    }
+   ],
+   "block": "b0097"
+  },
+  {
+   "section": "Tacos",
+   "name": "#18 TACO",
+   "description": "Barbacoa & pico de gallo",
+   "prices": [
+    {
+     "amount": "5.95",
+     "variant": null
+    }
+   ],
+   "block": "b0101"
+  },
+  {
+   "section": "Burritos",
+   "name": "Breakfast Rito",
+   "description": "Texas sized burrito filled with eggs, potatoes, avocado, shredded cheese & four slices of bacon",
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0106"
+  },
+  {
+   "section": "Burritos",
+   "name": "Chicken Rito",
+   "description": "Delicious stewed ranchero chicken, white rice, black beans, lettuce, tomatoes, avocado, queso fresco & chipotle cream",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0110"
+  },
+  {
+   "section": "Burritos",
+   "name": "Veggie Rito",
+   "description": "Zucchini squash, roasted peppers, grilled onions, rice, black beans, potatoes, lettuce, tomatoes, avocado, cheese & chipotle cream",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0115"
+  },
+  {
+   "section": "Burritos",
+   "name": "Fajita Rito",
+   "description": "Beef, Avocado, Cheese, Sour Cream and Fries",
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0119"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Ranchero",
+   "description": "Two over easy eggs topped with ranchero sauce aside carne guisada, home fries and refried beans",
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0124"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Mi Madres Migas",
+   "description": "Corn tortilla chips scrambled with eggs and pico de gallo then topped with melted cheese aside home fries and refried beans",
+   "prices": [
+    {
+     "amount": "14.50",
+     "variant": null
+    }
+   ],
+   "block": "b0129"
+  },
+  {
+   "section": "Breakfast Plates",
+   "name": "Chorizo Con Huevo",
+   "description": "Scrambled eggs with chorizo, topped with melted cheese, side refried beans & home fries",
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0134"
+  },
+  {
+   "section": "Specialty Plates",
+   "name": "Enchiladas de la Casa",
+   "description": "Traditional enchiladas with Mexican rice & refried beans",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0139"
+  },
+  {
+   "section": "Specialty Plates",
+   "name": "Chile Relleno",
+   "description": "Stewed Chicken filled poblano chile smothered with ranchero sauce, served with Mexican rice & charro beans",
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0144"
+  },
+  {
+   "section": "Specialty Plates",
+   "name": "Carne Guisada",
+   "description": "Tender braised beef stew with mexican rice served with refried beans & flour tortillas",
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0148"
+  },
+  {
+   "section": "Specialty Plates",
+   "name": "Chicken Quesadillas",
+   "description": "Melted cheddar & jack cheese, mexican rice, pico de gallo, pickled jalapenos, sour cream & cilantro",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0152"
+  },
+  {
+   "section": "Specialty Plates",
+   "name": "Mi Madres Fajitas",
+   "description": "Sizzling house marinated steak or chicken, roasted onions, mexican rice, charro beans, tortillas, pico de gallo & avocado",
+   "prices": [
+    {
+     "amount": "35.00",
+     "variant": null
+    },
+    {
+     "amount": "38.00",
+     "variant": "Steak"
+    },
+    {
+     "amount": "30.00",
+     "variant": "Chicken"
+    },
+    {
+     "amount": "45.00",
+     "variant": "Shrimp"
+    }
+   ],
+   "block": "b0156"
+  },
+  {
+   "section": "Salads",
+   "name": "Taco Salad",
+   "description": "Crispy flour tortilla basket filled with ground meat, romaine & iceberg lettuce, tomatoes, carrots, avocado & warm queso",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0162"
+  },
+  {
+   "section": "Salads",
+   "name": "Spinach & Black Bean",
+   "description": "Baby spinach, black beans, corn, onion, avocado, tomatoes, queso fresco, creamy chipotle dressing",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0166"
+  },
+  {
+   "section": "Drinks-",
+   "name": "Café de Olla",
+   "description": "Texas Coffee Traders coffee brewed with brown sugar, cinnamon, Mexican chocolate & star anise",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0174"
+  },
+  {
+   "section": "Drinks-",
+   "name": "Cold Brew Coffee",
+   "description": "Fresh Texas Coffee traders coffee cold brewed over ice",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0178"
+  },
+  {
+   "section": "Drinks-",
+   "name": "Jamaica",
+   "description": "House brewed hibiscus tea sweetened with sugar",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0182"
+  },
+  {
+   "section": "Drinks-",
+   "name": "Horchata",
+   "description": "Sweetened rice milk spiced with cinnamon & vanilla",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0186"
+  },
+  {
+   "section": "Drinks-",
+   "name": "Limonada",
+   "description": "Real lemons blended with sugar & water",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0190"
+  },
+  {
+   "section": "Drinks-",
+   "name": "Iced Mocha",
+   "description": "Cold brew coffee with chocolate and whipped cream",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0194"
+  },
+  {
+   "section": "Drinks-",
+   "name": "Cafechata",
+   "description": "Half cold brew, half house made horchata",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0198"
+  }
+ ],
+ "note": "every price printed twice: before the name (noise duplicate) and after the description (price); \"-Sub ...\", \"Add ... for 3\" add-on lines; fajitas carry a bare-number protein price line"
+}

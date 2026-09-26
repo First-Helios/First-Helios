@@ -1,0 +1,354 @@
+{
+ "page_id": "0507748949ae",
+ "url": "https://pterrys.com/menu/",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0024",
+   "b0087"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0024": "section",
+  "b0025": "item",
+  "b0026": "price",
+  "b0027": "item",
+  "b0028": "price",
+  "b0029": "item",
+  "b0030": "price",
+  "b0031": "item",
+  "b0032": "price",
+  "b0033": "item",
+  "b0034": "price",
+  "b0035": "item",
+  "b0036": "price",
+  "b0038": "item",
+  "b0039": "price",
+  "b0040": "section",
+  "b0041": "item",
+  "b0042": "price",
+  "b0043": "item",
+  "b0044": "price",
+  "b0045": "item",
+  "b0046": "price",
+  "b0047": "item",
+  "b0048": "price",
+  "b0049": "item",
+  "b0050": "price",
+  "b0051": "section",
+  "b0052": "modifier",
+  "b0053": "modifier",
+  "b0054": "modifier",
+  "b0055": "modifier",
+  "b0056": "modifier",
+  "b0057": "section",
+  "b0059": "item",
+  "b0060": "price",
+  "b0061": "item",
+  "b0062": "price",
+  "b0064": "item",
+  "b0065": "price",
+  "b0066": "item",
+  "b0067": "price",
+  "b0068": "section",
+  "b0069": "item",
+  "b0070": "description",
+  "b0071": "price",
+  "b0072": "item",
+  "b0073": "description",
+  "b0074": "price",
+  "b0075": "item",
+  "b0076": "description",
+  "b0077": "price",
+  "b0079": "item",
+  "b0080": "description",
+  "b0081": "price",
+  "b0082": "item",
+  "b0083": "description",
+  "b0084": "price",
+  "b0085": "item",
+  "b0086": "description",
+  "b0087": "price"
+ },
+ "items": [
+  {
+   "section": "Burgers & Chicken Bites",
+   "name": "Hamburger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.10",
+     "variant": null
+    }
+   ],
+   "block": "b0025"
+  },
+  {
+   "section": "Burgers & Chicken Bites",
+   "name": "Cheeseburger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.65",
+     "variant": null
+    }
+   ],
+   "block": "b0027"
+  },
+  {
+   "section": "Burgers & Chicken Bites",
+   "name": "Double Cheeseburger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0029"
+  },
+  {
+   "section": "Burgers & Chicken Bites",
+   "name": "Chicken Burger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.10",
+     "variant": null
+    }
+   ],
+   "block": "b0031"
+  },
+  {
+   "section": "Burgers & Chicken Bites",
+   "name": "Crispy Chicken Burger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.10",
+     "variant": null
+    }
+   ],
+   "block": "b0033"
+  },
+  {
+   "section": "Burgers & Chicken Bites",
+   "name": "Veggie Burger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "4.85",
+     "variant": null
+    }
+   ],
+   "block": "b0035"
+  },
+  {
+   "section": "Burgers & Chicken Bites",
+   "name": "Crispy Chicken Bites",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "Sides & Desserts",
+   "name": "French Fries",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.30",
+     "variant": null
+    }
+   ],
+   "block": "b0041"
+  },
+  {
+   "section": "Sides & Desserts",
+   "name": "Oatmeal Chocolate Chip Cookie",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.00",
+     "variant": null
+    }
+   ],
+   "block": "b0043"
+  },
+  {
+   "section": "Sides & Desserts",
+   "name": "Banana Bread",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.85",
+     "variant": null
+    }
+   ],
+   "block": "b0045"
+  },
+  {
+   "section": "Sides & Desserts",
+   "name": "BAKER'S DOZEN",
+   "description": null,
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0047"
+  },
+  {
+   "section": "Sides & Desserts",
+   "name": "LOAF OF BANANA BREAD",
+   "description": null,
+   "prices": [
+    {
+     "amount": "11.50",
+     "variant": null
+    }
+   ],
+   "block": "b0049"
+  },
+  {
+   "section": "Breakfast | Served until 11am",
+   "name": "bacon Egg Burger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0059"
+  },
+  {
+   "section": "Breakfast | Served until 11am",
+   "name": "sausage Egg Burger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0061"
+  },
+  {
+   "section": "Breakfast | Served until 11am",
+   "name": "Egg Burger",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.50",
+     "variant": null
+    }
+   ],
+   "block": "b0064"
+  },
+  {
+   "section": "Breakfast | Served until 11am",
+   "name": "Breakfast Potatoes",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.85",
+     "variant": null
+    }
+   ],
+   "block": "b0066"
+  },
+  {
+   "section": "Shakes & Drinks",
+   "name": "Hand spun Milkshakes",
+   "description": "Vanilla, double chocolate, strawberry, caramel, root beer, & Oreo",
+   "prices": [
+    {
+     "amount": "2.85",
+     "variant": null
+    },
+    {
+     "amount": "3.65",
+     "variant": null
+    }
+   ],
+   "block": "b0069"
+  },
+  {
+   "section": "Shakes & Drinks",
+   "name": "Lemonade",
+   "description": "Fresh-squeezed",
+   "prices": [
+    {
+     "amount": "2.25",
+     "variant": null
+    },
+    {
+     "amount": "2.85",
+     "variant": null
+    }
+   ],
+   "block": "b0072"
+  },
+  {
+   "section": "Shakes & Drinks",
+   "name": "Soft Drinks",
+   "description": "Coke, Diet Coke, Dr Pepper, Diet Dr Pepper, IBC Root Beer, 7UP, Hawaiian Punch, Big Red, Iced Tea",
+   "prices": [
+    {
+     "amount": "2.05",
+     "variant": null
+    },
+    {
+     "amount": "2.25",
+     "variant": null
+    }
+   ],
+   "block": "b0075"
+  },
+  {
+   "section": "Shakes & Drinks",
+   "name": "Coffee",
+   "description": "Ruta Maya Coffee medium roast",
+   "prices": [
+    {
+     "amount": "1.75",
+     "variant": null
+    }
+   ],
+   "block": "b0079"
+  },
+  {
+   "section": "Shakes & Drinks",
+   "name": "Orange Juice",
+   "description": "Fresh squeezed daily",
+   "prices": [
+    {
+     "amount": "2.30",
+     "variant": null
+    }
+   ],
+   "block": "b0082"
+  },
+  {
+   "section": "Shakes & Drinks",
+   "name": "Milk",
+   "description": "Organic low-fat",
+   "prices": [
+    {
+     "amount": "1.60",
+     "variant": null
+    }
+   ],
+   "block": "b0085"
+  }
+ ],
+ "note": "h2 section, h4 item, price p (two unlabeled size prices \"$2.85 | $3.65\" for drinks); Add-ons list is modifiers; div card titles and a \"Served until 11am\" h4 are noise; unpriced per-item detail sections after the menu excluded"
+}

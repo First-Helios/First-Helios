@@ -1,0 +1,524 @@
+{
+ "page_id": "0c51131daf93",
+ "url": "https://www.revelryatx.com/menus",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0026",
+   "b0170"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0026": "section",
+  "b0027": "item",
+  "b0028": "description",
+  "b0029": "price",
+  "b0031": "modifier",
+  "b0032": "modifier",
+  "b0033": "modifier",
+  "b0034": "modifier",
+  "b0035": "item",
+  "b0036": "description",
+  "b0037": "price",
+  "b0038": "item",
+  "b0039": "description",
+  "b0040": "price",
+  "b0041": "item",
+  "b0042": "description",
+  "b0043": "price",
+  "b0045": "modifier",
+  "b0046": "modifier",
+  "b0047": "item",
+  "b0048": "description",
+  "b0049": "price",
+  "b0050": "item",
+  "b0051": "description",
+  "b0052": "price",
+  "b0053": "item",
+  "b0054": "description",
+  "b0055": "price",
+  "b0056": "item",
+  "b0057": "description",
+  "b0058": "price",
+  "b0059": "item",
+  "b0060": "description",
+  "b0061": "price",
+  "b0063": "modifier",
+  "b0064": "modifier",
+  "b0065": "modifier",
+  "b0066": "modifier",
+  "b0067": "modifier",
+  "b0068": "modifier",
+  "b0069": "section",
+  "b0071": "item",
+  "b0072": "price",
+  "b0073": "item",
+  "b0074": "description",
+  "b0075": "price",
+  "b0076": "item",
+  "b0077": "price",
+  "b0079": "modifier",
+  "b0080": "modifier",
+  "b0081": "modifier",
+  "b0082": "modifier",
+  "b0083": "modifier",
+  "b0084": "modifier",
+  "b0085": "item",
+  "b0086": "description",
+  "b0087": "price",
+  "b0089": "modifier",
+  "b0090": "modifier",
+  "b0091": "modifier",
+  "b0092": "modifier",
+  "b0093": "modifier",
+  "b0094": "modifier",
+  "b0095": "item",
+  "b0096": "description",
+  "b0097": "price",
+  "b0099": "modifier",
+  "b0100": "modifier",
+  "b0101": "item",
+  "b0102": "description",
+  "b0103": "price",
+  "b0104": "item",
+  "b0105": "description",
+  "b0106": "price",
+  "b0107": "item",
+  "b0108": "description",
+  "b0109": "price",
+  "b0110": "item",
+  "b0111": "description",
+  "b0112": "price",
+  "b0113": "item",
+  "b0114": "description",
+  "b0115": "price",
+  "b0116": "modifier",
+  "b0117": "modifier",
+  "b0118": "modifier",
+  "b0119": "item",
+  "b0120": "description",
+  "b0121": "price",
+  "b0123": "modifier",
+  "b0124": "modifier",
+  "b0125": "item",
+  "b0126": "description",
+  "b0127": "price",
+  "b0129": "modifier",
+  "b0130": "modifier",
+  "b0131": "item",
+  "b0132": "description",
+  "b0133": "price",
+  "b0135": "modifier",
+  "b0136": "modifier",
+  "b0137": "modifier",
+  "b0138": "modifier",
+  "b0139": "modifier",
+  "b0140": "modifier",
+  "b0141": "item",
+  "b0142": "description",
+  "b0143": "price",
+  "b0144": "item",
+  "b0145": "description",
+  "b0146": "price",
+  "b0147": "item",
+  "b0148": "description",
+  "b0149": "price",
+  "b0150": "item",
+  "b0151": "description",
+  "b0152": "price",
+  "b0153": "section",
+  "b0154": "item",
+  "b0155": "price",
+  "b0157": "modifier",
+  "b0158": "modifier",
+  "b0159": "item",
+  "b0160": "price",
+  "b0161": "item",
+  "b0162": "description",
+  "b0163": "price",
+  "b0164": "section",
+  "b0165": "item",
+  "b0166": "description",
+  "b0167": "price",
+  "b0168": "item",
+  "b0169": "description",
+  "b0170": "price"
+ },
+ "items": [
+  {
+   "section": "APPETIZERS",
+   "name": "Chips & Queso",
+   "description": "Queso blanco, pico de gallo, house-made tortilla chips.",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0027"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Fried Brussel Sprouts",
+   "description": "Sriracha-bacon maple glaze, togarashi, green onions",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0035"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Fried Pickles",
+   "description": "Fried pickle chips served with ranch",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Revelry Signature Wings (6pcs Drums & Flats)",
+   "description": "Lemon Pepper/ Garlic Parmesan/ Asian Garlic*/ BBQ*/ Buffalo**/ Hot Chicken Rub***/ Honey Sriracha**** Hot Honey*** (*indicate spice level)",
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0041"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Roasted Hummus & Veggies",
+   "description": "Served with tortilla chips, cucumber, carrots, and celery",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0047"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Big Ass Pretzel",
+   "description": "Green Chili Queso, Honey Mustard, Garlic Butter",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0050"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Warm Bavarian Pretzel Bites",
+   "description": "Green Chili Queso, Honey Mustard",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0053"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Chips & Salsa",
+   "description": "House fried corn tortilla chips, fire roasted chipotle salsa.",
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    }
+   ],
+   "block": "b0056"
+  },
+  {
+   "section": "APPETIZERS",
+   "name": "Chili Cheese Fries",
+   "description": "House-made angus beef chili, jack cheese, green onions.",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0059"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Grilled Chicken Sandwich",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0071"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Patty Melt",
+   "description": "Served with sauteed onion, cheddar, sriracha mayo.",
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0073"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Veggie Burger (Beyond Meat Patty)",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0076"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Crispy Chicken Sandwich",
+   "description": "Cajun spiced buttermilk battered chicken, slaw, sriracha mayo, pickles on a challah bun.",
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0085"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Buffalo Chicken Wrap W/ Kettle Chips",
+   "description": "Grilled or fried Buffalo Chicken Wrap and a flour tortilla with lettuce, tomato, onion, and carrots with Jalapeno Ranch.",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0095"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Brisket Tacos (x2)",
+   "description": "Brown's BBQ Briske, smashed avocado, cheese, pico de gallo. (choice of flour -or- corn tortillas)",
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0101"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Fish Tacos",
+   "description": "Grilled Cajun Spice Crusted Redfish, smashed avocado, cole slaw, pico de gallo, side of fire roasted chipotle salsa. (choice of flour -or- corn tortilla)",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0104"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Carne Asada Tacos (x2)",
+   "description": "Chili-Lime Marinated Steak, smashed avocado, pico de gallo, queso fresco, side of fire-Roasted chipotle salsa. (choice of flour -or- corn tortillas)",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0107"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Crunchy Tacos (2)",
+   "description": "Choice of steak or chicken on crunchy house-made corn tortillas.",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0110"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Grilled Cheese",
+   "description": "Colby jack, texas toast, side of marinara.",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0113"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Cubano Grilled Cheese",
+   "description": "Roasted Pulled Pork, Pecan Smoked Ham, swiss, provolone, pickled jalapenos, on sourdough bread.",
+   "prices": [
+    {
+     "amount": "15.00",
+     "variant": null
+    }
+   ],
+   "block": "b0119"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Wedge Salad",
+   "description": "Iceberg lettuce, bacon, cherry tomatoes, red onion, and blue cheese crumbles. Choice of ranch or blue cheese dressing.",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0125"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "1401 Salad",
+   "description": "Mixed greens, cherry tomato, cucumber, carrot, red bell pepper, radish, red onion, queso fresco, pepitas. (Dressing: Sesame-Ginger, Bleu Cheese, Ranch, Jalapeno-Ranch, Balsamic Vinaigrette, Blood Orange Vinaigrette)",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0131"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Cowboy Burger",
+   "description": "Bacon, Fried Onions, Lettuce, Tomato, Fresh Jalapeno, Pepper Jack, BBQ Sauce",
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0141"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Pesto Chicken Sandwich",
+   "description": "Grilled Chicken, Pesto Aioli, Pepper Jack, Bacon, Lettuce, Onion, Tomato",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0144"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Caprese Chicken Sandwich",
+   "description": "Grilled Chicken, Lettuce, Tomato, Fresh Mozzarella, Balsamic Reduction",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0147"
+  },
+  {
+   "section": "BURGERS/ ENTREES",
+   "name": "Chicken Tender Basket",
+   "description": "Buttermilk Fried Chicken, Texas Toast, w Side of Ranch, Comes w Fries",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0150"
+  },
+  {
+   "section": "SIDES",
+   "name": "French Fries, Sweet Potato Wedges, -or- Tots",
+   "description": null,
+   "prices": [
+    {
+     "amount": "7.00",
+     "variant": null
+    }
+   ],
+   "block": "b0154"
+  },
+  {
+   "section": "SIDES",
+   "name": "House Made Kettle Chips",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0159"
+  },
+  {
+   "section": "SIDES",
+   "name": "Small Garden Salad",
+   "description": "(Dressing: Sesame-Ginger, Bleu Cheese, Ranch, Jalapeno-Ranch, Balsamic Vinaigrette, Blood Orange Vinaigrette)",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0161"
+  },
+  {
+   "section": "SWEETS",
+   "name": "Pretzel Delights",
+   "description": "Cinnamon sugar pretzel bites, comes with chocolate sauce and strawberry compote",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0165"
+  },
+  {
+   "section": "SWEETS",
+   "name": "Brownie Skillet",
+   "description": "Blue Bell vanilla ice cream, Pecan & chocolate sauce",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0168"
+  }
+ ],
+ "note": "name div, description div, price p; add-on lines (add/sub/xtra/toss in) with their own $ div are modifiers; '.' spacer lines and the happy-hour/burger intro paragraphs are noise"
+}

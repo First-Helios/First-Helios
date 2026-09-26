@@ -1,0 +1,870 @@
+{
+ "page_id": "8119034caa35",
+ "url": "https://www.amicitx.com/menus",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0021",
+   "b0216"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0021": "section",
+  "b0023": "item",
+  "b0024": "price",
+  "b0026": "item",
+  "b0027": "description",
+  "b0028": "price",
+  "b0029": "item",
+  "b0030": "price",
+  "b0032": "item",
+  "b0033": "description",
+  "b0034": "price",
+  "b0036": "item",
+  "b0037": "description",
+  "b0038": "price",
+  "b0039": "item",
+  "b0040": "price",
+  "b0041": "section",
+  "b0042": "item",
+  "b0043": "description",
+  "b0044": "price",
+  "b0046": "item",
+  "b0047": "description",
+  "b0048": "price",
+  "b0050": "item",
+  "b0051": "description",
+  "b0052": "price",
+  "b0054": "section",
+  "b0055": "item",
+  "b0056": "price",
+  "b0057": "modifier",
+  "b0058": "modifier",
+  "b0059": "modifier",
+  "b0060": "modifier",
+  "b0062": "item",
+  "b0063": "price",
+  "b0064": "modifier",
+  "b0065": "modifier",
+  "b0066": "modifier",
+  "b0067": "modifier",
+  "b0069": "item",
+  "b0070": "price",
+  "b0071": "item",
+  "b0072": "price",
+  "b0073": "item",
+  "b0074": "description",
+  "b0075": "price",
+  "b0076": "modifier",
+  "b0077": "modifier",
+  "b0078": "item",
+  "b0079": "description",
+  "b0080": "price",
+  "b0081": "item",
+  "b0082": "description",
+  "b0083": "price",
+  "b0084": "modifier",
+  "b0085": "modifier",
+  "b0086": "item",
+  "b0087": "description",
+  "b0088": "price",
+  "b0089": "item",
+  "b0090": "description",
+  "b0091": "price",
+  "b0092": "item",
+  "b0093": "description",
+  "b0094": "price",
+  "b0095": "item",
+  "b0096": "description",
+  "b0097": "price",
+  "b0098": "item",
+  "b0099": "description",
+  "b0100": "price",
+  "b0101": "section",
+  "b0102": "item",
+  "b0103": "description",
+  "b0104": "price",
+  "b0105": "modifier",
+  "b0106": "modifier",
+  "b0107": "item",
+  "b0108": "description",
+  "b0109": "price",
+  "b0110": "modifier",
+  "b0111": "modifier",
+  "b0112": "item",
+  "b0113": "description",
+  "b0114": "price",
+  "b0115": "modifier",
+  "b0116": "modifier",
+  "b0117": "section",
+  "b0119": "item",
+  "b0120": "price",
+  "b0121": "item",
+  "b0122": "description",
+  "b0123": "price",
+  "b0124": "item",
+  "b0125": "description",
+  "b0126": "price",
+  "b0127": "item",
+  "b0128": "description",
+  "b0129": "price",
+  "b0130": "item",
+  "b0131": "description",
+  "b0132": "price",
+  "b0133": "item",
+  "b0134": "description",
+  "b0135": "price",
+  "b0136": "item",
+  "b0137": "description",
+  "b0138": "price",
+  "b0139": "item",
+  "b0140": "price",
+  "b0141": "item",
+  "b0142": "description",
+  "b0143": "price",
+  "b0144": "item",
+  "b0145": "description",
+  "b0146": "price",
+  "b0147": "item",
+  "b0148": "description",
+  "b0149": "price",
+  "b0150": "section",
+  "b0151": "item",
+  "b0152": "price",
+  "b0153": "item",
+  "b0154": "description",
+  "b0155": "price",
+  "b0156": "item",
+  "b0157": "description",
+  "b0158": "price",
+  "b0159": "item",
+  "b0160": "description",
+  "b0161": "price",
+  "b0162": "item",
+  "b0163": "price",
+  "b0164": "section",
+  "b0166": "item",
+  "b0167": "price",
+  "b0168": "item",
+  "b0169": "price",
+  "b0170": "item",
+  "b0171": "price",
+  "b0172": "item",
+  "b0173": "price",
+  "b0174": "item",
+  "b0175": "price",
+  "b0176": "item",
+  "b0177": "description",
+  "b0178": "price",
+  "b0179": "price",
+  "b0180": "price",
+  "b0181": "price",
+  "b0183": "item",
+  "b0184": "price",
+  "b0186": "item",
+  "b0187": "description",
+  "b0188": "price",
+  "b0189": "price",
+  "b0190": "price",
+  "b0191": "price",
+  "b0193": "item",
+  "b0194": "price",
+  "b0198": "item",
+  "b0199": "description",
+  "b0200": "price",
+  "b0203": "item",
+  "b0204": "description",
+  "b0205": "section",
+  "b0206": "item",
+  "b0207": "price",
+  "b0208": "price",
+  "b0209": "item",
+  "b0210": "price",
+  "b0211": "item",
+  "b0212": "price",
+  "b0213": "item",
+  "b0214": "price",
+  "b0215": "item",
+  "b0216": "price"
+ },
+ "items": [
+  {
+   "section": "Appetizers",
+   "name": "Cheesy Garlic Bread",
+   "description": null,
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0023"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Loaded Bread",
+   "description": "Onion, Bacon, mozzarella, butter",
+   "prices": [
+    {
+     "amount": "13.00",
+     "variant": null
+    }
+   ],
+   "block": "b0026"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Mozzarella Caprese",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0029"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Polpette",
+   "description": "3 homemade meatballs cooked in marinara sauce",
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0032"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Burrata with Peaches",
+   "description": "Crushed pistachios, honey drizzle",
+   "prices": [
+    {
+     "amount": "19.00",
+     "variant": null
+    }
+   ],
+   "block": "b0036"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Steamed Mussels",
+   "description": null,
+   "prices": [
+    {
+     "amount": "20.00",
+     "variant": null
+    }
+   ],
+   "block": "b0039"
+  },
+  {
+   "section": "Salads",
+   "name": "House",
+   "description": "Spring mix, tomatoes, drizzled with homemade balsamic glaze",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0042"
+  },
+  {
+   "section": "Salads",
+   "name": "Arugula",
+   "description": "Arugula, lemon dressing, shaved parmigiano",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0046"
+  },
+  {
+   "section": "Salads",
+   "name": "Caesar",
+   "description": "Romaine lettuce, parmigiano, croutons, homemade Caesar dressing",
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0050"
+  },
+  {
+   "section": "Pizza",
+   "name": "12\" NY Style Cheese Pizza",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0055"
+  },
+  {
+   "section": "Pizza",
+   "name": "16\" NY Style Cheese Pizza",
+   "description": null,
+   "prices": [
+    {
+     "amount": "21.00",
+     "variant": null
+    }
+   ],
+   "block": "b0062"
+  },
+  {
+   "section": "Pizza",
+   "name": "12\" NY Style Pepperoni Pizza",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.00",
+     "variant": null
+    }
+   ],
+   "block": "b0069"
+  },
+  {
+   "section": "Pizza",
+   "name": "16\" NY Style Pepperoni Pizza",
+   "description": null,
+   "prices": [
+    {
+     "amount": "23.00",
+     "variant": null
+    }
+   ],
+   "block": "b0071"
+  },
+  {
+   "section": "Pizza",
+   "name": "12\" Tutta Carne (meat lovers)",
+   "description": "Italian sausage, pepperoni, bacon, ricotta",
+   "prices": [
+    {
+     "amount": "21.00",
+     "variant": null
+    }
+   ],
+   "block": "b0073"
+  },
+  {
+   "section": "Pizza",
+   "name": "16\" Tutta Carne (meat lovers)",
+   "description": "Italian sausage, pepperoni, bacon, ricotta",
+   "prices": [
+    {
+     "amount": "27.00",
+     "variant": null
+    }
+   ],
+   "block": "b0078"
+  },
+  {
+   "section": "Pizza",
+   "name": "12\" Suprema (supreme)",
+   "description": "Red sauce, pepperoni, red bell peppers, onion, black olives",
+   "prices": [
+    {
+     "amount": "21.00",
+     "variant": null
+    }
+   ],
+   "block": "b0081"
+  },
+  {
+   "section": "Pizza",
+   "name": "16\" Suprema (supreme)",
+   "description": "Red sauce, pepperoni, red bell peppers, onion, black olives",
+   "prices": [
+    {
+     "amount": "27.00",
+     "variant": null
+    }
+   ],
+   "block": "b0086"
+  },
+  {
+   "section": "Pizza",
+   "name": "12\" Vegetale",
+   "description": "Red sauce, spinach, red bell pepper, red onion, mushroom",
+   "prices": [
+    {
+     "amount": "21.00",
+     "variant": null
+    }
+   ],
+   "block": "b0089"
+  },
+  {
+   "section": "Pizza",
+   "name": "16\" Vegetale",
+   "description": "Red sauce, spinach, red bell pepper, red onion, mushroom",
+   "prices": [
+    {
+     "amount": "27.00",
+     "variant": null
+    }
+   ],
+   "block": "b0092"
+  },
+  {
+   "section": "Pizza",
+   "name": "12\" Miele Caldo",
+   "description": "Hot Honey, White sauce, Italian sausage, Calabrian chili peppers, goat cheese, mozzarella, red onion",
+   "prices": [
+    {
+     "amount": "23.00",
+     "variant": null
+    }
+   ],
+   "block": "b0095"
+  },
+  {
+   "section": "Pizza",
+   "name": "16\" Miele Caldo",
+   "description": "Hot Honey, White sauce, Italian sausage, Calabrian chili peppers, goat cheese, mozzarella, red onion",
+   "prices": [
+    {
+     "amount": "29.00",
+     "variant": null
+    }
+   ],
+   "block": "b0098"
+  },
+  {
+   "section": "Specialty Pizza",
+   "name": "12\" Margarita",
+   "description": "Red sauce, fresh mozzarella, basil",
+   "prices": [
+    {
+     "amount": "22.00",
+     "variant": null
+    }
+   ],
+   "block": "b0102"
+  },
+  {
+   "section": "Specialty Pizza",
+   "name": "12\" Bianca",
+   "description": "White sauce, mozzarella, pecorino cheese, spinach, ricotta",
+   "prices": [
+    {
+     "amount": "22.00",
+     "variant": null
+    }
+   ],
+   "block": "b0107"
+  },
+  {
+   "section": "Specialty Pizza",
+   "name": "12\" Prosciutto Arugula",
+   "description": "San Manzano tomatoes, fresh mozzarella, prosciutto, and arugula",
+   "prices": [
+    {
+     "amount": "24.00",
+     "variant": null
+    }
+   ],
+   "block": "b0112"
+  },
+  {
+   "section": "Pasta",
+   "name": "Spaghetti Marinara",
+   "description": null,
+   "prices": [
+    {
+     "amount": "19.00",
+     "variant": null
+    }
+   ],
+   "block": "b0119"
+  },
+  {
+   "section": "Pasta",
+   "name": "Spaghetti Puttanesca",
+   "description": "Olives, capers, anchovies, in red sauce",
+   "prices": [
+    {
+     "amount": "22.00",
+     "variant": null
+    }
+   ],
+   "block": "b0121"
+  },
+  {
+   "section": "Pasta",
+   "name": "Spaghetti Bolognese",
+   "description": "Meat sauce",
+   "prices": [
+    {
+     "amount": "23.00",
+     "variant": null
+    }
+   ],
+   "block": "b0124"
+  },
+  {
+   "section": "Pasta",
+   "name": "Spaghetti Carbonara",
+   "description": "Creamy egg yolk sauce with onions, pancetta and parmigiano",
+   "prices": [
+    {
+     "amount": "23.00",
+     "variant": null
+    }
+   ],
+   "block": "b0127"
+  },
+  {
+   "section": "Pasta",
+   "name": "Spaghetti con Polpette",
+   "description": "Spaghetti meatballs cooked in marinara sauce",
+   "prices": [
+    {
+     "amount": "24.00",
+     "variant": null
+    }
+   ],
+   "block": "b0130"
+  },
+  {
+   "section": "Pasta",
+   "name": "Penne Arrabbiata",
+   "description": "Spicy red sauce",
+   "prices": [
+    {
+     "amount": "20.00",
+     "variant": null
+    }
+   ],
+   "block": "b0133"
+  },
+  {
+   "section": "Pasta",
+   "name": "Penne Amatriciana",
+   "description": "Tomato, basil, prosciutto, and parmigiano",
+   "prices": [
+    {
+     "amount": "23.00",
+     "variant": null
+    }
+   ],
+   "block": "b0136"
+  },
+  {
+   "section": "Pasta",
+   "name": "Penne Pesto",
+   "description": null,
+   "prices": [
+    {
+     "amount": "22.00",
+     "variant": null
+    }
+   ],
+   "block": "b0139"
+  },
+  {
+   "section": "Pasta",
+   "name": "Penne alla Vodka",
+   "description": "Creamy tomato vodka sauce",
+   "prices": [
+    {
+     "amount": "22.00",
+     "variant": null
+    }
+   ],
+   "block": "b0141"
+  },
+  {
+   "section": "Pasta",
+   "name": "Fettuccine Alfredo",
+   "description": "Made with top-quality ingredients",
+   "prices": [
+    {
+     "amount": "23.00",
+     "variant": null
+    }
+   ],
+   "block": "b0144"
+  },
+  {
+   "section": "Pasta",
+   "name": "Fettuccine Giulio Cesare",
+   "description": "Creamy meat sauce with prosciutto, mushrooms, and parmigiano",
+   "prices": [
+    {
+     "amount": "27.00",
+     "variant": null
+    }
+   ],
+   "block": "b0147"
+  },
+  {
+   "section": "Main Dishes",
+   "name": "Homemade Meat Lasagna",
+   "description": null,
+   "prices": [
+    {
+     "amount": "25.00",
+     "variant": null
+    }
+   ],
+   "block": "b0151"
+  },
+  {
+   "section": "Main Dishes",
+   "name": "Chicken Parmigiana",
+   "description": "over pasta",
+   "prices": [
+    {
+     "amount": "25.00",
+     "variant": null
+    }
+   ],
+   "block": "b0153"
+  },
+  {
+   "section": "Main Dishes",
+   "name": "Shrimp Scampi",
+   "description": "over pasta",
+   "prices": [
+    {
+     "amount": "29.00",
+     "variant": null
+    }
+   ],
+   "block": "b0156"
+  },
+  {
+   "section": "Main Dishes",
+   "name": "Shrimp Fra Diavolo (spicy)",
+   "description": "over pasta",
+   "prices": [
+    {
+     "amount": "29.00",
+     "variant": null
+    }
+   ],
+   "block": "b0159"
+  },
+  {
+   "section": "Main Dishes",
+   "name": "Spaghetti alle Cozze",
+   "description": null,
+   "prices": [
+    {
+     "amount": "27.00",
+     "variant": null
+    }
+   ],
+   "block": "b0162"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Single Espresso",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0166"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Double Espresso",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0168"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Americano",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0170"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Cappuccino",
+   "description": null,
+   "prices": [
+    {
+     "amount": "6.00",
+     "variant": null
+    }
+   ],
+   "block": "b0172"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Cafe Latte",
+   "description": null,
+   "prices": [
+    {
+     "amount": "6.00",
+     "variant": null
+    }
+   ],
+   "block": "b0174"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Jimmy's NY Style Cheesecake",
+   "description": "Whole cake, must place order 1 week prior to pick up",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": "Slice"
+    },
+    {
+     "amount": "80.00",
+     "variant": "Whole Cake"
+    }
+   ],
+   "block": "b0176"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Hazelnut Square",
+   "description": null,
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0183"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Tiramisu",
+   "description": "Whole cake, must place order 1 week prior to pick up",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": "Slice"
+    },
+    {
+     "amount": "95.00",
+     "variant": "Whole Tray 16 pieces"
+    }
+   ],
+   "block": "b0186"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Cannoli",
+   "description": null,
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0193"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Amici Signature Tasting",
+   "description": "Join us every Wednesday for a special Italian tasting experience at Amici. Limited seating available each week. Advance booking required.",
+   "prices": [
+    {
+     "amount": "75.00",
+     "variant": null
+    }
+   ],
+   "block": "b0198"
+  },
+  {
+   "section": "Coffee/Desserts",
+   "name": "Sunday Sauce (Sunday's Only) Limited",
+   "description": "Meatballs, Sausage, Short Ribs slowly cooked in a red sauce over pasta",
+   "prices": [],
+   "block": "b0203"
+  },
+  {
+   "section": "Drinks",
+   "name": "San Pellegrino",
+   "description": null,
+   "prices": [
+    {
+     "amount": "4.00",
+     "variant": "Original"
+    }
+   ],
+   "block": "b0206"
+  },
+  {
+   "section": "Drinks",
+   "name": "Coke",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.00",
+     "variant": null
+    }
+   ],
+   "block": "b0209"
+  },
+  {
+   "section": "Drinks",
+   "name": "Diet Coke",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.00",
+     "variant": null
+    }
+   ],
+   "block": "b0211"
+  },
+  {
+   "section": "Drinks",
+   "name": "Dr. Pepper",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.00",
+     "variant": null
+    }
+   ],
+   "block": "b0213"
+  },
+  {
+   "section": "Drinks",
+   "name": "Sprite",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.00",
+     "variant": null
+    }
+   ],
+   "block": "b0215"
+  }
+ ],
+ "note": "name/desc/price divs, many items then repeat their name (noise); topping and gluten-free upcharge lines are add-ons; desserts with Slice/Whole variant label lines; weekly promos are noise; wine/beer list unpriced (outside region)"
+}

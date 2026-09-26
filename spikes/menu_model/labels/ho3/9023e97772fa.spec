@@ -1,0 +1,9 @@
+page 9023e97772fa menu html_list | every price printed twice: before the name (noise duplicate) and after the description (price); "-Sub ...", "Add ... for 3" add-on lines; fajitas carry a bare-number protein price line
+region b0019 b0200
+section b0019 b0035 b0104 b0122 b0137 b0160 b0172
+noise b0020 b0024 b0028 b0032 b0036 b0040 b0044 b0048 b0052 b0056 b0060 b0064 b0068 b0072 b0076 b0080 b0084 b0088 b0092 b0096 b0100 b0105 b0109 b0114 b0118 b0123 b0128 b0133 b0138 b0143 b0147 b0151 b0155 b0161 b0165 b0173 b0177 b0181 b0185 b0189 b0193 b0197
+modifier b0113 b0127 b0132 b0142 b0169..b0171
+description b0022 b0026 b0030 b0038 b0042 b0046 b0050 b0054 b0058 b0062 b0066 b0070 b0074 b0078 b0082 b0086 b0090 b0094 b0098 b0102 b0107 b0111 b0116 b0120 b0125 b0130 b0135 b0140 b0145 b0149 b0153 b0157 b0163 b0167 b0175 b0179 b0183 b0187 b0191 b0195 b0199
+price b0159
+name b0174=Café de Olla
+prices b0156=-:35,Steak:38,Chicken:30,Shrimp:45

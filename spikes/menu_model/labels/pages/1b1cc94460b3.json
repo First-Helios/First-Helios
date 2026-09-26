@@ -1,0 +1,966 @@
+{
+ "page_id": "1b1cc94460b3",
+ "url": "http://www.southsideflyingpizza.com/",
+ "page_label": "menu",
+ "format": "html_cards",
+ "menu_regions": [
+  [
+   "b0027",
+   "b0233"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0027": "section",
+  "b0028": "item",
+  "b0029": "description",
+  "b0030": "price",
+  "b0031": "section",
+  "b0032": "item",
+  "b0033": "price",
+  "b0034": "item",
+  "b0035": "price",
+  "b0036": "item",
+  "b0037": "price",
+  "b0038": "item",
+  "b0039": "price",
+  "b0040": "item",
+  "b0041": "price",
+  "b0042": "section",
+  "b0044": "item",
+  "b0045": "description",
+  "b0046": "price",
+  "b0047": "item",
+  "b0048": "description",
+  "b0049": "price",
+  "b0050": "section",
+  "b0053": "item",
+  "b0054": "description",
+  "b0055": "price",
+  "b0056": "section",
+  "b0058": "item",
+  "b0059": "description",
+  "b0060": "price",
+  "b0061": "section",
+  "b0064": "item",
+  "b0065": "description",
+  "b0066": "price",
+  "b0067": "section",
+  "b0070": "item",
+  "b0071": "description",
+  "b0072": "price",
+  "b0073": "section",
+  "b0076": "item",
+  "b0077": "description",
+  "b0078": "price",
+  "b0079": "section",
+  "b0082": "item",
+  "b0083": "description",
+  "b0084": "price",
+  "b0085": "section",
+  "b0088": "item",
+  "b0089": "price",
+  "b0090": "section",
+  "b0091": "item",
+  "b0092": "price",
+  "b0093": "item",
+  "b0094": "description",
+  "b0095": "price",
+  "b0096": "item",
+  "b0097": "description",
+  "b0098": "price",
+  "b0099": "item",
+  "b0100": "description",
+  "b0101": "price",
+  "b0102": "section",
+  "b0103": "item",
+  "b0104": "description",
+  "b0105": "price",
+  "b0106": "item",
+  "b0107": "description",
+  "b0108": "price",
+  "b0109": "item",
+  "b0110": "description",
+  "b0111": "price",
+  "b0112": "item",
+  "b0113": "description",
+  "b0114": "price",
+  "b0115": "item",
+  "b0116": "description",
+  "b0117": "price",
+  "b0118": "item",
+  "b0119": "description",
+  "b0120": "price",
+  "b0121": "item",
+  "b0122": "description",
+  "b0123": "price",
+  "b0124": "item",
+  "b0125": "description",
+  "b0126": "price",
+  "b0127": "item",
+  "b0128": "description",
+  "b0129": "price",
+  "b0130": "item",
+  "b0131": "description",
+  "b0132": "price",
+  "b0133": "item",
+  "b0134": "description",
+  "b0135": "price",
+  "b0136": "item",
+  "b0137": "description",
+  "b0138": "price",
+  "b0139": "item",
+  "b0140": "description",
+  "b0141": "price",
+  "b0142": "section",
+  "b0143": "item",
+  "b0144": "description",
+  "b0145": "price",
+  "b0146": "item",
+  "b0147": "description",
+  "b0148": "price",
+  "b0149": "item",
+  "b0150": "description",
+  "b0151": "price",
+  "b0152": "item",
+  "b0153": "description",
+  "b0154": "price",
+  "b0155": "item",
+  "b0156": "description",
+  "b0157": "price",
+  "b0158": "item",
+  "b0159": "description",
+  "b0160": "price",
+  "b0161": "item",
+  "b0162": "description",
+  "b0163": "price",
+  "b0164": "item",
+  "b0165": "description",
+  "b0166": "price",
+  "b0167": "item",
+  "b0168": "description",
+  "b0169": "price",
+  "b0170": "item",
+  "b0171": "description",
+  "b0172": "price",
+  "b0173": "item",
+  "b0174": "description",
+  "b0175": "price",
+  "b0176": "section",
+  "b0177": "item",
+  "b0178": "price",
+  "b0179": "item",
+  "b0180": "description",
+  "b0181": "price",
+  "b0182": "item",
+  "b0183": "description",
+  "b0184": "price",
+  "b0185": "item",
+  "b0186": "description",
+  "b0187": "price",
+  "b0188": "section",
+  "b0189": "item",
+  "b0190": "description",
+  "b0191": "price",
+  "b0192": "item",
+  "b0193": "description",
+  "b0194": "price",
+  "b0195": "section",
+  "b0196": "item",
+  "b0197": "price",
+  "b0198": "item",
+  "b0199": "price",
+  "b0200": "item",
+  "b0201": "price",
+  "b0202": "item",
+  "b0203": "price",
+  "b0204": "item",
+  "b0205": "price",
+  "b0206": "item",
+  "b0207": "description",
+  "b0208": "price",
+  "b0209": "item",
+  "b0210": "description",
+  "b0211": "price",
+  "b0212": "section",
+  "b0213": "item",
+  "b0214": "price",
+  "b0215": "item",
+  "b0216": "description",
+  "b0217": "price",
+  "b0218": "section",
+  "b0219": "item",
+  "b0220": "price",
+  "b0221": "item",
+  "b0222": "price",
+  "b0223": "item",
+  "b0224": "description",
+  "b0225": "price",
+  "b0226": "item",
+  "b0227": "description",
+  "b0228": "price",
+  "b0229": "section",
+  "b0231": "item",
+  "b0232": "description",
+  "b0233": "price"
+ },
+ "items": [
+  {
+   "section": "Pizza",
+   "name": "Create Your Own Pizza",
+   "description": "Pick a sauce and up to 4 meats and veggies. Base comes with mozzarella cheese and marinara. Also available with Vegan cheese!",
+   "prices": [
+    {
+     "amount": "16.50",
+     "variant": null
+    }
+   ],
+   "block": "b0028"
+  },
+  {
+   "section": "Catering - Pizza Party",
+   "name": "Pizza Party for 10",
+   "description": null,
+   "prices": [
+    {
+     "amount": "88.00",
+     "variant": null
+    }
+   ],
+   "block": "b0032"
+  },
+  {
+   "section": "Catering - Pizza Party",
+   "name": "Pizza Party for 20",
+   "description": null,
+   "prices": [
+    {
+     "amount": "175.00",
+     "variant": null
+    }
+   ],
+   "block": "b0034"
+  },
+  {
+   "section": "Catering - Pizza Party",
+   "name": "Pizza Party for 30",
+   "description": null,
+   "prices": [
+    {
+     "amount": "265.00",
+     "variant": null
+    }
+   ],
+   "block": "b0036"
+  },
+  {
+   "section": "Catering - Pizza Party",
+   "name": "Pizza Party for 40",
+   "description": null,
+   "prices": [
+    {
+     "amount": "350.00",
+     "variant": null
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "Catering - Pizza Party",
+   "name": "Pizza Party for 50",
+   "description": null,
+   "prices": [
+    {
+     "amount": "460.00",
+     "variant": null
+    }
+   ],
+   "block": "b0040"
+  },
+  {
+   "section": "September Special",
+   "name": "September- Sixty Cent Ranch!",
+   "description": "We know that we all love ranch",
+   "prices": [
+    {
+     "amount": "0.50",
+     "variant": null
+    }
+   ],
+   "block": "b0044"
+  },
+  {
+   "section": "September Special",
+   "name": "Pizza Rolls Special!",
+   "description": "Four Fabulous Pizza Rolls",
+   "prices": [
+    {
+     "amount": "12.00",
+     "variant": null
+    }
+   ],
+   "block": "b0047"
+  },
+  {
+   "section": "Monday Special",
+   "name": "Monday Five Cheese Please Pizza Special",
+   "description": "Mozzarella, Romano, Parmesan, Asiago and Feta!",
+   "prices": [
+    {
+     "amount": "19.50",
+     "variant": null
+    }
+   ],
+   "block": "b0053"
+  },
+  {
+   "section": "Tuesday Specials",
+   "name": "King of Pepperoni!",
+   "description": "Our glorious celebration of peperonni!",
+   "prices": [
+    {
+     "amount": "19.50",
+     "variant": null
+    }
+   ],
+   "block": "b0058"
+  },
+  {
+   "section": "Wednesday Specials",
+   "name": "Pizza Roll Wednesday Special",
+   "description": "Pepperoni or chicken jalapeno.",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0064"
+  },
+  {
+   "section": "Thursday Special",
+   "name": "Meatsider Pizza",
+   "description": "Three meats on beautiful crust",
+   "prices": [
+    {
+     "amount": "19.50",
+     "variant": null
+    }
+   ],
+   "block": "b0070"
+  },
+  {
+   "section": "Friday Special",
+   "name": "Wings Friday",
+   "description": "Five for Ten delicous baked chicken wings with your favorite sauce",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0076"
+  },
+  {
+   "section": "Saturday Special",
+   "name": "Caesar Plus More",
+   "description": "Our Caesar Plus More Salad",
+   "prices": [
+    {
+     "amount": "10.00",
+     "variant": null
+    }
+   ],
+   "block": "b0082"
+  },
+  {
+   "section": "Sunday Special",
+   "name": "Southsider Pizza",
+   "description": null,
+   "prices": [
+    {
+     "amount": "19.50",
+     "variant": null
+    }
+   ],
+   "block": "b0088"
+  },
+  {
+   "section": "Catering - Sides",
+   "name": "Salad Party for 15 People",
+   "description": null,
+   "prices": [
+    {
+     "amount": "80.00",
+     "variant": null
+    }
+   ],
+   "block": "b0091"
+  },
+  {
+   "section": "Catering - Sides",
+   "name": "Pizza Roll Party For 12 People",
+   "description": "24 Pizza Rolls",
+   "prices": [
+    {
+     "amount": "75.00",
+     "variant": null
+    }
+   ],
+   "block": "b0093"
+  },
+  {
+   "section": "Catering - Sides",
+   "name": "Wings Party for 10 People",
+   "description": "40 Pieces.",
+   "prices": [
+    {
+     "amount": "100.00",
+     "variant": null
+    }
+   ],
+   "block": "b0096"
+  },
+  {
+   "section": "Catering - Sides",
+   "name": "Boxed Lunch to Go",
+   "description": "Any Slice, Side Salad and Soda",
+   "prices": [
+    {
+     "amount": "16.40",
+     "variant": null
+    }
+   ],
+   "block": "b0099"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "King of Pepperoni Pizza",
+   "description": "Pepperoni, pepperoni, pepperoni, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0103"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "The Southsider Pizza",
+   "description": "Pepperoni, ham, sausage, red onion, mushrooms, bell peppers, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0106"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "The Eastsider Pizza",
+   "description": "Pepperoni, ham, sausage, black olives, pineapple, jalapeno peppers, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0109"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "The Meatsider Pizza",
+   "description": "Pepperoni, sausage, ham, beef, and bacon with mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0112"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "The Lakesider Pizza",
+   "description": "Pesto, pepperoni, sausage, red onion, jalapenos, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "25.50",
+     "variant": null
+    }
+   ],
+   "block": "b0115"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "The Greensider Pizza",
+   "description": "Mushrooms, red onions, tomatoes, red pepper, mozzarella, romano, Ricotta and parmesan.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0118"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "Flyin’ Hawaiian Pizza",
+   "description": "BBQ sauce, chicken, ham, red onions, pineapple, jalapenos, mozzarella, Romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0121"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "The Saxon Pizza",
+   "description": "Pepperoni, Italian sausage, chicken, mushroom, red onion, mozzarella, parmesan, and Romano.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0124"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "Margherita Pizza",
+   "description": "Olive oil, tomato, basil, garlic, mozzarella, parmesan, and romano.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0127"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "The Athena Pizza",
+   "description": "Basil, Kalamata olives, red onions, tomatoes, feta, mozzarella, parmesan, and Romano, Ricotta.",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0130"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "Artichoke & Basil Pesto Pizza",
+   "description": "Basil pesto, artichoke, tomato, spinach, roasted red pepper, Roma tomato, feta, mozzarella, parmesan, and Romano.",
+   "prices": [
+    {
+     "amount": "25.50",
+     "variant": null
+    }
+   ],
+   "block": "b0133"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "Five Cheese Please",
+   "description": "Mozzarella, Romano, Parmagiano, Asiago, Feta",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0136"
+  },
+  {
+   "section": "High Flying Pizza",
+   "name": "Garlic Chicken Special",
+   "description": "Marinara, Garlic, Onion, Chicken, Spinach, Mozzarella, Romano",
+   "prices": [
+    {
+     "amount": "23.50",
+     "variant": null
+    }
+   ],
+   "block": "b0139"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "King of Pepperoni Pizza Slice",
+   "description": "Pepperoni, pepperoni, pepperoni, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0143"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "The Southsider Pizza Slice",
+   "description": "Pepperoni, ham, sausage, red onion, mushrooms, bell peppers, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0146"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "The Eastsider Pizza Slice",
+   "description": "Pepperoni, ham, sausage, black olives, pineapple, jalepenos, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0149"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "The Meatsider Pizza Slice",
+   "description": "Pepperoni, sausage, ham, beef, and bacon with mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0152"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "The Lakesider Pizza Slice",
+   "description": "Pesto, pepperoni, sausage, red onion, jalapenos, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "8.50",
+     "variant": null
+    }
+   ],
+   "block": "b0155"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "The Greensider Pizza Slice",
+   "description": "Mushrooms, red onions, tomatoes, spinach, bell peppers, mozzarella, romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0158"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "Flyin’ Hawaiian Pizza Slice",
+   "description": "BBQ sauce, chicken, ham, red onions, pineapple, jalapenos, mozzarella, Romano, and parmesan.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0161"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "The Saxon Pizza Slice",
+   "description": "Pepperoni, Italian sausage, chicken, mushroom, red onion, mozzarella, parmesan, and Romano.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0164"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "Margherita Pizza Slice",
+   "description": "Olive oil, tomato, basil, garlic, mozzarella, parmesan, and romano.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0167"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "The Athena Pizza Slice",
+   "description": "Spinach, kalamata olives, red onions, tomatoes, feta, mozzarella, parmesan, and Romano.",
+   "prices": [
+    {
+     "amount": "7.99",
+     "variant": null
+    }
+   ],
+   "block": "b0170"
+  },
+  {
+   "section": "Giant Slices",
+   "name": "Artichoke & Basil Pesto Pizza Slice",
+   "description": "Basil pesto, artichoke, tomato, spinach, roasted red pepper, Roma tomato, feta, mozzarella, parmesan, and Romano.",
+   "prices": [
+    {
+     "amount": "8.50",
+     "variant": null
+    }
+   ],
+   "block": "b0173"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Big & Juicy Baked Chicken Wings",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0177"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Cheesy Breadsticks",
+   "description": "Our x-large pizza dough is brushed with house-made garlic butter and topped with mozzarella, parmesan, and romano cheese. Ranch or marinara for dipping.",
+   "prices": [
+    {
+     "amount": "17.00",
+     "variant": null
+    }
+   ],
+   "block": "b0179"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Handmade Pepperoni Pizza Rolls",
+   "description": "Pepperoni, mozzarella, and Romano, brushed with house-made garlic butter, and served with ranch or marinara for dipping.",
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0182"
+  },
+  {
+   "section": "Appetizers",
+   "name": "Handmade Chicken/Jalapeno Pizza Rolls",
+   "description": "Lucious pizza rolls with Chicken and Jalapeno, doused with garlic butter and Romano",
+   "prices": [
+    {
+     "amount": "14.00",
+     "variant": null
+    }
+   ],
+   "block": "b0185"
+  },
+  {
+   "section": "Fresh Salads",
+   "name": "Feta & Pecan House Salad",
+   "description": "Romaine, red cabbage, tomato, cucumber, feta, and pecans.",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0189"
+  },
+  {
+   "section": "Fresh Salads",
+   "name": "Caesar (with more!) Salad",
+   "description": "Romaine, Tomatoes, Croutons, Romano, Parmasan, Kalamata Olives and Caesar Dressing",
+   "prices": [
+    {
+     "amount": "11.00",
+     "variant": null
+    }
+   ],
+   "block": "b0192"
+  },
+  {
+   "section": "Extras",
+   "name": "Ranch Dressing",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.00",
+     "variant": null
+    }
+   ],
+   "block": "b0196"
+  },
+  {
+   "section": "Extras",
+   "name": "Marinara Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.50",
+     "variant": null
+    }
+   ],
+   "block": "b0198"
+  },
+  {
+   "section": "Extras",
+   "name": "Buffalo Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.50",
+     "variant": null
+    }
+   ],
+   "block": "b0200"
+  },
+  {
+   "section": "Extras",
+   "name": "BBQ Sauce",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.50",
+     "variant": null
+    }
+   ],
+   "block": "b0202"
+  },
+  {
+   "section": "Extras",
+   "name": "Pepperoncinis",
+   "description": null,
+   "prices": [
+    {
+     "amount": "1.50",
+     "variant": null
+    }
+   ],
+   "block": "b0204"
+  },
+  {
+   "section": "Extras",
+   "name": "Pizza Dough Ball",
+   "description": "Wonderful fresh in house raw pizza dough. Make your own Southside Pizza at home!",
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0206"
+  },
+  {
+   "section": "Extras",
+   "name": "Bag of Chips",
+   "description": "Chips",
+   "prices": [
+    {
+     "amount": "2.50",
+     "variant": null
+    }
+   ],
+   "block": "b0209"
+  },
+  {
+   "section": "Desserts",
+   "name": "Deep Chocolate Brownie",
+   "description": null,
+   "prices": [
+    {
+     "amount": "6.00",
+     "variant": null
+    }
+   ],
+   "block": "b0213"
+  },
+  {
+   "section": "Desserts",
+   "name": "Ginormous Chocalate Chip Cookie",
+   "description": "Fresh Baked and Really Big",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0215"
+  },
+  {
+   "section": "Beverages",
+   "name": "Soda",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.50",
+     "variant": null
+    }
+   ],
+   "block": "b0219"
+  },
+  {
+   "section": "Beverages",
+   "name": "Water",
+   "description": null,
+   "prices": [
+    {
+     "amount": "2.00",
+     "variant": null
+    }
+   ],
+   "block": "b0221"
+  },
+  {
+   "section": "Beverages",
+   "name": "2 Liter Coke or Other Soda!!",
+   "description": "Two Liter Special Coke",
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0223"
+  },
+  {
+   "section": "Beverages",
+   "name": "Powerade",
+   "description": "Thirst quencher!",
+   "prices": [
+    {
+     "amount": "3.00",
+     "variant": null
+    }
+   ],
+   "block": "b0226"
+  },
+  {
+   "section": "Vegan Special",
+   "name": "Vegan Greensider",
+   "description": "Vegan cheese and a world of vegetables",
+   "prices": [
+    {
+     "amount": "22.00",
+     "variant": null
+    }
+   ],
+   "block": "b0231"
+  }
+ ],
+ "note": "Square Online cards: h2 section, name p, description p, price p; daily-special card titles/availability divs are noise; Extras (sauces, dough ball, chips) are sold items"
+}

@@ -47,6 +47,15 @@ HELDOUT_1 = frozenset(
 DEV_PAGES = frozenset(
     {"f298109dce7a", "dc96fa2f50f3", "0580f923bc5e", "cbcdb04ffbe0", "abefb3029e57", "1b6233a80694"}
 )
+# Held-out-3 (usable-price session): fresh pages from 9 new venues (candidates batch 2),
+# labeled after the pages that tune validator v3 were fixed; scored once, at the end. Kept
+# out of every other split so the 24-page baselines stay comparable.
+HELDOUT_3 = frozenset(
+    {
+        "60014efbcff6", "9023e97772fa", "bf1cbf0a9e31", "8119034caa35", "1b1cc94460b3",
+        "0c51131daf93", "3cd639cd8f00", "0507748949ae", "630ef18b78a3",
+    }
+)  # fmt: skip
 PER_TYPE_PER_PAGE = 10
 
 
@@ -97,6 +106,10 @@ def main() -> None:  # noqa: C901, PLR0915 - a flat evaluation script
     rng = random.Random(SEED)
     gold = load_gold()
     split = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--split=")), "all")
+    if split == "ho3":
+        gold = {k: v for k, v in gold.items() if k in HELDOUT_3}
+    else:
+        gold = {k: v for k, v in gold.items() if k not in HELDOUT_3}
     if split == "dev":
         gold = {k: v for k, v in gold.items() if k in DEV_PAGES}
     elif split == "heldout":  # v1 held-out (sets 1 + 2)

@@ -57,7 +57,11 @@ def main() -> None:
 
     gold_pages = [lab for lab in labels if lab["page_label"] == "menu" and lab.get("blocks")]
     print(f"\n## 2. Block labels and gold items ({len(gold_pages)} block-labeled menus)\n")
-    for lab in _take(rng, gold_pages):
+    _blocks_and_items(rng, _take(rng, gold_pages))
+
+
+def _blocks_and_items(rng: random.Random, pages: list[dict[str, object]]) -> None:
+    for lab in pages:
         pid = str(lab["page_id"])
         text = {b.id: b.text for b in blocks_of(pid)}
         blocks = lab["blocks"]
@@ -83,5 +87,25 @@ def main() -> None:
         print()
 
 
+def main_ho3() -> None:
+    """Held-out-3 (usable-price session): every page, 20% of its blocks and of its items."""
+    from spikes.menu_model.eval_validator import HELDOUT_3  # noqa: PLC0415
+
+    rng = random.Random(20260926)
+    pages = [
+        json.loads((LABELS / "pages" / f"{pid}.json").read_text(encoding="utf-8"))
+        for pid in sorted(HELDOUT_3)
+    ]
+    print("# Held-out-3 spot-check (20% of each page's blocks and gold items)\n")
+    print(
+        "Nine new venues (candidates batch 2). Mark each row `ok` or write the correction. "
+        "Unlisted blocks inside a page's region are noise; the full record is "
+        "`labels/review.txt` (per-page specs in `labels/ho3/`). Seed `20260926`.\n"
+    )
+    _blocks_and_items(rng, pages)
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main_ho3() if "--ho3" in sys.argv else main()
