@@ -1,6 +1,6 @@
 # Spike: on-device menu model (classify, extract, validate)
 
-**Status:** Done (A–F, H); G (cuisine) not run. Winner: Qwen3-4B-Instruct-2507 Q4_0 on the Pi CPU, process v2.2
+**Status:** Done (A–F, H) plus a usable-price session (2026-09-26/27); G (cuisine) not run. Winner: Qwen3-4B-Instruct-2507 Q4_0 on the Pi CPU, process v2.3 + stitch v3 + validator v3 (usable prices 0.70 → 0.84)
 **Opened:** 2026-09-23 by the owner
 **Feeds:** the Phase 5 menu-extraction ADR (menu-page classifier per
 [ADR-0010 Amendment 3](../../adr/0010-website-and-menu-url-resolution.md#amendment-3-2026-09-23-menu-page-verification-and-platform-sites),
@@ -108,6 +108,7 @@ the false-reject rate.
 - [x] F. [5] validator: static checks + corruption injection, and on real extractor output (optional NLI cross-check not run)
 - [ ] G. (Optional) cuisine: not run (time went to the extractor stress test)
 - [x] H. Findings written below; recommendation for the ADR
+- [x] Usable-price session (owner-chosen levers, open question 1): split-layout prompt v2.3, role-hint A/B, deterministic repairs (stitch v2/v3), fresh held-out-3 labels (9 new venues), validator v3, adaptive second pass
 
 ## Results
 
@@ -142,6 +143,45 @@ NPU Qwen3-4B w8a8 (does not load on rknpu 0.9.6); speculative decoding (lossless
 slower). The runner-up, Qwen3-4B Q4_K_M, tied on quality (price recall 0.658, item recall 0.874)
 and ran at 7.1 pages/h.
 
+### Usable-price session (2026-09-26/27)
+
+Goal (open question 1): raise **usable prices** (validator-accepted rows with the exact gold
+price / all gold prices) from 0.70 toward 0.80+, price accuracy first. Variants were screened on
+this machine's GPU (llama.cpp b11165 CUDA, the same Q4_0 GGUF, 2 slots; its v2.2 numbers match
+the Pi's within 0.01) and the chosen configuration was re-run on the Pi. A fresh **held-out-3**
+(9 new venues, 463 items, 495 prices, from a second read-only candidate export; owner
+spot-checked) replaced held-out-2 as the honest set once held-out-2 had been scored and then
+used for tuning. Decisions were pre-registered in `spikes/menu_model/stress/PLAN.md`.
+
+| Configuration (Qwen3-4B Q4_0, Pi unless noted) | Usable, 24 pages | Usable, ho2 | Usable, ho3 | Price accuracy (24 / ho3) | Item recall (24) |
+|---|---|---|---|---|---|
+| Baseline: v2.2 + row stitching v1 + validator v2 (`st-q40`) | 0.705 | 0.549 | 0.598 (local) | 0.991 / 0.997 | 0.897 |
+| **v2.3 prompt + stitch v3 + validator v3** (`st-v23`) | **0.837** | **0.739** | 0.764 (after the fix: seen data) | 0.993 / 0.992 | 0.906 |
+| same, local GPU | 0.841 | 0.744 | 0.766 first score → 0.770 after fix (see below) | 0.994 / 0.901 → 0.980 | 0.891 |
+| + adaptive Qwen3-8B pass (coverage < 0.7), local | +0.000 to +0.006 | +0.000 | +0.000 | unchanged | — |
+
+What each lever did (local screening on dev + ho1, 14 pages, 992 gold prices; usable prices):
+
+| Lever | Result | Kept? |
+|---|---|---|
+| **Stitch v2** (deterministic, saved outputs): a description line under a heading item merges into it; a price echoed as its own "item" is dropped; an unpriced item takes the price-only line(s) printed 1-4 blocks below it; a variant copied from the name ("(L)") is dropped | 0.792 → 0.864 on the stress outputs, accuracy 0.992 | yes |
+| **Prompt v2.3**: "a name line, then its price and/or description lines are ONE item; the name is the short line, never the description", with a worked example in that layout | 0.862 → 0.887, 13 % fewer generated tokens | yes |
+| **Block-role hints** (`[item]`/`[price]`/`[desc]` tags from the stage [3] classifier, out-of-fold by venue, LOVO item F1 0.70) | item recall 0.93 → 0.87; usable 0.887 → 0.849 | **no** |
+| **Stitch v3**: variant completion (an item keeps its first price but drops the second: "Glass $7" / "Bottle $26", "Americano $2/$3") and description rows echoing the item's price dropped | all 24: 0.800 → 0.841 | yes (after the ho3 fix) |
+| **Validator v3**: "$19.5" one-decimal prices, bare "11 / 44" glass/bottle pairs, dietary marks glued to names ("Eggplantv"), unpriced description/nutrition rows no longer end a price scan | false rejects on correct gold rows 0.041 → 0.015 (24 pages); corruption catch 0.986 → 0.984 | yes |
+| **Adaptive second pass** (label-free coverage = accepted priced rows / printed prices; below 0.7 re-extract with Qwen3-8B Q4_K_M, 3k chunks; keep the result with more accepted priced rows) | +0.006 on dev+ho1, 0 on ho2 and ho3; single-pass 8B and 3k chunks were each worse than v2.3; on the Pi the 8B decodes 4-5× slower | **no** |
+
+| Stage (validator v3) | Setup | Result | Meets bar? |
+|---|---|---|---|
+| [5] Validator v3, corruption catch | injected corruptions | 0.984 on the 24 tuning pages; **0.971 held-out-3** | **no** (bar 0.99; swaps of unlabeled prices are indistinguishable by text) |
+| [5] Validator v3, false rejects | correct gold rows | 0.015 on the 24 tuning pages; **0.103 held-out-3** | tuning yes; held-out-3 just over (bar 0.10) |
+| Pi runtime, v2.3 | Q4_0, 2 slots, the same 43 stress pages | 19,907 s = **7.8 pages/h** (v2.2: 7.7); 0 errors; peak RSS 13.8 GB with the default prompt cache | same as before (batch job) |
+| Pi runtime, adaptive pass | Qwen3-8B Q4_K_M, 3k chunks, flagged pages only | not run to completion: Qwen3-8B decodes **0.56-0.71 tok/s per slot** on the Pi (4B: ~2.8), so ~4-5× the time per flagged page (6 of 33 pages flagged) for ≤ +0.006 | **no**: drop the pass on the Pi | — |
+
+Where the remaining gold prices go (Pi `st-v23`, 24 pages): accepted 83.7 %, item missed 7.9 %,
+right item but a different amount 3.8 %, right amount rejected by the validator 3.3 %, item
+found without a price 1.2 %.
+
 ## Findings and recommendation
 
 1. **A small LLM on the Pi CPU can extract menus with trustworthy prices, but slowly.**
@@ -165,6 +205,23 @@ and ran at 7.1 pages/h.
    0.536) at unchanged price accuracy (0.99) and zero runtime cost. Remaining loss: items missed
    11.2 %, still unpriced 8.2 %, validator rejects 6.3 % (mostly "size label after the price"),
    wrong amount 4.1 %.
+   **Usable-price session (2026-09-26/27): 0.705 → 0.837 on the Pi (24 pages), 0.549 → 0.739 on
+   held-out-2, at price accuracy 0.993** (Results, "Usable-price session"). Three things did it,
+   all cheap: a prompt that says a name line and the price/description lines after it are one
+   item (v2.3; also 15 % fewer output tokens), deterministic repairs on the model's rows (price
+   fill from the price-only line below an unpriced item; the second size price the model drops,
+   "Glass $7" / **"Bottle $26"**, "Americano $2/**$3**"), and a validator v3 that stops rejecting
+   correct "$19.5", "11 / 44" and "Eggplantv" rows. On the fresh **held-out-3** (9 new venues)
+   usable prices rose 0.598 → 0.766, **but price accuracy fell to 0.901** at the first frozen
+   score: the variant repair added the *next* item's leading copy of its price on pages that print
+   every price twice (before the name and after the description). Restricting that repair to
+   labeled price lines ("Bottle $26") fixed it (0.770 usable at 0.980 accuracy; the 24 pages
+   unchanged), but that number was measured on data already seen, so it is not a held-out result.
+   The remaining 8 wrong prices on held-out-3 are the same layout with the model itself picking
+   the next item's copy; the validator cannot tell them apart without also rejecting legitimate
+   unlabeled size lines. **Ceiling:** the largest remaining loss is items the model never
+   extracts (7.9 % on the 24 pages, 13 % on held-out-2/3); with this model on the Pi, ~0.85-0.90
+   is a realistic target, not 1.0.
 4. **The process mattered more than the model size.** Compact grammar-constrained JSON (no
    pretty-printing), keyed rows, ~1.5k-char chunks with a context line, and a deterministic
    retry for priced-but-empty chunks made the extractor ~2× faster than the first version while
@@ -187,42 +244,70 @@ and ran at 7.1 pages/h.
    (`[item]`, `[price]`, `[desc]`) is the most promising next experiment, aimed at both the
    non-item rows and the 12.8 % of items found without their price. Untested; the classifier's
    item F1 (0.67) means hints must stay advisory, never a filter.
+   **Tested (2026-09-26): hints hurt.** With out-of-fold hints (classifier trained without the
+   page's venue) item recall fell 0.93 → 0.87 and usable prices 0.887 → 0.849 on dev + ho1: the
+   model drops lines the classifier mislabels. The prompt fix (v2.3) got the non-item rows and the
+   unpriced items down without them (and cut output tokens 13-15 %). Keep the block classifier out.
+9. **A held-out set caught what the tuning pages could not.** Every lever looked safe on the 24
+   pages it was tuned on (accuracy ≥ 0.993); the first held-out-3 score showed one repair
+   accepting wrong prices on an unseen layout (0.901). Deterministic repairs need the same
+   held-out discipline as the model, and production should keep sampling pages for spot checks
+   (a few per month) to catch new layouts.
 8. **Operations.** Without airflow the Pi throttled 27 % of the time (SoC ~80 °C, cores to 600
    MHz), yet throughput dropped only ~2 %; with a fan it stays ~70 °C. Greedy decoding was
    byte-identical across runs, slot counts and restarts. llama-server's default host prompt
    cache adds up to 8 GB of RAM (`--cache-ram`).
 
 **Recommendation for the Phase 5 ADR:** adopt the pipeline **[1] page classifier →
-[2] segmentation → [4] Qwen3-4B-Instruct-2507 Q4_0 via llama.cpp on the Pi CPU (process v2.2) →
-deterministic repairs → [5] validator**, with accepted rows stored as the lowest-trust `llm`
-interpretation (ADR-0005), as an **offline batch job that only re-extracts changed pages**.
-Keep structured parses (JSON-LD) ahead of it where present. Drop the block classifier, the NPU
-path and speculative decoding. Do not treat the extractor as complete coverage: plan for
-~64 % usable prices per menu page at first and measure it in production.
+[2] segmentation → [4] Qwen3-4B-Instruct-2507 Q4_0 via llama.cpp on the Pi CPU (process v2.3) →
+deterministic repairs (stitch v3) → [5] validator v3**, with accepted rows stored as the
+lowest-trust `llm` interpretation (ADR-0005), as an **offline batch job that only re-extracts
+changed pages**. Keep structured parses (JSON-LD) ahead of it where present. Drop the block
+classifier (also as prompt hints), the NPU path, speculative decoding and the adaptive Qwen3-8B
+second pass (≤ +0.006, 4-5× slower on the Pi, a second 5 GB model). Plan for **~75-84 % usable prices
+per readable menu page** (held-out 0.74-0.77, tuning pages 0.84) with price accuracy ~0.98-0.99,
+store the rest as items with unknown price, and keep a small monthly spot-check sample, since
+unseen layouts can still fool the repairs (finding 9).
 
 ### Open questions for the owner (before the Phase 5 ADR)
 
-1. **Is ~70 % usable prices (with row stitching) acceptable to ship**, with unpriced items
-   stored as items with unknown price? Next levers, by expected gain: a split-layout prompt fix
-   (+ block-role hints), validator v3 on freshly labeled pages (the 18 unlabeled stress-run menu
-   pages), and an adaptive second pass for pages whose accepted rows cover few of their printed
-   prices. Target ~0.80 with the first two, ~0.85 with the third.
+1. ~~Is ~70 % usable prices acceptable?~~ Owner chose all three levers (2026-09-26); now
+   **0.84 on the 24 pages, 0.74-0.77 held out, accuracy 0.98-0.99** (finding 3).
+   **Owner decision (2026-09-27): one universal process, no per-platform parsers** (Wix, Square,
+   BentoBox, ...): "we are willing to lose data for the benefit of a universal process." Per-site
+   code needs re-aligning for every page that does not play nice; future gains should come from
+   upgrading the model, the classifier or the generic data preparation. Consequences for the
+   ADR: (a) the remaining loss (items never extracted, 8-13 %) is closed only by a better model or
+   better generic data prep, not by site code; (b) the deterministic repairs (stitch) stay only
+   while they are layout-generic, pay off on a held-out set, and still add something when the
+   model changes (re-measure each on every model/prompt change; delete what the model no longer
+   needs); (c) the evaluation harness (gold labels, held-out discipline, `stress/compare.py`,
+   `stress/loss.py`) is what makes a model swap a measured drop-in.
+   **Owner clarification (same day):** the line is *per-website branching* ("for website 1 do X,
+   website 2 do Y"), not custom logic as such. Allowed: (i) the schema.org JSON-LD parse, as long
+   as it stays a general-purpose standard reader; (ii) relational/positional repairs (a price is
+   printed close to its item, so the rule space is small and applies abstractly); (iii) a
+   **toolbelt** of such generic fixes that catches most problems, chosen per page by a decision
+   matrix or classifier (e.g. the label-free coverage signal, a layout detector), which also
+   lowers the overfitting risk seen on held-out-3.
 2. **Throughput budget:** is a ~12-day first pass and change-only monthly runs acceptable on the
    staging Pi, alongside Helios? Or should extraction run on other hardware?
 3. **Change detection:** what counts as "changed" (content hash of the menu region, fetched
    HTML, ETag)? This decides the monthly cost.
 4. **JS-only menus** (32 of 219 pages; Toast, Square, Clover, BentoBox): stay out of scope,
-   or does Phase 5 add a headless browser (new runtime dependency, ADR)?
-5. **Validator v3:** the frozen v2 misses the 0.99/0.10 bars on held-out-2. Tuning needs a
-   fresh labeled set; label more pages now or ship v2 and measure?
+   or does Phase 5 add a headless browser (new runtime dependency, ADR)? A headless render is
+   generic data prep (one path for every site), so it fits the universal-process decision (1).
+5. **Validator bars:** v3 (tuned on the 24 pages, held-out-3: catch 0.971, false reject 0.103)
+   still misses the 0.99 / 0.10 bars on unseen pages; its remaining misses are swaps of
+   unlabeled prices that text cannot distinguish. Relax the catch bar to ~0.97 for the ADR, or
+   require a second signal (question 6) for pages that print unlabeled price runs?
 6. **Trust level:** should validator-accepted `llm` prices be shown to users directly, or only
    after a second signal (another source, owner confirmation)?
 7. **Pi kernel/driver:** keep the stock kernel (NPU path closed), or plan an rknpu ≥ 0.9.7
    upgrade for other NPU uses (e.g. the classifier), with a recovery plan for a headless box?
 8. **Cooling:** add a fan/heatsink to the Pi as a deployment requirement?
 9. Cuisine tags (step G) were not attempted: still wanted for this ADR, or separate?
-10. **Block-role hints A/B before the ADR?** (finding 7) Tune on dev pages, test once on
-    held-out-2, ~2 h on the Pi.
+10. ~~Block-role hints A/B before the ADR?~~ Done: they hurt (finding 7); dropped.
 
 ## Log
 
@@ -246,69 +331,18 @@ path and speculative decoding. Do not treat the extractor as complete coverage: 
 | 2026-09-26 | E-8 | spike/menu-model | **Stress test done** (power outage mid-Q4_0: Pi rebooted, 33/43 results intact, resumed; Q4_0 throughput stitched around the gap: 43 pages in 13,827 s + 6,191 s). Owner confirmed fan at 07:45 CDT; a fan-on Q4_K_M re-run of its 12 pre-fan pages gave identical outputs, ~2% faster (5,576 s vs ~5,700 s), and 5.7 GB peak RSS with `--cache-ram 0` (the 13.5-14.1 GB peaks were llama-server's host prompt cache, default 8,192 MiB). **Owner decision (2026-09-26): the 8 GB RAM bar is relaxed** (Pi has 31 GB; ~10-14 GB with the default prompt cache is fine). Results on all 24 gold pages (Q4_K_M / Q4_0): item recall 0.874 / 0.899; price recall on accepted rows 0.658 / 0.643; price accuracy on accepted 0.992 / 0.990; worst-format item recall 0.864 / 0.843; held-out-2 item recall 0.794 / 0.846, price recall 0.480 / 0.478; end-to-end item recall through the page gate 0.789 / 0.803; 0 errors, 0 truncations; 7.1 / ~7.7 pages/h; peak RSS 13.5 / 9.9 GB (cache on). **Winner by the pre-registered rule: Qwen3-4B-Instruct-2507 Q4_0**, process v2.2, 2 slots (quality tied within 0.02, faster). Owner agreed from the fan-on runs. Price-loss breakdown (Q4_K_M, all gold prices): accepted 65.8%, item found but unpriced 12.8%, item missed 12.7%, right price not accepted 5.8%, wrong amount 3.0%. | Write-up (H) and docs PR. |
 | 2026-09-26 | H | spike/menu-model | Results table, findings, recommendation and open questions written; anonymized `labels-summary.md` added. Step G (cuisine) not run. Spike code stays on `spike/menu-model` (never merged); data stays in `var/spikes/menu-model/` and `~/menu-model-spike/` on the Pi. | Owner: answer the open questions, then write the Phase 5 ADR. Pi cleanup when done: `~/menu-model-spike` (17 GB: models, llama.cpp build, venvs, copied pages, results); skimmer units stay disabled unless re-enabled. |
 | 2026-09-26 | H-2 | spike/menu-model | Owner: usable prices (64 %) are the biggest problem. Per-page loss: 6 `html_list` pages with the price on its own line cause 59 % of lost prices; the model transcribes those line by line. Added deterministic row stitching (`stitch.py`, applied before duplicate collapse): usable prices 0.643 → 0.700 on the saved stress outputs (ho2 0.478 → 0.536, scored once), price accuracy unchanged. Caveat: one ho2 page was looked at while diagnosing. | Owner to pick next levers: prompt fix/role hints A/B, validator v3 on fresh labels, adaptive second pass. |
+| 2026-09-26 | U-1 | spike/menu-model | **Usable-price session, step 1** (owner: all three levers; later "use the local machine for faster results, the Pi only for benchmarks"). Screening moved to this machine's GPU (llama.cpp b11165 CUDA prebuilt, same Q4_0 GGUF; v2.2 there matches the Pi's st-q40 within 0.01). **Stitch v2** on saved outputs (dev+ho1 usable 0.792 → 0.864): sentence-line merge under heading items, price-echo drop, price fill from the price-only line(s) 1-4 blocks below an unpriced item, variant-in-name drop; three over-eager first drafts caught on the tune pages (inline "Name Description 9.99" blocks moved to the previous item; real items dropped; a description claiming the price line's block id). **Prompt v2.3** (split layout is one item; worked example): 0.887, 13 % fewer output tokens. **Role hints** (out-of-fold `hints.py`, LOVO item F1 0.70): item recall 0.93 → 0.87, dropped. Adaptive pass screened (Qwen3-8B Q4_K_M 5.03 GB, Apache-2.0, owner-approved; downloaded locally and on the Pi): ≤ +0.006. Pre-registered in `stress/PLAN.md` (`510b14f`). ho2 scored once (local): 0.536 → 0.636. | — |
+| 2026-09-26 | U-2 | spike/menu-model | **Held-out-3.** Only 4 of the 18 unlabeled stress pages print prices; following menu links deeper on the sample's venues (36 `SiteFetcher` fetches) added ~2 priced venues. Owner authorized the export: started only `infra-postgres-1` on the Pi (down since the outage; API left stopped), ran the read-only `sql/export_candidates_2.sql` (ranks 151+ of the batch-1 order, food categories; 200 venues, 0 overlap), fetched 100 venues (append mode). 15 new venues print ≥ 10 prices; 9 labeled (skipped: a 1,566-block page, a 3× larger twin of one layout, "$"-glyph prices, drink specials): 463 items, 495 prices, per-page notes in `labels/ho3/`, `review.txt` entries; owner spot-check (`labels/spotcheck-ho3.md`, 20 % of each page's blocks and items): "looks good" (`6d8d0ff`). `HELDOUT_3` kept out of `all`/`ho2`. | — |
+| 2026-09-27 | U-3 | spike/menu-model | **Stitch v3 + validator v3**, tuned on all 24 pages, frozen at `e6e4e1f`. Loss analysis showed most "wrong amount" losses were a dropped *second* size price ("Glass $7" kept, "Bottle $26" lost; "Americano $2/$3"): variant completion from the price run and inline (24 pages 0.800 → 0.833) + description rows echoing the item's price dropped. Validator v3: one-decimal "$19.5", bare "11 / 44" pairs, glued dietary marks ("Eggplantv"), unpriced description/nutrition rows no longer end a price scan: gold false rejects 0.041 → 0.015, catch 0.986 → 0.984; usable 0.845 (24), 0.744 (ho2). **Held-out-3, first score** (local, frozen): usable 0.598 (v2.2 baseline) → 0.766 but **price accuracy 0.901** (bar 0.98): variant completion took the next item's leading duplicate price on "printed twice" pages. Fix (`label-only run completion`) + scorer fix (a dish in two sections matched to the nearest gold copy): ho3 0.770 at 0.980 (seen data), 24 pages unchanged (0.844). Validator v3 on ho3 gold: catch 0.971, false reject 0.103. | — |
+| 2026-09-27 | U-4 | spike/menu-model | **Pi confirmation** (fan state not verified; SoC ~70 °C early, 83-86 °C at the end): v2.3 over the 43 stress pages, 19,907 s = 7.8 pages/h, 0 errors, peak RSS 13.8 GB (default prompt cache). Final rules on the Pi outputs: **24 pages 0.837** (accuracy 0.993, item recall 0.906), **ho2 0.739**; held-out-3 on the Pi: 9 pages 4,162 s (7.8 pages/h), peak RSS 8.8 GB, usable 0.764 at accuracy 0.992, item recall 0.888 (rules include the post-held-out fix, so seen data). Adaptive 8B pass on the Pi (6 flagged pages): stopped after ~25 min once its speed was measured (0.56-0.71 tok/s per slot, ~4-5× slower than the 4B); not worth running on the Pi. Tracker Results/Findings/Recommendation updated (this PR). | Owner: open questions 1 and 5 (ship at ~0.75-0.84 usable, or go after missed items; validator bars). Pi cleanup when done: `~/menu-model-spike` now also holds Qwen3-8B (5 GB); Helios Postgres was started for the export and left running. |
 
-## Next-session prompt (usable prices)
+## Next steps (after the usable-price session)
 
-Owner chose (2026-09-26) all three levers from open question 1. Launch from the repo root:
-`claude --model claude-opus-5-5`, effort **high**, mode: auto. Add the Pi password yourself (never
-commit it).
-
-```text
-Continue the menu-model spike: raise USABLE PRICES (validator-accepted rows with the exact gold
-price / all gold prices) from 0.700 toward >=0.80, quality first. Read docs/spikes/menu-model/
-README.md on main (Findings 3 and 7, open questions 1 and 10, Log rows E-5..H-2),
-spikes/menu_model/stress/PLAN.md on branch spike/menu-model, CLAUDE.md, ADR-0005 and
-ADR-0010 Amendment 3. Work in a worktree on branch spike/menu-model (git fetch; not from main).
-
-State you inherit (spike/menu-model, spikes/menu_model/):
-- Winner: Qwen3-4B-Instruct-2507 Q4_0 via llama.cpp (84e76d8) on the Pi CPU, process v2.2
-  (MENU_SPIKE_PROCESS=v2: compact GBNF grammar, keyed rows, 1.5k chunks + context line,
-  sparse-chunk retry), 2 slots, -fa on -ctk q8_0 -ctv q8_0, llama-server pinned to cores 4-7
-  on 127.0.0.1. Row stitching (stitch.py, MENU_SPIKE_STITCH=1) runs before duplicate collapse.
-- Baseline to beat, on the saved stress outputs (tag st-q40): usable prices 0.700 all 24 gold
-  pages, 0.793 ho1, 0.536 ho2 (ho2 scored once); price accuracy 0.99; item recall 0.896.
-  Loss buckets: item missed 11.2 %, unpriced 8.2 %, validator rejects 6.3 % (mostly "size
-  label after the price"), wrong amount 4.1 %. Tools: extract score --repair [--ref],
-  stress/loss.py, stress/report.py.
-- Local data: MENU_SPIKE_DATA=<main checkout>/var/spikes/menu-model (gitignored; pages/,
-  extract/<tag>/, stress logs, own ML venv .venv-ml). Page cache valid to 2026-09-30.
-- Pi: ssh orangepi@192.168.1.219 (password: <ask owner>, pass via SSHPASS + sshpass -e, never
-  in a file). Login shell is fish: pipe script files into `bash -s`; no $(...) inline. Work
-  only in ~/menu-model-spike (.venv py3.12, llama.cpp/build, gguf/, data/, logs/,
-  spikes/menu_model/stress/*.sh). Scripts must append to logs (a power outage already cut
-  one run). Helios containers did not restart after that outage: don't touch them.
-
-Do, in order, re-checking quality after every change that alters outputs:
-1. Split-layout prompt fix (v2.3) + block-role hints A/B. Tell the model that price and
-   description lines after an item belong to it (example in that layout). Hints: prefix lines
-   with the block classifier's role ([item]/[price]/[desc]/[section]) as advisory labels. The
-   block classifier must be OUT-OF-FOLD for every scored page (train without that page's
-   venue); the pickled one saw all labeled pages. Tune only on dev+ho1 pages (heavy losers:
-   2bfd0cdf0f6e, a647f424c99e, 1b6233a80694, abefb3029e57); compare with st-q40+stitch on
-   the same pages; then score ho2 once.
-2. Fresh labels -> held-out-3 -> validator v3. Draft gold (page/block/items+prices, same
-   labeltool/review.txt flow) for ~10 priced, distinct venues among the 18 unlabeled
-   stress-run menu pages (14fb3f6b00e4 19b79ff22898 1cf69aeeae45 295dac75322d 3cc7760ea65f
-   3d5c71b32afb 5724eae2a973 575abefd2796 62699b3f5eb3 684e203a8ab6 72940930f472
-   8d02fd690571 91dabe47afda a0f382a174e1 c61d591a7cab d3af46c8798e f78f7e304456
-   ff9e184bc72e; several are duplicates or unpriced chain menus, so fetch more with
-   SiteFetcher if fewer than ~8 qualify). STOP for the owner's 20 % spot-check before any
-   metric. Then validator v3 (size label after the price, bare-number prices, glued dietary
-   marks), tuned on dev+ho1+ho2, frozen, scored on held-out-3 (injected corruptions + real
-   output).
-3. Adaptive second pass: per page, coverage = accepted priced rows / printed prices in the
-   extracted blocks; below a threshold chosen on dev/ho1, re-extract with a stronger setup
-   (3k chunks and/or Qwen3-8B Q4_K_M, ~5 GB, owner-approved) and keep the better validated
-   result. Report extra Pi time per page.
-4. Final: the best configuration on all gold pages (24 + held-out-3) on the Pi, fan on,
-   stress-test style (PLAN.md rule, quality gate first), vs the v2.2+stitch baseline; update
-   the tracker Results/Findings/Log.
-
-Stop and ask before: installing torch, any model download > 5 GB other than Qwen3-8B, any
-sudo, touching the Helios stack. End state: push spike/menu-model; docs-only PR updating
-docs/spikes/menu-model/README.md (+ labels-summary.md). If the budget runs low: commit, push,
-write resume notes in the tracker Log.
-```
+Spike code and data: branch `spike/menu-model` (`spikes/menu_model/`, never merged), data in the
+main checkout's `var/spikes/menu-model/` and `~/menu-model-spike/` on the Pi. Reproduce the final
+numbers with `MENU_SPIKE_PROCESS=v2 MENU_SPIKE_PROMPT=v23 MENU_SPIKE_STITCH=3
+MENU_SPIKE_VALIDATOR=v3` (`stress/compare.py`, `stress/loss.py`, `stress/coverage.py`). The owner
+answers the open questions; the Phase 5 ADR comes next.
 
 ## Hand-off prompt
 
