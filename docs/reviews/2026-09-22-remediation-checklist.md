@@ -46,7 +46,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
 | 🚦 | **Phase 5 gate:** start menu extraction after S7, S11, S12, S13 are merged | | | [ ] |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [ ] |
-| 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [ ] |
+| 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 draft, awaiting owner review |
 | 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
 | 17 | S17 Close-out | all | S | [ ] |
 
@@ -763,16 +763,16 @@ Branch: `fix/schema-tightening` · Models + migration: hand-reviewed SQL, owner 
 Hand-off prompt: `Do session S15 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `chore/infra-tooling` · Split into an `infra/` PR and a config-only PR.
 
-- [ ] R84 `.dockerignore` patterns only match at the repo root
-- [ ] R85 Root `.env` is read by nothing, but docs say it is
-- [ ] R86 Compose's `DATABASE_URL` leaks in from your shell
-- [ ] R90 Images pinned by tag, not digest
-- [ ] R91 `mypy.ini` dead and redundant sections
-- [ ] R92 `ruff.toml` dead ignores; no security rules
-- [ ] R93 ruff version differs between pre-commit and the lockfile
-- [ ] R96 `pyproject.toml` name, unused and undeclared dependencies
-- [ ] R113 No volume for `var/`, so containerised runs lose their caches
-- [ ] R114 Compose has no project name or restart policy
+- [X] R84 `.dockerignore` patterns only match at the repo root
+- [X] R85 Root `.env` is read by nothing, but docs say it is
+- [X] R86 Compose's `DATABASE_URL` leaks in from your shell
+- [X] R90 Images pinned by tag, not digest
+- [X] R91 `mypy.ini` dead and redundant sections
+- [X] R92 `ruff.toml` dead ignores; no security rules
+- [X] R93 ruff version differs between pre-commit and the lockfile
+- [X] R96 `pyproject.toml` name, unused and undeclared dependencies
+- [X] R113 No volume for `var/`, so containerised runs lose their caches
+- [X] R114 Compose has no project name or restart policy
 
 **Recommended approach**
 - `infra/` PR: `**/` patterns in `.dockerignore`; compose `name: helios`,
@@ -833,3 +833,4 @@ Agents add one row per session (or per resume).
 | 2026-09-24 | S10 | test/hardening | #31 | Merged | — (ran in parallel with S9; `seed_sample_venues` gone since S1, so R29 covers discovery + URL paths; forged `subject_id=None` raises `22023`, now pinned. Row restored by S11: the S8 merge dropped it) |
 | 2026-09-24 | S11 | fix/menu-selector | #33 | Merged (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |
 | 2026-09-24 | S12 | fix/identity-matching | #34 | Draft, ADR-0012 Proposed, awaiting owner acceptance | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 waits on ADR-0012 acceptance, with a pick per §1–§5) |
+| 2026-09-26 | S15 | chore/infra-cleanup, chore/tooling-config | #40 (infra), #41 (config) | Draft, both awaiting owner review | — (D8.2 and D8.3 asked and approved at session start; both recorded on `main`. Split per the checklist: #40 touches `.dockerignore`/`infra/Dockerfile`/`infra/docker-compose.yml`/`makefile`/`README.md`/`.env.example` (R84–R86, R90 Dockerfile+compose half, R113, R114); #41 touches `mypy.ini`/`ruff.toml`/`.pre-commit-config.yaml`/`pyproject.toml`/`uv.lock`/`apps/discovery/overture.py` (R91–R93, R96). Enabling ruff's `S` family surfaced one real production hit (`overture.py`'s parameterized-but-f-string-built SQL, noqa'd with reasoning) and one pure mypy-narrowing hit (`audit.py`'s three asserts, per-file ignore) — flagged for the owner to double check in the PR body. `make ci` green on both branches; neither touches D14/ADR-gated paths, so S16/S17 are unaffected. D8.1/S14 unchanged (still draft #35, untouched this session)) |
