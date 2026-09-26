@@ -37,12 +37,12 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
 | 🚦 | **Pi gate:** OK to run `resolve_urls` on the Pi again after S2, S3, S4, S6 are merged | | | [ ] |
-| 7 | S7 Gold refresh fix | D5 | M | [X] #28 open, owner review |
-| 8 | S8 Identity lock order + guard tests | D6 | M | [ ] |
-| 9 | S9 API polish | D7 | M | [ ] |
-| 10 | S10 Test hardening sweep | — | S | [ ] |
-| 11 | S11 Menu selector semantics ⚠ | D5 | M | [ ] |
-| 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [ ] |
+| 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
+| 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 |
+| 9 | S9 API polish | D7 | M | [X] #32 |
+| 10 | S10 Test hardening sweep | — | S | [X] #31 |
+| 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 |
+| 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 draft, ADR-0012 awaiting acceptance |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
 | 🚦 | **Phase 5 gate:** start menu extraction after S7, S11, S12, S13 are merged | | | [ ] |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [ ] |
@@ -277,6 +277,11 @@ explains it. When a group is done, its sessions are ready to hand off.
   - [X] ⭐ Keep non-English letters (strip accents only)
   - [ ]  No, this wastes tokens, in dev mode its better to not need one off conversion when a rerun fix will be sufficent. if i misunderstood this push back ⭐ Recompute stored fingerprints on the Pi (agent writes the script, you run it)
   - [ ] ⭐ Don't auto-merge existing venues after the recompute
+  - *Answered 2026-09-24 (S12, confirmed with owner):* **no recompute script.** The
+    ADR-0011 §8 / D4.3 Pi purge + rebuild re-mints every Organization with the new
+    fingerprint. An *incremental* rerun would not: known POIs resolve by GERS id before
+    a fingerprint is computed. So don't run incremental discovery on the current Pi DB
+    before the rebuild. The auto-merge item is N/A (nothing is recomputed).
   - *Why:* today different bilingual names merge; recomputing keeps old and new
     fingerprints comparable; auto-merging is irreversible.
 - **6.3 Venue lifecycle** (re-seen venues never update; closed venues never retire)
@@ -584,13 +589,13 @@ Branch: `fix/gold-refresh` · No stop-and-ask path, but changes accepted ADR-000
 Hand-off prompt: `Do session S8 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/identity-locks` · Concurrency-sensitive accepted code: owner review.
 
-- [ ] R12 Two identity write paths lock in opposite order → deadlock (per D6.1)
-- [ ] R25 Stale cached row can unassign a valid mapping in the same transaction
-- [ ] R27 "Rejects delete" tests pass via FK errors (would pass with triggers removed)
-- [ ] R28 Missing tests: identity TRUNCATE, projection tampering, remap rules
-- [ ] R30 Concurrency tests count deadlocks as success
-- [ ] R61 Readiness refresh can be stale and only covers Organizations
-- [ ] R62 Readiness refresh adds a second lock-order risk
+- [X] R12 Two identity write paths lock in opposite order → deadlock (per D6.1)
+- [X] R25 Stale cached row can unassign a valid mapping in the same transaction
+- [X] R27 "Rejects delete" tests pass via FK errors (would pass with triggers removed)
+- [X] R28 Missing tests: identity TRUNCATE, projection tampering, remap rules
+- [X] R30 Concurrency tests count deadlocks as success
+- [X] R61 Readiness refresh can be stale and only covers Organizations (stale read fixed; Establishment demotion left to ADR-0012 per D6.4, see #30)
+- [X] R62 Readiness refresh adds a second lock-order risk
 
 **Recommended approach**
 - Turn the review appendix's R12 reproduction into a concurrency test first.
@@ -609,19 +614,20 @@ Branch: `fix/identity-locks` · Concurrency-sensitive accepted code: owner revie
 Hand-off prompt: `Do session S9 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/api-polish` · OpenAPI snapshot changes: owner review.
 
-- [ ] R37 OpenAPI documents the wrong error shape
-- [ ] R38 No database connect/pool timeouts (per D7.4)
-- [ ] R41 Huge id or cursor → 500 instead of 400/404
-- [ ] R42 500 errors missing request-id and CORS headers
-- [ ] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
-- [ ] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
-- [ ] R45 CORS wildcard allowed via environment (per D7.3)
-- [ ] R46 `X-Request-ID` not readable by browser JavaScript
-- [ ] R47 Deprecated 422 constant; TestClient `httpx` deprecation
-- [ ] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
-- [ ] R49 API error tests all require a database
-- [ ] R50 Timestamps not forced to UTC
-- [ ] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
+- [X] R37 OpenAPI documents the wrong error shape
+- [X] R38 No database connect/pool timeouts (per D7.4)
+- [X] R41 Huge id or cursor → 500 instead of 400/404
+- [X] R42 500 errors missing request-id and CORS headers
+- [X] R43 405 reported as `internal_error`, no `Allow` header (per D7.1)
+- [X] R44 `/readyz` failure not in the error envelope and not logged (per D7.2)
+- [X] R45 CORS wildcard allowed via environment (per D7.3)
+- [X] R46 `X-Request-ID` not readable by browser JavaScript
+- [X] R47 Deprecated 422 constant; TestClient `httpx` deprecation (constant fixed;
+  the `httpx`→`httpx2` swap is deliberately left — see PR)
+- [X] R48 uvicorn/stdlib logs unstructured, duplicate tracebacks
+- [X] R49 API error tests all require a database
+- [X] R50 Timestamps not forced to UTC
+- [X] R99 Client `X-Request-ID` trusted verbatim (per D7.5)
 
 **Recommended approach**
 - Catch unhandled exceptions inside the request middleware and render the envelope
@@ -641,14 +647,14 @@ Branch: `fix/api-polish` · OpenAPI snapshot changes: owner review.
 Hand-off prompt: `Do session S10 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `test/hardening` · Tests only.
 
-- [ ] R29 Discovery/URL/seed writes never tested with a real commit
-- [ ] R59 Menu TRUNCATE test can't detect a missing trigger
-- [ ] R77 Golden-set test re-implements the match rule
-- [ ] R78 Audit report label is always "wrong"
-- [ ] R81 Menu rejection tests accept too many error types
-- [ ] R82 Migration test cleanup swallows errors; alembic helper depends on cwd
-- [ ] R83 Parser-isolation guard checks nothing; Gold refresh missing from no-commit test
-- [ ] S7-found (not in review) `test_deterministic_resolution.py::test_identical_observation_retry_reuses_immutable_bronze_rows`
+- [X] R29 Discovery/URL/seed writes never tested with a real commit
+- [X] R59 Menu TRUNCATE test can't detect a missing trigger
+- [X] R77 Golden-set test re-implements the match rule
+- [X] R78 Audit report label is always "wrong"
+- [X] R81 Menu rejection tests accept too many error types
+- [X] R82 Migration test cleanup swallows errors; alembic helper depends on cwd
+- [X] R83 Parser-isolation guard checks nothing; Gold refresh missing from no-commit test
+- [X] S7-found (not in review) `test_deterministic_resolution.py::test_identical_observation_retry_reuses_immutable_bronze_rows`
   counts whole Bronze tables (`== 1`), so a full rerun on a used `*_test` DB fails
   (`assert 706 == 1`); scope the counts to its own source record (R11 class)
 
@@ -668,15 +674,15 @@ Branch: `test/hardening` · Tests only.
 Hand-off prompt: `Do session S11 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/menu-selector` · ADR-0005 behaviour: owner review (per D5.5).
 
-- [ ] R03 Menu content survives when the chain menu it depends on is withdrawn (prices don't)
-- [ ] R22 Two different chain-menu pins treated as the same item
-- [ ] R23 Two nodes with the same path in one page → result depends on row order
-- [ ] R24 History queries show chain "head" prices observed after the cutoff
-- [ ] R31 (selector half) Missing tests: base remap/retire, revival under cutoff, tie-break, channel wildcard, different bases, suppression, replacement
-- [ ] R64 Replay can falsely conflict because of Decimal formatting
-- [ ] R65 Tie-break compares string reprs and a surrogate id
-- [ ] R67 "withdrawn" reported too eagerly
-- [ ] R68 Selection requests not validated (naive timezones)
+- [X] R03 Menu content survives when the chain menu it depends on is withdrawn (prices don't)
+- [X] R22 Two different chain-menu pins treated as the same item
+- [X] R23 Two nodes with the same path in one page → result depends on row order
+- [X] R24 History queries show chain "head" prices observed after the cutoff
+- [X] R31 (selector half) Missing tests: base remap/retire, revival under cutoff, tie-break, channel wildcard, different bases, suppression, replacement
+- [X] R64 Replay can falsely conflict because of Decimal formatting
+- [X] R65 Tie-break compares string reprs and a surrogate id
+- [X] R67 "withdrawn" reported too eagerly
+- [X] R68 Selection requests not validated (naive timezones)
 
 **Recommended approach**
 - Write the missing M-rule scenario tests first (each maps to an ADR-0005 decision);
@@ -696,8 +702,8 @@ Branch: `fix/menu-selector` · ADR-0005 behaviour: owner review (per D5.5).
 Hand-off prompt: `Do session S12 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/identity-matching` · Matching-policy change + Pi data script (you run it) + ADR stop.
 
-- [ ] R18 Name fingerprint drops non-English letters → wrong merges (per D6.2; include recompute script)
-- [ ] ADR-0012 drafted for venue lifecycle: R36, R98, R105, R106 (per D6.3, D6.4) — then stop
+- [X] R18 Name fingerprint drops non-English letters → wrong merges (per D6.2; no recompute script, owner chose the Pi rebuild, see D6.2)
+- [X] ADR-0012 drafted for venue lifecycle: R36, R98, R105, R106 (per D6.3, D6.4) — then stop
 
 **Recommended approach**
 - Normalize: casefold → NFKD → drop combining marks → map letters NFKD can't split
@@ -821,4 +827,9 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S3 | fix/url-pipeline | #25 | Merged | — (D3.7–3.9 asked and answered at session start) |
 | 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
 | 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Draft, awaiting owner acceptance of ADR-0011 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
-| 2026-09-23 | S7 | fix/gold-refresh | #28 | Open, owner review (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
+| 2026-09-23 | S7 | fix/gold-refresh | #28 | Merged (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
+| 2026-09-23 | S8 | fix/identity-locks | #30 | Merged (concurrency-sensitive) | — (D6.1 answered on `main`. Lock order documented in `identity/commands.py`; the resolver plans without locks, then locks and re-checks inside a savepoint and retries once (`ResolutionConflictError`). R61 fixed for the stale read only; Establishment demotion is left to ADR-0012 (D6.4). Transactions that run several commands (discovery batches, URL resolve-then-assign) can still deadlock; this is documented, not fixed) |
+| 2026-09-24 | S9 | fix/api-polish | #32 | Merged | — (row added by S11; S9 left no log row) |
+| 2026-09-24 | S10 | test/hardening | #31 | Merged | — (ran in parallel with S9; `seed_sample_venues` gone since S1, so R29 covers discovery + URL paths; forged `subject_id=None` raises `22023`, now pinned. Row restored by S11: the S8 merge dropped it) |
+| 2026-09-24 | S11 | fix/menu-selector | #33 | Merged (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |
+| 2026-09-24 | S12 | fix/identity-matching | #34 | Draft, ADR-0012 Proposed, awaiting owner acceptance | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 waits on ADR-0012 acceptance, with a pick per §1–§5) |

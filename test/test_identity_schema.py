@@ -44,6 +44,7 @@ from packages.helios_core.provenance import (
     SourceRecord,
     SourceRecordVersion,
 )
+from test.guard_support import raises_guard
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -818,13 +819,22 @@ def test_resolution_aggregate_and_projection_reject_direct_mutation(
     _check_deferred(session)
     session.commit()
 
-    for statement in (
-        "UPDATE identity.resolution_event SET method = 'changed' WHERE id = :id",
-        "DELETE FROM identity.resolution_evidence WHERE resolution_event_id = :id",
-        "UPDATE identity.current_resolution SET state = 'needs_review' "
-        "WHERE source_record_id = :record_id",
+    for statement, message in (
+        (
+            "UPDATE identity.resolution_event SET method = 'changed' WHERE id = :id",
+            r"identity\.resolution_event is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.resolution_evidence WHERE resolution_event_id = :id",
+            r"identity\.resolution_evidence is append-only and cannot be delete",
+        ),
+        (
+            "UPDATE identity.current_resolution SET state = 'needs_review' "
+            "WHERE source_record_id = :record_id",
+            "current-resolution row must match authoritative history",
+        ),
     ):
-        with pytest.raises(DBAPIError):
+        with raises_guard(message):
             session.execute(
                 text(statement),
                 {"id": event.id, "record_id": record.id},
@@ -1411,24 +1421,76 @@ def test_subject_history_and_referenced_subject_reject_deletion(session: Session
     )
     session.commit()
 
-    for statement in (
-        "UPDATE identity.resolution_event SET method = method WHERE id = :event_id",
-        "DELETE FROM identity.resolution_event WHERE id = :event_id",
-        "UPDATE identity.resolution_evidence SET evidence_id = evidence_id "
-        "WHERE resolution_event_id = :event_id",
-        "DELETE FROM identity.resolution_evidence WHERE resolution_event_id = :event_id",
-        "UPDATE identity.subject_change_member SET role = role WHERE subject_change_id = :id",
-        "DELETE FROM identity.subject_change_member WHERE subject_change_id = :id",
-        "UPDATE identity.subject_change_evidence SET evidence_id = evidence_id "
-        "WHERE subject_change_id = :id",
-        "DELETE FROM identity.subject_change_evidence WHERE subject_change_id = :id",
-        "UPDATE identity.subject_change SET method = 'changed' WHERE id = :id",
-        "DELETE FROM identity.subject_change WHERE id = :id",
-        "UPDATE identity.adjudication SET rationale = 'changed' WHERE id = :adjudication_id",
-        "DELETE FROM identity.adjudication WHERE id = :adjudication_id",
-        "DELETE FROM identity.subject WHERE id = :subject_id",
+    for statement, message in (
+        (
+            "UPDATE identity.resolution_event SET method = method WHERE id = :event_id",
+            r"identity\.resolution_event is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.resolution_event WHERE id = :event_id",
+            r"identity\.resolution_event is append-only and cannot be delete",
+        ),
+        (
+            "UPDATE identity.resolution_evidence SET evidence_id = evidence_id "
+            "WHERE resolution_event_id = :event_id",
+            r"identity\.resolution_evidence is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.resolution_evidence WHERE resolution_event_id = :event_id",
+            r"identity\.resolution_evidence is append-only and cannot be delete",
+        ),
+        (
+            "UPDATE identity.subject_change_member SET role = role WHERE subject_change_id = :id",
+            r"identity\.subject_change_member is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.subject_change_member WHERE subject_change_id = :id",
+            r"identity\.subject_change_member is append-only and cannot be delete",
+        ),
+        (
+            "UPDATE identity.subject_change_evidence SET evidence_id = evidence_id "
+            "WHERE subject_change_id = :id",
+            r"identity\.subject_change_evidence is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.subject_change_evidence WHERE subject_change_id = :id",
+            r"identity\.subject_change_evidence is append-only and cannot be delete",
+        ),
+        (
+            "UPDATE identity.subject_change SET method = 'changed' WHERE id = :id",
+            r"identity\.subject_change is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.subject_change WHERE id = :id",
+            r"identity\.subject_change is append-only and cannot be delete",
+        ),
+        (
+            "UPDATE identity.adjudication SET rationale = 'changed' WHERE id = :adjudication_id",
+            r"identity\.adjudication is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.adjudication WHERE id = :adjudication_id",
+            r"identity\.adjudication is append-only and cannot be delete",
+        ),
+        (
+            "DELETE FROM identity.subject WHERE id = :subject_id",
+            "Identity Subjects are retired, not deleted",
+        ),
+        (
+            "UPDATE identity.applied_subject_change SET subject_change_id = subject_change_id "
+            "WHERE subject_change_id = :id",
+            r"identity\.applied_subject_change is append-only and cannot be update",
+        ),
+        (
+            "DELETE FROM identity.applied_subject_change WHERE subject_change_id = :id",
+            r"identity\.applied_subject_change is append-only and cannot be delete",
+        ),
+        (
+            "UPDATE identity.subject SET kind = 'organization' WHERE id = :subject_id",
+            "Subject kind is immutable",
+        ),
     ):
-        with pytest.raises(DBAPIError):
+        with raises_guard(message):
             session.execute(
                 text(statement),
                 {
@@ -1452,3 +1514,167 @@ def test_subject_history_and_referenced_subject_reject_deletion(session: Session
         )
         session.flush()
     session.rollback()
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        # Leaf tables: no FK points at them, so the trigger is the only guard.
+        "resolution_evidence",
+        "subject_change_member",
+        "subject_change_evidence",
+        "applied_subject_change",
+    ],
+)
+def test_identity_history_leaf_tables_reject_truncate(session: Session, table: str) -> None:
+    with raises_guard(rf"identity\.{table} is append-only and cannot be truncate"):
+        session.execute(text(f"TRUNCATE identity.{table}"))
+    session.rollback()
+
+
+@pytest.mark.parametrize("table", ["adjudication", "resolution_event", "subject_change"])
+def test_identity_history_parent_tables_reject_truncate_cascade(
+    session: Session, table: str
+) -> None:
+    # Without CASCADE an FK refuses first; CASCADE reaches the trigger.
+    with raises_guard(rf"identity\.{table} is append-only and cannot be truncate"):
+        session.execute(text(f"TRUNCATE identity.{table} CASCADE"))
+    session.rollback()
+
+
+def test_subject_projections_reject_tampering(session: Session) -> None:
+    survivor = create_place(session)
+    retired = create_place(session)
+    _check_deferred(session)
+    change = record_subject_change(
+        session,
+        operation="merge",
+        input_subject_ids=[survivor.id, retired.id],
+        output_subject_ids=[survivor.id],
+        decision=_decision(),
+        adjudication_id=_adjudication(session),
+    )
+    session.commit()
+    params = {"retired": retired.id, "survivor": survivor.id, "change": change.id}
+
+    for statement, message in (
+        (
+            "UPDATE identity.subject_currentness SET is_current = true, "
+            "retired_by_change_id = NULL, retirement_reason = NULL "
+            "WHERE subject_id = :retired",
+            "Subject-currentness row must match authoritative history",
+        ),
+        (
+            "UPDATE identity.subject_currentness SET subject_id = :survivor "
+            "WHERE subject_id = :retired",
+            "Subject-currentness projection key is immutable",
+        ),
+        (
+            "DELETE FROM identity.subject_currentness WHERE subject_id = :retired",
+            r"identity\.subject_currentness is a derived Identity projection",
+        ),
+        (
+            "TRUNCATE identity.subject_currentness",
+            r"identity\.subject_currentness is a derived Identity projection",
+        ),
+        (
+            "UPDATE identity.subject_lineage SET successor_subject_id = :retired "
+            "WHERE predecessor_subject_id = :retired",
+            "Subject-lineage projection rows are immutable",
+        ),
+        (
+            "DELETE FROM identity.subject_lineage WHERE predecessor_subject_id = :retired",
+            r"identity\.subject_lineage is a derived Identity projection",
+        ),
+        (
+            "TRUNCATE identity.subject_lineage",
+            r"identity\.subject_lineage is a derived Identity projection",
+        ),
+        (
+            "INSERT INTO identity.subject_lineage (subject_change_id, predecessor_subject_id, "
+            "predecessor_subject_kind, successor_subject_id, successor_subject_kind) "
+            "VALUES (:change, :survivor, 'place', :retired, 'place')",
+            "Subject-lineage row must match authoritative history",
+        ),
+    ):
+        with raises_guard(message):
+            session.execute(text(statement), params)
+            session.commit()
+        session.rollback()
+
+    currentness = session.get(SubjectCurrentness, retired.id, populate_existing=True)
+    assert currentness is not None
+    assert not currentness.is_current
+
+
+def test_remap_rejects_same_target_and_wrong_current_subject(session: Session) -> None:
+    record, evidence = _record_and_evidence(session)
+    current = create_place(session)
+    other = create_place(session)
+    _check_deferred(session)
+    admit_source_record(
+        session,
+        source_record_id=record.id,
+        decision=_decision(),
+        evidence_ids=[evidence.id],
+    )
+    assign_source_record(
+        session,
+        source_record_id=record.id,
+        to_subject_id=current.id,
+        decision=_decision(),
+        evidence_ids=[evidence.id],
+    )
+    session.commit()
+
+    with pytest.raises(ValueError, match="remap requires a different target Subject"):
+        remap_source_record(
+            session,
+            source_record_id=record.id,
+            from_subject_id=current.id,
+            to_subject_id=current.id,
+            decision=_decision(),
+            evidence_ids=[evidence.id],
+        )
+    with pytest.raises(IntegrityError) as same_target:
+        _raw_resolution_event(
+            session,
+            source_record_id=record.id,
+            operation="remap",
+            from_subject_id=current.id,
+            to_subject_id=current.id,
+            adjudication_id=_adjudication(session),
+        )
+    assert (
+        getattr(getattr(same_target.value.orig, "diag", None), "constraint_name", None)
+        == "ck_resolution_event_operation_shape"
+    )
+    session.rollback()
+
+    with pytest.raises(ValueError, match="remap must name the current Subject"):
+        remap_source_record(
+            session,
+            source_record_id=record.id,
+            from_subject_id=other.id,
+            to_subject_id=current.id,
+            decision=_decision(),
+            evidence_ids=[evidence.id],
+        )
+    with pytest.raises(IntegrityError, match="remap must name the current Subject") as wrong:
+        _raw_resolution_event(
+            session,
+            source_record_id=record.id,
+            operation="remap",
+            from_subject_id=other.id,
+            to_subject_id=current.id,
+            adjudication_id=_adjudication(session),
+        )
+    assert (
+        getattr(getattr(wrong.value.orig, "diag", None), "constraint_name", None)
+        == "ct_resolution_transition"
+    )
+    session.rollback()
+
+    current_row = session.get(CurrentResolution, record.id, populate_existing=True)
+    assert current_row is not None
+    assert (current_row.state, current_row.subject_id) == ("resolved", current.id)

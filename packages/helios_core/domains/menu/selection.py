@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from packages.helios_core.domains.menu.contracts import NodeKind
+    from packages.helios_core.provenance.contracts import CanonicalProvenanceKey
 
 KIND_RANK: dict[str, int] = {"jsonld": 0, "dom": 1, "pdf": 2, "llm": 3}
 
@@ -84,7 +85,10 @@ class TargetRef:
 
     Each element is ``(node_kind, source_native_key)``. Correspondence follows
     base links and native keys, never names or positions, so JSON-LD and DOM
-    claims that carry the same genuine native IDs compete for one target.
+    claims that carry the same genuine native IDs compete for one target. A
+    target reached through links to a pinned Organization page starts with
+    ``("base", "<pinned page id>")``: links to the same pinned base correspond
+    across sources, different bases never do (ADR-0005 §10).
     """
 
     kind: NodeKind
@@ -99,6 +103,9 @@ class ContextRef:
     service_period: str | None = None
     valid_from: datetime | None = None
     valid_to: datetime | None = None
+
+    def __post_init__(self) -> None:
+        _require_aware(self, ("valid_from", "valid_to"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +122,17 @@ class SelectionRequest:
     effective_instant: datetime
     knowledge_cutoff: datetime | None = None
     observation_cutoff: datetime | None = None
+
+    def __post_init__(self) -> None:
+        _require_aware(self, ("effective_instant", "knowledge_cutoff", "observation_cutoff"))
+
+
+def _require_aware(value: object, names: tuple[str, ...]) -> None:
+    """Times are compared as UTC instants; a naive one has no instant at all."""
+    for name in names:
+        instant: datetime | None = getattr(value, name)
+        if instant is not None and instant.utcoffset() is None:
+            raise ValueError(f"{name} requires an aware timestamp")
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +199,7 @@ class Selection:
 class _Node:
     kind: str
     id: int
+    key: str
     page_id: int
     parent_kind: str | None
     parent_id: int | None
@@ -195,21 +214,23 @@ class _Node:
 
 def _node_from_row(kind: str, row: MenuSection | MenuItem | MenuVariant | MenuModifier) -> _Node:
     if isinstance(row, MenuSection):
-        parent_kind, parent_id = "section", row.parent_section_id
+        parent_kind, parent_id, key = "section", row.parent_section_id, row.section_key
         base_id, name, description = row.base_section_id, row.name, None
     elif isinstance(row, MenuItem):
-        parent_kind, parent_id = "section", row.section_id
+        parent_kind, parent_id, key = "section", row.section_id, row.item_key
         base_id, name, description = row.base_item_id, row.name, row.description
     elif isinstance(row, MenuVariant):
-        parent_kind, parent_id = "item", row.item_id
+        parent_kind, parent_id, key = "item", row.item_id, row.variant_key
         base_id, name, description = row.base_variant_id, row.label, None
     else:
         parent_kind = "item" if row.item_id is not None else "section"
         parent_id = row.item_id if row.item_id is not None else row.section_id
+        key = row.modifier_key
         base_id, name, description = row.base_modifier_id, row.label, None
     return _Node(
         kind=kind,
         id=row.id,
+        key=key,
         page_id=row.page_id,
         parent_kind=parent_kind,
         parent_id=parent_id,
@@ -224,19 +245,28 @@ def _node_from_row(kind: str, row: MenuSection | MenuItem | MenuVariant | MenuMo
 
 
 class _PageGraph:
-    """All nodes of one page, indexed by ``(kind, id)`` for read-side traversal."""
+    """All nodes of one page, indexed by ``(kind, id)`` for read-side traversal.
+
+    Rows load in id order so iteration never depends on the query plan.
+    """
 
     def __init__(self, session: Session, page_id: int) -> None:
         self.page_id = page_id
         self.nodes: dict[tuple[str, int], _Node] = {}
-        for section in session.scalars(select(MenuSection).where(MenuSection.page_id == page_id)):
+        for section in session.scalars(
+            select(MenuSection).where(MenuSection.page_id == page_id).order_by(MenuSection.id)
+        ):
             self.nodes[("section", section.id)] = _node_from_row("section", section)
-        for item in session.scalars(select(MenuItem).where(MenuItem.page_id == page_id)):
+        for item in session.scalars(
+            select(MenuItem).where(MenuItem.page_id == page_id).order_by(MenuItem.id)
+        ):
             self.nodes[("item", item.id)] = _node_from_row("item", item)
-        for variant in session.scalars(select(MenuVariant).where(MenuVariant.page_id == page_id)):
+        for variant in session.scalars(
+            select(MenuVariant).where(MenuVariant.page_id == page_id).order_by(MenuVariant.id)
+        ):
             self.nodes[("variant", variant.id)] = _node_from_row("variant", variant)
         for modifier in session.scalars(
-            select(MenuModifier).where(MenuModifier.page_id == page_id)
+            select(MenuModifier).where(MenuModifier.page_id == page_id).order_by(MenuModifier.id)
         ):
             self.nodes[("modifier", modifier.id)] = _node_from_row("modifier", modifier)
 
@@ -261,10 +291,31 @@ def _graph(session: Session, page_id: int) -> _PageGraph:
 # --------------------------------------------------------------------------- #
 
 
+BASE_PATH_KIND = "base"
+
+
 def _canonical_native_path(
     session: Session, page: MenuPage, node: _Node
 ) -> tuple[tuple[str, str], ...] | None:
-    """Return the stable ``(kind, native_key)`` path, or ``None`` if version-local.
+    """Return the stable target path, or ``None`` if version-local.
+
+    A node that rides a base correspondence (itself or an ancestor links to the
+    pinned Organization page) is prefixed with ``("base", "<pinned page id>")``:
+    links to the same pinned base correspond across sources, and different
+    pinned bases stay separate targets (ADR-0005 §10, proposal §5).
+    """
+    path = _native_path(session, page, node)
+    if path is None or page.base_organization_page_id is None:
+        return path
+    if not _depends_on_base(session, page, node):
+        return path
+    return ((BASE_PATH_KIND, str(page.base_organization_page_id)), *path)
+
+
+def _native_path(
+    session: Session, page: MenuPage, node: _Node
+) -> tuple[tuple[str, str], ...] | None:
+    """The ``(kind, native_key)`` path without the pinned-base prefix.
 
     A node with no own native key but a typed base link resolves through the
     base node (in the pinned page) to the base's identity, so an inherited
@@ -281,13 +332,13 @@ def _canonical_native_path(
         base_page = session.get(MenuPage, page.base_organization_page_id)
         if base_page is None:
             return None
-        return _canonical_native_path(session, base_page, base_node)
+        return _native_path(session, base_page, base_node)
     graph = _graph(session, page.id)
     prefix: tuple[tuple[str, str], ...] = ()
     if node.parent_id is not None and node.parent_kind is not None:
         parent = graph.nodes.get((node.parent_kind, node.parent_id))
         if parent is not None:
-            resolved = _canonical_native_path(session, page, parent)
+            resolved = _native_path(session, page, parent)
             if resolved is None:
                 return None
             prefix = resolved
@@ -295,12 +346,20 @@ def _canonical_native_path(
 
 
 def _target_node(session: Session, page: MenuPage, target: TargetRef) -> _Node | None:
-    """Find the node in ``page`` whose canonical native path equals the target."""
+    """Find the one node in ``page`` whose canonical path equals the target.
+
+    The schema cannot stop two nodes of one page resolving to the same path
+    (e.g. a suppression of a base node and a local addition carrying its native
+    key). Such a page is ambiguous for the target and supplies nothing for it,
+    rather than whichever row happened to come first.
+    """
     graph = _graph(session, page.id)
-    for node in graph.of_kind(target.kind):
-        if _canonical_native_path(session, page, node) == target.native_path:
-            return node
-    return None
+    matches = [
+        node
+        for node in graph.of_kind(target.kind)
+        if _canonical_native_path(session, page, node) == target.native_path
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 # --------------------------------------------------------------------------- #
@@ -411,9 +470,23 @@ def _stream_heads(
 # --------------------------------------------------------------------------- #
 
 
-def _business_key(session: Session, page: MenuPage, claim_locator: str) -> str:
+type _KeyPart = tuple[int, str | tuple[_KeyPart, ...]]
+type _BusinessKey = tuple[tuple[_KeyPart, ...], tuple[str, str]]
+
+
+def _orderable(key: CanonicalProvenanceKey) -> tuple[_KeyPart, ...]:
+    """Tag each part so a string is never compared with a nested key."""
+    return tuple((0, part) if isinstance(part, str) else (1, _orderable(part)) for part in key)
+
+
+def _business_key(session: Session, page: MenuPage, claim_locator: tuple[str, str]) -> _BusinessKey:
+    """The canonical business tie key: Bronze version key, then claim locator.
+
+    Compared as the tuple itself, never its ``repr``, and never a surrogate id
+    (proposal §5).
+    """
     version = get_record_version(session, page.source_record_version_id)
-    return repr((version.canonical_key, claim_locator))
+    return (_orderable(version.canonical_key), claim_locator)
 
 
 def _rank_key(
@@ -421,8 +494,8 @@ def _rank_key(
     page: MenuPage,
     observed_at: datetime,
     confidence: Decimal,
-    claim_locator: str,
-) -> tuple[int, float, float, str]:
+    claim_locator: tuple[str, str],
+) -> tuple[int, float, float, _BusinessKey]:
     return (
         KIND_RANK.get(page.source_kind, len(KIND_RANK)),
         -observed_at.timestamp(),
@@ -501,6 +574,13 @@ def _base_valid(
     return True
 
 
+def _pin_valid(session: Session, request: SelectionRequest, page: MenuPage) -> bool:
+    """Whether ``page``'s pinned Organization base is usable for this request."""
+    base_id = page.base_organization_page_id
+    base = session.get(MenuPage, base_id) if base_id is not None else None
+    return base is not None and _base_valid(session, request, base)
+
+
 # --------------------------------------------------------------------------- #
 # Current-mode Identity gate through the published scope guard.
 # --------------------------------------------------------------------------- #
@@ -547,9 +627,17 @@ def _content_candidates(
 def _resolve_content(
     session: Session, request: SelectionRequest, candidate: _ContentCandidate
 ) -> ContentResult | None:
-    """Produce the content view, following an inherit reference to its base."""
+    """Produce the content view, following an inherit reference to its base.
+
+    Content that rides a base correspondence (an inherit reference, or a
+    replacement mapped to a base node or under a mapped ancestor) needs a valid
+    pin, the same rule as price; only independent local additions survive an
+    unresolved base (ADR-0005 §4).
+    """
     page, node = candidate.page, candidate.node
     if node.support_kind == "structural":
+        return None
+    if _depends_on_base(session, page, node) and not _pin_valid(session, request, page):
         return None
     if node.effect == "inherit":
         base_page_id = page.base_organization_page_id
@@ -595,7 +683,7 @@ def _select_content(
     ranked = sorted(
         candidates,
         key=lambda c: _rank_key(
-            session, c.page, c.page.observed_at, c.page.confidence, f"content:{c.node.id}"
+            session, c.page, c.page.observed_at, c.page.confidence, (c.node.kind, c.node.key)
         ),
     )
     for candidate in ranked:
@@ -632,17 +720,18 @@ def _price_contenders(
             continue
         if request.observation_cutoff is not None and page.observed_at > request.observation_cutoff:
             continue
-        graph = _graph(session, page.id)
+        node = _target_node(session, page, request.target)
+        if node is None or node.effect == "suppress":
+            continue
         for price in session.scalars(
-            select(PriceObservation).where(PriceObservation.page_id == page.id)
+            select(PriceObservation)
+            .where(PriceObservation.page_id == page.id)
+            .order_by(PriceObservation.id)
         ):
             if price.currency_code != request.currency_code:
                 continue
             kind, node_id = _price_target_column(price)
-            node = graph.nodes.get((kind, node_id))
-            if node is None or node.effect == "suppress":
-                continue
-            if _canonical_native_path(session, page, node) != request.target.native_path:
+            if (kind, node_id) != (node.kind, node.id):
                 continue
             effective = _effective_context(session, kind, node_id, price.applicability_id)
             if effective is None or not _matches_context(effective, request.context):
@@ -693,15 +782,12 @@ def _select_local_price(
         # No local price row exists: a derived unknown, with no invented
         # Evidence and no shared/sibling fallback.
         return PriceResult(state="absent", scope_subject_id=request.subject_id)
-    resolvable: list[_PriceCandidate] = []
-    for candidate in contenders:
-        if not _depends_on_base(session, candidate.page, candidate.node):
-            resolvable.append(candidate)
-            continue
-        base_id = candidate.page.base_organization_page_id
-        base = session.get(MenuPage, base_id) if base_id is not None else None
-        if base is not None and _base_valid(session, request, base):
-            resolvable.append(candidate)
+    resolvable = [
+        candidate
+        for candidate in contenders
+        if not _depends_on_base(session, candidate.page, candidate.node)
+        or _pin_valid(session, request, candidate.page)
+    ]
     if not resolvable:
         # Only base-dependent contenders existed and the pin is unresolved: keep
         # history but return no resolved local price. No sibling/base fallback.
@@ -709,7 +795,11 @@ def _select_local_price(
     ranked = sorted(
         resolvable,
         key=lambda c: _rank_key(
-            session, c.page, c.page.observed_at, c.price.confidence, c.price.observation_key
+            session,
+            c.page,
+            c.page.observed_at,
+            c.price.confidence,
+            ("price", c.price.observation_key),
         ),
     )
     winner = ranked[0]
@@ -725,9 +815,10 @@ def _org_claim(
     session: Session,
     request: SelectionRequest,
     page: MenuPage,
+    org_target: TargetRef,
     origin: Literal["pinned", "head"],
 ) -> OrganizationClaim | None:
-    node = _target_node(session, page, request.target)
+    node = _target_node(session, page, org_target)
     if node is None or node.effect in {"suppress", "inherit"}:
         return None
     kind, node_id = node.kind, node.id
@@ -769,20 +860,41 @@ def _organization_claims(
         return ()
     claims: list[OrganizationClaim] = []
     pinned = session.get(MenuPage, content.page_id)
-    if pinned is None:
+    prefix = (BASE_PATH_KIND, str(content.page_id))
+    if pinned is None or request.target.native_path[:1] != (prefix,):
         return ()
-    pinned_claim = _org_claim(session, request, pinned, "pinned")
+    # Inside the Organization stream the target is the base's own native path.
+    target = TargetRef(request.target.kind, request.target.native_path[1:])
+    pinned_claim = _org_claim(session, request, pinned, target, "pinned")
     if pinned_claim is not None:
         claims.append(pinned_claim)
     org_heads = _stream_heads(
         session, pinned.source_record_id, pinned.root_key, request.knowledge_cutoff
     )
     head = org_heads.get(pinned.source_kind)
-    if head is not None and head.id != pinned.id:
-        head_claim = _org_claim(session, request, head, "head")
+    if (
+        head is not None
+        and head.id != pinned.id
+        and _head_claimable(session, request, pinned, head)
+    ):
+        head_claim = _org_claim(session, request, head, target, "head")
         if head_claim is not None:
             claims.append(head_claim)
     return tuple(claims)
+
+
+def _head_claimable(
+    session: Session, request: SelectionRequest, pinned: MenuPage, head: MenuPage
+) -> bool:
+    """The Organization head is a factual page like any other: it must pass
+    ``O``, still belong to the pinned Organization, and (current mode) keep a
+    live accepted scope (ADR-0005 §9).
+    """
+    if request.observation_cutoff is not None and head.observed_at > request.observation_cutoff:
+        return False
+    if head.subject_id != pinned.subject_id:
+        return False
+    return request.knowledge_cutoff is not None or _live_scope(session, head) is not None
 
 
 # --------------------------------------------------------------------------- #
@@ -818,17 +930,18 @@ def select_price(session: Session, request: SelectionRequest) -> Selection:
     content = _select_content(session, request, heads)
     local_price = _select_local_price(session, request, heads)
 
-    if content is None and local_price.state == "absent" and _has_withdrawn_head(heads):
-        # A tombstone (per stream) blocks its predecessors; distinguish this
-        # deliberate withdrawal from a plain missing price.
+    if content is None and local_price.state == "absent" and _all_heads_withdrawn(heads):
+        # Every stream is tombstoned, which blocks its predecessors; distinguish
+        # this deliberate withdrawal from a plain missing price. A live stream
+        # that merely omits the target is absence, not withdrawal.
         local_price = PriceResult("withdrawn", request.subject_id)
 
     organization = _organization_claims(session, request, content)
     return Selection(mode, content, local_price, organization)
 
 
-def _has_withdrawn_head(heads: dict[str, MenuPage]) -> bool:
-    return any(page.operation == "withdrawal" for page in heads.values())
+def _all_heads_withdrawn(heads: dict[str, MenuPage]) -> bool:
+    return bool(heads) and all(page.operation == "withdrawal" for page in heads.values())
 
 
 def _subject_heads(heads: dict[str, MenuPage], subject_id: int) -> dict[str, MenuPage]:

@@ -96,25 +96,29 @@ def test_conflicting_replay_payload(
         persist_menu(writer, conflict)
 
 
+_HEAD_RULE = "successor requires the committed head and explicit lifecycle"
+
+
+# Every lifecycle defect shares ck_menu_lifecycle, so the message names the rule.
 @pytest.mark.parametrize(
-    "defect",
+    ("defect", "message"),
     [
-        "fork",
-        "skip_stream",
-        "skip_version",
-        "same_tx",
-        "wrong_stream",
-        "duplicate_initial",
-        "old_observation",
-        "restoration_without_withdrawal",
+        ("fork", _HEAD_RULE),
+        ("skip_stream", _HEAD_RULE),
+        ("skip_version", "incorrect version interpretation revision"),
+        ("same_tx", _HEAD_RULE),
+        ("wrong_stream", "stream must start with initial revision 1"),
+        ("duplicate_initial", _HEAD_RULE),
+        ("old_observation", "observation requires unused later Bronze input"),
+        ("restoration_without_withdrawal", _HEAD_RULE),
     ],
 )
 def test_lifecycle_intent_rejected(
-    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], defect: str
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture], defect: str, message: str
 ) -> None:
     from sqlalchemy.exc import DBAPIError
 
-    from test.menu_support import raw_page
+    from test.menu_support import raw_page, rejected
 
     factory, scope = menu_scopes
     value = aggregate(scope)
@@ -138,8 +142,10 @@ def test_lifecycle_intent_rejected(
             intent = replace(intent, page=replace(intent.page, operation="observation"))
         elif defect == "restoration_without_withdrawal":
             intent = replace(intent, page=replace(intent.page, operation="restoration"))
-        with pytest.raises(DBAPIError):
+        with pytest.raises(DBAPIError) as error:
             raw_page(writer, intent)
+        rejected(error, "ck_menu_lifecycle")
+        assert error.value.orig.diag.message_primary == message  # type: ignore[union-attr]
         writer.rollback()
 
 
@@ -352,6 +358,25 @@ def test_duplicate_bronze_business_identity_replays_without_new_ids(
                 writer,
                 replace(value, page=replace(value.page, source_record_version_id=duplicate.id)),
             )
+
+
+def test_replay_member_order_ignores_decimal_scale(
+    menu_scopes: tuple[sessionmaker[Session], ScopeFixture],
+) -> None:
+    # R64: 0.1 and 0.10 are the same confidence, stored as 0.1000. Formatting
+    # must not reorder members and turn an exact replay into a conflict.
+    from decimal import Decimal
+
+    factory, scope = menu_scopes
+    value = aggregate(scope)
+    later = replace(value.prices[0], observation_key="p-z", confidence=Decimal("0.1"))
+    earlier = replace(value.prices[0], observation_key="p-a", confidence=Decimal("0.10"))
+    value = replace(value, prices=(later, earlier))
+    with factory.begin() as writer:
+        first = persist_menu(writer, value)
+    with factory.begin() as writer:
+        replay = persist_menu(writer, value)
+    assert replay.replayed and replay.page_id == first.page_id and replay.members == first.members
 
 
 def test_reference_error_rolls_back_supported_prefix(

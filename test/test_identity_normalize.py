@@ -42,6 +42,69 @@ def test_name_fingerprint_keeps_distinct_names_distinct() -> None:
     assert name_fingerprint("Torchys Tacos") != name_fingerprint("Torchys Burgers")
 
 
+# R18: non-English letters are kept; only accents (combining marks) are stripped.
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Chinese Restaurant 金龍", "Chinese Restaurant 福州"),
+        ("Đông Phương", "Ông Phương"),
+        ("Pho Ha Noi Ørsted", "Pho Ha Noi rsted"),
+        ("مطعم الأمير", "مطعم الأميرة"),
+        ("Ταβέρνα Ζορμπάς", "Ταβέρνα Μύθος"),
+        ("Taj किताब", "Taj"),
+    ],
+)
+def test_name_fingerprint_keeps_non_english_letters(a: str, b: str) -> None:
+    assert name_fingerprint(a) != name_fingerprint(b)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("金龍", "金龍"),  # all-CJK: normalized, not the raw-string fallback
+        ("Chinese Restaurant 金龍", "chinese restaurant 金龍"),
+        ("Đông Phương", "dong phuong"),
+        ("Smørrebrød", "smorrebrod"),
+        ("Łódź Pierogi", "lodz pierogi"),
+        ("Æble Œuvre", "aeble oeuvre"),
+        ("Straße", "strasse"),
+        ("Kırmızı İskender", "kirmizi iskender"),
+        ("Þór's Hús", "thors hus"),
+        ("ΤΑΒΕΡΝΑΣ", "ταβερνασ"),  # final and medial sigma fold together
+        ("ταβέρνας", "ταβερνασ"),
+        ("مَطْعَم", "مطعم"),  # Arabic harakat are marks, stripped like accents
+        ("ＡＢＣ　Ｃａｆｅ", "abc cafe"),  # fullwidth compatibility forms
+        ("Caf­e Bar", "cafe bar"),  # soft hyphen is invisible, not a break
+        ("🍕🍕", ""),
+    ],
+)
+def test_normalize_name_unicode_letters(raw: str, expected: str) -> None:
+    assert normalize_name(raw) == expected
+    assert normalize_name(normalize_name(raw)) == expected
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["Torchy's Tacos", "Torchy’s Tacos", "Torchyʼs Tacos", "Torchy´s Tacos", "Torchy＇s Tacos"],
+)
+def test_apostrophe_variants_are_elided(variant: str) -> None:
+    assert name_fingerprint(variant) == "torchys tacos"
+
+
+def test_indic_vowel_signs_stay_inside_the_word() -> None:
+    # Spacing vowel signs are marks with combining class 0: part of the letter,
+    # not accents, so they must not become word breaks.
+    assert " " not in normalize_name("किताब")
+
+
+def test_normalize_name_is_idempotent_across_the_bmp() -> None:
+    for code_point in range(0x10000):
+        if 0xD800 <= code_point <= 0xDFFF:
+            continue
+        once = normalize_name(f"a{chr(code_point)}b")
+        assert normalize_name(once) == once, hex(code_point)
+
+
 def test_normalize_address_normalizes_like_a_name() -> None:
     assert normalize_address("1311 S. 1st St, Austin, TX") == "1311 s 1st st austin tx"
 

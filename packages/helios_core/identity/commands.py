@@ -4,10 +4,41 @@ Commands flush but never commit.  The caller owns the surrounding transaction,
 which lets provenance, identity, and a future vertical write atomically.
 Database triggers repeat the transition and lineage checks so bypassing these
 commands cannot bypass an invariant.
+
+Lock order
+----------
+Every Identity writer, in Python or in SQL (``identity.lock_scope_inputs``,
+the resolution-event and Subject-change triggers), acquires locks in this one
+global order, and within each step in ascending ID order:
+
+1. the shared Identity-maintenance advisory lock ``(48454, 2)``;
+2. Subjects, then their currentness and typed-grain rows;
+3. the Source Endpoint of a URL observation (deterministic resolution only);
+4. Source Records;
+5. Identity projection rows (``current_resolution``).
+
+A writer never waits for an earlier step while holding a later one.
+Deterministic resolution does not know its Subjects until it has read the
+record's current mapping, so it reads that plan without locks, locks in this
+order, and re-reads the plan. If the plan changed it rolls back to a savepoint,
+which releases every lock it took, and plans once more
+(:class:`ResolutionConflictError` if that also changes).
+
+Readiness refresh is the one second pass over step 4: holding an
+Organization, it locks the Source Records currently resolved to it. That is
+safe because changing any such record's mapping requires that Organization's
+lock first (remap/unassign name it; re-observation plans it).
+
+The order holds within one command. A transaction that runs several commands
+(a discovery batch, or re-observation followed by an explicit assign) takes
+each command's locks while still holding the previous command's, so two such
+transactions over the same records can still deadlock; like any ``40P01``,
+that requires rolling back and retrying the transaction.
 """
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -16,6 +47,7 @@ from sqlalchemy import select, text
 
 from packages.helios_core.identity.contracts import (
     DeterministicResolutionResult,
+    ResolutionConflictError,
     SubjectNotEligibleError,
     lock_subject_readiness_inputs,
     subject_meets_readiness_policy,
@@ -37,6 +69,9 @@ from packages.helios_core.identity.models import (
 )
 from packages.helios_core.provenance.contracts import (
     BronzeObservation,
+    canonicalize_http_url,
+    find_source_record_id,
+    lock_source_endpoint,
     lock_source_record,
     persist_source_record_observation,
     source_record_ids_for_canonical_url,
@@ -47,6 +82,8 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from sqlalchemy.orm import Session
+
+    from packages.helios_core.provenance.contracts import PersistedBronzeObservation
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,8 +213,17 @@ def mark_subject_eligible(session: Session, subject_id: int) -> Subject:
 
 
 def _refresh_subject_readiness(session: Session, subject_id: int) -> None:
-    """Keep stored readiness aligned with the current typed feature policy."""
-    subject = session.get(Subject, subject_id)
+    """Keep an Organization's stored readiness aligned with the feature policy.
+
+    Only Organizations are refreshed: their readiness depends on their own
+    resolved records, which is what Identity decisions change. An
+    Establishment's stored ``eligible`` is not demoted with its parent here;
+    admission re-evaluates the parents, and Establishment readiness is
+    ADR-0012's decision (checklist D6.4).
+    """
+    # Another transaction may have promoted or demoted this row since the
+    # caller loaded it; comparing against a stale value can skip the write.
+    subject = session.get(Subject, subject_id, populate_existing=True)
     if subject is None or subject.kind != "organization":
         return
     readiness = (
@@ -231,20 +277,12 @@ def _require_decision_support(
         raise ValueError("an Identity decision requires Evidence or Adjudication")
 
 
-def _lock_resolution_subjects(
-    session: Session,
-    from_subject_id: int | None,
-    to_subject_id: int | None,
-) -> None:
-    subject_ids = sorted(
-        subject_id for subject_id in {from_subject_id, to_subject_id} if subject_id is not None
-    )
-    if subject_ids:
+def _lock_resolution_subjects(session: Session, *subject_ids: int | None) -> None:
+    """Lock-order step 2 for resolution: the named Subjects, in ID order."""
+    ids = sorted({subject_id for subject_id in subject_ids if subject_id is not None})
+    if ids:
         session.execute(
-            select(Subject.id)
-            .where(Subject.id.in_(subject_ids))
-            .order_by(Subject.id)
-            .with_for_update()
+            select(Subject.id).where(Subject.id.in_(ids)).order_by(Subject.id).with_for_update()
         )
 
 
@@ -499,240 +537,98 @@ def _current_lineage_successor_ids(
     return tuple(session.scalars(statement))
 
 
-def _lock_resolution_subjects_for_update(
+@dataclass(frozen=True, slots=True)
+class _ResolutionPlan:
+    """What re-observation expects to find, and therefore which rows it locks."""
+
+    prior_state: str | None
+    prior_subject_id: int | None
+    prior_is_current: bool | None
+    successor_ids: tuple[int, ...]
+    url_source_record_ids: tuple[int, ...]
+    url_target_id: int | None
+
+    @property
+    def subject_ids(self) -> tuple[int, ...]:
+        prior = self.prior_subject_id if self.prior_state == "resolved" else None
+        candidates = (prior, *self.successor_ids, self.url_target_id)
+        return tuple(sorted({subject_id for subject_id in candidates if subject_id is not None}))
+
+    @property
+    def locked_url_source_record_ids(self) -> tuple[int, ...]:
+        # Same-URL records matter only while they name one target Subject.
+        return self.url_source_record_ids if self.url_target_id is not None else ()
+
+
+class _StaleResolutionPlan(Exception):
+    """The plan re-read under locks differs from the unlocked read."""
+
+
+_RESOLUTION_ATTEMPTS = 2
+
+
+def _read_resolution_plan(
     session: Session,
-    subject_ids: Sequence[int],
-) -> set[int]:
-    if not subject_ids:
-        return set()
-    return set(
-        session.scalars(
-            select(Subject.id)
-            .where(Subject.id.in_(sorted(set(subject_ids))))
-            .order_by(Subject.id)
-            .with_for_update()
-        )
-    )
+    source_record_id: int | None,
+    canonical_url: str | None,
+) -> _ResolutionPlan:
+    """Read the record's mapping and URL candidates, taking no locks.
 
-
-def resolve_source_record_observation(
-    session: Session,
-    *,
-    observation: BronzeObservation,
-    decided_at: datetime,
-) -> DeterministicResolutionResult:
-    """Persist Bronze first, then apply exact-key/URL resolution atomically.
-
-    Existing ``(source, external_key)`` resolution always wins.  URL-only
-    assignment is allowed only when the exact canonical endpoint currently
-    identifies one distinct current Subject.  Ambiguous or unmatched records
-    remain explicitly unresolved, and a prior unassignment remains
-    ``needs_review`` until a caller makes an explicit assignment decision.
+    Column reads bypass the ORM identity map: a caller-held projection object
+    goes stale as triggers advance ``current_resolution``.
     """
-    persisted = persist_source_record_observation(session, observation)
+    prior = (
+        session.execute(
+            select(CurrentResolution.state, CurrentResolution.subject_id).where(
+                CurrentResolution.source_record_id == source_record_id
+            )
+        ).one_or_none()
+        if source_record_id is not None
+        else None
+    )
+    prior_state = prior.state if prior is not None else None
+    prior_subject_id = prior.subject_id if prior is not None else None
 
-    # The provenance command holds the endpoint's NO KEY UPDATE lock when a
-    # URL is present. That prevents another deterministic resolver from
-    # adding a same-URL record while this transaction selects its lock set.
-    # Read likely targets before Source Record locks so every Identity writer
-    # retains the established Subject -> Source Record ordering.
-    prior = session.get(CurrentResolution, persisted.source_record_id)
+    prior_is_current: bool | None = None
+    successor_ids: tuple[int, ...] = ()
+    if prior_state == "resolved" and prior_subject_id is not None:
+        prior_is_current = session.scalar(
+            select(SubjectCurrentness.is_current).where(
+                SubjectCurrentness.subject_id == prior_subject_id
+            )
+        )
+        if prior_is_current is False:
+            successor_ids = _current_lineage_successor_ids(session, prior_subject_id)
+
     url_source_record_ids: tuple[int, ...] = ()
     url_target_id: int | None = None
-    if persisted.canonical_url is not None and (prior is None or prior.state == "unresolved"):
-        url_source_record_ids = source_record_ids_for_canonical_url(
-            session, persisted.canonical_url
+    if canonical_url is not None and prior_state in {None, "unresolved"}:
+        url_source_record_ids = tuple(
+            record_id
+            for record_id in source_record_ids_for_canonical_url(session, canonical_url)
+            if record_id != source_record_id
         )
         url_subject_ids = _current_subject_ids_for_source_records(session, url_source_record_ids)
         if len(url_subject_ids) == 1:
             url_target_id = url_subject_ids[0]
 
-    retired_successor_ids: tuple[int, ...] = ()
-    if prior is not None and prior.state == "resolved" and prior.subject_id is not None:
-        prior_is_current = session.scalar(
-            select(SubjectCurrentness.is_current).where(
-                SubjectCurrentness.subject_id == prior.subject_id
-            )
-        )
-        if prior_is_current is False:
-            retired_successor_ids = _current_lineage_successor_ids(session, prior.subject_id)
-
-    subjects_to_lock = {
-        subject_id
-        for subject_id in (
-            *retired_successor_ids,
-            prior.subject_id if prior is not None and prior.state == "resolved" else None,
-            url_target_id,
-        )
-        if subject_id is not None
-    }
-    _lock_identity_maintenance(session)
-    locked_subject_ids = _lock_resolution_subjects_for_update(session, sorted(subjects_to_lock))
-    # Explicit assign/remap/unassign commands lock their owning Source Record.
-    # Lock every record observed at this URL in stable order so none can
-    # introduce a second Subject between the uniqueness check and URL assign.
-    source_record_ids_to_lock = sorted(set(url_source_record_ids) | {persisted.source_record_id})
-    for source_record_id in source_record_ids_to_lock:
-        _lock_source_resolution(session, source_record_id)
-    current = session.scalar(
-        select(CurrentResolution)
-        .where(CurrentResolution.source_record_id == persisted.source_record_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
+    return _ResolutionPlan(
+        prior_state=prior_state,
+        prior_subject_id=prior_subject_id,
+        prior_is_current=prior_is_current,
+        successor_ids=successor_ids,
+        url_source_record_ids=url_source_record_ids,
+        url_target_id=url_target_id,
     )
 
-    appended_event_ids: list[int] = []
-    if current is not None and current.state == "resolved":
-        subject_id = current.subject_id
-        subject_is_current = (
-            session.scalar(
-                select(SubjectCurrentness.is_current).where(
-                    SubjectCurrentness.subject_id == subject_id
-                )
-            )
-            if subject_id is not None
-            else False
-        )
-        if subject_id is not None and subject_is_current and subject_id in locked_subject_ids:
-            _refresh_subject_readiness(session, subject_id)
-            return DeterministicResolutionResult(
-                source_id=persisted.source_id,
-                source_record_id=persisted.source_record_id,
-                source_record_version_id=persisted.source_record_version_id,
-                capture_id=persisted.capture_id,
-                evidence_id=persisted.evidence_id,
-                state="resolved",
-                subject_id=subject_id,
-                match_basis="external_key",
-                appended_event_ids=(),
-                source_record_created=persisted.source_record_created,
-                observation_created=persisted.observation_created,
-            )
 
-        if subject_id is None:
-            raise RuntimeError("resolved projection has no Subject")
-        stable_successors = _current_lineage_successor_ids(session, subject_id)
-        if len(stable_successors) == 1 and stable_successors[0] in locked_subject_ids:
-            successor_id = stable_successors[0]
-            remapped = remap_source_record(
-                session,
-                source_record_id=persisted.source_record_id,
-                from_subject_id=subject_id,
-                to_subject_id=successor_id,
-                decision=_deterministic_decision(
-                    method="exact-key-lineage-successor",
-                    decided_at=decided_at,
-                    effective_at=observation.observed_at,
-                ),
-                evidence_ids=[persisted.evidence_id],
-            )
-            return DeterministicResolutionResult(
-                source_id=persisted.source_id,
-                source_record_id=persisted.source_record_id,
-                source_record_version_id=persisted.source_record_version_id,
-                capture_id=persisted.capture_id,
-                evidence_id=persisted.evidence_id,
-                state="resolved",
-                subject_id=successor_id,
-                match_basis="external_key_lineage",
-                appended_event_ids=(remapped.id,),
-                source_record_created=persisted.source_record_created,
-                observation_created=persisted.observation_created,
-            )
-
-        unassigned = unassign_source_record(
-            session,
-            source_record_id=persisted.source_record_id,
-            from_subject_id=subject_id,
-            decision=_deterministic_decision(
-                method="exact-key-retired-subject",
-                decided_at=decided_at,
-                effective_at=observation.observed_at,
-            ),
-            evidence_ids=[persisted.evidence_id],
-        )
-        return DeterministicResolutionResult(
-            source_id=persisted.source_id,
-            source_record_id=persisted.source_record_id,
-            source_record_version_id=persisted.source_record_version_id,
-            capture_id=persisted.capture_id,
-            evidence_id=persisted.evidence_id,
-            state="needs_review",
-            subject_id=None,
-            match_basis=None,
-            appended_event_ids=(unassigned.id,),
-            source_record_created=persisted.source_record_created,
-            observation_created=persisted.observation_created,
-        )
-
-    if current is not None and current.state == "needs_review":
-        return DeterministicResolutionResult(
-            source_id=persisted.source_id,
-            source_record_id=persisted.source_record_id,
-            source_record_version_id=persisted.source_record_version_id,
-            capture_id=persisted.capture_id,
-            evidence_id=persisted.evidence_id,
-            state="needs_review",
-            subject_id=None,
-            match_basis=None,
-            appended_event_ids=(),
-            source_record_created=persisted.source_record_created,
-            observation_created=persisted.observation_created,
-        )
-
-    if current is None:
-        opened = admit_source_record(
-            session,
-            source_record_id=persisted.source_record_id,
-            decision=_deterministic_decision(
-                method="deterministic-admission",
-                decided_at=decided_at,
-                effective_at=observation.observed_at,
-            ),
-            evidence_ids=[persisted.evidence_id],
-        )
-        appended_event_ids.append(opened.id)
-
-    # Re-check after all URL-associated Source Record locks. Only the one
-    # Subject locked before those records may be used; a changed, newly
-    # ambiguous, or unexpectedly expanded candidate set remains unresolved.
-    stable_url_target_id: int | None = None
-    if url_target_id is not None and persisted.canonical_url is not None:
-        current_url_source_record_ids = source_record_ids_for_canonical_url(
-            session,
-            persisted.canonical_url,
-        )
-        current_url_subject_ids = _current_subject_ids_for_source_records(
-            session,
-            current_url_source_record_ids,
-        )
-        if current_url_source_record_ids == url_source_record_ids and current_url_subject_ids == (
-            url_target_id,
-        ):
-            stable_url_target_id = url_target_id
-
-    if stable_url_target_id is not None:
-        assigned = assign_source_record(
-            session,
-            source_record_id=persisted.source_record_id,
-            to_subject_id=stable_url_target_id,
-            decision=_deterministic_decision(
-                method="exact-canonical-url",
-                decided_at=decided_at,
-                effective_at=observation.observed_at,
-            ),
-            evidence_ids=[persisted.evidence_id],
-        )
-        appended_event_ids.append(assigned.id)
-        _refresh_subject_readiness(session, stable_url_target_id)
-        state = "resolved"
-        subject_id = stable_url_target_id
-        match_basis = "canonical_url"
-    else:
-        state = "unresolved"
-        subject_id = None
-        match_basis = None
-
+def _resolution_result(
+    persisted: PersistedBronzeObservation,
+    state: str,
+    subject_id: int | None = None,
+    match_basis: str | None = None,
+    appended_event_ids: Sequence[int] = (),
+) -> DeterministicResolutionResult:
     return DeterministicResolutionResult(
         source_id=persisted.source_id,
         source_record_id=persisted.source_record_id,
@@ -745,6 +641,150 @@ def resolve_source_record_observation(
         appended_event_ids=tuple(appended_event_ids),
         source_record_created=persisted.source_record_created,
         observation_created=persisted.observation_created,
+    )
+
+
+def resolve_source_record_observation(
+    session: Session,
+    *,
+    observation: BronzeObservation,
+    decided_at: datetime,
+) -> DeterministicResolutionResult:
+    """Persist Bronze, then apply exact-key/URL resolution atomically.
+
+    Existing ``(source, external_key)`` resolution always wins.  URL-only
+    assignment is allowed only when the exact canonical endpoint currently
+    identifies one distinct current Subject.  Ambiguous or unmatched records
+    remain explicitly unresolved, and a prior unassignment remains
+    ``needs_review`` until a caller makes an explicit assignment decision.
+
+    Locks follow the module's lock order. Each attempt runs in a savepoint; if
+    Identity changed between the unlocked plan and the locked re-read, the
+    savepoint is rolled back (releasing its locks and Bronze writes) and the
+    observation is planned once more. A second change raises
+    :class:`ResolutionConflictError`.
+    """
+    canonical_url: str | None = None
+    # Persistence rejects an invalid URL with its own message.
+    with suppress(ValueError):
+        if observation.canonical_url is not None:
+            canonical_url = canonicalize_http_url(observation.canonical_url)
+
+    for _ in range(_RESOLUTION_ATTEMPTS):
+        try:
+            with session.begin_nested():
+                return _resolve_observation_once(
+                    session,
+                    observation=observation,
+                    canonical_url=canonical_url,
+                    decided_at=decided_at,
+                )
+        except _StaleResolutionPlan:
+            continue
+    raise ResolutionConflictError(
+        f"Identity for {observation.source_namespace!r} record "
+        f"{observation.external_key!r} changed while resolution acquired its locks"
+    )
+
+
+def _resolve_observation_once(
+    session: Session,
+    *,
+    observation: BronzeObservation,
+    canonical_url: str | None,
+    decided_at: datetime,
+) -> DeterministicResolutionResult:
+    source_record_id = find_source_record_id(
+        session, observation.source_namespace, observation.external_key
+    )
+    plan = _read_resolution_plan(session, source_record_id, canonical_url)
+
+    _lock_identity_maintenance(session)
+    _lock_resolution_subjects(session, *plan.subject_ids)
+    if canonical_url is not None:
+        # The endpoint lock keeps other resolvers from adding a same-URL record
+        # while this one relies on the URL's candidate set.
+        lock_source_endpoint(session, canonical_url)
+    record_ids_to_lock = set(plan.locked_url_source_record_ids)
+    if source_record_id is not None:
+        record_ids_to_lock.add(source_record_id)
+    for record_id in sorted(record_ids_to_lock):
+        _lock_source_resolution(session, record_id)
+
+    persisted = persist_source_record_observation(session, observation)
+    if source_record_id is None and not persisted.source_record_created:
+        # Another observer created the record after the plan was read, so
+        # its lock was taken out of order and its mapping was never planned.
+        raise _StaleResolutionPlan
+    session.execute(
+        select(CurrentResolution.source_record_id)
+        .where(CurrentResolution.source_record_id == persisted.source_record_id)
+        .with_for_update()
+    )
+    if _read_resolution_plan(session, persisted.source_record_id, canonical_url) != plan:
+        raise _StaleResolutionPlan
+
+    def decision(method: str) -> DecisionMetadata:
+        return _deterministic_decision(
+            method=method,
+            decided_at=decided_at,
+            effective_at=observation.observed_at,
+        )
+
+    if plan.prior_state == "resolved":
+        subject_id = plan.prior_subject_id
+        if subject_id is None:
+            raise RuntimeError("resolved projection has no Subject")
+        if plan.prior_is_current:
+            _refresh_subject_readiness(session, subject_id)
+            return _resolution_result(persisted, "resolved", subject_id, "external_key")
+        if len(plan.successor_ids) == 1:
+            successor_id = plan.successor_ids[0]
+            remapped = remap_source_record(
+                session,
+                source_record_id=persisted.source_record_id,
+                from_subject_id=subject_id,
+                to_subject_id=successor_id,
+                decision=decision("exact-key-lineage-successor"),
+                evidence_ids=[persisted.evidence_id],
+            )
+            return _resolution_result(
+                persisted, "resolved", successor_id, "external_key_lineage", [remapped.id]
+            )
+        unassigned = unassign_source_record(
+            session,
+            source_record_id=persisted.source_record_id,
+            from_subject_id=subject_id,
+            decision=decision("exact-key-retired-subject"),
+            evidence_ids=[persisted.evidence_id],
+        )
+        return _resolution_result(persisted, "needs_review", appended_event_ids=[unassigned.id])
+
+    if plan.prior_state == "needs_review":
+        return _resolution_result(persisted, "needs_review")
+
+    appended_event_ids: list[int] = []
+    if plan.prior_state is None:
+        opened = admit_source_record(
+            session,
+            source_record_id=persisted.source_record_id,
+            decision=decision("deterministic-admission"),
+            evidence_ids=[persisted.evidence_id],
+        )
+        appended_event_ids.append(opened.id)
+
+    if plan.url_target_id is None:
+        return _resolution_result(persisted, "unresolved", appended_event_ids=appended_event_ids)
+    assigned = assign_source_record(
+        session,
+        source_record_id=persisted.source_record_id,
+        to_subject_id=plan.url_target_id,
+        decision=decision("exact-canonical-url"),
+        evidence_ids=[persisted.evidence_id],
+    )
+    appended_event_ids.append(assigned.id)
+    return _resolution_result(
+        persisted, "resolved", plan.url_target_id, "canonical_url", appended_event_ids
     )
 
 
@@ -799,9 +839,15 @@ def record_subject_change(
     )
     _lock_identity_maintenance(session)
     member_ids = sorted(set(input_subject_ids) | set(output_subject_ids))
+    # populate_existing: triggers maintain currentness, and a caller-held ORM
+    # object would otherwise answer these locked reads from the identity map.
     subjects = list(
         session.scalars(
-            select(Subject).where(Subject.id.in_(member_ids)).order_by(Subject.id).with_for_update()
+            select(Subject)
+            .where(Subject.id.in_(member_ids))
+            .order_by(Subject.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
     )
     by_id = {subject.id: subject for subject in subjects}
@@ -817,6 +863,7 @@ def record_subject_change(
             .where(SubjectCurrentness.subject_id.in_(member_ids))
             .order_by(SubjectCurrentness.subject_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
     )
     currentness_by_id = {row.subject_id: row for row in currentness_rows}

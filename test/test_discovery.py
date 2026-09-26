@@ -164,6 +164,20 @@ def test_blank_name_is_skipped(session: Session) -> None:
     assert (report.fetched, report.skipped, report.minted) == (1, 1, 0)
 
 
+def test_name_without_letters_or_digits_is_skipped(session: Session) -> None:
+    # R18: no fallback to the raw name as a fingerprint; a symbol-only name has
+    # no match key, so it is skipped before Bronze like a blank one.
+    report = _run(session, [_poi("!!!", 30.25, -97.75, gers_id="gers-symbols")])
+    assert (report.fetched, report.skipped, report.minted) == (1, 1, 0)
+    assert _resolution_subject(session, "gers-symbols") is None
+
+
+def test_non_english_name_is_fingerprinted_not_copied(session: Session) -> None:
+    report = _run(session, [_poi("ＫＩＮＧ 金龍", 30.26, -97.74)])
+    assert report.minted == 1
+    assert _current_establishment_count(session, "king 金龍") == 1
+
+
 def test_ambiguous_match_is_left_unresolved(session: Session) -> None:
     # Two current same-fingerprint Establishments within 50 m, created directly so
     # neither deduped the other; a POI at that point must not auto-merge.

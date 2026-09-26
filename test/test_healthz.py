@@ -38,10 +38,32 @@ def test_readyz_unavailable_when_db_unreachable(
 
     response = client.get("/readyz")
     assert response.status_code == 503
-    assert response.json() == {"status": "unavailable"}
+    body = response.json()
+    # The standard error envelope (R44), not the ad hoc {"status": ...} body:
+    # a caller already knows how to parse every other error from this API.
+    assert body["code"] == "service_unavailable"
+    assert set(body) == {"detail", "code", "trace_id"}
+    assert body["trace_id"]
 
 
 def test_readyz_ok_when_db_reachable(client: TestClient, database_engine: Engine) -> None:
     response = client.get("/readyz")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_readyz_failure_is_logged(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class _BrokenEngine:
+        def connect(self) -> None:
+            raise RuntimeError("simulated connection failure")
+
+    monkeypatch.setattr("apps.api.main.get_engine", lambda: _BrokenEngine())
+
+    with caplog.at_level("ERROR"):
+        client.get("/readyz")
+
+    assert any("readyz_failed" in record.getMessage() for record in caplog.records)

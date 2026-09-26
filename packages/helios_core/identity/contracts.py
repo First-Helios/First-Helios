@@ -49,6 +49,14 @@ class SubjectNotEligibleError(ValueError):
     """Raised when a vertical attempts to use an ineligible Subject."""
 
 
+class ResolutionConflictError(RuntimeError):
+    """Identity kept changing while deterministic resolution acquired its locks.
+
+    Nothing from the attempt remains in the transaction. Like SQLSTATE
+    40001/40P01, the caller should roll back and retry the whole transaction.
+    """
+
+
 def subject_meets_readiness_policy(
     session: Session,
     subject_id: int,

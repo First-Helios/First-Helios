@@ -256,7 +256,9 @@ def persist_source_record_observation(
             .on_conflict_do_nothing(index_elements=[SourceEndpoint.canonical_uri])
         )
         # FOR NO KEY UPDATE serializes deterministic URL resolution while
-        # remaining compatible with Capture's FK key-share lock.
+        # remaining compatible with Capture's FK key-share lock. Identity's
+        # resolver takes this lock itself, after its Subjects and before any
+        # Source Record, so here it is normally already held.
         endpoint = session.scalar(
             select(SourceEndpoint)
             .where(SourceEndpoint.canonical_uri == canonical_url)
@@ -272,9 +274,13 @@ def persist_source_record_observation(
                 f"{endpoint.endpoint_kind!r}"
             )
 
-    # Serialize retry detection without blocking Identity's KEY SHARE lock on
-    # this immutable key. This makes an exact retry idempotent under concurrent
-    # delivery while leaving genuinely new observations append-only.
+    # FOR NO KEY UPDATE serializes exact-retry detection between concurrent
+    # observers of one record (so an identical retry stays idempotent and new
+    # observations stay append-only) while remaining compatible with the FOR
+    # KEY SHARE locks that FK checks from new versions and Identity events
+    # take. It is the same lock Identity decisions take on the record, so
+    # Identity's resolver acquires it before calling this function, after its
+    # Subjects (see ``packages.helios_core.identity.commands``, "Lock order").
     source_record = session.scalar(
         select(SourceRecord)
         .where(SourceRecord.id == source_record.id)
@@ -378,6 +384,37 @@ def source_record_ids_for_canonical_url(
         .order_by(SourceRecordVersion.source_record_id)
     )
     return tuple(session.scalars(statement))
+
+
+def find_source_record_id(
+    session: Session,
+    source_namespace: str,
+    external_key: str,
+) -> int | None:
+    """Return an existing ``(source, external_key)`` record ID, taking no lock."""
+    return session.scalar(
+        select(SourceRecord.id)
+        .join(Source, Source.id == SourceRecord.source_id)
+        .where(
+            Source.namespace == source_namespace,
+            SourceRecord.external_key == external_key,
+        )
+    )
+
+
+def lock_source_endpoint(session: Session, canonical_url: str) -> bool:
+    """Lock an existing Source Endpoint with the lock observation persistence takes.
+
+    Returns ``False`` when no endpoint exists yet; persistence then creates it.
+    """
+    return (
+        session.scalar(
+            select(SourceEndpoint.id)
+            .where(SourceEndpoint.canonical_uri == canonical_url)
+            .with_for_update(key_share=True)
+        )
+        is not None
+    )
 
 
 def lock_source_record(session: Session, source_record_id: int) -> bool:

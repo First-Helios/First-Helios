@@ -15,6 +15,12 @@ from apps.api.errors import InvalidCursorError
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
+# subject_id is a Postgres BIGINT (identity/models.py); a decoded value
+# outside this range can never match a row, and passing it straight to a
+# ``::BIGINT`` comparison raises `numeric field overflow` -- a 500, not a
+# 400 (R41). Also the upper bound path/query params are validated against.
+BIGINT_MAX = 2**63 - 1
+
 
 def encode_cursor(subject_id: int) -> str:
     """Encode the last row's ordering key as an opaque token."""
@@ -28,6 +34,6 @@ def decode_cursor(cursor: str) -> int:
         value = int(raw.decode("ascii"))
     except (ValueError, UnicodeDecodeError) as exc:
         raise InvalidCursorError from exc
-    if value < 0:
+    if value < 0 or value > BIGINT_MAX:
         raise InvalidCursorError
     return value
