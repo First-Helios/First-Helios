@@ -33,7 +33,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 2 | S2 Crawler etiquette ⚠ (protego) | D2 | M | [X] #24 |
 | 3 | S3 URL pipeline logic | D3 | M | [X] #25 |
 | 4 | S4 Menu-URL quality | D3 | S | [X] #26 |
-| 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 draft, awaiting acceptance |
+| 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 merged; ADR-0011 still Proposed |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
 | 🚦 | **Pi gate:** OK to run `resolve_urls` on the Pi again after S2, S3, S4, S6 are merged | | | [ ] |
@@ -42,10 +42,10 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 9 | S9 API polish | D7 | M | [X] #32 |
 | 10 | S10 Test hardening sweep | — | S | [X] #31 |
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 |
-| 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 draft, ADR-0012 awaiting acceptance |
+| 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 merged; ADR-0012 still Proposed |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
 | 🚦 | **Phase 5 gate:** start menu extraction after S7, S11, S12, S13 are merged | | | [ ] |
-| 14 | S14 Schema tightening migration ⚠ | D8 | M | [ ] |
+| 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 draft, awaiting review |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [ ] |
 | 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
 | 17 | S17 Close-out | all | S | [ ] |
@@ -742,12 +742,12 @@ Branch: `fix/venue-lifecycle`
 Hand-off prompt: `Do session S14 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/schema-tightening` · Models + migration: hand-reviewed SQL, owner review.
 
-- [ ] R53 Bronze tables lack their own TRUNCATE guard
-- [ ] R54 Some Bronze columns still editable (`first_seen_at`, `kind`, `endpoint_kind`)
-- [ ] R56 Naive datetimes / out-of-scale confidence accepted; DB silently rounds
-- [ ] R60 DB text/time checks looser than Python (whitespace, blanks, infinity)
-- [ ] R63 Invisible or over-long names slip through or abort the run
-- [ ] R69 Negative staleness allowed in Gold
+- [X] R53 Bronze tables lack their own TRUNCATE guard
+- [X] R54 Some Bronze columns still editable (`first_seen_at`, `kind`, `endpoint_kind`)
+- [X] R56 Naive datetimes / out-of-scale confidence accepted; DB silently rounds (Python rejects; the `NUMERIC(6,5)` column still rounds, see #35)
+- [X] R60 DB text/time checks looser than Python (whitespace, blanks, infinity)
+- [X] R63 Invisible or over-long names slip through or abort the run
+- [X] R69 Negative staleness allowed in Gold
 
 **Recommended approach**
 - One forward migration; check existing Pi data won't violate a new CHECK first
@@ -826,10 +826,11 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Merged | — |
 | 2026-09-23 | S3 | fix/url-pipeline | #25 | Merged | — (D3.7–3.9 asked and answered at session start) |
 | 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
-| 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Draft, awaiting owner acceptance of ADR-0011 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
+| 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Merged; ADR-0011 still Proposed (S6 waits on acceptance) | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 waits on ADR acceptance) |
 | 2026-09-23 | S7 | fix/gold-refresh | #28 | Merged (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
 | 2026-09-23 | S8 | fix/identity-locks | #30 | Merged (concurrency-sensitive) | — (D6.1 answered on `main`. Lock order documented in `identity/commands.py`; the resolver plans without locks, then locks and re-checks inside a savepoint and retries once (`ResolutionConflictError`). R61 fixed for the stale read only; Establishment demotion is left to ADR-0012 (D6.4). Transactions that run several commands (discovery batches, URL resolve-then-assign) can still deadlock; this is documented, not fixed) |
 | 2026-09-24 | S9 | fix/api-polish | #32 | Merged | — (row added by S11; S9 left no log row) |
 | 2026-09-24 | S10 | test/hardening | #31 | Merged | — (ran in parallel with S9; `seed_sample_venues` gone since S1, so R29 covers discovery + URL paths; forged `subject_id=None` raises `22023`, now pinned. Row restored by S11: the S8 merge dropped it) |
 | 2026-09-24 | S11 | fix/menu-selector | #33 | Merged (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |
-| 2026-09-24 | S12 | fix/identity-matching | #34 | Draft, ADR-0012 Proposed, awaiting owner acceptance | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 waits on ADR-0012 acceptance, with a pick per §1–§5) |
+| 2026-09-24 | S12 | fix/identity-matching | #34 | Merged; ADR-0012 still Proposed (S13 waits on acceptance) | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 waits on ADR-0012 acceptance, with a pick per §1–§5) |
+| 2026-09-24 | S14 | fix/schema-tightening | #35 | Draft, awaiting owner review (migration `12a76ebed458` + models) | — (Uses a new `bronze.whitespace()` instead of `menu.whitespace()`: Bronze/Identity sit below Menu. Existing CHECK names kept. R56's DB rounding stays (would need `ALTER COLUMN TYPE`); Python rejects first. Gold staleness is clamped to 0. Run `docs/reviews/sql/2026-09-22-s14-schema-tightening-precheck.sql` on the Pi before upgrading. `test_legacy_identity_reset` and `test_gold_migration` now compare at `5f3a9c1e7b24`, not head) |

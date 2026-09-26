@@ -59,7 +59,7 @@ def test_gold_downgrade_and_reupgrade_preserve_menu(disposable_database_engine: 
             assert connection.scalar(text("SELECT to_regnamespace('gold')")) is None
             assert connection.scalar(text("SELECT version_num FROM public.alembic_version")) == MENU
             assert _menu_counts(connection) == before
-        migrate("upgrade", "head")
+        migrate("upgrade", GOLD)
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM public.alembic_version")) == GOLD
             assert connection.scalar(text("SELECT count(*) FROM gold.current_menu")) == 0

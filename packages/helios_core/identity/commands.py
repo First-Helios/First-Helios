@@ -98,14 +98,26 @@ class DecisionMetadata:
     effective_at: datetime
 
     def __post_init__(self) -> None:
-        if not 0 <= self.confidence <= 1:
-            raise ValueError("decision confidence must be between 0 and 1")
+        # NUMERIC(6, 5) would silently round a sixth place (R56).
+        if (
+            not isinstance(self.confidence, Decimal)
+            or not self.confidence.is_finite()
+            or not 0 <= self.confidence <= 1
+            or self.confidence != self.confidence.quantize(Decimal("0.00001"))
+        ):
+            raise ValueError(
+                "decision confidence requires a finite exact Decimal in [0, 1] "
+                "with at most five places"
+            )
         if not self.method or self.method != self.method.strip():
             raise ValueError("decision method must be nonblank and trimmed")
         if not self.method_version or self.method_version != self.method_version.strip():
             raise ValueError("decision method_version must be nonblank and trimmed")
         if self.actor_class not in {"rule", "model", "migration", "human"}:
             raise ValueError("decision actor_class is not allowed")
+        for name in ("decided_at", "effective_at"):
+            if getattr(self, name).utcoffset() is None:
+                raise ValueError(f"decision {name} requires an aware timestamp")
 
 
 def _lock_identity_maintenance(session: Session) -> None:

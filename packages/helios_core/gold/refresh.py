@@ -48,7 +48,9 @@ def _row_values(
     content = selection.content
     staleness: int | None = None
     if price.state == "priced" and price.observed_at is not None:
-        staleness = int((request.effective_instant - price.observed_at).total_seconds())
+        # An age: a price observed after E is fresh at E, not negatively aged,
+        # and ck_gold_staleness rejects a negative value (R69).
+        staleness = max(0, int((request.effective_instant - price.observed_at).total_seconds()))
     return {
         "subject_id": request.subject_id,
         "subject_kind": request.subject_kind,

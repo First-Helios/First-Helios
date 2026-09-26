@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 
 DEFAULT_DEDUPE_RADIUS_M = 50.0
 _COORD_QUANTUM = Decimal("0.000001")  # Place stores Numeric(9, 6)
+_MAX_NAME_LENGTH = 255  # Organization canonical_name and name_fingerprint
 
 
 @dataclass(slots=True)
@@ -205,7 +206,9 @@ def run_discovery(
         # A name with no letters or digits has no match key; skip it rather than
         # fall back to the raw string, which would bypass normalization (R18).
         fingerprint = name_fingerprint(poi.name)
-        if not fingerprint:
+        # A name that doesn't fit the Organization columns would abort the whole
+        # transaction at flush; skip it like a nameless POI (R63).
+        if not fingerprint or max(len(poi.name.strip()), len(fingerprint)) > _MAX_NAME_LENGTH:
             report.skipped += 1
             continue
 

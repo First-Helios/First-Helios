@@ -172,6 +172,29 @@ def test_name_without_letters_or_digits_is_skipped(session: Session) -> None:
     assert _resolution_subject(session, "gers-symbols") is None
 
 
+@pytest.mark.parametrize("name", ["\u200b", "\u200d\ufeff\u2060"])
+def test_invisible_name_is_skipped(session: Session, name: str) -> None:
+    # R63: zero-width characters alone are not a name.
+    report = _run(session, [_poi(name, 30.25, -97.75, gers_id="gers-invisible")])
+    assert (report.fetched, report.skipped, report.minted) == (1, 1, 0)
+    assert _resolution_subject(session, "gers-invisible") is None
+
+
+def test_name_longer_than_the_column_is_skipped_not_fatal(session: Session) -> None:
+    # R63: a 256-character name used to abort the whole transaction at flush
+    # (String(255)); it is skipped before Bronze, and the run carries on.
+    report = _run(
+        session,
+        [
+            _poi("a" * 256, 30.25, -97.75, gers_id="gers-too-long"),
+            _poi("b" * 255, 30.26, -97.74, gers_id="gers-longest"),
+        ],
+    )
+    assert (report.fetched, report.skipped, report.minted) == (2, 1, 1)
+    assert _resolution_subject(session, "gers-too-long") is None
+    assert _resolution_subject(session, "gers-longest") is not None
+
+
 def test_non_english_name_is_fingerprinted_not_copied(session: Session) -> None:
     report = _run(session, [_poi("ＫＩＮＧ 金龍", 30.26, -97.74)])
     assert report.minted == 1
