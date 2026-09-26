@@ -250,7 +250,12 @@ def complete_variants(rows: list[Row], blocks: list[Block]) -> tuple[list[Row], 
         have = {parse_amount(r.amount) for r in grp}
         if not cands or not have <= printed:
             continue
-        missing = [c for c in cands if parse_amount(c.amount) not in have]
+        # from a run below the item, only LABELED lines ("Bottle $26", "Without Ice $5.00"): on
+        # pages that print every price twice, an unlabeled "$11" right after the item's own price
+        # is the next item's leading copy (found on held-out-3, see the tracker log)
+        missing = [
+            c for c in cands if parse_amount(c.amount) not in have and (not run or c.variant)
+        ]
         if missing:
             extra[id(grp[-1])] = missing
     out: list[Row] = []

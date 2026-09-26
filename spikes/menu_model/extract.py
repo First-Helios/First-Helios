@@ -500,12 +500,17 @@ def _key(name: str) -> frozenset[str]:
     return frozenset(norm_tokens(name))
 
 
+def _block_no(block_id: str | None) -> int:
+    return int(block_id[1:]) if block_id and block_id[1:].isdigit() else 0
+
+
 def _match(row: Row, gold_items: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Gold item with the same name tokens (prefer the claimed block), else a same-block subset match."""
     k = _key(row.item)
     same = [g for g in gold_items if _key(g["name"]) == k]
-    if same:
-        return next((g for g in same if g["block"] == row.claimed_block), same[0])
+    if same:  # the same dish in two sections (dinner/lunch): the one printed nearest the claim
+        claim = _block_no(row.claimed_block)
+        return min(same, key=lambda g: abs(_block_no(g["block"]) - claim))
     for g in gold_items:
         gk = _key(g["name"])
         if g["block"] == row.claimed_block and k and (k <= gk or gk <= k):
