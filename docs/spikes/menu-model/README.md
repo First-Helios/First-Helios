@@ -247,6 +247,69 @@ path and speculative decoding. Do not treat the extractor as complete coverage: 
 | 2026-09-26 | H | spike/menu-model | Results table, findings, recommendation and open questions written; anonymized `labels-summary.md` added. Step G (cuisine) not run. Spike code stays on `spike/menu-model` (never merged); data stays in `var/spikes/menu-model/` and `~/menu-model-spike/` on the Pi. | Owner: answer the open questions, then write the Phase 5 ADR. Pi cleanup when done: `~/menu-model-spike` (17 GB: models, llama.cpp build, venvs, copied pages, results); skimmer units stay disabled unless re-enabled. |
 | 2026-09-26 | H-2 | spike/menu-model | Owner: usable prices (64 %) are the biggest problem. Per-page loss: 6 `html_list` pages with the price on its own line cause 59 % of lost prices; the model transcribes those line by line. Added deterministic row stitching (`stitch.py`, applied before duplicate collapse): usable prices 0.643 → 0.700 on the saved stress outputs (ho2 0.478 → 0.536, scored once), price accuracy unchanged. Caveat: one ho2 page was looked at while diagnosing. | Owner to pick next levers: prompt fix/role hints A/B, validator v3 on fresh labels, adaptive second pass. |
 
+## Next-session prompt (usable prices)
+
+Owner chose (2026-09-26) all three levers from open question 1. Launch from the repo root:
+`claude --model claude-opus-5-5`, effort **high**, mode: auto. Add the Pi password yourself (never
+commit it).
+
+```text
+Continue the menu-model spike: raise USABLE PRICES (validator-accepted rows with the exact gold
+price / all gold prices) from 0.700 toward >=0.80, quality first. Read docs/spikes/menu-model/
+README.md on main (Findings 3 and 7, open questions 1 and 10, Log rows E-5..H-2),
+spikes/menu_model/stress/PLAN.md on branch spike/menu-model, CLAUDE.md, ADR-0005 and
+ADR-0010 Amendment 3. Work in a worktree on branch spike/menu-model (git fetch; not from main).
+
+State you inherit (spike/menu-model, spikes/menu_model/):
+- Winner: Qwen3-4B-Instruct-2507 Q4_0 via llama.cpp (84e76d8) on the Pi CPU, process v2.2
+  (MENU_SPIKE_PROCESS=v2: compact GBNF grammar, keyed rows, 1.5k chunks + context line,
+  sparse-chunk retry), 2 slots, -fa on -ctk q8_0 -ctv q8_0, llama-server pinned to cores 4-7
+  on 127.0.0.1. Row stitching (stitch.py, MENU_SPIKE_STITCH=1) runs before duplicate collapse.
+- Baseline to beat, on the saved stress outputs (tag st-q40): usable prices 0.700 all 24 gold
+  pages, 0.793 ho1, 0.536 ho2 (ho2 scored once); price accuracy 0.99; item recall 0.896.
+  Loss buckets: item missed 11.2 %, unpriced 8.2 %, validator rejects 6.3 % (mostly "size
+  label after the price"), wrong amount 4.1 %. Tools: extract score --repair [--ref],
+  stress/loss.py, stress/report.py.
+- Local data: MENU_SPIKE_DATA=<main checkout>/var/spikes/menu-model (gitignored; pages/,
+  extract/<tag>/, stress logs, own ML venv .venv-ml). Page cache valid to 2026-09-30.
+- Pi: ssh orangepi@192.168.1.219 (password: <ask owner>, pass via SSHPASS + sshpass -e, never
+  in a file). Login shell is fish: pipe script files into `bash -s`; no $(...) inline. Work
+  only in ~/menu-model-spike (.venv py3.12, llama.cpp/build, gguf/, data/, logs/,
+  spikes/menu_model/stress/*.sh). Scripts must append to logs (a power outage already cut
+  one run). Helios containers did not restart after that outage: don't touch them.
+
+Do, in order, re-checking quality after every change that alters outputs:
+1. Split-layout prompt fix (v2.3) + block-role hints A/B. Tell the model that price and
+   description lines after an item belong to it (example in that layout). Hints: prefix lines
+   with the block classifier's role ([item]/[price]/[desc]/[section]) as advisory labels. The
+   block classifier must be OUT-OF-FOLD for every scored page (train without that page's
+   venue); the pickled one saw all labeled pages. Tune only on dev+ho1 pages (heavy losers:
+   2bfd0cdf0f6e, a647f424c99e, 1b6233a80694, abefb3029e57); compare with st-q40+stitch on
+   the same pages; then score ho2 once.
+2. Fresh labels -> held-out-3 -> validator v3. Draft gold (page/block/items+prices, same
+   labeltool/review.txt flow) for ~10 priced, distinct venues among the 18 unlabeled
+   stress-run menu pages (14fb3f6b00e4 19b79ff22898 1cf69aeeae45 295dac75322d 3cc7760ea65f
+   3d5c71b32afb 5724eae2a973 575abefd2796 62699b3f5eb3 684e203a8ab6 72940930f472
+   8d02fd690571 91dabe47afda a0f382a174e1 c61d591a7cab d3af46c8798e f78f7e304456
+   ff9e184bc72e; several are duplicates or unpriced chain menus, so fetch more with
+   SiteFetcher if fewer than ~8 qualify). STOP for the owner's 20 % spot-check before any
+   metric. Then validator v3 (size label after the price, bare-number prices, glued dietary
+   marks), tuned on dev+ho1+ho2, frozen, scored on held-out-3 (injected corruptions + real
+   output).
+3. Adaptive second pass: per page, coverage = accepted priced rows / printed prices in the
+   extracted blocks; below a threshold chosen on dev/ho1, re-extract with a stronger setup
+   (3k chunks and/or Qwen3-8B Q4_K_M, ~5 GB, owner-approved) and keep the better validated
+   result. Report extra Pi time per page.
+4. Final: the best configuration on all gold pages (24 + held-out-3) on the Pi, fan on,
+   stress-test style (PLAN.md rule, quality gate first), vs the v2.2+stitch baseline; update
+   the tracker Results/Findings/Log.
+
+Stop and ask before: installing torch, any model download > 5 GB other than Qwen3-8B, any
+sudo, touching the Helios stack. End state: push spike/menu-model; docs-only PR updating
+docs/spikes/menu-model/README.md (+ labels-summary.md). If the budget runs low: commit, push,
+write resume notes in the tracker Log.
+```
+
 ## Hand-off prompt
 
 Launch from the repo root: `claude --model claude-opus-5-5`, then `/model` →
