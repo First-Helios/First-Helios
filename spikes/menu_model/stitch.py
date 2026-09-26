@@ -34,7 +34,14 @@ import re
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from spikes.menu_model.validator import PriceToken, Row, norm_tokens, price_label, price_tokens
+from spikes.menu_model.validator import (
+    PriceToken,
+    Row,
+    norm_tokens,
+    parse_amount,
+    price_label,
+    price_tokens,
+)
 
 if TYPE_CHECKING:
     from spikes.menu_model.segment import Block
@@ -74,7 +81,9 @@ def _is_sentence_line(
     return len(name.split()) >= 7 or (len(name) > 25 and name.rstrip().endswith("."))  # noqa: PLR2004
 
 
-def stitch(rows: list[Row], blocks: list[Block], *, v2: bool = False) -> tuple[list[Row], int]:
+def stitch(
+    rows: list[Row], blocks: list[Block], *, v2: bool = False, v3: bool = False
+) -> tuple[list[Row], int]:
     """Stitched rows and how many pseudo-item rows were merged into an item (or dropped)."""
     index = {b.id: i for i, b in enumerate(blocks)}
     priced_blocks = (
@@ -145,7 +154,39 @@ def stitch(rows: list[Row], blocks: list[Block], *, v2: bool = False) -> tuple[l
     if v2:
         out, filled = fill_prices(out, blocks)
         merged += filled
+    if v3:
+        out, added = complete_variants(out, blocks)
+        merged += added
     return out, merged
+
+
+def _run_after(
+    pos: int, blocks: list[Block], prices: list[list[PriceToken]], row_blocks: set[int]
+) -> list[int]:
+    """Price-only blocks printed just below a name block (skipping description/icon lines)."""
+    run: list[int] = []
+    for j in range(pos + 1, min(pos + 1 + FILL_GAP, len(blocks))):
+        toks = [t for t in prices[j] if t.kind == "money"]
+        if j in row_blocks or blocks[j].heading:
+            break
+        if toks and _price_only(blocks[j].text, toks):
+            run.append(j)
+            continue
+        if run or toks:
+            break  # end of the price run, or a priced line that is not price-only
+    return run
+
+
+def _run_rows(
+    row: Row, blocks: list[Block], prices: list[list[PriceToken]], run: list[int]
+) -> list[Row]:
+    out = []
+    for j in run:
+        for t in [t for t in prices[j] if t.kind == "money"]:
+            label = price_label(blocks[j].text, prices[j], t) or None
+            amount = blocks[j].text[t.start : t.end].replace("$", "").strip()
+            out.append(replace(row, amount=amount, variant=label))
+    return out
 
 
 def fill_prices(rows: list[Row], blocks: list[Block]) -> tuple[list[Row], int]:
@@ -161,28 +202,62 @@ def fill_prices(rows: list[Row], blocks: list[Block]) -> tuple[list[Row], int]:
         if row.amount is not None or pos is None or not _names_in(row.item, blocks[pos].text):
             out.append(row)
             continue
-        run: list[int] = []
-        for j in range(pos + 1, min(pos + 1 + FILL_GAP, len(blocks))):
-            toks = [t for t in prices[j] if t.kind == "money"]
-            if j in row_blocks or blocks[j].heading:
-                break
-            if toks and _price_only(blocks[j].text, toks):
-                run.append(j)
-                continue
-            if run or toks:
-                break  # end of the price run, or a priced line that is not price-only
+        run = _run_after(pos, blocks, prices, row_blocks)
         if not run:
             out.append(row)
             continue
         filled += 1
-        for j in run:
-            for t in [t for t in prices[j] if t.kind == "money"]:
-                label = price_label(blocks[j].text, prices[j], t) or None
-                amount = blocks[j].text[t.start : t.end].replace("$", "").strip()
-                out.append(
-                    replace(row, amount=amount, variant=label, claimed_block=row.claimed_block)
-                )
+        out.extend(_run_rows(row, blocks, prices, run))
     return out, filled
+
+
+def complete_variants(rows: list[Row], blocks: list[Block]) -> tuple[list[Row], int]:
+    """v3: an item priced from the run of price-only lines below it gets the run's other prices.
+
+    "Glass $7" / "Bottle $26" under a wine, "$4.50" / "Without Ice $5.00" under a tea: the model
+    kept the first price and dropped the second. Only when every amount the model gave the item
+    is printed in that run (so the run is the item's own), the run's missing amounts are added
+    with their printed labels as variants.
+    """
+    index = {b.id: i for i, b in enumerate(blocks)}
+    prices = price_tokens(blocks)
+    row_blocks = {j for r in rows if (j := _name_block(r, blocks, index)) is not None}
+    groups: dict[tuple[str, int], list[Row]] = {}
+    for r in rows:
+        pos = _name_block(r, blocks, index)
+        if r.amount is not None and pos is not None and _names_in(r.item, blocks[pos].text):
+            groups.setdefault((" ".join(norm_tokens(r.item)), pos), []).append(r)
+    per_block: dict[int, int] = {}
+    for _, pos in groups:
+        per_block[pos] = per_block.get(pos, 0) + 1
+    extra: dict[int, list[Row]] = {}  # id(last row of the group) -> rows to add after it
+    for (_, pos), grp in groups.items():
+        run = _run_after(pos, blocks, prices, row_blocks - {pos})
+        cands = _run_rows(grp[0], blocks, prices, run)
+        if not run and per_block[pos] == 1:  # inline "Americano $2/$3": one item in the block
+            start = blocks[pos].text.lower().find(norm_tokens(grp[0].item)[0])
+            toks = [t for t in prices[pos] if t.kind == "money" and t.start > start]
+            if len(toks) >= 2:  # noqa: PLR2004
+                cands = [
+                    replace(
+                        grp[0],
+                        amount=blocks[pos].text[t.start : t.end].replace("$", "").strip(),
+                        variant=price_label(blocks[pos].text, prices[pos], t) or None,
+                    )
+                    for t in toks
+                ]
+        printed = {parse_amount(c.amount) for c in cands}
+        have = {parse_amount(r.amount) for r in grp}
+        if not cands or not have <= printed:
+            continue
+        missing = [c for c in cands if parse_amount(c.amount) not in have]
+        if missing:
+            extra[id(grp[-1])] = missing
+    out: list[Row] = []
+    for r in rows:
+        out.append(r)
+        out.extend(extra.get(id(r), []))
+    return out, sum(len(v) for v in extra.values())
 
 
 def _name_block(row: Row, blocks: list[Block], index: dict[str, int]) -> int | None:

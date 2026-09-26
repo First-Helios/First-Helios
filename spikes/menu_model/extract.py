@@ -404,7 +404,8 @@ def rows_of(
     4. (stitch v2) a variant whose words are all in the item name ("(L)", "(GF/V)" copied
        from "Orange Chicken (L)") is dropped: it was not printed with the price.
     """
-    v2 = os.environ.get("MENU_SPIKE_STITCH") == "2"
+    v2 = os.environ.get("MENU_SPIKE_STITCH") in {"2", "3"}
+    v3 = os.environ.get("MENU_SPIKE_STITCH") == "3"
     rows: list[Row] = []
     for ch in result["chunks"]:
         out = parse_output(ch["raw"]) if "raw" in ch else ch["out"]
@@ -426,7 +427,7 @@ def rows_of(
                         )
                     )
     if blocks is not None:  # stitch split lines before dedupe (identical price lines repeat)
-        rows, _ = stitch(rows, blocks, v2=v2)
+        rows, _ = stitch(rows, blocks, v2=v2, v3=v3)
     if repair and v2:  # after stitching: "$7.50/Medium" must still read as a price line there
         rows = [
             replace(r, variant=None)

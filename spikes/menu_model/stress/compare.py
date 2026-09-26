@@ -2,7 +2,8 @@
 
     MENU_SPIKE_DATA=... uv run python -m spikes.menu_model.stress.compare --split=tune TAG [TAG ...]
 
-Stitch modes: 1 = v1 row stitching (the st-q40 baseline), 2 = stitch v2 (+ price fill).
+Stitch modes: 1 = v1 row stitching (the st-q40 baseline), 2 = stitch v2 (+ price fill),
+3 = v3 (+ variant completion).
 Scores only pages present in every tag, so the lines are comparable.
 """
 
@@ -25,7 +26,7 @@ def main() -> None:
     print(f"split={split} pages={len(common)} (of {len(pages)})")
     print(f"{'tag':18} st  items  usable  acc    FR     catch  rows  gen_tok")
     for tag in tags:
-        for mode in ("1", "2"):
+        for mode in ("1", "2", "3"):
             os.environ["MENU_SPIKE_STITCH"] = mode
             with contextlib.redirect_stdout(io.StringIO()):
                 s = cmd_score(tag, split, repair=True, only=common)
