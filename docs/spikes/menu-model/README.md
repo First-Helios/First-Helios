@@ -272,16 +272,25 @@ unseen layouts can still fool the repairs (finding 9).
 ### Open questions for the owner (before the Phase 5 ADR)
 
 1. ~~Is ~70 % usable prices acceptable?~~ Owner chose all three levers (2026-09-26); now
-   **0.84 on the 24 pages, 0.74-0.77 held out, accuracy 0.98-0.99** (finding 3). New question:
-   **ship at that level**, or first work on the biggest remaining loss, items never extracted
-   (8-13 %)? The options there are a stronger model on other hardware, or deterministic parsers
-   for the common site builders (Wix, Square, BentoBox, which also cover some JS-only pages).
+   **0.84 on the 24 pages, 0.74-0.77 held out, accuracy 0.98-0.99** (finding 3).
+   **Owner decision (2026-09-27): one universal process, no per-platform parsers** (Wix, Square,
+   BentoBox, ...): "we are willing to lose data for the benefit of a universal process." Per-site
+   code needs re-aligning for every page that does not play nice; future gains should come from
+   upgrading the model, the classifier or the generic data preparation. Consequences for the
+   ADR: (a) the remaining loss (items never extracted, 8-13 %) is closed only by a better model or
+   better generic data prep, not by site code; (b) the deterministic repairs (stitch) stay only
+   while they are layout-generic, pay off on a held-out set, and still add something when the
+   model changes (re-measure each on every model/prompt change; delete what the model no longer
+   needs); (c) the evaluation harness (gold labels, held-out discipline, `stress/compare.py`,
+   `stress/loss.py`) is what makes a model swap a measured drop-in. Still open: keep the
+   schema.org JSON-LD parse (a web standard, not per-site code; priced 3 of 48 menu pages)?
 2. **Throughput budget:** is a ~12-day first pass and change-only monthly runs acceptable on the
    staging Pi, alongside Helios? Or should extraction run on other hardware?
 3. **Change detection:** what counts as "changed" (content hash of the menu region, fetched
    HTML, ETag)? This decides the monthly cost.
 4. **JS-only menus** (32 of 219 pages; Toast, Square, Clover, BentoBox): stay out of scope,
-   or does Phase 5 add a headless browser (new runtime dependency, ADR)?
+   or does Phase 5 add a headless browser (new runtime dependency, ADR)? A headless render is
+   generic data prep (one path for every site), so it fits the universal-process decision (1).
 5. **Validator bars:** v3 (tuned on the 24 pages, held-out-3: catch 0.971, false reject 0.103)
    still misses the 0.99 / 0.10 bars on unseen pages; its remaining misses are swaps of
    unlabeled prices that text cannot distinguish. Relax the catch bar to ~0.97 for the ADR, or
