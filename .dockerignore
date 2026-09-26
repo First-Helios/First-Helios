@@ -5,23 +5,24 @@
 .github
 
 # Virtualenvs — the image builds its own at /app/.venv
-.venv
-venv
+# `**/` matches at any depth, not just the context root (R84).
+**/.venv
+**/venv
 
 # Python caches
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-dist/
-build/
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/*.egg-info/
+**/dist/
+**/build/
 
 # Tool caches / test output
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
-htmlcov/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.coverage
+**/htmlcov/
 
 # Local env — never bake secrets into an image
 .env

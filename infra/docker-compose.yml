@@ -1,3 +1,7 @@
+# Named so `docker compose ps`/`down` from any cwd targets this stack
+# specifically instead of falling back to a directory-derived name (R114).
+name: helios
+
 services:
   postgres:
     # NOT the official postgis/postgis image: that one is amd64-only by
@@ -5,7 +9,9 @@ services:
     # Orange Pi staging box. This is a fork of the official build system by
     # the official image's co-maintainer, publishing multi-arch tags.
     # See docs/adr/0002-containerization.md.
-    image: imresamu/postgis:16-3.4
+    # Pinned by digest for reproducible pulls; tag kept in the comment for
+    # humans (R90).
+    image: imresamu/postgis@sha256:6da75969915039b7356058b4310d43fde88c275ada982c2dfee29da68445ff4d  # 16-3.4
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-helios}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helios}
@@ -19,6 +25,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   # One-shot: runs to completion, then exits. Kept separate from the api
   # service so migrations never race across replicas on startup.
@@ -27,8 +34,11 @@ services:
       context: ..
       dockerfile: infra/Dockerfile
     command: ["alembic", "upgrade", "head"]
+    # HELIOS_COMPOSE_DATABASE_URL, not DATABASE_URL: a shell that already
+    # exports DATABASE_URL (e.g. to point `make ci`/alembic at a disposable
+    # *_test database) must never leak into this container's DB target (R86).
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
+      DATABASE_URL: ${HELIOS_COMPOSE_DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,9 +49,13 @@ services:
       context: ..
       dockerfile: infra/Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
+      DATABASE_URL: ${HELIOS_COMPOSE_DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
     ports:
       - "127.0.0.1:8000:8000"
+    volumes:
+      # Discovery CLIs (run via `docker compose exec api ...` on the Pi) cache
+      # to var/; without this the cache is lost on every container recreate (R113).
+      - ../var:/app/var
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,6 +72,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    restart: unless-stopped
 
 volumes:
   postgres_data:

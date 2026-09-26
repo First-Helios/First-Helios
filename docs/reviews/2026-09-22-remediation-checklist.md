@@ -319,11 +319,11 @@ explains it. When a group is done, its sessions are ready to hand off.
   - *Why:* all low-risk constraints; batching them means one migration review, not six.
 - **8.2 Infra PR**: `.dockerignore`, compose env handling, `var/` volume, restart
   policy, project name, image digests
-  - [ ] ⭐ Approve  - [ ] Skip for now
+  - [X] ⭐ Approve  - [ ] Skip for now
   - *Why:* stops the Pi losing caches every run and lets the stack survive a reboot.
 - **8.3 `pyproject.toml`**: rename to `helios`, declare `pydantic`/`starlette`, drop
   unused `pytest-asyncio`
-  - [ ] ⭐ Approve  - [ ] Skip for now
+  - [X] ⭐ Approve  - [ ] Skip for now
   - *Why:* cosmetic, but makes the dependency list honest.
 
 ### D9 — Accept or defer (no session needed; confirm with a tick)
