@@ -1,0 +1,179 @@
+{
+ "page_id": "62c001df2971",
+ "url": "https://www.peets.com/pages/menu",
+ "page_label": "menu",
+ "format": "html_cards",
+ "menu_regions": [
+  [
+   "b0156",
+   "b0218"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0156": "section",
+  "b0159": "item",
+  "b0162": "item",
+  "b0165": "item",
+  "b0168": "item",
+  "b0171": "item",
+  "b0174": "item",
+  "b0177": "item",
+  "b0180": "item",
+  "b0183": "item",
+  "b0186": "item",
+  "b0189": "item",
+  "b0192": "item",
+  "b0195": "item",
+  "b0198": "item",
+  "b0201": "item",
+  "b0204": "item",
+  "b0207": "item",
+  "b0210": "item",
+  "b0213": "item",
+  "b0216": "item"
+ },
+ "items": [
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Caramel Apple Protein Smoothie",
+   "description": null,
+   "prices": [],
+   "block": "b0159"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Sparkling Green Apple Energy",
+   "description": null,
+   "prices": [],
+   "block": "b0162"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Iced Pumpkin Latte with Vanilla Dream Top",
+   "description": null,
+   "prices": [],
+   "block": "b0165"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Iced Pumpkin Chai Latte with Vanilla Dream Top",
+   "description": null,
+   "prices": [],
+   "block": "b0168"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Iced Pumpkin Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0171"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Pumpkin Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0174"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Iced Pumpkin Chai Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0177"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Pumpkin Chai Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0180"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Protein Banana Cold Brew Oat Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0183"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Protein Banana Matcha Oat Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0186"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Sparkling Watermelon Matcha Spritz",
+   "description": null,
+   "prices": [],
+   "block": "b0189"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Sparkling Strawberry Energy",
+   "description": null,
+   "prices": [],
+   "block": "b0192"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Sparkling Watermelon Energy",
+   "description": null,
+   "prices": [],
+   "block": "b0195"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Vanilla Protein Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0198"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Iced Vanilla Protein Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0201"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Golden Protein Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0204"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Iced Golden Protein Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0207"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Matcha Protein Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0210"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Iced Matcha Protein Latte",
+   "description": null,
+   "prices": [],
+   "block": "b0213"
+  },
+  {
+   "section": "FROM THE COFFEEBAR",
+   "name": "Espresso",
+   "description": null,
+   "prices": [],
+   "block": "b0216"
+  }
+ ],
+ "note": "unpriced chain menu landing: item cards (name printed twice + \"Order Now\"), category tiles below; $ amounts on page are shipping promos"
+}

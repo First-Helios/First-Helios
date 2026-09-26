@@ -1,0 +1,178 @@
+{
+ "page_id": "7e3a83b84a97",
+ "url": "https://www.juiceland.com/best-sellers/",
+ "page_label": "menu",
+ "format": "html_cards",
+ "menu_regions": [
+  [
+   "b0049",
+   "b0113"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0049": "item",
+  "b0050": "price",
+  "b0057": "item",
+  "b0058": "price",
+  "b0059": "price",
+  "b0060": "price",
+  "b0061": "description",
+  "b0067": "item",
+  "b0068": "price",
+  "b0069": "price",
+  "b0070": "price",
+  "b0077": "item",
+  "b0078": "price",
+  "b0084": "item",
+  "b0085": "price",
+  "b0092": "item",
+  "b0093": "price",
+  "b0094": "price",
+  "b0095": "price",
+  "b0102": "item",
+  "b0103": "price",
+  "b0104": "price",
+  "b0105": "price",
+  "b0111": "item",
+  "b0112": "price",
+  "b0051": "description",
+  "b0071": "description",
+  "b0079": "description",
+  "b0086": "description",
+  "b0096": "description",
+  "b0106": "description",
+  "b0113": "description"
+ },
+ "items": [
+  {
+   "section": null,
+   "name": "Frijole Roller Burrito",
+   "description": "potato and mushroom picadillo, black bean spread, vegan sour cream, side of housemade habanero sauce",
+   "prices": [
+    {
+     "amount": "8.95",
+     "variant": null
+    }
+   ],
+   "block": "b0049"
+  },
+  {
+   "section": null,
+   "name": "Originator",
+   "description": "apple, almondmilk, banana, blueberry, cherry, peanut butter, spirulina, pick your protein: pea, hemp, whey (+$1)",
+   "prices": [
+    {
+     "amount": "7.95",
+     "variant": null
+    },
+    {
+     "amount": "8.95",
+     "variant": null
+    },
+    {
+     "amount": "10.95",
+     "variant": null
+    }
+   ],
+   "block": "b0057"
+  },
+  {
+   "section": null,
+   "name": "Wundershowzen",
+   "description": "almondmilk, banana, spinach, hemp protein, peanut butter",
+   "prices": [
+    {
+     "amount": "6.25",
+     "variant": null
+    },
+    {
+     "amount": "6.95",
+     "variant": null
+    },
+    {
+     "amount": "8.95",
+     "variant": null
+    }
+   ],
+   "block": "b0067"
+  },
+  {
+   "section": null,
+   "name": "Mid East Feast",
+   "description": "award-winning hummus, quinoa tabouli (gluten-free), Kalamata Olives, Lemon, Parsley, Paprika",
+   "prices": [
+    {
+     "amount": "5.95",
+     "variant": null
+    }
+   ],
+   "block": "b0077"
+  },
+  {
+   "section": null,
+   "name": "Golden Milk Coffee Latte",
+   "description": "oatmilk, coffee, turmeric, cinnamon, vanilla, coconut oil, coconut sugar",
+   "prices": [
+    {
+     "amount": "6.50",
+     "variant": null
+    }
+   ],
+   "block": "b0084"
+  },
+  {
+   "section": null,
+   "name": "Tigerlilly",
+   "description": "cucumber, celery, kale, parsley, spinach",
+   "prices": [
+    {
+     "amount": "8.95",
+     "variant": null
+    },
+    {
+     "amount": "10.95",
+     "variant": null
+    },
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0092"
+  },
+  {
+   "section": null,
+   "name": "Morning Sunshine",
+   "description": "pineapple, orange, banana, mango, goji berry, local bee pollen",
+   "prices": [
+    {
+     "amount": "7.95",
+     "variant": null
+    },
+    {
+     "amount": "8.95",
+     "variant": null
+    },
+    {
+     "amount": "10.95",
+     "variant": null
+    }
+   ],
+   "block": "b0102"
+  },
+  {
+   "section": null,
+   "name": "Recovery Punch",
+   "description": "watermelon, pineapple, coconut water, beet, lime, sea salt",
+   "prices": [
+    {
+     "amount": "8.50",
+     "variant": null
+    }
+   ],
+   "block": "b0111"
+  }
+ ],
+ "note": "best-sellers subset of the chain menu: image alt text, <h3> name, size prices, ingredients"
+}

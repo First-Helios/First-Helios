@@ -1,0 +1,217 @@
+{
+ "page_id": "cbcdb04ffbe0",
+ "url": "https://kapatad.com/drink-menu",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0035",
+   "b0065"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0035": "section",
+  "b0048": "section",
+  "b0051": "section",
+  "b0036": "item",
+  "b0038": "item",
+  "b0040": "item",
+  "b0042": "item",
+  "b0044": "item",
+  "b0046": "item",
+  "b0037": "price",
+  "b0039": "price",
+  "b0041": "price",
+  "b0043": "price",
+  "b0045": "price",
+  "b0047": "price",
+  "b0049": "item",
+  "b0050": "price",
+  "b0052": "item",
+  "b0054": "item",
+  "b0056": "item",
+  "b0058": "item",
+  "b0060": "item",
+  "b0062": "item",
+  "b0064": "item",
+  "b0053": "price",
+  "b0055": "price",
+  "b0057": "price",
+  "b0059": "price",
+  "b0061": "price",
+  "b0063": "price",
+  "b0065": "price"
+ },
+ "items": [
+  {
+   "section": "List",
+   "name": "Kirin Ichiban",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0036"
+  },
+  {
+   "section": "List",
+   "name": "Kirin Light",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "List",
+   "name": "Budweiser",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.00",
+     "variant": null
+    }
+   ],
+   "block": "b0040"
+  },
+  {
+   "section": "List",
+   "name": "Michelob Ultra",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0042"
+  },
+  {
+   "section": "List",
+   "name": "Hopadillo IPA",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0044"
+  },
+  {
+   "section": "List",
+   "name": "Stella Artois",
+   "description": null,
+   "prices": [
+    {
+     "amount": "5.25",
+     "variant": null
+    }
+   ],
+   "block": "b0046"
+  },
+  {
+   "section": "Wine By The Glass",
+   "name": "Wine By The Glass",
+   "description": null,
+   "prices": [
+    {
+     "amount": "8.00",
+     "variant": null
+    }
+   ],
+   "block": "b0049"
+  },
+  {
+   "section": "List",
+   "name": "Iced Tea",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0052"
+  },
+  {
+   "section": "List",
+   "name": "Hot Tea",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0054"
+  },
+  {
+   "section": "List",
+   "name": "Coke",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0056"
+  },
+  {
+   "section": "List",
+   "name": "Diet Coke",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0058"
+  },
+  {
+   "section": "List",
+   "name": "Sprite",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0060"
+  },
+  {
+   "section": "List",
+   "name": "Dr. Pepper",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0062"
+  },
+  {
+   "section": "List",
+   "name": "Lemonade",
+   "description": null,
+   "prices": [
+    {
+     "amount": "3.50",
+     "variant": null
+    }
+   ],
+   "block": "b0064"
+  }
+ ],
+ "note": "SpotHopper-style name/price div pairs; tab labels are noise, generic \"List\" headings are the sections"
+}

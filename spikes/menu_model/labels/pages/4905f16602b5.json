@@ -1,0 +1,574 @@
+{
+ "page_id": "4905f16602b5",
+ "url": "https://www.emarestaurants.com/austin/menus",
+ "page_label": "menu",
+ "format": "html_list",
+ "menu_regions": [
+  [
+   "b0028",
+   "b0117"
+  ]
+ ],
+ "reviewed": true,
+ "blocks": {
+  "b0028": "section",
+  "b0030": "section",
+  "b0032": "item",
+  "b0033": "price",
+  "b0034": "item",
+  "b0035": "price",
+  "b0036": "item",
+  "b0037": "price",
+  "b0038": "item",
+  "b0039": "price",
+  "b0040": "section",
+  "b0041": "item",
+  "b0042": "price",
+  "b0043": "item",
+  "b0044": "price",
+  "b0045": "item",
+  "b0046": "price",
+  "b0047": "item",
+  "b0048": "price",
+  "b0049": "item",
+  "b0050": "price",
+  "b0051": "section",
+  "b0052": "item",
+  "b0053": "price",
+  "b0054": "item",
+  "b0055": "price",
+  "b0056": "item",
+  "b0057": "price",
+  "b0058": "item",
+  "b0059": "price",
+  "b0060": "section",
+  "b0061": "item",
+  "b0062": "price",
+  "b0063": "item",
+  "b0064": "price",
+  "b0065": "item",
+  "b0066": "price",
+  "b0067": "item",
+  "b0068": "price",
+  "b0069": "section",
+  "b0070": "item",
+  "b0071": "price",
+  "b0072": "item",
+  "b0073": "price",
+  "b0074": "item",
+  "b0075": "price",
+  "b0076": "item",
+  "b0077": "price",
+  "b0078": "section",
+  "b0079": "item",
+  "b0080": "price",
+  "b0081": "item",
+  "b0082": "price",
+  "b0083": "item",
+  "b0084": "price",
+  "b0085": "item",
+  "b0086": "price",
+  "b0087": "section",
+  "b0088": "item",
+  "b0089": "price",
+  "b0090": "item",
+  "b0091": "price",
+  "b0092": "item",
+  "b0093": "price",
+  "b0094": "item",
+  "b0095": "price",
+  "b0096": "section",
+  "b0097": "item",
+  "b0098": "price",
+  "b0099": "item",
+  "b0100": "price",
+  "b0101": "item",
+  "b0102": "price",
+  "b0103": "item",
+  "b0104": "price",
+  "b0105": "item",
+  "b0106": "price",
+  "b0107": "section",
+  "b0108": "item",
+  "b0109": "price",
+  "b0110": "item",
+  "b0111": "price",
+  "b0112": "item",
+  "b0113": "price",
+  "b0114": "item",
+  "b0115": "price",
+  "b0116": "item",
+  "b0117": "price"
+ },
+ "items": [
+  {
+   "section": "Lunch Specials",
+   "name": "FALAFEL SANDWICH",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0032"
+  },
+  {
+   "section": "Lunch Specials",
+   "name": "BRAISED SHORT RIB SANDWICH",
+   "description": null,
+   "prices": [
+    {
+     "amount": "18.95",
+     "variant": null
+    }
+   ],
+   "block": "b0034"
+  },
+  {
+   "section": "Lunch Specials",
+   "name": "PRIME STEAK SANDWICH",
+   "description": null,
+   "prices": [
+    {
+     "amount": "28.95",
+     "variant": null
+    }
+   ],
+   "block": "b0036"
+  },
+  {
+   "section": "Lunch Specials",
+   "name": "AHI TUNA POKE BOWL",
+   "description": null,
+   "prices": [
+    {
+     "amount": "24.95",
+     "variant": null
+    }
+   ],
+   "block": "b0038"
+  },
+  {
+   "section": "Hummus",
+   "name": "Classic",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0041"
+  },
+  {
+   "section": "Hummus",
+   "name": "Spicy",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.95",
+     "variant": null
+    }
+   ],
+   "block": "b0043"
+  },
+  {
+   "section": "Hummus",
+   "name": "Sweet Corn",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0045"
+  },
+  {
+   "section": "Hummus",
+   "name": "Pumpkin",
+   "description": null,
+   "prices": [
+    {
+     "amount": "18.95",
+     "variant": null
+    }
+   ],
+   "block": "b0047"
+  },
+  {
+   "section": "Hummus",
+   "name": "Lamb Ragu",
+   "description": null,
+   "prices": [
+    {
+     "amount": "21.95",
+     "variant": null
+    }
+   ],
+   "block": "b0049"
+  },
+  {
+   "section": "Spreads",
+   "name": "Charred Eggplant",
+   "description": null,
+   "prices": [
+    {
+     "amount": "15.95",
+     "variant": null
+    }
+   ],
+   "block": "b0052"
+  },
+  {
+   "section": "Spreads",
+   "name": "Spicy Whipped Feta",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0054"
+  },
+  {
+   "section": "Spreads",
+   "name": "Roasted Walnut",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0056"
+  },
+  {
+   "section": "Spreads",
+   "name": "Moroccan Onion Dip",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0058"
+  },
+  {
+   "section": "Raw",
+   "name": "Snapper Crudo",
+   "description": null,
+   "prices": [
+    {
+     "amount": "21.95",
+     "variant": null
+    }
+   ],
+   "block": "b0061"
+  },
+  {
+   "section": "Raw",
+   "name": "Octopus Carpaccio",
+   "description": null,
+   "prices": [
+    {
+     "amount": "21.95",
+     "variant": null
+    }
+   ],
+   "block": "b0063"
+  },
+  {
+   "section": "Raw",
+   "name": "Tuna & Watermelon",
+   "description": null,
+   "prices": [
+    {
+     "amount": "23.95",
+     "variant": null
+    }
+   ],
+   "block": "b0065"
+  },
+  {
+   "section": "Raw",
+   "name": "Hamachi",
+   "description": null,
+   "prices": [
+    {
+     "amount": "23.95",
+     "variant": null
+    }
+   ],
+   "block": "b0067"
+  },
+  {
+   "section": "Salads",
+   "name": "Brussels Sprouts & Honey Crisp Apple",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0070"
+  },
+  {
+   "section": "Salads",
+   "name": "Lemon Caesar",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0072"
+  },
+  {
+   "section": "Salads",
+   "name": "California Chopped",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0074"
+  },
+  {
+   "section": "Salads",
+   "name": "Greek Village",
+   "description": null,
+   "prices": [
+    {
+     "amount": "21.95",
+     "variant": null
+    }
+   ],
+   "block": "b0076"
+  },
+  {
+   "section": "Vegetables",
+   "name": "Brussels Sprouts",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0079"
+  },
+  {
+   "section": "Vegetables",
+   "name": "Sweet Potato Latkes",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0081"
+  },
+  {
+   "section": "Vegetables",
+   "name": "Blistered Green Beans",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0083"
+  },
+  {
+   "section": "Vegetables",
+   "name": "Roasted Autumn Squash",
+   "description": null,
+   "prices": [
+    {
+     "amount": "17.95",
+     "variant": null
+    }
+   ],
+   "block": "b0085"
+  },
+  {
+   "section": "Hot Mezze",
+   "name": "Crispy Potatoes",
+   "description": null,
+   "prices": [
+    {
+     "amount": "13.95",
+     "variant": null
+    }
+   ],
+   "block": "b0088"
+  },
+  {
+   "section": "Hot Mezze",
+   "name": "Green Falafel",
+   "description": null,
+   "prices": [
+    {
+     "amount": "14.95",
+     "variant": null
+    }
+   ],
+   "block": "b0090"
+  },
+  {
+   "section": "Hot Mezze",
+   "name": "Mushroom \"Escargot\"",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0092"
+  },
+  {
+   "section": "Hot Mezze",
+   "name": "Hot Honey Halloumi",
+   "description": null,
+   "prices": [
+    {
+     "amount": "16.95",
+     "variant": null
+    }
+   ],
+   "block": "b0094"
+  },
+  {
+   "section": "Kebabs",
+   "name": "Grilled Cauliflower",
+   "description": null,
+   "prices": [
+    {
+     "amount": "19.95",
+     "variant": null
+    }
+   ],
+   "block": "b0097"
+  },
+  {
+   "section": "Kebabs",
+   "name": "Grilled Chicken",
+   "description": null,
+   "prices": [
+    {
+     "amount": "22.95",
+     "variant": null
+    }
+   ],
+   "block": "b0099"
+  },
+  {
+   "section": "Kebabs",
+   "name": "Spicy Brisket Kefta",
+   "description": null,
+   "prices": [
+    {
+     "amount": "23.95",
+     "variant": null
+    }
+   ],
+   "block": "b0101"
+  },
+  {
+   "section": "Kebabs",
+   "name": "Faroe Islands Salmon",
+   "description": null,
+   "prices": [
+    {
+     "amount": "26.95",
+     "variant": null
+    }
+   ],
+   "block": "b0103"
+  },
+  {
+   "section": "Kebabs",
+   "name": "Grilled Oishii Shrimp",
+   "description": null,
+   "prices": [
+    {
+     "amount": "29.95",
+     "variant": null
+    }
+   ],
+   "block": "b0105"
+  },
+  {
+   "section": "Seafood & Braises",
+   "name": "Alaskan Halibut",
+   "description": null,
+   "prices": [
+    {
+     "amount": "34.95",
+     "variant": null
+    }
+   ],
+   "block": "b0108"
+  },
+  {
+   "section": "Seafood & Braises",
+   "name": "Grilled Branzino",
+   "description": null,
+   "prices": [
+    {
+     "amount": "42.95",
+     "variant": null
+    }
+   ],
+   "block": "b0110"
+  },
+  {
+   "section": "Seafood & Braises",
+   "name": "Spiced Chicken Thigh",
+   "description": null,
+   "prices": [
+    {
+     "amount": "22.95",
+     "variant": null
+    }
+   ],
+   "block": "b0112"
+  },
+  {
+   "section": "Seafood & Braises",
+   "name": "Slow-Braised Short Rib",
+   "description": null,
+   "prices": [
+    {
+     "amount": "36.95",
+     "variant": null
+    }
+   ],
+   "block": "b0114"
+  },
+  {
+   "section": "Seafood & Braises",
+   "name": "Grilled Prime Skirt Steak",
+   "description": null,
+   "prices": [
+    {
+     "amount": "38.95",
+     "variant": null
+    }
+   ],
+   "block": "b0116"
+  }
+ ],
+ "note": "name <p> then \"description / 17.95\" <p>; dietary marks glued to names by the segmenter (\"Classicv\", \"Snapper Crudo*gf\") - gold uses the clean printed name"
+}
