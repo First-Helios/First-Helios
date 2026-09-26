@@ -156,8 +156,15 @@ and ran at 7.1 pages/h.
 3. **Usable-price yield is the weak point: 64 % overall, 48 % on held-out-2.** Where gold prices
    go (runner-up, all gold): 12.8 % item found but no price attached (list layouts where the
    price is its own block), 12.7 % item missed, 5.8 % right price rejected by the validator
-   (variant/position rules), 3.0 % wrong amount. A deterministic "attach the nearest printed
-   price" step recovered only a little (held-out-2 0.480 → 0.503), so it is not a quick fix.
+   (variant/position rules), 3.0 % wrong amount. **Root cause of most of it (found after the
+   stress run):** on layouts where the price is its own line, the model transcribes line by line:
+   the item comes back unpriced and "$7.50/Medium" or "aleppo, urfa pepper / 15.95" comes back as
+   its own "item". Deterministic **row stitching** (`stitch.py`: move such a line's price onto the
+   unpriced item 1-3 blocks above, drop the pseudo-item) raised usable prices on the saved Q4_0
+   outputs from **0.643 to 0.700** (held-out-1 0.726 → 0.793; held-out-2, scored once, 0.478 →
+   0.536) at unchanged price accuracy (0.99) and zero runtime cost. Remaining loss: items missed
+   11.2 %, still unpriced 8.2 %, validator rejects 6.3 % (mostly "size label after the price"),
+   wrong amount 4.1 %.
 4. **The process mattered more than the model size.** Compact grammar-constrained JSON (no
    pretty-printing), keyed rows, ~1.5k-char chunks with a context line, and a deterministic
    retry for priced-but-empty chunks made the extractor ~2× faster than the first version while
@@ -195,9 +202,11 @@ path and speculative decoding. Do not treat the extractor as complete coverage: 
 
 ### Open questions for the owner (before the Phase 5 ADR)
 
-1. **Is ~64 % usable prices per menu page acceptable to ship**, with unpriced items stored as
-   items with unknown price, or is a price-attachment step (and its own held-out test) a
-   precondition?
+1. **Is ~70 % usable prices (with row stitching) acceptable to ship**, with unpriced items
+   stored as items with unknown price? Next levers, by expected gain: a split-layout prompt fix
+   (+ block-role hints), validator v3 on freshly labeled pages (the 18 unlabeled stress-run menu
+   pages), and an adaptive second pass for pages whose accepted rows cover few of their printed
+   prices. Target ~0.80 with the first two, ~0.85 with the third.
 2. **Throughput budget:** is a ~12-day first pass and change-only monthly runs acceptable on the
    staging Pi, alongside Helios? Or should extraction run on other hardware?
 3. **Change detection:** what counts as "changed" (content hash of the menu region, fetched
@@ -236,6 +245,7 @@ path and speculative decoding. Do not treat the extractor as complete coverage: 
 | 2026-09-25 | E-7 | spike/menu-model | **Stress run in progress; environment change noted.** Q4_K_M finished: 43 pages, 278 chunks, 21,832 s (6.1 h), 0 errors, **peak RSS 14.1 GB** (suspected llama-server in-RAM prompt cache, to verify with `--cache-ram 0`). Owner turned on the room's ceiling fan at 07:45 CDT (owner-confirmed; Pi clock is Asia/Shanghai), 1 h 22 min into the Q4_K_M run: its first 11 pages ran without the fan, the 12th straddled it (06:23-12:27 CDT); Q4_0 (12:28 CDT on) ran with the fan throughout. Monitor: before the fan SoC mean 79.4 °C, big cores up to 88 °C, big-core clock below max in 27% of samples (down to 600 MHz: thermal throttling); after the fan SoC mean 70.9 °C, 7%; Q4_0 so far 69.9 °C, 6%. Quality is unaffected (greedy decoding); Q4_K_M throughput is understated for its first ~1.4 h. | After Q4_0 ends: re-run Q4_K_M on the pages it processed before ~07:50 CDT with `--cache-ram 0` (fan-on timing + RAM check + determinism), then the report. |
 | 2026-09-26 | E-8 | spike/menu-model | **Stress test done** (power outage mid-Q4_0: Pi rebooted, 33/43 results intact, resumed; Q4_0 throughput stitched around the gap: 43 pages in 13,827 s + 6,191 s). Owner confirmed fan at 07:45 CDT; a fan-on Q4_K_M re-run of its 12 pre-fan pages gave identical outputs, ~2% faster (5,576 s vs ~5,700 s), and 5.7 GB peak RSS with `--cache-ram 0` (the 13.5-14.1 GB peaks were llama-server's host prompt cache, default 8,192 MiB). **Owner decision (2026-09-26): the 8 GB RAM bar is relaxed** (Pi has 31 GB; ~10-14 GB with the default prompt cache is fine). Results on all 24 gold pages (Q4_K_M / Q4_0): item recall 0.874 / 0.899; price recall on accepted rows 0.658 / 0.643; price accuracy on accepted 0.992 / 0.990; worst-format item recall 0.864 / 0.843; held-out-2 item recall 0.794 / 0.846, price recall 0.480 / 0.478; end-to-end item recall through the page gate 0.789 / 0.803; 0 errors, 0 truncations; 7.1 / ~7.7 pages/h; peak RSS 13.5 / 9.9 GB (cache on). **Winner by the pre-registered rule: Qwen3-4B-Instruct-2507 Q4_0**, process v2.2, 2 slots (quality tied within 0.02, faster). Owner agreed from the fan-on runs. Price-loss breakdown (Q4_K_M, all gold prices): accepted 65.8%, item found but unpriced 12.8%, item missed 12.7%, right price not accepted 5.8%, wrong amount 3.0%. | Write-up (H) and docs PR. |
 | 2026-09-26 | H | spike/menu-model | Results table, findings, recommendation and open questions written; anonymized `labels-summary.md` added. Step G (cuisine) not run. Spike code stays on `spike/menu-model` (never merged); data stays in `var/spikes/menu-model/` and `~/menu-model-spike/` on the Pi. | Owner: answer the open questions, then write the Phase 5 ADR. Pi cleanup when done: `~/menu-model-spike` (17 GB: models, llama.cpp build, venvs, copied pages, results); skimmer units stay disabled unless re-enabled. |
+| 2026-09-26 | H-2 | spike/menu-model | Owner: usable prices (64 %) are the biggest problem. Per-page loss: 6 `html_list` pages with the price on its own line cause 59 % of lost prices; the model transcribes those line by line. Added deterministic row stitching (`stitch.py`, applied before duplicate collapse): usable prices 0.643 → 0.700 on the saved stress outputs (ho2 0.478 → 0.536, scored once), price accuracy unchanged. Caveat: one ho2 page was looked at while diagnosing. | Owner to pick next levers: prompt fix/role hints A/B, validator v3 on fresh labels, adaptive second pass. |
 
 ## Hand-off prompt
 
