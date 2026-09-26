@@ -32,6 +32,7 @@ Checks (tracker §[5]):
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -50,6 +51,21 @@ _MONEY = re.compile(
     r"(?P<cur>\$)\s?(?P<a>\d{1,3}(?:,\d{3})*|\d+)(?:[.,](?P<c>\d{2}))?(?!\d)"
     r"|(?<![\w$.,])(?P<a2>\d{1,3})[.,](?P<c2>\d{2})(?![\d%])"
 )
+# v3 (usable-price session; MENU_SPIKE_VALIDATOR=v3, tuned on the 24 gold pages): a "$19.5"
+# price with one decimal digit is 19.50 (v2 read it as $19).
+V3 = os.environ.get("MENU_SPIKE_VALIDATOR") == "v3"
+_MONEY_V3 = re.compile(
+    r"(?P<cur>\$)\s?(?P<a>\d{1,3}(?:,\d{3})*|\d+)(?:[.,](?P<c>\d{2})|\.(?P<c1>\d))?(?!\d)"
+    r"|(?<![\w$.,])(?P<a2>\d{1,3})[.,](?P<c2>\d{2})(?![\d%])"
+)
+# v3: unpriced extracted "items" that are really description or nutrition lines ("an even
+# better twist on the classic", "Calories: 260", "Alergens:") no longer end an item's price scan.
+_NOT_ITEM = re.compile(
+    r"^[a-z]|:$|^(?i:calories|fat|carbohydrates|protein|allergens?|alergens)\b"
+    r"|^(?:\S+\s+){5,}\S+\.$"  # a 6+ word sentence ending in "."
+)
+_BARE_PAIR = re.compile(r"\s*\d{1,3}(?:\s*/\s*\d{1,3})+\s*")  # v3: "11 / 44"
+_DIET_MARKS = ("v", "vg", "gf", "df")  # v3: glued to a name, "Classicv"
 _BARE_INT = re.compile(r"(?<![\w$.,:/-])(\d{1,3})(?![\w.,:%/])")
 _WORD = re.compile(r"\w+", re.UNICODE)
 
@@ -107,10 +123,14 @@ def price_tokens(blocks: list[Block]) -> list[list[PriceToken]]:
     out: list[list[PriceToken]] = []
     for i, b in enumerate(blocks):
         toks: list[PriceToken] = []
-        for m in _MONEY.finditer(b.text):
+        for m in (_MONEY_V3 if V3 else _MONEY).finditer(b.text):
             whole = (m.group("a") or m.group("a2") or "0").replace(",", "")
-            cents = m.group("c") or m.group("c2") or "00"
+            c1 = m.groupdict().get("c1")
+            cents = m.group("c") or m.group("c2") or (f"{c1}0" if c1 else "00")
             toks.append(PriceToken(i, m.start(), m.end(), Decimal(f"{whole}.{cents}"), "money"))
+        if not toks and V3 and _BARE_PAIR.fullmatch(b.text):  # v3: "11 / 44" glass / bottle
+            for m in re.finditer(r"\d{1,3}", b.text):
+                toks.append(PriceToken(i, m.start(), m.end(), Decimal(m.group(0)), "bare"))
         if not toks:
             bare = list(_BARE_INT.finditer(b.text))
             if bare and not b.text[bare[-1].end() :].strip(" .-–—|"):
@@ -137,6 +157,8 @@ def _grounds(name_toks: list[str], block_toks: set[str], *, fuzzy: bool) -> bool
             continue
         if fuzzy and len(t) >= 5 and any(_edit1(t, u) for u in block_toks if len(u) >= 4):  # noqa: PLR2004
             continue
+        if V3 and any(t + mark in block_toks for mark in _DIET_MARKS):
+            continue  # v3: "Charred Eggplantv" - a dietary mark glued to the name
         return False
     return True
 
@@ -198,6 +220,8 @@ def _claimed_by_other(
 
 def _sole_number(block: Block) -> bool:
     """A bare integer is a price only when it stands alone ("16"), not "Calories: 300"."""
+    if V3 and _BARE_PAIR.fullmatch(block.text):
+        return True
     return re.fullmatch(r"\s*\d{1,3}\s*", block.text) is not None
 
 
@@ -261,6 +285,11 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
         if chosen is not None:
             cursor = chosen
     item_blocks = {i for i in name_block if i is not None}
+    stop_blocks = {  # blocks that end another item's price scan
+        i
+        for row, i in zip(rows, name_block, strict=True)
+        if i is not None and not (V3 and row.amount is None and _NOT_ITEM.search(row.item.strip()))
+    }
     # Name starts per block, so two items printed in one block ("Taco $3 Burrito $8")
     # each own only the prices between their name and the next item's name.
     starts_in: dict[int, list[int]] = {}
@@ -313,7 +342,7 @@ def validate(  # noqa: C901, PLR0912 - one linear pass mirroring the tracker's c
         # nearest run of price-bearing blocks after it, before the next item/heading.
         next_start = min((s for s in starts_in[nb] if s > span[0]), default=len(block.text))
         region = [t for t in prices[nb] if span[0] <= t.start < next_start]
-        region.extend(_price_run(blocks, prices, nb, item_blocks, inline=bool(region)))
+        region.extend(_price_run(blocks, prices, nb, stop_blocks, inline=bool(region)))
         if (  # price-first layout: only when nothing is priced after the name
             not region
             and nb > 0

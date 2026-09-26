@@ -124,12 +124,12 @@ def stitch(
         if (
             v2
             and pseudo
-            and _is_price_line(row)
+            and (_is_price_line(row) or (v3 and row.item.strip()[:1].islower()))
             and out
             and last_priced is not None
             and pos is not None
             and 0 < pos - last_priced[0] <= MAX_GAP
-            and last_priced[1] == row.amount
+            and parse_amount(last_priced[1]) == parse_amount(row.amount)
         ):
             merged += 1  # "$20.24" echoed as an item right after "Soup  20.24"
             continue
