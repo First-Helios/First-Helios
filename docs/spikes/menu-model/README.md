@@ -171,7 +171,16 @@ and ran at 7.1 pages/h.
 6. **Deterministic stages carry less than hoped.** Structured data (JSON-LD, embedded state)
    priced 3 of 48 menu pages; 32 of 219 fetched pages (15 %) need JavaScript (not attempted, per
    the brief); the block classifier missed its bar and is not needed in the winning pipeline.
-7. **Operations.** Without airflow the Pi throttled 27 % of the time (SoC ~80 °C, cores to 600
+7. **Where the Pi's time goes, and the unused lever.** In the stress run 83 % of LLM time was
+   generating output (~5.6 tok/s across 2 slots), 17 % reading input, 2 % on chunks that
+   produced nothing. On the gold pages 30 % of generated rows were not menu items
+   (descriptions 218, price lines 186, noise/headings 114 of 1,972 rows): wasted time, and the
+   validator's blind spot. The block classifier is not used in the winning pipeline (the LLM
+   sees plain `bNNNN | text`); feeding its predictions to the LLM as **soft role hints**
+   (`[item]`, `[price]`, `[desc]`) is the most promising next experiment, aimed at both the
+   non-item rows and the 12.8 % of items found without their price. Untested; the classifier's
+   item F1 (0.67) means hints must stay advisory, never a filter.
+8. **Operations.** Without airflow the Pi throttled 27 % of the time (SoC ~80 °C, cores to 600
    MHz), yet throughput dropped only ~2 %; with a fan it stays ~70 °C. Greedy decoding was
    byte-identical across runs, slot counts and restarts. llama-server's default host prompt
    cache adds up to 8 GB of RAM (`--cache-ram`).
@@ -203,6 +212,8 @@ path and speculative decoding. Do not treat the extractor as complete coverage: 
    upgrade for other NPU uses (e.g. the classifier), with a recovery plan for a headless box?
 8. **Cooling:** add a fan/heatsink to the Pi as a deployment requirement?
 9. Cuisine tags (step G) were not attempted: still wanted for this ADR, or separate?
+10. **Block-role hints A/B before the ADR?** (finding 7) Tune on dev pages, test once on
+    held-out-2, ~2 h on the Pi.
 
 ## Log
 
