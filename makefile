@@ -1,4 +1,6 @@
-COMPOSE := docker compose -f infra/docker-compose.yml
+# --env-file: docker compose otherwise looks for .env next to the compose
+# file (infra/), never the repo-root .env that .env.example is copied to (R85).
+COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 
 .PHONY: install lint typecheck test lockcheck ci clean build dev dev-down dev-logs migrate
 
