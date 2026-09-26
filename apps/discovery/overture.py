@@ -105,6 +105,9 @@ def _select_sql(food_categories: tuple[str, ...]) -> str:
         if food_categories
         else "categories.primary LIKE '%restaurant%'"
     )
+    # category_filter is one of two fixed strings (or `?` placeholders whose count
+    # matches food_categories); every actual value is bound separately below by the
+    # caller via duckdb's parameterized execute(), never spliced in here.
     return f"""
         SELECT
             id,
@@ -122,7 +125,7 @@ def _select_sql(food_categories: tuple[str, ...]) -> str:
           AND names.primary IS NOT NULL
           AND categories.primary IS NOT NULL
           AND {category_filter}
-    """
+    """  # noqa: S608
 
 
 def _format_address(addresses: object) -> str | None:
