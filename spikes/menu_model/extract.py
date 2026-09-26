@@ -43,6 +43,7 @@ from typing import Any
 
 from spikes.menu_model.eval_validator import DEV_PAGES, HELDOUT_1, load_gold
 from spikes.menu_model.labeltool import blocks_of
+from spikes.menu_model.stitch import stitch
 from spikes.menu_model.validator import Row, norm_tokens, parse_amount, validate
 
 DATA = Path(os.environ.get("MENU_SPIKE_DATA", "var/spikes/menu-model"))
@@ -326,7 +327,9 @@ def _rows_form(parsed: dict[str, Any]) -> dict[str, Any]:
 _AMOUNT_ONLY = re.compile(r"^\$?\s?\d{1,4}(?:[.,]\d{1,2})?$")
 
 
-def rows_of(result: dict[str, Any], *, repair: bool = False) -> list[Row]:
+def rows_of(
+    result: dict[str, Any], *, repair: bool = False, blocks: list[Any] | None = None
+) -> list[Row]:
     """Extracted rows; ``repair`` applies two deterministic, counted fixes (see ``score``).
 
     1. price printed in the variant slot and the price slot empty -> swap (small models
@@ -354,6 +357,8 @@ def rows_of(result: dict[str, Any], *, repair: bool = False) -> list[Row]:
                             claimed_block=block or None,
                         )
                     )
+    if blocks is not None:  # stitch split lines before dedupe (identical price lines repeat)
+        rows, _ = stitch(rows, blocks)
     if repair:
         seen: set[tuple[str, str | None, str | None, str | None]] = set()
         unique = []
@@ -461,7 +466,8 @@ def cmd_score(
         )
         items: list[dict[str, Any]] = gold[pid]["items"]  # type: ignore[assignment]
         raw_rows = rows_of(result)
-        rows = rows_of(result, repair=repair)
+        stitch_blocks = blocks_of(pid) if os.environ.get("MENU_SPIKE_STITCH") else None
+        rows = rows_of(result, repair=repair, blocks=stitch_blocks)
         c["rows_raw"] += len(raw_rows)
         c["repair_price_from_variant"] += sum(
             1 for r in raw_rows if not r.amount and r.variant and _AMOUNT_ONLY.match(r.variant)

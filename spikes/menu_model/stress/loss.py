@@ -11,6 +11,7 @@ validator downgraded/rejected it; by reason), ``accepted`` (usable).
 from __future__ import annotations
 
 import json
+import os
 import sys
 from collections import Counter
 
@@ -31,7 +32,12 @@ def main() -> None:
         result = json.loads((DATA / "extract" / tag / f"{pid}.json").read_text(encoding="utf-8"))
         items = gold[pid]["items"]
         assert isinstance(items, list)
-        verdicts = validate(blocks_of(pid), rows_of(result, repair=True))
+        extracted = rows_of(
+            result,
+            repair=True,
+            blocks=blocks_of(pid) if os.environ.get("MENU_SPIKE_STITCH") else None,
+        )
+        verdicts = validate(blocks_of(pid), extracted)
         by_item: dict[int, list[tuple[object, str, list[str]]]] = {}
         for v in verdicts:
             g = _match(v.row, items)
