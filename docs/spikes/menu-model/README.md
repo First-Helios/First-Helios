@@ -1,6 +1,6 @@
 # Spike: on-device menu model (classify, extract, validate)
 
-**Status:** In progress — step E next (A–D done)
+**Status:** Done (A–F, H); G (cuisine) not run. Winner: Qwen3-4B-Instruct-2507 Q4_0 on the Pi CPU, process v2.2
 **Opened:** 2026-09-23 by the owner
 **Feeds:** the Phase 5 menu-extraction ADR (menu-page classifier per
 [ADR-0010 Amendment 3](../../adr/0010-website-and-menu-url-resolution.md#amendment-3-2026-09-23-menu-page-verification-and-platform-sites),
@@ -104,22 +104,105 @@ the false-reject rate.
 - [x] B. Labels: page labels, block labels, and gold items + prices for the menu pages; owner spot-checks 20%
 - [x] C. Baselines: JSON-LD/platform parse coverage; S4 pre-filter precision/recall
 - [x] D. [1]+[3] classifiers: embedding + logistic regression, cross-validated; timed on the Pi
-- [ ] E. [4] extractor: `llama.cpp` + a small (1.5B–8B) instruct model with a JSON-only grammar; timed on the Pi
-- [ ] F. [5] validator: static checks + corruption injection; optional NLI cross-check
-- [ ] G. (Optional) cuisine: draft label list, compare with Overture categories on the sample
-- [ ] H. Findings written below; recommendation for the ADR
+- [x] E. [4] extractor: `llama.cpp` + a small (1.5B–8B) instruct model with a JSON-only grammar; timed on the Pi (plus RK3588 NPU via RKLLM, owner-approved)
+- [x] F. [5] validator: static checks + corruption injection, and on real extractor output (optional NLI cross-check not run)
+- [ ] G. (Optional) cuisine: not run (time went to the extractor stress test)
+- [x] H. Findings written below; recommendation for the ADR
 
 ## Results
 
-_To be filled in by the spike session._
+Sample: 150 candidate venues, 219 fetched pages; 48 menu pages (34 venues), 25 with block labels and
+gold items (1,400 items, 1,555 prices; 24 priced). Anonymized counts:
+[labels-summary.md](./labels-summary.md). Splits: dev (6 pages) and held-out-1 (8) shaped the
+validator and prompts; **held-out-2 (10 pages) is the honest held-out set**. Cross-validation for
+[1] and [3] is grouped by venue. Pi = Orange Pi 5 Plus (RK3588, 4×A76 + 4×A55, 31 GB), CPU
+inference pinned to the A76 cores.
 
 | Stage | Setup | Result | Meets bar? |
 |---|---|---|---|
-| | | | |
+| [0] Structured parse | schema.org JSON-LD `MenuItem` + generic embedded-state walker | priced structured data on **3/48 menu pages (2/34 venues)**; 0/32 JS-only pages; one site's JSON-LD prices are not on the visible page | baseline only |
+| S4 pre-filter (venue) | ADR-0010 Am. 3 verdict vs page labels | precision 0.605, recall 0.676 | baseline |
+| S4 pre-filter (page) | `page_menu_signal` on all 179 text pages | precision 0.597, recall 0.833 (priced menus 0.750) | baseline |
+| [1] Page classifier | potion-base-8M (MIT, 30 MB) + 7 layout features, LR, nested threshold | **precision 0.976, recall 0.833** (priced menus 0.893); 22 ms/page on the Pi | precision yes; recall ties S4 overall, beats it on priced menus |
+| [2] Segmentation | stdlib `html.parser` blocks | 15 ms median/page on the Pi | — |
+| [3] Block classifier | bge-small-en-v1.5 (MIT, 67 MB) + layout features, LR | item F1 **0.670**, price F1 **0.859**; 3.1 s median/page on the Pi | **no** (bar 0.90) |
+| [4] Extractor, price accuracy | Qwen3-4B-Instruct-2507 Q4_0, process v2.2, validator-accepted rows | **0.990** (24 gold pages); 0.993 held-out-2 | **yes** (≥ 0.98) |
+| [4] Extractor, item recall | same | **0.899** (24 gold pages); **0.846** held-out-2; worst format 0.843 | yes overall; held-out-2 just under |
+| [4] Usable prices | accepted rows with the exact gold price / all gold prices | 0.643 (24 pages); 0.478 held-out-2 | not a tracker bar (see findings) |
+| [5] Validator, corruption catch | v2 (frozen), injected corruptions | 0.983 held-out-2 (0.993 dev, 0.981 ho1) | **no** (bar 0.99; misses are indistinguishable by text) |
+| [5] Validator, false rejects | v2 on correct gold rows | 0.112 held-out-2 (0.000 dev/ho1) | **no** (bar 0.10) |
+| [5] Validator on real output | stress run, Q4_0 | false-reject 0.082; catch 0.446 (misses: grounded non-items such as headings/descriptions next to a real price) | FR yes; catch n/a |
+| Pi runtime | Q4_0, 2 slots, 43 pages, fan on | **median 360 s/page** (p90 1,105, max 1,786); 7.7 pages/h; 0 errors | **no** (bar 60 s); workable as a batch job (findings) |
+| Pi RAM | llama-server peak RSS | 9.9 GB with the default host prompt cache; 5.7 GB with it off (Q4_K_M, measured) | owner relaxed the 8 GB bar (2026-09-26) |
+
+Models tried and dropped (all on the Pi): Qwen2.5-1.5B-Instruct Q4_K_M (item recall 0.36-0.46,
+runaways); Phi-4-mini-instruct Q4_K_M (item recall 0.64); Qwen3-4B with process v1 (item recall
+0.984 on dev but ~30 min/page); NPU Qwen2.5-1.5B w8a8 (decode ~10 tok/s vs 18-22 on CPU);
+NPU Qwen3-4B w8a8 (does not load on rknpu 0.9.6); speculative decoding (lossless, 30-40 %
+slower). The runner-up, Qwen3-4B Q4_K_M, tied on quality (price recall 0.658, item recall 0.874)
+and ran at 7.1 pages/h.
 
 ## Findings and recommendation
 
-_To be filled in._
+1. **A small LLM on the Pi CPU can extract menus with trustworthy prices, but slowly.**
+   Qwen3-4B-Instruct-2507 (Apache-2.0, 2.4 GB Q4_0) found 90 % of gold items, and 99 % of the
+   prices the validator accepted were exactly right, on list, card and inline layouts alike. The
+   cost is ~6-8 minutes per menu page (7.7 pages/h): about 12 days of Pi time for a full pass
+   over ~2,300 menu pages (estimate from the sample's menu rate), so this only works as a
+   background batch job that re-extracts **only pages whose content changed**.
+2. **The validator does its main job.** Accepted prices are 99 % exact. It cannot reject a real
+   printed price attached to something that is not an item (a heading or description the model
+   emitted as an item); static grounding is blind to that by construction.
+3. **Usable-price yield is the weak point: 64 % overall, 48 % on held-out-2.** Where gold prices
+   go (runner-up, all gold): 12.8 % item found but no price attached (list layouts where the
+   price is its own block), 12.7 % item missed, 5.8 % right price rejected by the validator
+   (variant/position rules), 3.0 % wrong amount. A deterministic "attach the nearest printed
+   price" step recovered only a little (held-out-2 0.480 → 0.503), so it is not a quick fix.
+4. **The process mattered more than the model size.** Compact grammar-constrained JSON (no
+   pretty-printing), keyed rows, ~1.5k-char chunks with a context line, and a deterministic
+   retry for priced-but-empty chunks made the extractor ~2× faster than the first version while
+   keeping quality. Each change needed a quality re-check: two of them first broke recall (a
+   JSON-schema `pattern` the server silently ignored; a too-strict grammar that pushed prices into
+   the wrong field or let the model close the list at once).
+5. **The RK3588 NPU is not the answer for this job.** It is correctly set up (numbers match
+   independent benchmarks) but runs only W8A8, so it decodes ~2× slower than the CPU on Q4
+   weights; it is 4× faster at prompt processing. The 4B model needs a newer kernel driver
+   (rknpu ≥ 0.9.7). Running NPU and CPU together costs the CPU ~29 % (shared memory bandwidth).
+6. **Deterministic stages carry less than hoped.** Structured data (JSON-LD, embedded state)
+   priced 3 of 48 menu pages; 32 of 219 fetched pages (15 %) need JavaScript (not attempted, per
+   the brief); the block classifier missed its bar and is not needed in the winning pipeline.
+7. **Operations.** Without airflow the Pi throttled 27 % of the time (SoC ~80 °C, cores to 600
+   MHz), yet throughput dropped only ~2 %; with a fan it stays ~70 °C. Greedy decoding was
+   byte-identical across runs, slot counts and restarts. llama-server's default host prompt
+   cache adds up to 8 GB of RAM (`--cache-ram`).
+
+**Recommendation for the Phase 5 ADR:** adopt the pipeline **[1] page classifier →
+[2] segmentation → [4] Qwen3-4B-Instruct-2507 Q4_0 via llama.cpp on the Pi CPU (process v2.2) →
+deterministic repairs → [5] validator**, with accepted rows stored as the lowest-trust `llm`
+interpretation (ADR-0005), as an **offline batch job that only re-extracts changed pages**.
+Keep structured parses (JSON-LD) ahead of it where present. Drop the block classifier, the NPU
+path and speculative decoding. Do not treat the extractor as complete coverage: plan for
+~64 % usable prices per menu page at first and measure it in production.
+
+### Open questions for the owner (before the Phase 5 ADR)
+
+1. **Is ~64 % usable prices per menu page acceptable to ship**, with unpriced items stored as
+   items with unknown price, or is a price-attachment step (and its own held-out test) a
+   precondition?
+2. **Throughput budget:** is a ~12-day first pass and change-only monthly runs acceptable on the
+   staging Pi, alongside Helios? Or should extraction run on other hardware?
+3. **Change detection:** what counts as "changed" (content hash of the menu region, fetched
+   HTML, ETag)? This decides the monthly cost.
+4. **JS-only menus** (32 of 219 pages; Toast, Square, Clover, BentoBox): stay out of scope,
+   or does Phase 5 add a headless browser (new runtime dependency, ADR)?
+5. **Validator v3:** the frozen v2 misses the 0.99/0.10 bars on held-out-2. Tuning needs a
+   fresh labeled set; label more pages now or ship v2 and measure?
+6. **Trust level:** should validator-accepted `llm` prices be shown to users directly, or only
+   after a second signal (another source, owner confirmation)?
+7. **Pi kernel/driver:** keep the stock kernel (NPU path closed), or plan an rknpu ≥ 0.9.7
+   upgrade for other NPU uses (e.g. the classifier), with a recovery plan for a headless box?
+8. **Cooling:** add a fan/heatsink to the Pi as a deployment requirement?
+9. Cuisine tags (step G) were not attempted: still wanted for this ADR, or separate?
 
 ## Log
 
@@ -141,6 +224,7 @@ _To be filled in._
 | 2026-09-25 | E-6 | spike/menu-model | **v2.1 → v2.2 re-checks** (3 dev pages, 2 slots). v2.1 Q4_K_M still returned `{"sections":[]}` for a mid-section chunk (item recall 0.891), Q4_0 0.953. v2.2 adds a deterministic **sparse-chunk retry** (≥3 printed prices in the chunk but < 1/3 as priced rows → re-ask once, telling the model the price count; counted) and a price-on-next-line hint. v2.2 results (item recall / price recall accepted / price accuracy / catch / wall): **Qwen3-4B Q4_K_M 0.992 / 0.882 / 1.000 / 1.000 / 1,323 s** (1 retry, recovered the page); Q4_0 0.945 / 0.812 / 0.992 / 0.684 / 1,139 s; **Phi-4-mini-instruct 0.641 / 0.479** (fails quality, out); v1 reference 0.984 / 0.833 / 1.000 / 1.000 / 2,509 s. Stress finalists: v2.2 Qwen3-4B Q4_K_M and Q4_0 (2 slots), 43 pages each (41 passed by the out-of-fold page gate + the 2 gold pages it drops), ~8-9 h each; v1 dropped (fails the operational gate at ~30 min/page). | Stress test launched on the Pi (`logs/stress.log`, `logs/stress-monitor.csv`); ~17 h unattended. |
 | 2026-09-25 | E-7 | spike/menu-model | **Stress run in progress; environment change noted.** Q4_K_M finished: 43 pages, 278 chunks, 21,832 s (6.1 h), 0 errors, **peak RSS 14.1 GB** (suspected llama-server in-RAM prompt cache, to verify with `--cache-ram 0`). Owner turned on the room's ceiling fan at 07:45 CDT (owner-confirmed; Pi clock is Asia/Shanghai), 1 h 22 min into the Q4_K_M run: its first 11 pages ran without the fan, the 12th straddled it (06:23-12:27 CDT); Q4_0 (12:28 CDT on) ran with the fan throughout. Monitor: before the fan SoC mean 79.4 °C, big cores up to 88 °C, big-core clock below max in 27% of samples (down to 600 MHz: thermal throttling); after the fan SoC mean 70.9 °C, 7%; Q4_0 so far 69.9 °C, 6%. Quality is unaffected (greedy decoding); Q4_K_M throughput is understated for its first ~1.4 h. | After Q4_0 ends: re-run Q4_K_M on the pages it processed before ~07:50 CDT with `--cache-ram 0` (fan-on timing + RAM check + determinism), then the report. |
 | 2026-09-26 | E-8 | spike/menu-model | **Stress test done** (power outage mid-Q4_0: Pi rebooted, 33/43 results intact, resumed; Q4_0 throughput stitched around the gap: 43 pages in 13,827 s + 6,191 s). Owner confirmed fan at 07:45 CDT; a fan-on Q4_K_M re-run of its 12 pre-fan pages gave identical outputs, ~2% faster (5,576 s vs ~5,700 s), and 5.7 GB peak RSS with `--cache-ram 0` (the 13.5-14.1 GB peaks were llama-server's host prompt cache, default 8,192 MiB). **Owner decision (2026-09-26): the 8 GB RAM bar is relaxed** (Pi has 31 GB; ~10-14 GB with the default prompt cache is fine). Results on all 24 gold pages (Q4_K_M / Q4_0): item recall 0.874 / 0.899; price recall on accepted rows 0.658 / 0.643; price accuracy on accepted 0.992 / 0.990; worst-format item recall 0.864 / 0.843; held-out-2 item recall 0.794 / 0.846, price recall 0.480 / 0.478; end-to-end item recall through the page gate 0.789 / 0.803; 0 errors, 0 truncations; 7.1 / ~7.7 pages/h; peak RSS 13.5 / 9.9 GB (cache on). **Winner by the pre-registered rule: Qwen3-4B-Instruct-2507 Q4_0**, process v2.2, 2 slots (quality tied within 0.02, faster). Owner agreed from the fan-on runs. Price-loss breakdown (Q4_K_M, all gold prices): accepted 65.8%, item found but unpriced 12.8%, item missed 12.7%, right price not accepted 5.8%, wrong amount 3.0%. | Write-up (H) and docs PR. |
+| 2026-09-26 | H | spike/menu-model | Results table, findings, recommendation and open questions written; anonymized `labels-summary.md` added. Step G (cuisine) not run. Spike code stays on `spike/menu-model` (never merged); data stays in `var/spikes/menu-model/` and `~/menu-model-spike/` on the Pi. | Owner: answer the open questions, then write the Phase 5 ADR. Pi cleanup when done: `~/menu-model-spike` (~12 GB: models, llama.cpp build, venv, copied pages); skimmer units stay disabled unless re-enabled. |
 
 ## Hand-off prompt
 
