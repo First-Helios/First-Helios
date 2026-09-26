@@ -38,6 +38,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +98,7 @@ SCHEMA: dict[str, Any] = {
 # by the grammar, smaller chunks (decode slows as context grows), a cached system-prompt
 # prefix, and chunks sent concurrently to a multi-slot llama-server.
 PROCESS = os.environ.get("MENU_SPIKE_PROCESS", "v1")
-CHUNK_CHARS_V2 = 1500
+CHUNK_CHARS_V2 = int(os.environ.get("MENU_SPIKE_CHUNK", "1500"))  # step 3 second pass: 3000
 
 SYSTEM_V2 = (
     "You extract restaurant menus. Input lines are 'BLOCK_ID | text' in page order. "
@@ -115,6 +116,67 @@ SYSTEM_V2 = (
     '{"b":"b0020","n":"Horchata","p":"2.50","v":"Small"},{"b":"b0020","n":"Horchata","p":"3.50",'
     '"v":"Large"}]},{"section":"Sides","items":[{"b":"b0031","n":"Chips and Salsa","p":"4"}]}]}'
 )
+
+# Process v2.3 prompt (MENU_SPIKE_PROMPT=v23; after the stitching analysis, tracker log H-2):
+# on pages printing name / price / description as separate lines the model transcribed line by
+# line, and on "NAME / $price / description" pages it even took the description sentence as
+# the item name. v2.3 says that such lines form one item, with a worked example in that layout.
+PROMPT = os.environ.get("MENU_SPIKE_PROMPT", "v22")
+SYSTEM_V23 = (
+    "You extract restaurant menus. Input lines are 'BLOCK_ID | text' in page order. "
+    "Return every menu item that is sold, grouped by the menu section it is under. "
+    'Each item is {"b": block id where its name appears, "n": item name copied exactly as '
+    'printed, "p": price copied exactly as printed, digits only (e.g. 12.50), "" if no price '
+    'is printed for it, "v": size/variant word printed next to that price (e.g. "Large", '
+    '"Glass"), only if there is one}. An item with several prices gets one entry per price. '
+    "Many menus print one item over several lines: a short name line, then its price line "
+    "and/or a description line, in either order. Those lines are ONE item: its name is the "
+    "short name line (never the description sentence), its price comes from the price line "
+    "after the name, and a price line or description line is never an item of its own. "
+    "Do not invent items or prices, do not convert or compute prices, skip section headings, "
+    "descriptions, navigation, hours, addresses, reviews and add-on/extra lines. "
+    "If the text contains no menu items, return no sections. "
+    "Output compact JSON on a single line with no spaces or newlines. Example input:\n"
+    "b0011 | Tacos\nb0012 | Carne Asada Taco | $3.50\nb0014 | Horchata\nb0015 | $2.50/Small\n"
+    "b0016 | $3.50/Large\nb0017 | Sides\nb0018 | CHIPS AND SALSA\nb0019 | $4\n"
+    "b0020 | House-made chips, roasted tomato salsa.\nb0021 | Elote\n"
+    "b0022 | Grilled corn, cotija, chile and lime.\nb0023 | 5.25\nExample output:\n"
+    '{"sections":[{"section":"Tacos","items":[{"b":"b0012","n":"Carne Asada Taco","p":"3.50"},'
+    '{"b":"b0014","n":"Horchata","p":"2.50","v":"Small"},{"b":"b0014","n":"Horchata","p":"3.50",'
+    '"v":"Large"}]},{"section":"Sides","items":[{"b":"b0018","n":"CHIPS AND SALSA","p":"4"},'
+    '{"b":"b0021","n":"Elote","p":"5.25"}]}]}'
+)
+
+# Block-role hints (MENU_SPIKE_HINTS=1, tracker finding 7): each line carries the stage [3]
+# classifier's role for its block as an advisory tag, "b0012 [item] | text". The predictions
+# are out-of-fold (``hints.py``: the classifier never saw the page's venue).
+HINTS = bool(os.environ.get("MENU_SPIKE_HINTS"))
+HINT_TAGS = {
+    "item": "item",
+    "price": "price",
+    "description": "desc",
+    "section": "section",
+    "modifier": "addon",
+}
+HINT_NOTE = (
+    " Some lines carry a role tag after the block id ([item], [price], [desc], [section], "
+    "[addon]) from a simple classifier: a hint that is often right but sometimes wrong; "
+    "the text decides."
+)
+
+
+def system_prompt() -> str:
+    base = SYSTEM_V23 if PROMPT == "v23" else SYSTEM_V2
+    return base + (HINT_NOTE if HINTS else "")
+
+
+def _hints(page_id: str) -> dict[str, str]:
+    if not HINTS:
+        return {}
+    path = DATA / "hints" / f"{page_id}.json"  # a missing file is an error, not "no hints"
+    hints: dict[str, str] = json.loads(path.read_text(encoding="utf-8"))
+    return hints
+
 
 # v2 output grammar, passed to llama-server as GBNF (not a JSON schema): compact JSON with no
 # whitespace at all (pretty-printed v1 output spent a large share of its tokens on newlines
@@ -134,7 +196,7 @@ vchr    ::= [^"\\\x00-\x1f]
 """
 
 
-CHUNK_SOFT_V2 = 1200  # v2.1: past this, cut before the next heading block
+CHUNK_SOFT_V2 = CHUNK_CHARS_V2 * 4 // 5  # v2.1: past this, cut before the next heading block
 
 
 def chunks(page_id: str) -> list[str]:
@@ -151,6 +213,7 @@ def chunks(page_id: str) -> list[str]:
     size = 0
     section = ""
     recent: list[str] = []  # texts of the last lines, carried as context (no block ids)
+    hints = _hints(page_id)
     for b in blocks:
         line = f"{b.id} | {b.text[:BLOCK_CHARS]}"
         hard = size + len(line) + 1 > (CHUNK_CHARS_V2 if v2 else CHUNK_CHARS)
@@ -165,7 +228,9 @@ def chunks(page_id: str) -> list[str]:
         if b.heading:
             section = b.text[:80]
         recent.append(b.text[:80])
-        cur.append(line)
+        tag = HINT_TAGS.get(hints.get(b.id, ""))
+        # sizes count the untagged line, so chunk boundaries match the no-hint run
+        cur.append(f"{b.id} [{tag}] | {b.text[:BLOCK_CHARS]}" if tag else line)
         size += len(line) + 1
     if cur:
         out.append("\n".join(cur))
@@ -195,7 +260,7 @@ def _extract_once(server: str, text: str, nudge: str = "") -> dict[str, Any]:
     v2 = PROCESS == "v2"
     body = {
         "messages": [
-            {"role": "system", "content": SYSTEM_V2 if v2 else SYSTEM},
+            {"role": "system", "content": system_prompt() if v2 else SYSTEM},
             {"role": "user", "content": text + nudge},
         ],
         "temperature": 0,
@@ -335,8 +400,11 @@ def rows_of(
     1. price printed in the variant slot and the price slot empty -> swap (small models
        lose the positional order of ``[block, name, price, variant]``);
     2. exact duplicate rows (same item, variant, price, section) collapse to one;
-    3. a variant with no letters (e.g. "4") is dropped.
+    3. a variant with no letters (e.g. "4") is dropped;
+    4. (stitch v2) a variant whose words are all in the item name ("(L)", "(GF/V)" copied
+       from "Orange Chicken (L)") is dropped: it was not printed with the price.
     """
+    v2 = os.environ.get("MENU_SPIKE_STITCH") == "2"
     rows: list[Row] = []
     for ch in result["chunks"]:
         out = parse_output(ch["raw"]) if "raw" in ch else ch["out"]
@@ -358,7 +426,14 @@ def rows_of(
                         )
                     )
     if blocks is not None:  # stitch split lines before dedupe (identical price lines repeat)
-        rows, _ = stitch(rows, blocks)
+        rows, _ = stitch(rows, blocks, v2=v2)
+    if repair and v2:  # after stitching: "$7.50/Medium" must still read as a price line there
+        rows = [
+            replace(r, variant=None)
+            if r.variant and set(norm_tokens(r.variant)) <= set(norm_tokens(r.item))
+            else r
+            for r in rows
+        ]
     if repair:
         seen: set[tuple[str, str | None, str | None, str | None]] = set()
         unique = []
@@ -437,16 +512,29 @@ def _match(row: Row, gold_items: list[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
-def cmd_score(
-    tag: str, split: str, *, repair: bool = False, ref: str | None = None
-) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915 - flat scoring pass
-    gold = load_gold()
-    pages = {
+def split_pages(gold: dict[str, Any], split: str) -> set[str]:
+    """Gold page ids of one split; ``tune`` = dev + ho1 (the pages prompts may be tuned on)."""
+    return {
         "all": set(gold),
         "dev": set(gold) & DEV_PAGES,
         "ho1": set(gold) & HELDOUT_1,
+        "tune": set(gold) & (DEV_PAGES | HELDOUT_1),
         "ho2": set(gold) - DEV_PAGES - HELDOUT_1,
     }[split]
+
+
+def cmd_score(
+    tag: str,
+    split: str,
+    *,
+    repair: bool = False,
+    ref: str | None = None,
+    only: set[str] | None = None,
+) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915 - flat scoring pass
+    gold = load_gold()
+    pages = split_pages(gold, split)
+    if only is not None:
+        pages &= only
     c: Counter[str] = Counter()
     reasons: Counter[str] = Counter()
     walls, gens, per_page = [], [], []

@@ -155,16 +155,30 @@ def page_id(url: str) -> str:
 
 
 def main() -> None:
-    with (DATA / "candidates.csv").open(newline="", encoding="utf-8") as fh:
+    # Held-out-3 batch (usable-price session): MENU_SPIKE_CANDIDATES=candidates-2.csv appends
+    # to the manifests and skips venues and website hosts already in the sample.
+    batch2 = os.environ.get("MENU_SPIKE_CANDIDATES")
+    with (DATA / (batch2 or "candidates.csv")).open(newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
+    if batch2:
+        old = [json.loads(line) for line in (DATA / "venues.jsonl").open(encoding="utf-8")]
+        known = {v["gers_id"] for v in old}
+        hosts = {urlsplit(v["website"]).netloc.removeprefix("www.") for v in old}
+        rows = [
+            r
+            for r in rows
+            if r["gers_id"] not in known
+            and urlsplit(r["website"]).netloc.removeprefix("www.") not in hosts
+        ]
     venues = pick_venues(rows)
     pages_dir = DATA / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
     seen: set[str] = set()
+    mode = "a" if batch2 else "w"
     with (
         SiteFetcher(cache_dir=DATA / "cache", user_agent=USER_AGENT, min_interval_s=2.0) as f,
-        (DATA / "venues.jsonl").open("w", encoding="utf-8") as vout,
-        (DATA / "pages.jsonl").open("w", encoding="utf-8") as pout,
+        (DATA / "venues.jsonl").open(mode, encoding="utf-8") as vout,
+        (DATA / "pages.jsonl").open(mode, encoding="utf-8") as pout,
     ):
 
         def grab(url: str, venue: str, role: str) -> FetchResult | None:

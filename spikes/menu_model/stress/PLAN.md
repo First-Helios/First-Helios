@@ -61,3 +61,30 @@ which bar it misses and by how much.
 Any optimization that changes outputs (quantization, chunk size, batching numerics) is
 re-checked for quality; greedy speculative decoding is expected to be output-identical and is
 verified with `extract score --ref` against the same config without it.
+
+## Usable-price session (2026-09-26/27), pre-registered before the Pi numbers
+
+Goal: usable prices (validator-accepted rows with the exact gold price / all gold prices) from
+0.700 toward ≥ 0.80, quality first (price accuracy on accepted rows stays ≥ 0.98).
+
+Screening ran on this machine's GPU (llama.cpp b11165 CUDA, same Qwen3-4B Q4_0 GGUF, 2 slots)
+on the 14 tune pages (dev + ho1) only; its v2.2 numbers match the Pi's st-q40 within 0.01, so it
+ranks variants, and the Pi confirms. Tune-set usable prices (stitch v2 unless noted):
+
+| Variant | items | usable | accuracy |
+|---|---|---|---|
+| st-q40 (Pi), stitch v1 = baseline | 0.923 | 0.792 | 0.990 |
+| st-q40 (Pi), stitch v2 (repairs only) | 0.923 | 0.864 | 0.992 |
+| v2.2 local | 0.931 | 0.862 | 0.998 |
+| **v2.3 prompt** local | 0.925 | **0.887** | 0.996 |
+| v2.2 + role hints | 0.878 | 0.858 | 0.996 |
+| v2.3 + role hints | 0.868 | 0.849 | 0.998 |
+| v2.3, 3k chunks / 8B / 8B + 3k (single pass) | 0.90-0.93 | 0.843-0.847 | 0.977-0.996 |
+| v2.3 + adaptive 8B/3k pass below coverage 0.7 | 0.933 | 0.893 | 0.996 |
+
+Frozen for the Pi: **process v2.3** (v2.2 + the split-layout prompt), **no role hints** (they cost
+~6 points of item recall), **stitch v2** (`MENU_SPIKE_STITCH=2`), and the **adaptive second pass**
+with Qwen3-8B Q4_K_M, 3k chunks, for pages whose label-free coverage (accepted priced rows /
+printed prices) is below **0.7**; the result with more accepted priced rows is kept. Pi runs:
+`st-v23` (all 43 stress pages), then the second pass on the flagged pages. ho2 is scored once,
+after both; held-out-3 (fresh labels) is scored once at the end.
