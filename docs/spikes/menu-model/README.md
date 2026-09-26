@@ -282,8 +282,14 @@ unseen layouts can still fool the repairs (finding 9).
    while they are layout-generic, pay off on a held-out set, and still add something when the
    model changes (re-measure each on every model/prompt change; delete what the model no longer
    needs); (c) the evaluation harness (gold labels, held-out discipline, `stress/compare.py`,
-   `stress/loss.py`) is what makes a model swap a measured drop-in. Still open: keep the
-   schema.org JSON-LD parse (a web standard, not per-site code; priced 3 of 48 menu pages)?
+   `stress/loss.py`) is what makes a model swap a measured drop-in.
+   **Owner clarification (same day):** the line is *per-website branching* ("for website 1 do X,
+   website 2 do Y"), not custom logic as such. Allowed: (i) the schema.org JSON-LD parse, as long
+   as it stays a general-purpose standard reader; (ii) relational/positional repairs (a price is
+   printed close to its item, so the rule space is small and applies abstractly); (iii) a
+   **toolbelt** of such generic fixes that catches most problems, chosen per page by a decision
+   matrix or classifier (e.g. the label-free coverage signal, a layout detector), which also
+   lowers the overfitting risk seen on held-out-3.
 2. **Throughput budget:** is a ~12-day first pass and change-only monthly runs acceptable on the
    staging Pi, alongside Helios? Or should extraction run on other hardware?
 3. **Change detection:** what counts as "changed" (content hash of the menu region, fetched
