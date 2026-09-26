@@ -133,7 +133,7 @@ inference pinned to the A76 cores.
 | [5] Validator, false rejects | v2 on correct gold rows | 0.112 held-out-2 (0.000 dev/ho1) | **no** (bar 0.10) |
 | [5] Validator on real output | stress run, Q4_0 | false-reject 0.082; catch 0.446 (misses: grounded non-items such as headings/descriptions next to a real price) | FR yes; catch n/a |
 | Pi runtime | Q4_0, 2 slots, 43 pages, fan on | **median 360 s/page** (p90 1,105, max 1,786); 7.7 pages/h; 0 errors | **no** (bar 60 s); workable as a batch job (findings) |
-| Pi RAM | llama-server peak RSS | 9.9 GB with the default host prompt cache; 5.7 GB with it off (Q4_K_M, measured) | owner relaxed the 8 GB bar (2026-09-26) |
+| Pi RAM | llama-server peak RSS | 9.9 GB with the default host prompt cache; **5.2 GB with it off** (`--cache-ram 0`; Q4_K_M 5.7 GB); outputs identical either way | yes with the cache off; owner also relaxed the 8 GB bar (2026-09-26) |
 
 Models tried and dropped (all on the Pi): Qwen2.5-1.5B-Instruct Q4_K_M (item recall 0.36-0.46,
 runaways); Phi-4-mini-instruct Q4_K_M (item recall 0.64); Qwen3-4B with process v1 (item recall
