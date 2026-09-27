@@ -22,6 +22,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.helios_core.db.base import SCHEMA_BRONZE, Base
 
+# Python's ``str.strip()`` whitespace; see migration 12a76ebed458.
+WHITESPACE = f"{SCHEMA_BRONZE}.whitespace()"
+
+
+def _canonical(column: str, name: str) -> CheckConstraint:
+    """Nonblank and trimmed, as ``_require_trimmed`` checks it in Python."""
+    return CheckConstraint(
+        f"{column} = btrim({column}, {WHITESPACE}) AND length({column}) > 0", name=name
+    )
+
 
 class Source(Base):
     """A stable namespace for source-local record keys."""
@@ -29,10 +39,8 @@ class Source(Base):
     __tablename__ = "source"
     __table_args__: Any = (
         UniqueConstraint("namespace", name="uq_source_namespace"),
-        CheckConstraint(
-            "namespace = btrim(namespace) AND length(namespace) > 0",
-            name="ck_source_namespace_canonical",
-        ),
+        _canonical("namespace", "ck_source_namespace_canonical"),
+        _canonical("kind", "ck_source_kind_canonical"),
         {"schema": SCHEMA_BRONZE},
     )
 
@@ -48,10 +56,8 @@ class SourceEndpoint(Base):
     __table_args__: Any = (
         UniqueConstraint("canonical_uri", name="uq_source_endpoint_canonical_uri"),
         UniqueConstraint("id", "source_id", name="uq_source_endpoint_id_source"),
-        CheckConstraint(
-            "canonical_uri = btrim(canonical_uri) AND length(canonical_uri) > 0",
-            name="ck_source_endpoint_uri_canonical",
-        ),
+        _canonical("canonical_uri", "ck_source_endpoint_uri_canonical"),
+        _canonical("endpoint_kind", "ck_source_endpoint_kind_canonical"),
         Index("ix_source_endpoint_source_id", "source_id"),
         {"schema": SCHEMA_BRONZE},
     )
@@ -85,13 +91,15 @@ class Capture(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "content_hash IS NULL OR length(btrim(content_hash)) > 0",
+            f"content_hash IS NULL OR length(btrim(content_hash, {WHITESPACE})) > 0",
             name="ck_capture_content_hash_not_blank",
         ),
         CheckConstraint(
-            "bundle_path IS NULL OR length(btrim(bundle_path)) > 0",
+            f"bundle_path IS NULL OR length(btrim(bundle_path, {WHITESPACE})) > 0",
             name="ck_capture_bundle_path_not_blank",
         ),
+        _canonical("outcome", "ck_capture_outcome_canonical"),
+        CheckConstraint("isfinite(fetched_at)", name="ck_capture_fetched_at_finite"),
         UniqueConstraint("id", "source_id", name="uq_capture_id_source"),
         Index("ix_capture_source_id", "source_id"),
         Index("ix_capture_source_endpoint_id", "source_endpoint_id"),
@@ -126,10 +134,8 @@ class SourceRecord(Base):
             name="uq_source_record_source_external_key",
         ),
         UniqueConstraint("id", "source_id", name="uq_source_record_id_source"),
-        CheckConstraint(
-            "external_key = btrim(external_key) AND length(external_key) > 0",
-            name="ck_source_record_external_key_canonical",
-        ),
+        _canonical("external_key", "ck_source_record_external_key_canonical"),
+        CheckConstraint("isfinite(first_seen_at)", name="ck_source_record_first_seen_finite"),
         {"schema": SCHEMA_BRONZE},
     )
 
@@ -175,8 +181,12 @@ class SourceRecordVersion(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "length(btrim(content_hash)) > 0",
+            f"length(btrim(content_hash, {WHITESPACE})) > 0",
             name="ck_source_record_version_content_hash_not_blank",
+        ),
+        CheckConstraint(
+            "isfinite(observed_at)",
+            name="ck_source_record_version_observed_at_finite",
         ),
         Index("ix_source_record_version_source_record_id", "source_record_id"),
         Index("ix_source_record_version_capture_id", "capture_id"),
@@ -202,11 +212,11 @@ class Evidence(Base):
             name="ck_evidence_exactly_one_target",
         ),
         CheckConstraint(
-            "length(btrim(locator)) > 0",
+            f"length(btrim(locator, {WHITESPACE})) > 0",
             name="ck_evidence_locator_not_blank",
         ),
         CheckConstraint(
-            "length(btrim(excerpt_hash)) > 0",
+            f"length(btrim(excerpt_hash, {WHITESPACE})) > 0",
             name="ck_evidence_excerpt_hash_not_blank",
         ),
         Index("ix_evidence_source_record_version_id", "source_record_version_id"),

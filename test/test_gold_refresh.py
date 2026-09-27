@@ -9,12 +9,14 @@ committed to disposable ``*_test`` PostgreSQL; nothing writes application data.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from packages.helios_core.domains.menu.commands import persist_menu
@@ -195,6 +197,35 @@ def test_refresh_materializes_the_selector_result(
     assert row["price_evidence_ids"] == list(selection.local_price.evidence_ids)
     assert row["organization_claim_count"] == 0
     assert row["staleness_seconds"] == int((E - OBSERVED).total_seconds())
+
+
+def test_price_observed_after_e_has_zero_staleness(
+    world: tuple[sessionmaker[Session], SelectionRequest],
+) -> None:
+    # R69: staleness is an age; a price observed after E is not negative-aged.
+    factory, request = world
+    early = replace(request, effective_instant=OBSERVED - timedelta(days=1))
+    with factory.begin() as session:
+        assert refresh_current_menu(session, [early]) == 1
+    with factory() as session:
+        (row,) = _business(session, early)
+    assert row["price_state"] == "priced"
+    assert row["staleness_seconds"] == 0
+
+
+def test_database_rejects_negative_staleness(
+    world: tuple[sessionmaker[Session], SelectionRequest],
+) -> None:
+    factory, request = world
+    with factory.begin() as session:
+        refresh_current_menu(session, [request])
+    with pytest.raises(IntegrityError) as error, factory.begin() as session:
+        session.execute(
+            update(CurrentMenu)
+            .where(CurrentMenu.subject_id == request.subject_id)
+            .values(staleness_seconds=-1)
+        )
+    assert getattr(error.value.orig, "sqlstate", None) == "23514"
 
 
 def test_full_rebuild_reproduces_business_columns(

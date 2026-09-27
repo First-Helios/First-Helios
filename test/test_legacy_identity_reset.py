@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 PRE_RESET_REVISION = "3f8b2c1d9a74"
+# The reset must leave Bronze and Identity as they were. Compare at the last
+# revision before S14 (12a76ebed458), which tightens them on purpose.
+COMPARED_REVISION = "5f3a9c1e7b24"
 LEGACY_SCHEMAS = ("raw", "canonical", "mart")
 LEGACY_TABLES = (
     "venue_site",
@@ -358,7 +361,7 @@ def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
             }
             assert _legacy_row_counts(connection) == dict.fromkeys(LEGACY_TABLES, 1)
 
-        upgrade = _run_alembic("upgrade", "head")
+        upgrade = _run_alembic("upgrade", COMPARED_REVISION)
         migration_output = f"{upgrade.stdout}\n{upgrade.stderr}"
         for table in LEGACY_TABLES:
             assert f"canonical.{table}=1" in migration_output
@@ -410,7 +413,7 @@ def test_seeded_legacy_upgrade_downgrade_and_reupgrade(
                 schema: _schema_row_counts(connection, schema) for schema in ("bronze", "identity")
             } == foundation_rows
 
-        reupgrade = _run_alembic("upgrade", "head")
+        reupgrade = _run_alembic("upgrade", COMPARED_REVISION)
         reupgrade_output = f"{reupgrade.stdout}\n{reupgrade.stderr}"
         for table in LEGACY_TABLES:
             assert f"canonical.{table}=0" in reupgrade_output

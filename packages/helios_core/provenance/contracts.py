@@ -210,6 +210,10 @@ def persist_source_record_observation(
         _require_trimmed(observation.capture_content_hash, "capture content hash")
     if observation.bundle_path is not None:
         _require_trimmed(observation.bundle_path, "capture bundle path")
+    if observation.observed_at.utcoffset() is None:
+        raise ValueError("observed at requires an aware timestamp")
+    if observation.fetched_at is not None and observation.fetched_at.utcoffset() is None:
+        raise ValueError("fetched at requires an aware timestamp")
 
     session.execute(
         insert(Source)

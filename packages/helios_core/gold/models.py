@@ -119,6 +119,9 @@ class CurrentMenu(Base):
         ),
         CheckConstraint("currency_code ~ '^[A-Z]{3}$'", name="ck_gold_currency"),
         CheckConstraint(
+            "staleness_seconds IS NULL OR staleness_seconds >= 0", name="ck_gold_staleness"
+        ),
+        CheckConstraint(
             "content_scope IS NULL OR content_scope IN ('local', 'organization')",
             name="ck_gold_content_scope",
         ),
