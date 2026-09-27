@@ -1,6 +1,7 @@
 # ADR-0012: Venue lifecycle — re-observation, closure, re-homing, and readiness
 
-**Status:** Proposed
+**Status:** Accepted
+**Accepted:** 2026-09-27, under the owner’s delegated lifecycle design authority.
 **Date:** 2026-09-24
 **Phase:** 4 (remediation of the 2026-09-22 review, session S12)
 **Decides for:** R36, R98, R105, R106, and the Establishment half of R61; sets
@@ -48,7 +49,8 @@ when a parent drops back to `provisional` (R61, Establishment half).
 - **History in Bronze.** Every discovery run with a new `observed_at` appends a
   Version per POI it sees, stamped with the release (`capture.bundle_path`
   today, the release endpoint under ADR-0011). "Last release this POI was seen
-  in" is already derivable. No new table is needed to detect absence.
+  in" is already derivable. Versions establish presence, but do not prove survey completion or coverage.
+  Absence additionally requires the durable completion contract in §3.
 - **Closure semantics exist.** ADR-0004 §2: closing a restaurant changes the
   Establishment's operating state and is *not* retirement. A Place is not
   retired because one Establishment at it closes. `operating_status` is one of
@@ -79,8 +81,8 @@ when a parent drops back to `provisional` (R61, Establishment half).
 A **lifecycle pass** in the discovery app (`apps/discovery`), built only from
 existing Identity commands plus one readiness command. It is a deterministic
 function of Bronze history: re-running it on the same Bronze rows gives the same
-Identity state. Each area below lists options; ⭐ is the recommendation. The
-owner picks per area when accepting (see "For review").
+Identity state. The starred choices are accepted with the corrections below. Implementation
+remains S13; accepting this ADR does not open Phase 5.
 
 ### 1. Audit trail for lifecycle changes
 
@@ -97,8 +99,15 @@ way minting copies the first one today.
 
 ### 2. Re-observed POIs (R36, first half)
 
-This runs inline in `run_discovery`'s `resolved` branch, where the new POI is in
-hand. It applies only when the Establishment is **discovery-owned**: its only
+The projection uses only the latest successful Overture Version by release
+instant for the record, never an incoming older/backfilled POI. An exact retry
+must not mint, remap, close, or reopen anything twice. Conflicting observations
+at the same release instant are reported for review, not ordered by surrogate
+id. Replaying A after B may add Bronze history but cannot undo B’s Identity
+state. Lifecycle decisions and feature edits for one venue commit atomically.
+A combined fingerprint change and relocation creates both a new Organization
+and a new Place in one successor transition; it must not create two successors.
+This runs in `run_discovery`’s resolved branch after selecting the winning Version. It applies only when the Establishment is **discovery-owned**: its only
 current Overture record is this one, and no other current Establishment that
 is **not closed** shares its Organization or Place. Closed ones are ignored
 because a relocation or rebrand below leaves the closed predecessor on the
@@ -120,6 +129,22 @@ rules. It is a named constant. If Overture coordinates jitter by more than that
 between releases, the first S13 run will show it as a burst of relocations (the
 run report counts them) and the constant is raised.
 
+**Derived URLs on rebrand.** The old Organization remains valid history, but
+its website/menu records cannot silently supply the successor. S13 extends URL
+resolution to compare each per-GERS record’s current subject with the intended
+Organization before the unchanged-payload shortcut. For a lifecycle successor,
+a fresh website observation can evidence an explicit remap to the new
+Organization; readiness is refreshed in that transaction. Own-site and every
+`<gers>|<platform>` menu record require fresh successful verification before
+remap. Failed verification preserves history on the old Organization and cannot
+make it current for the successor. `needs_review` records are never remapped
+automatically. Reusing a cached response fetched before the transition is not
+fresh verification. This does not merge Organizations or transfer stored menu
+pages: old resolution-event bindings stop qualifying for current selection;
+historical selection still uses them. Tests cover unchanged/changed websites,
+all platform keys, failed verification, review protection, new readiness, and
+current versus historical menu selection.
+
 ### 3. Venues that disappear (R36, second half)
 
 - **Close, never retire** (ADR-0004 §2): `operating_status = 'closed'`,
@@ -132,11 +157,28 @@ run report counts them) and the constant is raised.
   discovery run. Only current, not-yet-closed Establishments with at least one
   current Overture record are considered. A venue with no Overture record (one
   created by hand or by another source) is never closed by Overture's silence.
-- **Partial runs never close anything.** The pass runs only after the discovery
-  iterator is fully consumed. It **refuses** (reports and changes nothing) when
-  either of the last N releases saw fewer than **90 %** of the POIs the release
-  before it saw (named constant). A crashed or bbox-limited run then can't
-  close a venue that was simply not read.
+- **Partial runs never contribute absence.** S13 adds a discovery-owned,
+  append-only `bronze.discovery_release_completion` table in a hand-reviewed
+  migration. A completion row contains the canonical release endpoint, release
+  instant, exact bbox and category/filter-policy version (canonical coverage
+  key), ingested POI count, and server completion time. The CLI writes it only
+  after exhausting the iterator and committing the final observations. A
+  crash before that marker leaves presence data but no usable absence evidence.
+  Retrying the identical completed release/coverage is idempotent; disagreement
+  in counts is reported and disables closure for that release.
+- Closure considers only completed releases for the configured full metro
+  coverage and identical filter policy. Custom bbox runs may update presence,
+  but cannot close venues or count toward missing releases. The completion
+  dates must be strictly increasing consecutive published releases; S13 takes
+  an explicit expected predecessor release parameter for closure, and refuses
+  to infer absence across unknown or skipped releases. Old/backfilled runs
+  never move the closure horizon backwards. Two eligible missing releases
+  after a completed baseline are required.
+- The **90% count floor** remains an additional anomaly veto, never proof of
+  completeness. A 95% bbox run and a crashed run after 95% of commits must both
+  fail closure acceptance tests. Closing and reopening operate only on inferred
+  Overture closures, never manual closures; S13 records their origin and first
+  missing release in discovery-owned state alongside the completion contract.
 - ⭐ **Reappearance reopens** the same Establishment: `operating_status` goes
   back to `unknown` and `valid_to` to NULL. The closure was only inferred, and
   Bronze keeps the gap. *Alternative:* mint a new Establishment, which gives a
@@ -259,15 +301,15 @@ each pass:
 - Deduped Establishments (two Overture records) and human-merged parents never
   auto-update. They are counted, not fixed.
 
-## For review (owner)
+## Accepted policy choices
 
-Accept or change each ⭐:
+The owner delegated these choices on 2026-09-26; accepted 2026-09-27:
 
 1. §1 audit: **A** — in-place feature edits, Bronze as audit (no migration).
 2. §2 fingerprint change = **new business** (close + mint), not rename in place.
 3. §2 relocation threshold **50 m**, relocation = close + new Place + new
    Establishment.
-4. §3 **N = 2** releases, **90 %** partial-run floor, **reopen** on
+4. §3 **N = 2** releases, **90 %** anomaly floor plus durable completion/coverage checks, **reopen** on
    reappearance.
 5. §3 `/v1/venues` **hides closed venues**.
 6. §4 re-home via merge `[E, E′] → E′` in the lifecycle pass; retire on a
@@ -277,7 +319,7 @@ Accept or change each ⭐:
    Establishments in the sweep and after website assignment; new
    `refresh_subject_readiness` command.
 
-On acceptance S13 implements exactly this, adds an amendment pointer to
+S13 implements this accepted contract, adds an amendment pointer to
 ADR-0009 §2 (re-observation) and a note to ADR-0008 (§3/§4 venue filtering),
 and writes the tests the checklist lists for S13. Those are: a re-observed POI
 with a new address, a POI missing for N releases, an Organization merge seen
