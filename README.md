@@ -116,7 +116,12 @@ curl localhost:8000/healthz   # {"status":"ok"}
 curl localhost:8000/readyz    # {"status":"ok"} once Postgres is up
 ```
 
-`make dev-logs` tails the stack, `make dev-down` stops it.
+`make dev-logs` tails the stack, `make dev-down` stops it. `.env` is read only
+by these Docker Compose targets (`--env-file .env`); the app, Alembic, and
+pytest below read `DATABASE_URL` straight from the process environment and
+never load `.env`, so the Compose stack's variable is named
+`HELIOS_COMPOSE_DATABASE_URL` — that keeps a shell's own `DATABASE_URL` (set
+for the commands below) from leaking into the containers.
 
 To work on the code directly (tests, linting, type checking):
 

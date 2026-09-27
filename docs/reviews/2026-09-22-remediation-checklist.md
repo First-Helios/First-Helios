@@ -46,7 +46,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
 | 🚦 | **Phase 5 gate:** start menu extraction after S7, S11, S12, S13 are merged | | | [ ] |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 draft, awaiting review |
-| 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [ ] |
+| 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 draft, awaiting owner review |
 | 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
 | 17 | S17 Close-out | all | S | [ ] |
 
@@ -319,11 +319,11 @@ explains it. When a group is done, its sessions are ready to hand off.
   - *Why:* all low-risk constraints; batching them means one migration review, not six.
 - **8.2 Infra PR**: `.dockerignore`, compose env handling, `var/` volume, restart
   policy, project name, image digests
-  - [ ] ⭐ Approve  - [ ] Skip for now
+  - [X] ⭐ Approve  - [ ] Skip for now
   - *Why:* stops the Pi losing caches every run and lets the stack survive a reboot.
 - **8.3 `pyproject.toml`**: rename to `helios`, declare `pydantic`/`starlette`, drop
   unused `pytest-asyncio`
-  - [ ] ⭐ Approve  - [ ] Skip for now
+  - [X] ⭐ Approve  - [ ] Skip for now
   - *Why:* cosmetic, but makes the dependency list honest.
 
 ### D9 — Accept or defer (no session needed; confirm with a tick)
@@ -763,16 +763,16 @@ Branch: `fix/schema-tightening` · Models + migration: hand-reviewed SQL, owner 
 Hand-off prompt: `Do session S15 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `chore/infra-tooling` · Split into an `infra/` PR and a config-only PR.
 
-- [ ] R84 `.dockerignore` patterns only match at the repo root
-- [ ] R85 Root `.env` is read by nothing, but docs say it is
-- [ ] R86 Compose's `DATABASE_URL` leaks in from your shell
-- [ ] R90 Images pinned by tag, not digest
-- [ ] R91 `mypy.ini` dead and redundant sections
-- [ ] R92 `ruff.toml` dead ignores; no security rules
-- [ ] R93 ruff version differs between pre-commit and the lockfile
-- [ ] R96 `pyproject.toml` name, unused and undeclared dependencies
-- [ ] R113 No volume for `var/`, so containerised runs lose their caches
-- [ ] R114 Compose has no project name or restart policy
+- [X] R84 `.dockerignore` patterns only match at the repo root
+- [X] R85 Root `.env` is read by nothing, but docs say it is
+- [X] R86 Compose's `DATABASE_URL` leaks in from your shell
+- [X] R90 Images pinned by tag, not digest
+- [X] R91 `mypy.ini` dead and redundant sections
+- [X] R92 `ruff.toml` dead ignores; no security rules
+- [X] R93 ruff version differs between pre-commit and the lockfile
+- [X] R96 `pyproject.toml` name, unused and undeclared dependencies
+- [X] R113 No volume for `var/`, so containerised runs lose their caches
+- [X] R114 Compose has no project name or restart policy
 
 **Recommended approach**
 - `infra/` PR: `**/` patterns in `.dockerignore`; compose `name: helios`,
