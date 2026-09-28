@@ -1,6 +1,6 @@
 # S6 Pi rebuild execution record
 
-**Rebuild complete. Pi URL-resolution gate closed pending confirmation of the new precision audit.**
+**Rebuild complete. Pi URL-resolution gate closed: precision review found supported errors and unresolved cases.**
 
 The owner explicitly instructed the agent to perform the rebuild after #42
 merged. Execution began 2026-09-28 and used merged commit
@@ -90,11 +90,14 @@ cache. The local packet additionally includes `sample.json`, `review.md`
 backup directory.
 
 The raw CLI worksheet pre-populates labels with detector suggestions. The
-separate **`review.json` clears those labels and records `review_status:
-"pending"`**, so they cannot be mistaken for completed review. Resolve the
-43 duplicate candidates and 45 geocode flags with supporting notes before
-recording confirmed rates and opening the gate. No labels were carried over
-from the previous audit. URL resolution remains stopped.
+original **`review.json` clears those labels and records `review_status:
+"pending"`**, so they cannot be mistaken for completed review. It remains
+unchanged for reproducibility. The [subsequent precision review](2026-09-28-precision-review.md)
+assesses all 88 entries in a separate worksheet: 23 supported duplicate pairs,
+4 distinct, 16 unresolved; 20 corroborated geocodes, 3 supported wrong,
+22 unresolved. Owner confirmation remains pending. Three confirmed wrong
+geocodes would yield at least 3% in the 100-row sample and fail the gate.
+No labels were carried over from the previous audit. URL resolution remains stopped.
 
 S6b is not Pi-gating. Phase 5 remains closed until S13 and its lifecycle
 acceptance tests pass.

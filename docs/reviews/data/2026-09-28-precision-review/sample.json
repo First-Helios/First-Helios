@@ -1,0 +1,802 @@
+[
+  {
+    "subject_id": 8595,
+    "name": "Gatto Nero Llc",
+    "fingerprint": "gatto nero llc",
+    "latitude": 30.262453,
+    "longitude": -97.726204,
+    "address": "1601 E 6th St, Austin, TX, 78702-3307"
+  },
+  {
+    "subject_id": 7635,
+    "name": "South Lamar, Austin",
+    "fingerprint": "south lamar austin",
+    "latitude": 30.25569,
+    "longitude": -97.763077,
+    "address": "1100 South Lamar Blvd, Austin, TX, 78704"
+  },
+  {
+    "subject_id": 11421,
+    "name": "Super Tacos Bros",
+    "fingerprint": "super tacos bros",
+    "latitude": 30.226582,
+    "longitude": -97.476738,
+    "address": "115 Willie May Way, Elgin, TX, 78621"
+  },
+  {
+    "subject_id": 26124,
+    "name": "Pollo Campero",
+    "fingerprint": "pollo campero",
+    "latitude": 30.481659,
+    "longitude": -97.661079,
+    "address": "549 Louis Henna Blvd, Round Rock, TX, 78664"
+  },
+  {
+    "subject_id": 14490,
+    "name": "J2 Dining",
+    "fingerprint": "j2 dining",
+    "latitude": 30.282833,
+    "longitude": -97.736649,
+    "address": "201 E 21st St, Austin, TX, 78705"
+  },
+  {
+    "subject_id": 20067,
+    "name": "Don Charly",
+    "fingerprint": "don charly",
+    "latitude": 30.299616,
+    "longitude": -97.474571,
+    "address": "10309 Hibbs Ln, Manor, TX, 78653"
+  },
+  {
+    "subject_id": 12771,
+    "name": "Jacob's Bread Co",
+    "fingerprint": "jacobs bread co",
+    "latitude": 30.346916,
+    "longitude": -97.766739,
+    "address": "6011 Bon Terra Dr, Austin, TX, 78731"
+  },
+  {
+    "subject_id": 12705,
+    "name": "Wayback Burgers",
+    "fingerprint": "wayback burgers",
+    "latitude": 30.356226,
+    "longitude": -97.734451,
+    "address": "2525 W Anderson Ln #135, Austin, TX, 78757"
+  },
+  {
+    "subject_id": 20271,
+    "name": "Polkadots Cupcake Factory",
+    "fingerprint": "polkadots cupcake factory",
+    "latitude": 30.310757,
+    "longitude": -97.712082,
+    "address": "944 E 51st St, Austin, TX, 78751-2241"
+  },
+  {
+    "subject_id": 9381,
+    "name": "The Pub - Downtown",
+    "fingerprint": "the pub downtown",
+    "latitude": 30.266878,
+    "longitude": -97.745415,
+    "address": "214 W 4th St Ste A, Austin, TX, 78701"
+  },
+  {
+    "subject_id": 16977,
+    "name": "Byte | Serving Up Food + Data",
+    "fingerprint": "byte serving up food data",
+    "latitude": 30.462856,
+    "longitude": -97.792809,
+    "address": "13785 Research Blvd, Austin, TX, 78750-1873"
+  },
+  {
+    "subject_id": 4347,
+    "name": "Benny's Texas Bar-B-Que",
+    "fingerprint": "bennys texas bar b que",
+    "latitude": 30.129929,
+    "longitude": -97.445,
+    "address": "1688 State Highway 71 W, Cedar Creek, TX, 78612"
+  },
+  {
+    "subject_id": 7491,
+    "name": "Snack Bar",
+    "fingerprint": "snack bar",
+    "latitude": 30.251448,
+    "longitude": -97.749199,
+    "address": "1224 S Congress Ave, Austin, TX, 78704"
+  },
+  {
+    "subject_id": 26472,
+    "name": "Cool Cafe (school Cafeteria)",
+    "fingerprint": "cool cafe school cafeteria",
+    "latitude": 30.48978,
+    "longitude": -97.691513,
+    "address": "1010 Chisholm Valley Dr, Round Rock, TX, 78681-7344"
+  },
+  {
+    "subject_id": 1347,
+    "name": "Barstool Bites",
+    "fingerprint": "barstool bites",
+    "latitude": 30.257803,
+    "longitude": -97.807068,
+    "address": "2901 S Capital of Texas Hwy, Austin, TX, 78746-8101"
+  },
+  {
+    "subject_id": 750,
+    "name": "Fired Up",
+    "fingerprint": "fired up",
+    "latitude": 30.253933,
+    "longitude": -97.872437,
+    "address": "7500 Rialto Blvd, Austin, TX, 78735"
+  },
+  {
+    "subject_id": 3222,
+    "name": "Sonic Drive In",
+    "fingerprint": "sonic drive in",
+    "latitude": 30.166693,
+    "longitude": -97.79155,
+    "address": "155 W. Slaughter Lane, Austin, TX, 78748"
+  },
+  {
+    "subject_id": 17862,
+    "name": "Mouton's Bistro & Bar",
+    "fingerprint": "moutons bistro bar",
+    "latitude": 30.479994,
+    "longitude": -97.831932,
+    "address": "1821 S Lakeline Blvd #104, Cedar Park, TX, 78613"
+  },
+  {
+    "subject_id": 14583,
+    "name": "Heat",
+    "fingerprint": "heat",
+    "latitude": 30.282785,
+    "longitude": -97.742317,
+    "address": "1914 Guadalupe St, Austin, TX, 78705-5607"
+  },
+  {
+    "subject_id": 22119,
+    "name": "Tortilleria El Taquito Marisquero",
+    "fingerprint": "tortilleria el taquito marisquero",
+    "latitude": 30.355619,
+    "longitude": -97.704178,
+    "address": "8610 N Lamar Blvd #114, Austin, TX, 78753"
+  },
+  {
+    "subject_id": 12495,
+    "name": "Eldorado Cafe",
+    "fingerprint": "eldorado cafe",
+    "latitude": 30.362291,
+    "longitude": -97.742302,
+    "address": "3300 W Anderson Ln, Austin, TX, 78757"
+  },
+  {
+    "subject_id": 28200,
+    "name": "Bar Louie",
+    "fingerprint": "bar louie",
+    "latitude": 30.569372,
+    "longitude": -97.68763,
+    "address": "270 Bass Pro Dr, Round Rock, TX, 78665"
+  },
+  {
+    "subject_id": 9336,
+    "name": "P. Terry's Burger Stand",
+    "fingerprint": "p terrys burger stand",
+    "latitude": 30.267153,
+    "longitude": -97.743073,
+    "address": "517 W MLK Jr. Blvd., Austin, TX, 78701"
+  },
+  {
+    "subject_id": 16866,
+    "name": "Great American Cookies",
+    "fingerprint": "great american cookies",
+    "latitude": 30.471882,
+    "longitude": -97.803368,
+    "address": "11200 Lakeline Mall Dr, Cedar Park, TX, 78613-1500"
+  },
+  {
+    "subject_id": 1266,
+    "name": "Chaat Ka Chaskaaa",
+    "fingerprint": "chaat ka chaskaaa",
+    "latitude": 30.235216,
+    "longitude": -97.839104,
+    "address": "4912 Monterey Oaks Blvd, Austin, TX, 78749"
+  },
+  {
+    "subject_id": 2109,
+    "name": "El Sol y La Luna",
+    "fingerprint": "el sol y la luna",
+    "latitude": 30.224819,
+    "longitude": -97.796432,
+    "address": "1224 S Congress Ave, Austin, TX, 78704"
+  },
+  {
+    "subject_id": 3510,
+    "name": "CraigO's Pizza, Pastaria, Salads",
+    "fingerprint": "craigos pizza pastaria salads",
+    "latitude": 30.137337,
+    "longitude": -97.795967,
+    "address": "11215 S Interstate 35, Austin, TX, 78747-0001"
+  },
+  {
+    "subject_id": 9378,
+    "name": "Halcyon",
+    "fingerprint": "halcyon",
+    "latitude": 30.266939,
+    "longitude": -97.745697,
+    "address": "218 W 4th St, Austin, TX, 78701"
+  },
+  {
+    "subject_id": 20388,
+    "name": "MezzeMe",
+    "fingerprint": "mezzeme",
+    "latitude": 30.315611,
+    "longitude": -97.733536,
+    "address": "4700 W Guadalupe St Suite#9, Austin, TX, 78751"
+  },
+  {
+    "subject_id": 6087,
+    "name": "McDonald's",
+    "fingerprint": "mcdonalds",
+    "latitude": 30.235693,
+    "longitude": -97.724037,
+    "address": "2426 E Riverside Dr, Austin, TX, 78741-3035"
+  },
+  {
+    "subject_id": 17058,
+    "name": "Lake Creek Food Arena",
+    "fingerprint": "lake creek food arena",
+    "latitude": 30.460272,
+    "longitude": -97.794792,
+    "address": "13752 Research Blvd, Austin, TX, 78750"
+  },
+  {
+    "subject_id": 26817,
+    "name": "Dutch Bros. Coffee",
+    "fingerprint": "dutch bros coffee",
+    "latitude": 30.519382,
+    "longitude": -97.656197,
+    "address": "1700 E Palm Valley Blvd #850, Round Rock, TX, 78664"
+  },
+  {
+    "subject_id": 23064,
+    "name": "Rrh Den Llc",
+    "fingerprint": "rrh den llc",
+    "latitude": 30.375757,
+    "longitude": -97.672852,
+    "address": "904 E Braker Ln, Austin, TX, 78753-3230"
+  },
+  {
+    "subject_id": 17856,
+    "name": "Dough it Up",
+    "fingerprint": "dough it up",
+    "latitude": 30.47896,
+    "longitude": -97.832664,
+    "address": "1540 Cypress Creek Road #106, Cedar Park, TX, 78613"
+  },
+  {
+    "subject_id": 16128,
+    "name": "Cedar Park Grove Ltd",
+    "fingerprint": "cedar park grove ltd",
+    "latitude": 30.524389,
+    "longitude": -97.814331,
+    "address": "1310 E Whitestone Blvd Ste 500, Cedar Park, TX, 78613-2433"
+  },
+  {
+    "subject_id": 18582,
+    "name": "Super Burrito",
+    "fingerprint": "super burrito",
+    "latitude": 30.435059,
+    "longitude": -97.766907,
+    "address": "7309 McNeil Dr, Austin, TX, 78729"
+  },
+  {
+    "subject_id": 11715,
+    "name": "Gatti's Pizza",
+    "fingerprint": "gattis pizza",
+    "latitude": 30.31352,
+    "longitude": -97.949196,
+    "address": "3305 Ranch Road 620 S, Austin, TX, 78738"
+  },
+  {
+    "subject_id": 1557,
+    "name": "Kerbey Lane Cafe",
+    "fingerprint": "kerbey lane cafe",
+    "latitude": 30.242182,
+    "longitude": -97.783501,
+    "address": "3003 S Lamar Blvd, Austin, TX, 78704"
+  },
+  {
+    "subject_id": 21153,
+    "name": "The Meltdown",
+    "fingerprint": "the meltdown",
+    "latitude": 30.3325,
+    "longitude": -97.705238,
+    "address": "7100 North I-35, Austin, TX, 78752"
+  },
+  {
+    "subject_id": 19413,
+    "name": "Tacos & Mariscos Chelito's",
+    "fingerprint": "tacos mariscos chelitos",
+    "latitude": 30.285519,
+    "longitude": -97.683449,
+    "address": "4509 E Martin Luther King Jr Blvd, Austin, TX, 78721-1356"
+  },
+  {
+    "subject_id": 16647,
+    "name": "Papa Johns Pizza",
+    "fingerprint": "papa johns pizza",
+    "latitude": 30.478374,
+    "longitude": -97.764908,
+    "address": "9222 W Parmer Ln D, Austin, TX, 78717"
+  },
+  {
+    "subject_id": 2697,
+    "name": "Bamboo Bistro Westgate",
+    "fingerprint": "bamboo bistro westgate",
+    "latitude": 30.207642,
+    "longitude": -97.815628,
+    "address": "6818 West Gate Blvd, Austin, TX, 78745"
+  },
+  {
+    "subject_id": 3585,
+    "name": "Main St & I-35",
+    "fingerprint": "main st i 35",
+    "latitude": 30.0868,
+    "longitude": -97.822556,
+    "address": "670 OLD SAN ANTONIO RD, BUDA, TX, 78610"
+  },
+  {
+    "subject_id": 10326,
+    "name": "Willow Country Bar",
+    "fingerprint": "willow country bar",
+    "latitude": 30.270023,
+    "longitude": -97.750443,
+    "address": "719 W 6th St, Austin, TX, 78701-2707"
+  },
+  {
+    "subject_id": 10986,
+    "name": "Quesoff III",
+    "fingerprint": "quesoff iii",
+    "latitude": 30.270014,
+    "longitude": -97.736084,
+    "address": "912 Red River St, Austin, TX, 78701-2625"
+  },
+  {
+    "subject_id": 22635,
+    "name": "Express Teriyaki & Grill",
+    "fingerprint": "express teriyaki grill",
+    "latitude": 30.36701,
+    "longitude": -97.696121,
+    "address": "9616 N Lamar Blvd Ste 168, Austin, TX, 78753"
+  },
+  {
+    "subject_id": 6723,
+    "name": "Big Boss Foods",
+    "fingerprint": "big boss foods",
+    "latitude": 30.250067,
+    "longitude": -97.755547,
+    "address": "1502 S 1st St, Austin, TX, 78704-3043"
+  },
+  {
+    "subject_id": 28698,
+    "name": "Eats on 8th",
+    "fingerprint": "eats on 8th",
+    "latitude": 30.636345,
+    "longitude": -97.675873,
+    "address": "204 E 8th St, Georgetown, TX, 78626"
+  },
+  {
+    "subject_id": 25983,
+    "name": "Wingstop",
+    "fingerprint": "wingstop",
+    "latitude": 30.469246,
+    "longitude": -97.596336,
+    "address": "18816 Limestone Commercial Dr, Ste. 400, Pflugerville, TX, 78660"
+  },
+  {
+    "subject_id": 5469,
+    "name": "El Pollo Regio",
+    "fingerprint": "el pollo regio",
+    "latitude": 30.220362,
+    "longitude": -97.757111,
+    "address": "500 E Ben White Blvd, Austin, TX, 78704-3259"
+  },
+  {
+    "subject_id": 12222,
+    "name": "Tutto Gusto Restaurant",
+    "fingerprint": "tutto gusto restaurant",
+    "latitude": 30.382254,
+    "longitude": -97.884377,
+    "address": "4300 N Quinlan Park Rd, Austin, TX, 78732-6072"
+  },
+  {
+    "subject_id": 1452,
+    "name": "Taco Bell",
+    "fingerprint": "taco bell",
+    "latitude": 30.274006,
+    "longitude": -97.799843,
+    "address": "3201 Bee Cave Rd Ste 180, Austin, TX, 78746"
+  },
+  {
+    "subject_id": 8400,
+    "name": "Mezcaler\u00c3\u00ada Tobal\u00c3\u00a1",
+    "fingerprint": "mezcaleraa tobala",
+    "latitude": 30.262043,
+    "longitude": -97.722717,
+    "address": "1816 E 6th St, Austin, TX, 78702"
+  },
+  {
+    "subject_id": 27480,
+    "name": "Pinthouse Pizza",
+    "fingerprint": "pinthouse pizza",
+    "latitude": 30.539417,
+    "longitude": -97.694328,
+    "address": "2800 Hoppe Trail, Round Rock, TX, 78681"
+  },
+  {
+    "subject_id": 6969,
+    "name": "Hi Sign Brewing",
+    "fingerprint": "hi sign brewing",
+    "latitude": 30.254555,
+    "longitude": -97.696945,
+    "address": "730 Shady Ln, Austin, TX, 78702"
+  },
+  {
+    "subject_id": 26850,
+    "name": "Rosa's Caf\u00e9 & Tortilla Factory",
+    "fingerprint": "rosas cafe tortilla factory",
+    "latitude": 30.51779,
+    "longitude": -97.652855,
+    "address": "2111 E Palm Valley Blvd, Round Rock, TX, 78665-4566"
+  },
+  {
+    "subject_id": 13332,
+    "name": "Chipotle Mexican Grill",
+    "fingerprint": "chipotle mexican grill",
+    "latitude": 30.312473,
+    "longitude": -97.738663,
+    "address": "4400 N Lamar Blvd Ste 101, Austin, TX, 78756"
+  },
+  {
+    "subject_id": 4965,
+    "name": "Whataburger",
+    "fingerprint": "whataburger",
+    "latitude": 30.21097,
+    "longitude": -97.667282,
+    "address": "2901 Spirit of Texas Dr #100, Austin, TX, 78719"
+  },
+  {
+    "subject_id": 15861,
+    "name": "La parrilla LAC , Latin Cuisine",
+    "fingerprint": "la parrilla lac latin cuisine",
+    "latitude": 30.630341,
+    "longitude": -97.745056,
+    "address": "209 Farley St, Hutto, TX, 78634-4539"
+  },
+  {
+    "subject_id": 18288,
+    "name": "Fuegosff.atx",
+    "fingerprint": "fuegosff atx",
+    "latitude": 30.4464,
+    "longitude": -97.797142,
+    "address": "9817 Anderson Mill Rd, Austin, TX, 78750-2227"
+  },
+  {
+    "subject_id": 5049,
+    "name": "Pueblo Viejo",
+    "fingerprint": "pueblo viejo",
+    "latitude": 30.208761,
+    "longitude": -97.729462,
+    "address": "3901 Promontory Point Dr., Austin, TX, 78744"
+  },
+  {
+    "subject_id": 21183,
+    "name": "Jefes",
+    "fingerprint": "jefes",
+    "latitude": 30.331713,
+    "longitude": -97.722153,
+    "address": "720 Lamar Pl, Austin, TX, 78752"
+  },
+  {
+    "subject_id": 24753,
+    "name": "Afrogrill ATX",
+    "fingerprint": "afrogrill atx",
+    "latitude": 30.428619,
+    "longitude": -97.678764,
+    "address": "1716 W Howard Ln, Austin, TX, 78728"
+  },
+  {
+    "subject_id": 27111,
+    "name": "The Alcove Cantina",
+    "fingerprint": "the alcove cantina",
+    "latitude": 30.508595,
+    "longitude": -97.677948,
+    "address": "119 E Main St, Round Rock, TX, 78664-5242"
+  },
+  {
+    "subject_id": 17301,
+    "name": "Buenos Sabores",
+    "fingerprint": "buenos sabores",
+    "latitude": 30.453783,
+    "longitude": -97.828094,
+    "address": "11416 N FM 620, Austin, TX, 78726"
+  },
+  {
+    "subject_id": 22698,
+    "name": "Machetes \u201cdo\u00f1a Leova\u201d",
+    "fingerprint": "machetes dona leova",
+    "latitude": 30.367472,
+    "longitude": -97.695267,
+    "address": "9710 N Lamar Blvd, Austin, TX, 78753-4112"
+  },
+  {
+    "subject_id": 15606,
+    "name": "Lali Son Fast Food",
+    "fingerprint": "lali son fast food",
+    "latitude": 30.575928,
+    "longitude": -97.872322,
+    "address": "1500 S, Leander, TX, 78641"
+  },
+  {
+    "subject_id": 14127,
+    "name": "The Cauldron",
+    "fingerprint": "the cauldron",
+    "latitude": 30.290577,
+    "longitude": -97.750343,
+    "address": "2402 San Gabriel St, Austin, TX 78705, United States, Austin, TX, 78705"
+  },
+  {
+    "subject_id": 14823,
+    "name": "Olamaie",
+    "fingerprint": "olamaie",
+    "latitude": 30.27989,
+    "longitude": -97.743607,
+    "address": "1610 San Antonio St, Austin, TX, 78701"
+  },
+  {
+    "subject_id": 1590,
+    "name": "Wholly Cow Burgers",
+    "fingerprint": "wholly cow burgers",
+    "latitude": 30.242826,
+    "longitude": -97.783844,
+    "address": "3010 S Lamar Blvd, Austin, TX, 78704"
+  },
+  {
+    "subject_id": 7503,
+    "name": "Doc's Bar & Grill",
+    "fingerprint": "docs bar grill",
+    "latitude": 30.252361,
+    "longitude": -97.748322,
+    "address": "1123 S Congress Ave, Austin, TX, 78704-1727"
+  },
+  {
+    "subject_id": 24357,
+    "name": "Tech Ridge Management, Llc",
+    "fingerprint": "tech ridge management llc",
+    "latitude": 30.40304,
+    "longitude": -97.669609,
+    "address": "12510 McCallen Pass, Austin, TX, 78753-5358"
+  },
+  {
+    "subject_id": 27261,
+    "name": "Sabor Colombia Restaurant",
+    "fingerprint": "sabor colombia restaurant",
+    "latitude": 30.512274,
+    "longitude": -97.696198,
+    "address": "1318 Round Rock Ave, Round Rock, TX, 78681"
+  },
+  {
+    "subject_id": 15378,
+    "name": "Agave Coffee",
+    "fingerprint": "agave coffee",
+    "latitude": 30.548061,
+    "longitude": -97.865074,
+    "address": "1801 Muledeer Run, Leander, TX, 78641-2851"
+  },
+  {
+    "subject_id": 3483,
+    "name": "Kikos Tacos",
+    "fingerprint": "kikos tacos",
+    "latitude": 30.160198,
+    "longitude": -97.777496,
+    "address": "729 E Slaughter Ln, Austin, TX, 78744"
+  },
+  {
+    "subject_id": 22284,
+    "name": "Tikka Shack Indian Grub",
+    "fingerprint": "tikka shack indian grub",
+    "latitude": 30.357914,
+    "longitude": -97.73291,
+    "address": "2438 W Anderson Ln. A-1, Austin, TX, 78757"
+  },
+  {
+    "subject_id": 4002,
+    "name": "The Burger Den",
+    "fingerprint": "the burger den",
+    "latitude": 30.03097,
+    "longitude": -97.849289,
+    "address": "19020 Ih35, Kyle, TX, 78640"
+  },
+  {
+    "subject_id": 10812,
+    "name": "Apollo Cafe",
+    "fingerprint": "apollo cafe",
+    "latitude": 30.272043,
+    "longitude": -97.74292,
+    "address": "1449  Ashton Lane, Austin, TX, 78701"
+  },
+  {
+    "subject_id": 5940,
+    "name": "Goldis Sausage Co.",
+    "fingerprint": "goldis sausage co",
+    "latitude": 30.231403,
+    "longitude": -97.759705,
+    "address": "3116 S Congress Ave, Austin, TX, 78704"
+  },
+  {
+    "subject_id": 4593,
+    "name": "Protein Life",
+    "fingerprint": "protein life",
+    "latitude": 30.174706,
+    "longitude": -97.612846,
+    "address": "13301 Dearbonne Dr, Del Valle, TX, 78617-5770"
+  },
+  {
+    "subject_id": 11256,
+    "name": "Beto's Restaurant",
+    "fingerprint": "betos restaurant",
+    "latitude": 30.273869,
+    "longitude": -97.697044,
+    "address": "3306 Oak Springs Dr, Austin, TX, 78721"
+  },
+  {
+    "subject_id": 19449,
+    "name": "Short Stop",
+    "fingerprint": "short stop",
+    "latitude": 30.286713,
+    "longitude": -97.707314,
+    "address": "3710 Airport Blvd, Austin, TX, 78722"
+  },
+  {
+    "subject_id": 29253,
+    "name": "Thirsty Penguin",
+    "fingerprint": "thirsty penguin",
+    "latitude": 30.674637,
+    "longitude": -97.925987,
+    "address": "14751 W State Hwy 29, Liberty Hill, TX, 78642"
+  },
+  {
+    "subject_id": 7395,
+    "name": "La Catedral Del Marisco",
+    "fingerprint": "la catedral del marisco",
+    "latitude": 30.253027,
+    "longitude": -97.713455,
+    "address": "2711 E Cesar Chavez St, Austin, TX, 78702"
+  },
+  {
+    "subject_id": 4527,
+    "name": "Super Moreliana",
+    "fingerprint": "super moreliana",
+    "latitude": 30.167648,
+    "longitude": -97.692429,
+    "address": "6112 US Highway 183 S, Austin, TX, 78744-5420"
+  },
+  {
+    "subject_id": 11820,
+    "name": "Little Country Diner",
+    "fingerprint": "little country diner",
+    "latitude": 30.366262,
+    "longitude": -98.071228,
+    "address": "22000 State Highway 71 W, Spicewood, TX, 78669-6978"
+  },
+  {
+    "subject_id": 27129,
+    "name": "Mi Mundo Coffeehouse and Roastery",
+    "fingerprint": "mi mundo coffeehouse and roastery",
+    "latitude": 30.508118,
+    "longitude": -97.678833,
+    "address": "106 S Mays St #100, Round Rock, TX, 78664"
+  },
+  {
+    "subject_id": 14169,
+    "name": "The Pizza Press",
+    "fingerprint": "the pizza press",
+    "latitude": 30.290661,
+    "longitude": -97.742012,
+    "address": "404 W 26th St, Austin, TX, 78705"
+  },
+  {
+    "subject_id": 2769,
+    "name": "Galaxy Cafe",
+    "fingerprint": "galaxy cafe",
+    "latitude": 30.18331,
+    "longitude": -97.848053,
+    "address": "9911 Brodie Ln, Austin, TX, 78748"
+  },
+  {
+    "subject_id": 19872,
+    "name": "Doc Green's Salads and Grill",
+    "fingerprint": "doc greens salads and grill",
+    "latitude": 30.30636,
+    "longitude": -97.709084,
+    "address": "1201 Barbara Jordan Blvd, Austin, TX, 78723"
+  },
+  {
+    "subject_id": 19398,
+    "name": "Torchy's Tacos",
+    "fingerprint": "torchys tacos",
+    "latitude": 30.287413,
+    "longitude": -97.681198,
+    "address": "4501 Springdale Rd, Austin, TX, 78723-6031"
+  },
+  {
+    "subject_id": 11997,
+    "name": "Jasper's Big Dog Saloon",
+    "fingerprint": "jaspers big dog saloon",
+    "latitude": 30.349838,
+    "longitude": -97.965042,
+    "address": "1310 Ranch Road 620 S Ste B12, Lakeway, TX, 78734"
+  },
+  {
+    "subject_id": 1512,
+    "name": "Nothing Bundt Cakes",
+    "fingerprint": "nothing bundt cakes",
+    "latitude": 30.270399,
+    "longitude": -97.788513,
+    "address": "2785 Bee Caves Rd #333, Rollingwood, TX, 78746"
+  },
+  {
+    "subject_id": 12825,
+    "name": "Starbucks",
+    "fingerprint": "starbucks",
+    "latitude": 30.33659,
+    "longitude": -97.803795,
+    "address": "3801 N Capital Of Texas Hwy, Ste G100, Austin, TX, 78746"
+  },
+  {
+    "subject_id": 24711,
+    "name": "Hay Elotes",
+    "fingerprint": "hay elotes",
+    "latitude": 30.42499,
+    "longitude": -97.670113,
+    "address": "1200 W Howard Ln, Austin, TX, 78753-9174"
+  },
+  {
+    "subject_id": 24549,
+    "name": "Bombay Express",
+    "fingerprint": "bombay express",
+    "latitude": 30.41115,
+    "longitude": -97.676125,
+    "address": "13000 N IH-35 Svc Rd SB, Austin, TX, 78753"
+  },
+  {
+    "subject_id": 15159,
+    "name": "Casita Ruby",
+    "fingerprint": "casita ruby",
+    "latitude": 30.538237,
+    "longitude": -97.940559,
+    "address": "23296 Nameless Rd, Leander, TX, 78641-4047"
+  },
+  {
+    "subject_id": 29178,
+    "name": "Golden Chick",
+    "fingerprint": "golden chick",
+    "latitude": 30.665014,
+    "longitude": -97.90493,
+    "address": "13282 W State Hwy 29, Liberty Hill, TX, 78642"
+  },
+  {
+    "subject_id": 8562,
+    "name": "Tacos Juanita",
+    "fingerprint": "tacos juanita",
+    "latitude": 30.263187,
+    "longitude": -97.726692,
+    "address": "1512 E 6th St, Austin, TX, 78702"
+  },
+  {
+    "subject_id": 21354,
+    "name": "Bamboo House",
+    "fingerprint": "bamboo house",
+    "latitude": 30.339102,
+    "longitude": -97.71843,
+    "address": "7010 Easy Wind Dr Unit 100, Austin, TX, 78752"
+  }
+]
