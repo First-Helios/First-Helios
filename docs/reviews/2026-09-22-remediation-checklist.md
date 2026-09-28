@@ -34,7 +34,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 3 | S3 URL pipeline logic | D3 | M | [X] #25 |
 | 4 | S4 Menu-URL quality | D3 | S | [X] #26 |
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 merged; ADR-0011 accepted 2026-09-27 |
-| 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [ ] Implemented on `fix/evidence-endpoints`; validated; review and merge pending |
+| 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; audit confirmation pending |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
 | 🚦 | **Pi gate:** after S2/S3/S4/S6 merge AND owner rebuild/new precision audit | | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
@@ -553,7 +553,7 @@ Branch: `fix/platform-menu-urls` · Not Pi-gating.
 - Test: a homepage with a site menu and a Toast link writes both records; a re-run
   writes nothing.
 
-🚦 **Pi gate remains closed** — S2/S3/S4 are merged; S6 merge and the owner-run rebuild/new precision audit remain. Follow [the S6 runbook](2026-09-27-s6-pi-rebuild.md). S6b is not Pi-gating.
+🚦 **Pi gate remains closed** — S2/S3/S4/S6 are merged and the owner-authorized Pi rebuild completed 2026-09-28; confirmation of the new precision audit remains. Follow [the S6 runbook](2026-09-27-s6-pi-rebuild.md). S6b is not Pi-gating.
 
 ### S7 — Gold refresh fix · size M · needs D5
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`
@@ -826,7 +826,7 @@ Agents add one row per session (or per resume).
 | 2026-09-23 | S2 | fix/crawler-etiquette | #24 | Merged | — |
 | 2026-09-23 | S3 | fix/url-pipeline | #25 | Merged | — (D3.7–3.9 asked and answered at session start) |
 | 2026-09-23 | S4 | fix/menu-url-quality | #26 | Merged | — (D3.4 classifier → Phase 5 ADR; D3.5 platform fallback, one URL; see ADR-0010 Amendment 3) |
-| 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Merged; ADR-0011 accepted 2026-09-27 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 implementation now awaits review and merge) |
+| 2026-09-23 | S5 | docs/adr-0011-evidence-endpoints | #27 | Merged; ADR-0011 accepted 2026-09-27 | — (D4 answered; D4.6 = S6b and D4.7 = 20 days approved by owner; S6 subsequently merged as #42) |
 | 2026-09-23 | S7 | fix/gold-refresh | #28 | Merged (changes ADR-0006 refresh behaviour; amendment note added) | — (D5 already on `main`. #27 was merged, but ADR-0011 still says `Status: Proposed`, so S6 stays blocked until you record acceptance. Also rejects observation-cutoff requests; see PR) |
 | 2026-09-23 | S8 | fix/identity-locks | #30 | Merged (concurrency-sensitive) | — (D6.1 answered on `main`. Lock order documented in `identity/commands.py`; the resolver plans without locks, then locks and re-checks inside a savepoint and retries once (`ResolutionConflictError`). R61 fixed for the stale read only; Establishment demotion is left to ADR-0012 (D6.4). Transactions that run several commands (discovery batches, URL resolve-then-assign) can still deadlock; this is documented, not fixed) |
 | 2026-09-24 | S9 | fix/api-polish | #32 | Merged | — (row added by S11; S9 left no log row) |
@@ -845,6 +845,18 @@ verification on rebrand, and monotonic lifecycle replay. S13 is ready to
 implement, not completed. S6 passed strict `make ci` on a fresh disposable
 database: 957 passed, one expected parsing-package placeholder skip, 92% coverage.
 `alembic check` found no drift; the Docker build and `/healthz` smoke test passed.
-S6 still awaits review and merge; no Pi rebuild or Phase 5 gate was executed. Current operational status is in the
+At that point S6 awaited review and merge. It subsequently merged as #42 and the
+owner-authorized Pi rebuild completed 2026-09-28. The new precision audit still
+requires confirmation; Phase 5 remains closed. Current operational status is in the
 [S6 runbook](2026-09-27-s6-pi-rebuild.md). This supersedes earlier proposed/draft
 status text in the historical session log.
+
+### 2026-09-28 Pi rebuild
+
+S6 (#42) merged with green CI. On the owner's explicit instruction, the agent
+backed up the Pi database and source snapshot, retained the previous
+`infra_postgres_data` volume offline, and deployed the merged commit into a fresh
+`helios_postgres_data` volume. Discovery completed with 10,014 observations and
+9,996 venues; every observation has the full provenance chain. The API and
+schema checks passed. See [the execution record](2026-09-28-pi-rebuild-results.md).
+URL resolution remains stopped pending confirmation of the new precision audit.

@@ -1,21 +1,27 @@
 # S6 Pi rebuild and gate record
 
-**Status: closed — S6 is not yet merged and the owner has not rebuilt/audited the Pi.**
+**Status: rebuild complete; Pi URL-resolution gate closed pending confirmation of the new precision audit.**
 
-S2 (#24), S3 (#25), S4 (#26), and S14 (#35) are merged. S6 must be merged,
-with its strict database tests, migration SQL review, schema check, and Docker
-check passing, before this procedure. ADR-0011 and ADR-0012 were accepted under
-the owner's delegated authority on 2026-09-27. S6b is not Pi-gating.
+S2 (#24), S3 (#25), S4 (#26), S14 (#35), and S6 (#42) are merged. The owner
+explicitly authorized the agent to perform the Pi rebuild. It completed on
+2026-09-28 at commit `3faae15e1cd452bcc00abfcd53b951ba3f46ae89` and migration
+`c91a6f02de73`. See [the execution record](2026-09-28-pi-rebuild-results.md)
+for backups, deployment details, ingestion counts, and audit status.
+S6b is not Pi-gating.
 
-Local acceptance on 2026-09-27 passed strict `make ci` against a fresh disposable
-PostgreSQL database: 957 passed, one expected parsing-package placeholder skip,
-92% coverage. `alembic check` reported no drift; the Docker build and `/healthz`
-smoke test passed. Review and merge remain pending.
+Local acceptance passed strict `make ci` on a fresh disposable database:
+957 passed, one expected parsing-package placeholder skip, 92% coverage.
+PR and merged-main CI passed. The Pi build, migrations, `alembic check`,
+`/healthz`, and `/readyz` passed too.
 
-This procedure is for the **owner on the Pi**. No agent ran it. It deliberately
-removes pre-ADR data; all Subject IDs change. The old precision worksheet cannot
-validate the rebuilt IDs. Preserve a backup first if you want that historical
-data; it cannot be upgraded in place by the S6 migration.
+The procedure below is a template for a future rebuild, not an instruction to
+repeat the completed operation. It removes active pre-ADR data; old Subject IDs
+and precision worksheets cannot validate the rebuilt database. In this run,
+the previous stack used `infra_postgres_data`: that volume was retained offline
+and a fresh `helios_postgres_data` was created. The old checkout was a source
+snapshot, so the exact merged commit was deployed with `git archive` instead
+of `git pull`. Do not assume the template's volume or checkout layout without
+inspecting the actual host.
 
 ## Rebuild the local Compose database
 
@@ -81,7 +87,7 @@ bind mount and is not the database volume.
 
 | Gate | Required evidence | Current state |
 |---|---|---|
-| Pi URL resolution | S2/S3/S4/S6 merged; owner rebuild and new precision audit | Closed |
+| Pi URL resolution | S2/S3/S4/S6 merged; authorized rebuild and new confirmed precision audit | Rebuild complete; audit confirmation pending |
 | Platform breadth | S6b collects platform menus alongside own-site menus | Optional for Pi |
 | Phase 5 extraction | S7/S11/S12/S13 merged; lifecycle acceptance including completion, rebrand, replay, and readiness | Closed; S13 not implemented |
 
