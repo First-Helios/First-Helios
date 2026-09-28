@@ -138,7 +138,8 @@ def test_bronze_kinds_and_outcome_must_be_trimmed(session: Session, value: str) 
     )
     _assert_check_rejects(
         session,
-        "INSERT INTO bronze.capture (source_id, fetched_at, outcome) VALUES (:s, now(), :v)",
+        "INSERT INTO bronze.capture (source_id, source_endpoint_id, fetched_at, outcome) VALUES (:s, :e, now(), :v)",
+        e=rows["source_endpoint"],
         s=rows["source"],
         v=value,
     )
@@ -149,8 +150,9 @@ def test_bronze_times_must_be_finite(session: Session, instant: str) -> None:
     rows = _bronze_rows(session)
     _assert_check_rejects(
         session,
-        "INSERT INTO bronze.capture (source_id, fetched_at, outcome)"
-        " VALUES (:s, CAST(:t AS timestamptz), 'succeeded')",
+        "INSERT INTO bronze.capture (source_id, source_endpoint_id, fetched_at, outcome)"
+        " VALUES (:s, :e, CAST(:t AS timestamptz), 'succeeded')",
+        e=rows["source_endpoint"],
         s=rows["source"],
         t=instant,
     )

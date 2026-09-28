@@ -127,7 +127,7 @@ basis for picking a winner there.
 50 m is ADR-0009's dedupe radius, so "same place" means the same thing in both
 rules. It is a named constant. If Overture coordinates jitter by more than that
 between releases, the first S13 run will show it as a burst of relocations (the
-run report counts them) and the constant is raised.
+run report counts them) and the report is reviewed before changing the threshold; it is never raised automatically.
 
 **Derived URLs on rebrand.** The old Organization remains valid history, but
 its website/menu records cannot silently supply the successor. S13 extends URL

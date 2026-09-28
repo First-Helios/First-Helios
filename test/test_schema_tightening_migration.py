@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from packages.helios_core.provenance.contracts import persist_source_record_observation
+from test.legacy_bronze_support import legacy_observation
 from test.provider_support import migrate, observation
 
 if TYPE_CHECKING:
@@ -66,12 +66,12 @@ def test_schema_tightening_sql_artifacts_match_fresh_generation() -> None:
 
 
 def test_downgrade_restores_previous_schema_and_keeps_rows(
-    disposable_database_engine: Engine,
+    historical_database_engine: Engine,
 ) -> None:
-    engine = disposable_database_engine
-    migrate("upgrade", "head")
+    engine = historical_database_engine
+    migrate("upgrade", "12a76ebed458")
     with Session(engine) as setup, setup.begin():
-        persist_source_record_observation(setup, observation())
+        legacy_observation(setup, observation())
     try:
         migrate("downgrade", GOLD)
         with engine.connect() as connection:
@@ -88,4 +88,4 @@ def test_downgrade_restores_previous_schema_and_keeps_rows(
             assert _schema(connection) == previous
             assert _bronze_counts(connection) == before
     finally:
-        migrate("upgrade", "head")
+        migrate("upgrade", "12a76ebed458")

@@ -427,3 +427,8 @@ contrary to the modular-monolith decision.
 - `alembic/versions/a466cf4bc4e0_venue_identity_schema_and_three_layer_.py`
 - `test/test_schema_layout.py`
 - `test/test_venue_identity_schema.py`
+
+
+## Amendment — ADR-0011 (accepted 2026-09-27)
+
+Capture now records acquisition outcomes; provenance endpoints are separate from opt-in Identity match keys. Version Evidence uses restricted JSONPath and contract-computed excerpt hashes. See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.

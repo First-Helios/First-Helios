@@ -5,7 +5,7 @@ recently observed Overture record):
 
 1. **Website** — take Overture's published website (or a registry override for
    that host), persist it as a Bronze ``website`` observation, and assign it to
-   the venue's **Organization** Subject. ``canonical_url`` stays ``None``: a
+   the venue's **Organization** Subject. ``identity_match_url`` stays ``None``: a
    website is an attribute here, never an Establishment match key, so two
    locations of one chain never collapse (ADR-0009 hazard, ADR-0010 §4).
 2. **Menu-URL** — a registry ``menu_url`` always wins; otherwise crawl the site
@@ -18,7 +18,7 @@ An unchanged website/menu-URL is not re-persisted, a record a human put in
 ``needs_review`` is never re-assigned, and a venue whose Organization is no
 longer current is counted and skipped.
 
-Every write reuses the published Identity/Bronze commands and adds no schema.
+Every write reuses the published Identity/Bronze commands (ADR-0011).
 The menu-URL resolver is injected as a Protocol, so tests supply a fake and CI
 makes no network calls.
 """
@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, Protocol
 from urllib.parse import urlsplit
@@ -35,6 +36,8 @@ from urllib.parse import urlsplit
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
 
+from apps.discovery.menu_url import ordering_platform_host, platform_signal
+from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
     assign_source_record,
@@ -48,8 +51,16 @@ from packages.helios_core.identity.models import (
 from packages.helios_core.provenance.contracts import (
     BronzeObservation,
     canonicalize_http_url,
+    latest_capture_at,
+    record_capture_attempt,
 )
-from packages.helios_core.provenance.models import Source, SourceRecord, SourceRecordVersion
+from packages.helios_core.provenance.models import (
+    Capture,
+    Source,
+    SourceEndpoint,
+    SourceRecord,
+    SourceRecordVersion,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -58,10 +69,10 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from apps.discovery.registry import RegistryEntry
-    from apps.discovery.web_client import MenuUrlDiscovery
 
 WEBSITE_NAMESPACE = "website-resolution"
 MENU_URL_NAMESPACE = "menu-url-discovery"
+RECRAWL_WINDOW = timedelta(days=20)
 
 _Outcome = Literal["assigned", "updated", "unchanged", "needs_review"]
 
@@ -69,7 +80,7 @@ _Outcome = Literal["assigned", "updated", "unchanged", "needs_review"]
 class MenuUrlResolver(Protocol):
     """The one capability the pipeline needs from the site fetcher."""
 
-    def discover_menu_url(self, website: str) -> MenuUrlDiscovery | None: ...
+    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +92,8 @@ class VenueToResolve:
     organization_is_current: bool
     gers_id: str
     overture_websites: tuple[str, ...]
+    source_url: str
+    content_hash: str
 
 
 @dataclass(slots=True)
@@ -102,6 +115,7 @@ class UrlDiscoveryReport:
     menu_urls_absent: int = 0
     needs_review: int = 0
     org_not_current: int = 0
+    cooldown_skipped: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +178,8 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
             organization_currentness.is_current,
             SourceRecord.external_key,
             SourceRecordVersion.source_payload,
+            SourceEndpoint.canonical_uri,
+            SourceRecordVersion.content_hash,
         )
         .join(SubjectCurrentness, SubjectCurrentness.subject_id == Establishment.subject_id)
         .outerjoin(
@@ -174,6 +190,8 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
         .join(SourceRecord, SourceRecord.id == CurrentResolution.source_record_id)
         .join(Source, Source.id == SourceRecord.source_id)
         .join(SourceRecordVersion, SourceRecordVersion.source_record_id == SourceRecord.id)
+        .join(Capture, Capture.id == SourceRecordVersion.capture_id)
+        .join(SourceEndpoint, SourceEndpoint.id == Capture.source_endpoint_id)
         .where(
             SubjectCurrentness.is_current.is_(True),
             CurrentResolution.state == "resolved",
@@ -193,15 +211,29 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
     while True:
         page = statement if after is None else statement.where(Establishment.subject_id > after)
         rows = session.execute(page).all()
-        for subject_id, org_subject_id, org_is_current, external_key, payload in rows:
+        for (
+            subject_id,
+            org_subject_id,
+            org_is_current,
+            external_key,
+            payload,
+            source_url,
+            content_hash,
+        ) in rows:
             raw = payload.get("websites") if isinstance(payload, dict) else None
-            websites = tuple(str(item) for item in raw if item) if isinstance(raw, list) else ()
+            websites = (
+                tuple(str(item) if item is not None else "" for item in raw)
+                if isinstance(raw, list)
+                else ()
+            )
             yield VenueToResolve(
                 establishment_subject_id=subject_id,
                 organization_subject_id=org_subject_id,
                 organization_is_current=org_is_current is True,
                 gers_id=str(external_key),
                 overture_websites=websites,
+                source_url=source_url,
+                content_hash=content_hash,
             )
         if len(rows) < page_size:
             return
@@ -232,7 +264,9 @@ def _observation(
     external_key: str,
     payload: dict[str, object],
     locator: str,
-    excerpt: str,
+    source_url: str,
+    capture_hash: str,
+    fetched_at: datetime,
     observed_at: datetime,
 ) -> BronzeObservation:
     content_hash = _sha(json.dumps(payload, sort_keys=True, default=str))
@@ -244,9 +278,9 @@ def _observation(
         content_hash=content_hash,
         source_payload=payload,
         evidence_locator=locator,
-        evidence_excerpt_hash=_sha(excerpt),
-        canonical_url=None,  # a website/menu URL is an attribute, never a match key
-        capture_content_hash=content_hash,
+        source_url=source_url,
+        capture_content_hash=capture_hash,
+        fetched_at=fetched_at,
     )
 
 
@@ -337,6 +371,25 @@ def _resolve_venue(
     if saved_website is not None and saved_website.state == "needs_review":
         report.needs_review += 1  # a human disputed this website: don't write or crawl
         return False
+    if origin == "registry" and (
+        entry is None or not entry.content_hash or entry.source_url is None
+    ):
+        raise ValueError("registry provenance requires file bytes and a repo-relative path")
+    website_payload: dict[str, object] = {
+        "website": website,
+        "origin": origin,
+        "host": _host_of(website),
+        "location_unique": entry.location_unique if entry else False,
+    }
+    if origin == "overture":
+        index = next(
+            i for i, raw in enumerate(venue.overture_websites) if _coerce_website(raw) == website
+        )
+        website_payload["derived_from"] = {
+            "namespace": "overture",
+            "external_key": venue.gers_id,
+            "locator": f"$.websites[{index}]",
+        }
     website_outcome = _persist_and_assign(
         session,
         saved=saved_website,
@@ -344,14 +397,15 @@ def _resolve_venue(
             namespace=WEBSITE_NAMESPACE,
             kind="website",
             external_key=venue.gers_id,
-            payload={
-                "website": website,
-                "origin": origin,
-                "host": _host_of(website),
-                "location_unique": entry.location_unique if entry else False,
-            },
-            locator=f"website:{venue.gers_id}",
-            excerpt=website,
+            payload=website_payload,
+            locator="$.website",
+            source_url=entry.source_url
+            if origin == "registry" and entry and entry.source_url
+            else venue.source_url,
+            capture_hash=entry.content_hash
+            if origin == "registry" and entry
+            else venue.content_hash,
+            fetched_at=observed_at,
             observed_at=observed_at,
         ),
         to_subject_id=venue.organization_subject_id,
@@ -369,12 +423,42 @@ def _resolve_venue(
         report.websites_reused += 1
     worked = website_outcome != "unchanged"
 
-    saved_menu = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=venue.gers_id)
+    platform_host = ordering_platform_host(entry.menu_url if entry and entry.menu_url else website)
+    menu_key = (
+        f"{venue.gers_id}|{platform_host}"
+        if platform_signal(entry.menu_url if entry and entry.menu_url else website)
+        else venue.gers_id
+    )
+    saved_menu = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=menu_key)
+    if saved_menu is None:
+        # S6b can create multiple platform records; any saved verified menu for
+        # this unchanged website keeps S6's existing no-recrawl behavior.
+        platform_keys = session.scalars(
+            select(SourceRecord.external_key)
+            .join(Source)
+            .where(
+                Source.namespace == MENU_URL_NAMESPACE,
+                SourceRecord.external_key.startswith(venue.gers_id + "|"),
+            )
+        ).all()
+        for key in sorted(platform_keys):
+            candidate = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
+            if candidate and candidate.payload.get("website") == website:
+                menu_key, saved_menu = key, candidate
+                break
     if saved_menu is not None and saved_menu.state == "needs_review":
         report.needs_review += 1
         return worked
     if entry is not None and entry.menu_url is not None:
         menu_url, signal = entry.menu_url, "registry"  # the registry always wins
+        if not entry.content_hash or entry.source_url is None:
+            raise ValueError("registry provenance requires file bytes and a repo-relative path")
+        menu_source_url, menu_hash, fetched_at, found_via = (
+            entry.source_url,
+            entry.content_hash,
+            observed_at,
+            None,
+        )
     elif (
         saved_menu is not None
         and saved_menu.state == "resolved"
@@ -383,23 +467,62 @@ def _resolve_venue(
         report.menu_urls_reused += 1
         return worked
     else:
-        discovery = resolver.discover_menu_url(website)
-        worked = True  # a crawl is work even when it finds nothing
-        if discovery is None:
-            report.menu_urls_absent += 1  # a saved menu-URL, if any, stays current
+        latest = latest_capture_at(session, MENU_URL_NAMESPACE, website)
+        if (
+            latest
+            and latest.outcome in {"failed", "skipped"}
+            and observed_at - latest.fetched_at < RECRAWL_WINDOW
+        ):
+            report.cooldown_skipped += 1
+            return worked
+        discovery = resolver.discover_menu_attempt(website)
+        worked = True
+        if isinstance(discovery, CaptureFailure):
+            record_capture_attempt(
+                session,
+                source_namespace=MENU_URL_NAMESPACE,
+                source_kind="menu_url",
+                source_url=website,
+                fetched_at=discovery.fetched_at,
+                outcome=discovery.outcome,
+                reason_code=discovery.reason_code,
+            )
+            report.menu_urls_absent += 1
             return worked
         menu_url, signal = discovery.menu_url, discovery.signal
+        menu_source_url, menu_hash, fetched_at, found_via = (
+            discovery.menu_url,
+            discovery.content_hash,
+            discovery.fetched_at,
+            discovery.found_via,
+        )
 
+    platform = ordering_platform_host(menu_url)
+    menu_key = f"{venue.gers_id}|{platform}" if platform else venue.gers_id
+    saved_menu = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=menu_key)
+    if saved_menu is not None and saved_menu.state == "needs_review":
+        report.needs_review += 1
+        return worked
+    menu_payload: dict[str, object] = {
+        "menu_url": menu_url,
+        "signal": signal,
+        "website": website,
+        "found_via": found_via,
+    }
+    if platform:
+        menu_payload["platform"] = platform
     menu_outcome = _persist_and_assign(
         session,
         saved=saved_menu,
         observation=_observation(
             namespace=MENU_URL_NAMESPACE,
             kind="menu_url",
-            external_key=venue.gers_id,
-            payload={"menu_url": menu_url, "signal": signal, "website": website},
-            locator=f"menu-url:{venue.gers_id}",
-            excerpt=menu_url,
+            external_key=menu_key,
+            payload=menu_payload,
+            locator="$.menu_url",
+            source_url=menu_source_url,
+            capture_hash=menu_hash,
+            fetched_at=fetched_at,
             observed_at=observed_at,
         ),
         to_subject_id=venue.organization_subject_id,

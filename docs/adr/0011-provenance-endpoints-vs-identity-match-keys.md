@@ -222,6 +222,14 @@ retain the raw payload and locator-derived Evidence, and cannot carry an
 `identity_match_url`. The Identity observation resolver refuses rejected input
 before any write; admission of a rejected-only Source Record is refused too.
 A later valid observation of the same external key can be admitted normally.
+This is a public-command admission rule, not a new database invariant. The
+existing nullable `source_record_version.capture_id` and low-level admission of
+uncaptured Versions remain supported; S6 does not require every admitted record
+to have a successful Capture. Admission still requires the existing Evidence or
+Adjudication support; nullable Capture linkage does not waive that requirement.
+A universal successful-Capture requirement would
+need an explicit contract change and SQL transition enforcement, rather than
+an accidental restriction in one Python entrypoint.
 Blank, symbol-only, and overlong names are all recorded this way. Failed and
 skipped attempts never create Versions. Public contracts validate outcome/reason
 pairs; HTTP failure codes must be valid 4xx/5xx status codes.
@@ -444,7 +452,7 @@ the real pipeline on fixtures and gets back the expected endpoint, kind,
 
 ## Consequences
 
-- **Every Bronze row can answer "where did this come from"** through one walk,
+- **Every observation written by these commands can answer "where did this come from"** through one walk,
   for every namespace. Identity can no longer collapse records by accident,
   because nothing it reads is set by default.
 - **Failures become data:** dead and robots-blocked sites stop being re-crawled

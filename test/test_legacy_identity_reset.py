@@ -334,8 +334,8 @@ def _assert_foundations_preserved(
 
 
 @pytest.fixture
-def migration_engine(disposable_database_engine: Engine) -> Iterator[Engine]:
-    yield disposable_database_engine
+def migration_engine(historical_database_engine: Engine) -> Iterator[Engine]:
+    yield historical_database_engine
 
 
 def test_seeded_legacy_upgrade_downgrade_and_reupgrade(

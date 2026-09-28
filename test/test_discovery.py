@@ -70,7 +70,7 @@ def _run(session: Session, pois: list[OverturePoi]) -> DiscoveryReport:
         pois,
         decided_at=_NOW,
         observed_at=_NOW,
-        release="test-release-2026-01-01",
+        release="s3://overturemaps-us-west-2/release/2026-01-01.0/theme=places/type=place/*",
     )
 
 
@@ -117,7 +117,10 @@ def test_discovery_mints_distinct_venues_bronze_first(session: Session) -> None:
         session.scalar(
             select(func.count())
             .select_from(SourceRecord)
-            .where(SourceRecord.source_id == source_id)
+            .where(
+                SourceRecord.source_id == source_id,
+                SourceRecord.external_key.in_([poi.gers_id for poi in pois]),
+            )
         )
         == 2
     )
@@ -243,7 +246,7 @@ def test_batches_commit_so_a_crash_keeps_earlier_work(session: Session) -> None:
             pois(),
             decided_at=_NOW,
             observed_at=_NOW,
-            release="test-release-2026-01-01",
+            release="s3://overturemaps-us-west-2/release/2026-01-01.0/theme=places/type=place/*",
             batch_size=2,
             on_batch=commit,
         )

@@ -180,7 +180,7 @@ def _pair_is_deduped(session: Session, a: dict[str, Any], b: dict[str, Any]) -> 
             [_golden_poi(a), _golden_poi(b)],
             decided_at=_NOW,
             observed_at=_NOW,
-            release="golden-2026-01-01",
+            release="s3://overturemaps-us-west-2/release/2026-01-01.0/theme=places/type=place/*",
         )
         assert report.ambiguous == 0, f"unexpected ambiguity for {a['name']!r}"
         assert report.minted + report.deduped == 2

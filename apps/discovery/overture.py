@@ -122,7 +122,6 @@ def _select_sql(food_categories: tuple[str, ...]) -> str:
         FROM read_parquet(?, hive_partitioning => true, union_by_name => true)
         WHERE bbox.xmin BETWEEN ? AND ?
           AND bbox.ymin BETWEEN ? AND ?
-          AND names.primary IS NOT NULL
           AND categories.primary IS NOT NULL
           AND {category_filter}
     """  # noqa: S608
@@ -151,7 +150,7 @@ def _as_str_tuple(value: object) -> tuple[str, ...]:
 def _to_poi(row: dict[str, Any]) -> OverturePoi:
     return OverturePoi(
         gers_id=str(row["id"]),
-        name=str(row["name"]),
+        name=str(row["name"]) if row["name"] is not None else "",
         primary_category=(
             str(row["primary_category"]) if row.get("primary_category") is not None else None
         ),

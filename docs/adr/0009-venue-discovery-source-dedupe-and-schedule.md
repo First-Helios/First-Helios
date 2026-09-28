@@ -314,3 +314,10 @@ ROADMAP §6.4's ADR ledger is stale: it lists 0007 = "Prod hosting" and
 (both Accepted). RFC-0001 §D4 also still refers to the LLM-fallback ADR as
 "ADR-0008". Flagging per CLAUDE.md; a docs-only PR should renumber/realign
 the ledger.
+
+
+## Amendment — ADR-0011 (accepted 2026-09-27)
+
+Overture observations record a canonical release endpoint and field-path Evidence. Rejected POIs remain in Bronze without Identity admission. Release aliases are exact retries; discovery no longer uses bundle_path for provenance. See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.
+
+Operational follow-up: [S6 Pi rebuild and gate record](../reviews/2026-09-27-s6-pi-rebuild.md). The owner performs the rebuild and a new precision audit before reopening URL resolution; S6b is not a prerequisite.

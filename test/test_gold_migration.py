@@ -40,11 +40,11 @@ def test_gold_sql_artifacts_match_fresh_generation() -> None:
             assert sql.count("DROP TABLE gold.") == 1
 
 
-def test_gold_downgrade_and_reupgrade_preserve_menu(disposable_database_engine: Engine) -> None:
-    engine = disposable_database_engine
-    migrate("upgrade", "head")
+def test_gold_downgrade_and_reupgrade_preserve_menu(historical_database_engine: Engine) -> None:
+    engine = historical_database_engine
+    migrate("upgrade", "12a76ebed458")
     with Session(engine) as setup, setup.begin():
-        scope = seed_scope(setup)
+        scope = seed_scope(setup, legacy_bronze=True)
     # Menu admission consumes already committed input; persist after the seed
     # commits.
     with Session(engine) as setup, setup.begin():
@@ -65,4 +65,4 @@ def test_gold_downgrade_and_reupgrade_preserve_menu(disposable_database_engine: 
             assert connection.scalar(text("SELECT count(*) FROM gold.current_menu")) == 0
             assert _menu_counts(connection) == before
     finally:
-        migrate("upgrade", "head")
+        migrate("upgrade", "12a76ebed458")

@@ -357,3 +357,8 @@ checklist) settle:
 - [Phase 4 retro](../retro/2026-09-21-phase-4.md) (82.1% website coverage, menu-URL = 0)
 - V1 port hints (`V1-Graveyard`): `collectors/meal_deals/osm_url_resolver.py`
   (URL canonicalization), `config/meal_deal_sources.yaml` (registry shape)
+
+
+## Amendment — ADR-0011 (accepted 2026-09-27)
+
+Website provenance points to the upstream release or registry. Verified menu provenance retains response hashes, final URLs and fetch times. Failed/skipped sites are recorded with a 20-day retry window. Ordering-platform records use independent per-GERS/domain keys; collecting them alongside an own-site menu remains S6b. See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.

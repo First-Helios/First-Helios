@@ -7,8 +7,7 @@ Run after Overture seeding, on the Orange Pi against the staging database::
 Idempotent and re-runnable: a venue whose website and menu-URL records are
 current and unchanged is skipped without writing or crawling, and commits land
 every 100 venues, so a re-run after an interruption skips the committed work.
-A venue where no menu was found has nothing saved and is re-crawled each run
-(from the fetch cache while it is fresh). ``--limit`` counts only venues that
+Failed/skipped sites are recorded in Bronze and retried after 20 days. ``--limit`` counts only venues that
 need work. Records a human put in ``needs_review`` are never re-assigned. Crawls
 live restaurant sites (robots + rate limited), so it makes network calls and is
 not exercised in CI.

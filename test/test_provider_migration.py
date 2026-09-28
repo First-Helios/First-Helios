@@ -57,9 +57,9 @@ def signatures(connection: Connection) -> dict[str, dict[str, object]]:
 
 @pytest.mark.parametrize("concrete_sql", [False, True], ids=["alembic", "sql-artifacts"])
 def test_seeded_provider_upgrade_downgrade_reupgrade(
-    disposable_database_engine: Engine, concrete_sql: bool
+    historical_database_engine: Engine, concrete_sql: bool
 ) -> None:
-    engine = disposable_database_engine
+    engine = historical_database_engine
 
     def apply(direction: str) -> None:
         target = PARENT if direction == "downgrade" else HEAD
@@ -74,12 +74,12 @@ def test_seeded_provider_upgrade_downgrade_reupgrade(
                 connection.scalar(text("SELECT version_num FROM public.alembic_version")) == target
             )
 
-    migrate("upgrade", "head")
+    migrate("upgrade", "12a76ebed458")
     # Exercise this historical boundary with its actual parent/head installed;
     # the Menu migration has independent preservation tests and is restored below.
     migrate("downgrade", HEAD)
     with Session(engine) as setup, setup.begin():
-        fixture = seed_scope(setup)
+        fixture = seed_scope(setup, legacy_bronze=True)
         setup.add(
             SubjectName(
                 subject_id=fixture.organization.subject_id,
@@ -140,7 +140,7 @@ def test_seeded_provider_upgrade_downgrade_reupgrade(
             assert provider_rows(connection) == seeded
             assert sequence_state(connection) == sequences
     finally:
-        migrate("upgrade", "head")
+        migrate("upgrade", "12a76ebed458")
 
 
 def test_provider_offline_sql_is_available_in_both_directions() -> None:

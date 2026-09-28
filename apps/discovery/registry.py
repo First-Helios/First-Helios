@@ -13,8 +13,9 @@ not acted on now.
 
 from __future__ import annotations
 
+import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -38,6 +39,8 @@ class RegistryEntry:
     website: str | None
     menu_url: str | None
     location_unique: bool
+    content_hash: str = ""
+    source_url: str | None = "repo:config/sources.yaml"
 
 
 def _normalize_host(value: str) -> str:
@@ -124,5 +127,17 @@ def load_registry(path: Path, *, missing_ok: bool = False) -> dict[str, Registry
     """
     if missing_ok and not path.exists():
         return {}
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return parse_registry(document)
+    from pathlib import Path
+
+    raw = path.read_bytes()
+    entries = parse_registry(yaml.safe_load(raw))
+    try:
+        relative = path.resolve().relative_to(Path(__file__).resolve().parents[2])
+        source_url = f"repo:{relative.as_posix()}"
+    except ValueError:
+        source_url = None
+    digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+    return {
+        host: replace(entry, content_hash=digest, source_url=source_url)
+        for host, entry in entries.items()
+    }

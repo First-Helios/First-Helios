@@ -27,7 +27,7 @@ from apps.discovery.url_pipeline import (
     _coerce_website,
     resolve_urls,
 )
-from apps.discovery.web_client import MenuUrlDiscovery
+from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
     record_subject_change,
@@ -47,7 +47,31 @@ from packages.helios_core.provenance.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy.orm import Session
+
+
+@pytest.fixture(autouse=True)
+def isolate_existing_venues(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reports must not depend on committed fixtures from earlier test modules."""
+    if "session" not in request.fixturenames:
+        return
+    import apps.discovery.url_pipeline as pipeline
+
+    session = request.getfixturevalue("session")
+    existing = set(session.scalars(select(Establishment.subject_id)))
+    original = pipeline.iter_venues_to_resolve
+
+    def selected(session: Session, *, page_size: int = 100) -> Iterator[pipeline.VenueToResolve]:
+        for venue in original(session, page_size=page_size):
+            if venue.establishment_subject_id not in existing:
+                yield venue
+
+    monkeypatch.setattr(pipeline, "iter_venues_to_resolve", selected)
+
 
 _NOW = datetime.now(UTC)
 
@@ -60,11 +84,16 @@ class _FakeResolver:
         self._signal = signal
         self.calls: list[str] = []
 
-    def discover_menu_url(self, website: str) -> MenuUrlDiscovery | None:
+    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
         self.calls.append(website)
         if self._menu_url is None:
-            return None
-        return MenuUrlDiscovery(menu_url=self._menu_url, signal=self._signal)
+            return CaptureFailure("failed", "no_menu_found", _NOW)
+        return MenuUrlDiscovery(
+            menu_url=self._menu_url,
+            signal=self._signal,
+            fetched_at=_NOW,
+            content_hash="sha256:fixture-page",
+        )
 
 
 def _poi(
@@ -91,7 +120,13 @@ def _poi(
 
 
 def _seed(session: Session, pois: list[OverturePoi]) -> None:
-    run_discovery(session, pois, decided_at=_NOW, observed_at=_NOW, release="test-2026-01-01")
+    run_discovery(
+        session,
+        pois,
+        decided_at=_NOW,
+        observed_at=_NOW,
+        release="s3://overturemaps-us-west-2/release/2026-01-01.0/theme=places/type=place/*",
+    )
 
 
 def _resolve(
@@ -186,6 +221,7 @@ def test_registry_menu_url_override_skips_the_crawl(session: Session) -> None:
     resolver = _FakeResolver(None)  # would return no menu if called
     registry = {
         "torchystacos.com": RegistryEntry(
+            content_hash="sha256:fixture-registry",
             host="torchystacos.com",
             website=None,
             menu_url="https://torchystacos.com/menu",
@@ -344,6 +380,7 @@ def test_registry_menu_url_replaces_a_saved_one(session: Session) -> None:
     _resolve_at(session, _FakeResolver("https://torchystacos.com/"), at=_NOW)
     registry = {
         "torchystacos.com": RegistryEntry(
+            content_hash="sha256:fixture-registry",
             host="torchystacos.com",
             website=None,
             menu_url="https://torchystacos.com/menu",
@@ -373,6 +410,7 @@ def test_registry_website_overrides_overture_and_drives_the_crawl(session: Sessi
     _seed(session, [_poi("Veracruz", 30.27, -97.72, gers_id="r9", websites=("veracruz.com",))])
     registry = {
         "veracruz.com": RegistryEntry(
+            content_hash="sha256:fixture-registry",
             host="veracruz.com",
             website="https://veracruzallnatural.com/",  # parse_registry canonicalizes
             menu_url=None,
@@ -400,7 +438,7 @@ def _seed_website(session: Session, gers_id: str, website: str, *, at: datetime)
         [_poi("Veracruz", 30.27, -97.72, gers_id=gers_id, websites=(website,))],
         decided_at=at,
         observed_at=at,
-        release="test-release",
+        release="s3://overturemaps-us-west-2/release/2026-01-01.0/theme=places/type=place/*",
     )
 
 
@@ -500,10 +538,10 @@ class _FailingResolver(_FakeResolver):
         super().__init__("https://example.com/menu")
         self._fail_on = fail_on
 
-    def discover_menu_url(self, website: str) -> MenuUrlDiscovery | None:
+    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
         if website == self._fail_on:
             raise RuntimeError("simulated crash mid-run")
-        return super().discover_menu_url(website)
+        return super().discover_menu_attempt(website)
 
 
 def test_batches_commit_so_a_crash_keeps_earlier_work(session: Session) -> None:

@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from apps.discovery.overture import OverturePoi
 from apps.discovery.pipeline import run_discovery
 from apps.discovery.url_pipeline import MENU_URL_NAMESPACE, WEBSITE_NAMESPACE, resolve_urls
-from apps.discovery.web_client import MenuUrlDiscovery
+from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery
 from packages.helios_core.config import get_database_url
 from packages.helios_core.identity.models import CurrentResolution, Establishment
 from packages.helios_core.provenance.models import Source, SourceRecord
@@ -73,7 +73,7 @@ def _discover(session: Session, pois: list[OverturePoi]) -> None:
         pois,
         decided_at=_NOW,
         observed_at=_NOW,
-        release="commit-test-2026-01-01",
+        release="s3://overturemaps-us-west-2/release/2026-01-01.0/theme=places/type=place/*",
         batch_size=2,
         on_batch=session.commit,
     )
@@ -118,10 +118,17 @@ class _Resolver:
         self._website = website
         self._menu_url = menu_url
 
-    def discover_menu_url(self, website: str) -> MenuUrlDiscovery | None:
+    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
         if website != self._website:
-            return None  # other committed venues in a shared *_test database
-        return MenuUrlDiscovery(menu_url=self._menu_url, signal="crawled")
+            return CaptureFailure(
+                "failed", "no_menu_found", _NOW
+            )  # other committed venues in a shared *_test database
+        return MenuUrlDiscovery(
+            menu_url=self._menu_url,
+            signal="crawled",
+            fetched_at=_NOW,
+            content_hash="sha256:fixture-page",
+        )
 
 
 def test_resolve_urls_commits_website_and_menu_url(committed: sessionmaker[Session]) -> None:

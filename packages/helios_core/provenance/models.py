@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -54,7 +55,12 @@ class SourceEndpoint(Base):
 
     __tablename__ = "source_endpoint"
     __table_args__: Any = (
-        UniqueConstraint("canonical_uri", name="uq_source_endpoint_canonical_uri"),
+        UniqueConstraint(
+            "source_id", "canonical_uri", name="uq_source_endpoint_source_canonical_uri"
+        ),
+        CheckConstraint(
+            "endpoint_kind IN ('http', 'https', 's3', 'repo')", name="ck_source_endpoint_kind"
+        ),
         UniqueConstraint("id", "source_id", name="uq_source_endpoint_id_source"),
         _canonical("canonical_uri", "ck_source_endpoint_uri_canonical"),
         _canonical("endpoint_kind", "ck_source_endpoint_kind_canonical"),
@@ -77,7 +83,7 @@ class SourceEndpoint(Base):
 
 
 class Capture(Base):
-    """An immutable completed source-fetch attempt."""
+    """An immutable acquisition attempt and its outcome."""
 
     __tablename__ = "capture"
     __table_args__: Any = (
@@ -99,6 +105,17 @@ class Capture(Base):
             name="ck_capture_bundle_path_not_blank",
         ),
         _canonical("outcome", "ck_capture_outcome_canonical"),
+        CheckConstraint(
+            "outcome IN ('succeeded', 'failed', 'skipped', 'rejected')", name="ck_capture_outcome"
+        ),
+        CheckConstraint(
+            "(outcome = 'succeeded') = (reason_code IS NULL)",
+            name="ck_capture_reason_matches_outcome",
+        ),
+        CheckConstraint(
+            "reason_code IS NULL OR reason_code ~ '^[a-z][a-z0-9_]*$'",
+            name="ck_capture_reason_code_format",
+        ),
         CheckConstraint("isfinite(fetched_at)", name="ck_capture_fetched_at_finite"),
         UniqueConstraint("id", "source_id", name="uq_capture_id_source"),
         Index("ix_capture_source_id", "source_id"),
@@ -116,11 +133,15 @@ class Capture(Base):
         ),
         nullable=False,
     )
-    source_endpoint_id: Mapped[int | None] = mapped_column(BigInteger)
+    source_endpoint_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     content_hash: Mapped[str | None] = mapped_column(String(128))
     bundle_path: Mapped[str | None] = mapped_column(Text)
     outcome: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(64))
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class SourceRecord(Base):
@@ -188,6 +209,17 @@ class SourceRecordVersion(Base):
             "isfinite(observed_at)",
             name="ck_source_record_version_observed_at_finite",
         ),
+        ForeignKeyConstraint(
+            ["identity_match_endpoint_id", "source_id"],
+            [f"{SCHEMA_BRONZE}.source_endpoint.id", f"{SCHEMA_BRONZE}.source_endpoint.source_id"],
+            name="fk_source_record_version_match_endpoint_source",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_source_record_version_identity_match_endpoint_id",
+            "identity_match_endpoint_id",
+            postgresql_where=text("identity_match_endpoint_id IS NOT NULL"),
+        ),
         Index("ix_source_record_version_source_record_id", "source_record_id"),
         Index("ix_source_record_version_capture_id", "capture_id"),
         {"schema": SCHEMA_BRONZE},
@@ -200,6 +232,10 @@ class SourceRecordVersion(Base):
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     source_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    identity_match_endpoint_id: Mapped[int | None] = mapped_column(BigInteger)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Evidence(Base):
@@ -218,6 +254,10 @@ class Evidence(Base):
         CheckConstraint(
             f"length(btrim(excerpt_hash, {WHITESPACE})) > 0",
             name="ck_evidence_excerpt_hash_not_blank",
+        ),
+        CheckConstraint(
+            "source_record_version_id IS NULL OR left(locator, 1) = '$'",
+            name="ck_evidence_version_locator_jsonpath",
         ),
         Index("ix_evidence_source_record_version_id", "source_record_version_id"),
         Index("ix_evidence_capture_id", "capture_id"),
@@ -243,3 +283,6 @@ class Evidence(Base):
     )
     locator: Mapped[str] = mapped_column(Text, nullable=False)
     excerpt_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

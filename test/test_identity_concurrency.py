@@ -128,10 +128,9 @@ def _bronze_observation(
         observed_at=datetime.now(UTC),
         content_hash=f"sha256:record-{token}",
         source_payload={"id": external_key, "token": token},
-        evidence_locator="$",
-        evidence_excerpt_hash=f"sha256:evidence-{token}",
-        canonical_url=canonical_url,
-        endpoint_kind="https",
+        evidence_locator="$.id",
+        identity_match_url=canonical_url,
+        source_url=canonical_url or "repo:test/fixture.json",
         capture_content_hash=f"sha256:capture-{token}",
     )
 

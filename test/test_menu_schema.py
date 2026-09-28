@@ -443,7 +443,7 @@ def test_evidence_exact_ownership_and_committed_input(
                 with writer.begin_nested():
                     pending = Evidence(
                         source_record_version_id=scope.local_input.source_record_version_id,
-                        locator="pending",
+                        locator="$.id",
                         excerpt_hash="hash",
                     )
                     writer.add(pending)
@@ -451,7 +451,7 @@ def test_evidence_exact_ownership_and_committed_input(
             else:
                 pending = Evidence(
                     source_record_version_id=scope.local_input.source_record_version_id,
-                    locator="pending",
+                    locator="$.id",
                     excerpt_hash="hash",
                 )
                 writer.add(pending)
