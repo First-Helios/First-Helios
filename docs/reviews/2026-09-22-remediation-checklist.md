@@ -34,7 +34,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 3 | S3 URL pipeline logic | D3 | M | [X] #25 |
 | 4 | S4 Menu-URL quality | D3 | S | [X] #26 |
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 merged; ADR-0011 accepted 2026-09-27 |
-| 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; audit confirmation pending |
+| 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; precision review found errors; gate closed |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
 | 🚦 | **Pi gate:** after S2/S3/S4/S6 merge AND owner rebuild/new precision audit | | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
@@ -553,7 +553,7 @@ Branch: `fix/platform-menu-urls` · Not Pi-gating.
 - Test: a homepage with a site menu and a Toast link writes both records; a re-run
   writes nothing.
 
-🚦 **Pi gate remains closed** — S2/S3/S4/S6 are merged and the owner-authorized Pi rebuild completed 2026-09-28; confirmation of the new precision audit remains. Follow [the S6 runbook](2026-09-27-s6-pi-rebuild.md). S6b is not Pi-gating.
+🚦 **Pi gate remains closed** — S2/S3/S4/S6 are merged and the owner-authorized Pi rebuild completed 2026-09-28; [precision review](2026-09-28-precision-review.md) found supported errors and unresolved cases. Follow [the S6 runbook](2026-09-27-s6-pi-rebuild.md). S6b is not Pi-gating.
 
 ### S7 — Gold refresh fix · size M · needs D5
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`
@@ -860,3 +860,12 @@ backed up the Pi database and source snapshot, retained the previous
 9,996 venues; every observation has the full provenance chain. The API and
 schema checks passed. See [the execution record](2026-09-28-pi-rebuild-results.md).
 URL resolution remains stopped pending confirmation of the new precision audit.
+
+### 2026-09-28 precision review
+
+All 43 duplicate pairs and 45 geocode flags have evidence-backed agent
+assessments or explicit unresolved notes in the [precision review](2026-09-28-precision-review.md).
+Results: 23 duplicate pairs, 4 distinct, 16 unresolved; 20 corroborated
+geocodes, 3 supported wrong, 22 unresolved. Owner labels remain pending.
+The Pi gate remains closed; confirm/correct the coordinate defects and resolve
+outstanding evidence before acceptance. S6b is not Pi-gating.
