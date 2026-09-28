@@ -187,6 +187,7 @@ class SiteFetcher:
         self._failure_reason = "network_error"
         self._site_failure: CaptureFailure | None = None
         self._found_via: dict[str, str] = {}
+        self._not_before: float = 0.0
 
     def close(self) -> None:
         if self._owns_client:
@@ -271,6 +272,12 @@ class SiteFetcher:
 
     def _get(self, url: str, *, obey_robots: bool) -> FetchResult | None:
         cached = self._read_cache(url)
+        if self._not_before and (
+            cached is None
+            or isinstance(cached, FetchResult)
+            and cached.fetched_at < self._not_before
+        ):
+            cached = _Miss()
         if not isinstance(cached, _Miss):
             return cached
         outcome = self._follow(url, obey_robots=obey_robots)
@@ -415,6 +422,50 @@ class SiteFetcher:
             or self._site_failure
             or CaptureFailure("failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC))
         )
+
+    def verify_menu_attempt(
+        self, website: str, menu_url: str, *, not_before: datetime
+    ) -> MenuUrlDiscovery | CaptureFailure:
+        """Fresh per-record verification for a rebrand; never reuse pre-transition bytes."""
+        previous = self._not_before
+        self._not_before = not_before.timestamp()
+        self._site_failure = None
+        self._failure_reason = "no_menu_found"
+        # Re-evaluate robots under the same freshness floor.
+        self._robots.clear()
+        try:
+            platform = ordering_platform_host(menu_url)
+            if platform and not is_platform_venue_page(menu_url, ordering_only=True):
+                return CaptureFailure(
+                    "skipped", "platform_root", datetime.fromtimestamp(self._clock(), UTC)
+                )
+            if not platform and not same_site(website, menu_url):
+                return CaptureFailure(
+                    "failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC)
+                )
+            homepage = None if platform else self.fetch(website)
+            result = self.fetch(menu_url)
+            valid = result is not None and result.status == 200 and _is_html(result)
+            if valid and result is not None:
+                valid = result.fetched_at >= self._not_before
+                if platform:
+                    valid &= is_platform_venue_page(result.url, ordering_only=True)
+                else:
+                    valid &= (
+                        not same_resource(result.url, website)
+                        and page_menu_signal(result.text, result.url, trust_path=False)
+                        and homepage is not None
+                        and homepage.status == 200
+                        and _body_hash(result.text) != _body_hash(homepage.text)
+                    )
+                if valid:
+                    return self._discovered(result, "platform" if platform else "crawled", website)
+            self._note_failure(result)
+            return self._site_failure or CaptureFailure(
+                "failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC)
+            )
+        finally:
+            self._not_before = previous
 
     def _note_failure(self, result: FetchResult | None) -> None:
         reason = (

@@ -312,3 +312,12 @@ between this ADR's conventions and the shipped code. Owner decisions D7
 - `packages/helios_core/config.py` — settings surface a `cors_allow_origins`
   addition extends.
 </content>
+
+### S13 venue lifecycle filtering (2026-09-28)
+
+Accepted [ADR-0012 §3–§4](0012-venue-lifecycle.md) changes both venue routes:
+`/v1/venues` and `/v1/venues/{id}` serve only current Establishments with current
+Organization and Place parents, a status other than `closed`, and no expired
+`valid_to`. A filtered detail request returns the existing 404 error contract.
+Lifecycle re-homing records an Establishment merge and preserves its lineage;
+the API does not add a redirect or historical-venue endpoint in S13.

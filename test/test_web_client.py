@@ -655,3 +655,66 @@ def test_gzip_bomb_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
     with _fetcher(tmp_path, {}, handler=handle) as fetcher:
         assert fetcher.fetch("https://k.com/big.xml.gz") is None
+
+
+@pytest.mark.parametrize("platform", [False, True])
+def test_lifecycle_verification_refetches_pre_transition_cache(
+    tmp_path: Path, platform: bool
+) -> None:
+    from datetime import UTC, datetime
+
+    from apps.discovery.web_client import MenuUrlDiscovery
+
+    clock = FakeClock()
+    calls: list[str] = []
+    website = "https://kitchen.example.com/"
+    menu = "https://www.toasttab.com/kitchen" if platform else website + "menu"
+    routes = {
+        "/robots.txt": (200, "User-agent: *\nAllow: /", "text/plain"),
+        website: (200, "<h1>Kitchen</h1>", _HTML),
+        menu: (200, "<h1>Menu</h1><p>Tacos $10</p>", _HTML),
+    }
+    with _fetcher(tmp_path, routes, calls=calls, clock=clock) as fetcher:
+        assert fetcher.fetch(menu)
+        assert calls.count(menu) == 1
+        clock.wall += 5
+        floor = datetime.fromtimestamp(clock.wall, UTC)
+        result = fetcher.verify_menu_attempt(website, menu, not_before=floor)
+        assert isinstance(result, MenuUrlDiscovery)
+        assert result.fetched_at >= floor
+        assert calls.count(menu) == 2
+        fetcher.verify_menu_attempt(website, menu, not_before=floor)
+        assert calls.count(menu) == 2  # post-transition bytes are reusable
+
+
+@pytest.mark.parametrize("failure", ["robots", "http", "soft404", "other_host", "platform_root"])
+def test_lifecycle_verification_rejects_failed_or_unrelated_pages(
+    tmp_path: Path, failure: str
+) -> None:
+    from datetime import UTC, datetime
+
+    from apps.discovery.web_client import CaptureFailure
+
+    website = "https://kitchen.example.com/"
+    menu = (
+        "https://www.toasttab.com/"
+        if failure == "platform_root"
+        else "https://other.example.com/menu"
+        if failure == "other_host"
+        else website + "menu"
+    )
+    home = "<h1>Menu</h1> Same content"
+    routes = {
+        "/robots.txt": (
+            200,
+            "User-agent: *\nDisallow: /" if failure == "robots" else "",
+            "text/plain",
+        ),
+        website: (200, home, _HTML),
+        menu: (503 if failure == "http" else 200, home, _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        result = fetcher.verify_menu_attempt(
+            website, menu, not_before=datetime(2026, 1, 1, tzinfo=UTC)
+        )
+        assert isinstance(result, CaptureFailure)

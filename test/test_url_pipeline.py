@@ -84,6 +84,11 @@ class _FakeResolver:
         self._signal = signal
         self.calls: list[str] = []
 
+    def verify_menu_attempt(
+        self, website: str, menu_url: str, *, not_before: datetime
+    ) -> MenuUrlDiscovery | CaptureFailure:
+        return self.discover_menu_attempt(website)
+
     def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
         self.calls.append(website)
         if self._menu_url is None:

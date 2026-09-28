@@ -26,7 +26,9 @@ from packages.helios_core.provenance.validation import (
     canonicalize_http_url as canonicalize_http_url,
 )
 from packages.helios_core.provenance.validation import (
-    canonicalize_source_url,
+    canonicalize_source_url as canonicalize_source_url,
+)
+from packages.helios_core.provenance.validation import (
     excerpt_hash,
     validate_outcome,
 )

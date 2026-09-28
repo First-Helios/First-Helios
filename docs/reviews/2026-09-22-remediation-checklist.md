@@ -43,7 +43,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 10 | S10 Test hardening sweep | — | S | [X] #31 |
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 |
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 merged; ADR-0012 accepted 2026-09-27 |
-| 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] |
+| 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] Implemented in draft; merge pending |
 | 🚦 | **Phase 5 gate:** after S7/S11/S12/S13 merge AND lifecycle acceptance tests pass | | | [ ] |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
@@ -721,12 +721,12 @@ Branch: `fix/identity-matching` · Matching-policy change + Pi data script (you 
 
 ### S13 — Venue-lifecycle implementation ⚠ · size M · needs S12 ADR accepted
 Hand-off prompt: `Do session S13 from docs/reviews/2026-09-22-remediation-checklist.md.`
-Branch: `fix/venue-lifecycle`
+Branch: `feat/s13-venue-lifecycle`
 
-- [ ] R36 Re-seen venues never update; closed venues never retired
-- [ ] R98 Venue keeps showing a retired Organization's name
-- [ ] R105 Establishments never become eligible → no menu writes possible
-- [ ] R106 Establishment parent links are immutable (fix via new Establishment + remap, per ADR)
+- [X] R36 Re-seen venues update; disappearance closes (never retires) per ADR-0012
+- [X] R98 Venue keeps showing a retired Organization's name
+- [X] R105 Establishments never become eligible → no menu writes possible
+- [X] R106 Establishment parent links are immutable (fix via new Establishment + remap, per ADR)
 
 **Recommended approach**
 - Implement exactly what ADR-0012 accepted, in discovery (apps layer), using the
@@ -735,6 +735,9 @@ Branch: `fix/venue-lifecycle`
 - Tests: a re-observed POI with a new address, a POI missing for N releases, an
   Organization merge seen through `/v1/venues`, and Establishment promotion
   unblocking a Menu write.
+
+Implementation and validation: [S13 review](2026-09-28-s13-venue-lifecycle.md).
+Draft implementation only; merge and gate acceptance remain pending.
 
 🚦 **Phase 5 gate** — start menu extraction after S7, S11, S12, S13 are merged.
 
@@ -869,3 +872,12 @@ Results: 23 duplicate pairs, 4 distinct, 16 unresolved; 20 corroborated
 geocodes, 3 supported wrong, 22 unresolved. Owner labels remain pending.
 The Pi gate remains closed; confirm/correct the coordinate defects and resolve
 outstanding evidence before acceptance. S6b is not Pi-gating.
+
+
+### 2026-09-28 S13 implementation
+
+Implemented accepted ADR-0012 in isolated `feat/s13-venue-lifecycle`, based on
+`main@46d81d4` (PRs #43 and #44 were already merged; no open PRs at start).
+See the [S13 review](2026-09-28-s13-venue-lifecycle.md) for the schema contract,
+acceptance matrix, validation, and limitations. Existing worktrees and the Pi
+were untouched. Both gates remain closed; broad duplicate cleanup is deferred.
