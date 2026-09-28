@@ -52,8 +52,9 @@ import tempfile
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -65,6 +66,7 @@ from apps.discovery.menu_url import (
     is_platform_venue_page,
     menu_links_from_sitemap,
     ordered_menu_candidates,
+    ordering_platform_host,
     page_menu_signal,
     path_candidates,
     platform_links_from_html,
@@ -95,6 +97,8 @@ class FetchResult:
     status: int
     text: str
     content_type: str
+    fetched_at: float
+    content_hash: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +110,16 @@ class MenuUrlDiscovery:
     # (the venue's own site is a shared platform host, or a homepage link
     # into one, D3.5)
     signal: str
+    fetched_at: datetime
+    content_hash: str
+    found_via: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureFailure:
+    outcome: Literal["failed", "skipped"]
+    reason_code: str
+    fetched_at: datetime
 
 
 def _is_html(result: FetchResult) -> bool:
@@ -169,6 +183,10 @@ class SiteFetcher:
         self._crawl_delay: dict[str, float] = {}
         # origin -> rules; None means the site is skipped this run.
         self._robots: dict[str, Protego | None] = {}
+        self._robots_reasons: dict[str, str] = {}
+        self._failure_reason = "network_error"
+        self._site_failure: CaptureFailure | None = None
+        self._found_via: dict[str, str] = {}
 
     def close(self) -> None:
         if self._owns_client:
@@ -198,12 +216,15 @@ class SiteFetcher:
                 return _MISS
             result = payload["result"]
             if result is None:
+                self._failure_reason = str(payload["reason_code"])
                 return None
             return FetchResult(
                 url=str(result["url"]),
                 status=int(result["status"]),
                 text=str(result["text"]),
                 content_type=str(result["content_type"]),
+                fetched_at=fetched_at,
+                content_hash=str(result["content_hash"]),
             )
         except (ValueError, KeyError, TypeError):
             return _MISS
@@ -219,12 +240,20 @@ class SiteFetcher:
                 "status": result.status,
                 "text": result.text,
                 "content_type": result.content_type,
+                "content_hash": result.content_hash,
             }
         )
         fd, tmp_name = tempfile.mkstemp(dir=self._cache_dir, suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump({"fetched_at": self._clock(), "result": body}, handle)
+                json.dump(
+                    {
+                        "fetched_at": result.fetched_at if result else self._clock(),
+                        "reason_code": self._failure_reason if result is None else None,
+                        "result": body,
+                    },
+                    handle,
+                )
             Path(tmp_name).replace(self._cache_path(url))
         except BaseException:
             Path(tmp_name).unlink(missing_ok=True)
@@ -253,6 +282,7 @@ class SiteFetcher:
     def _follow(self, url: str, *, obey_robots: bool) -> FetchResult | None | _Blocked:
         """Follow redirects by hand under the same-site, public-address policy."""
         current = url
+        self._failure_reason = "redirect_refused"
         for _ in range(MAX_REDIRECTS + 1):
             try:
                 split = urlsplit(current)
@@ -261,6 +291,7 @@ class SiteFetcher:
             if split.scheme not in {"http", "https"} or not same_site(current, url):
                 return None
             if not self._is_public_host(split.hostname or ""):
+                self._failure_reason = "non_public_host"
                 return None
             if obey_robots and not self.allowed(current):
                 return _BLOCKED
@@ -308,7 +339,9 @@ class SiteFetcher:
                     return _Redirect(location)
                 body = _read_capped(response)
                 if body is None:
+                    self._failure_reason = "too_large"
                     return None
+                content_hash = "sha256:" + hashlib.sha256(body).hexdigest()
                 is_gz_url = url.lower().split("?", 1)[0].endswith(".gz")
                 if is_gz_url and body.startswith(_GZIP_MAGIC):
                     # R75: a gzipped sitemap. Decompress with its own cap so a
@@ -323,8 +356,11 @@ class SiteFetcher:
                     status=response.status_code,
                     text=_decode(body, response.encoding),
                     content_type=response.headers.get("content-type", ""),
+                    fetched_at=self._clock(),
+                    content_hash=content_hash,
                 )
         except (httpx.HTTPError, httpx.InvalidURL):
+            self._failure_reason = "network_error"
             return None
         finally:
             self._last_request_at[host] = self._monotonic()
@@ -338,7 +374,10 @@ class SiteFetcher:
         if origin not in self._robots:
             self._robots[origin] = self._load_robots(origin, split.hostname or "")
         rules = self._robots[origin]
-        return rules is not None and rules.can_fetch(url, self._user_agent)
+        allowed = rules is not None and rules.can_fetch(url, self._user_agent)
+        if not allowed:
+            self._failure_reason = self._robots_reasons.get(origin, "robots_disallowed")
+        return allowed
 
     def _load_robots(self, origin: str, host: str) -> Protego | None:
         """An origin's rules, or ``None`` to skip the site (owner decision D2.2).
@@ -346,6 +385,7 @@ class SiteFetcher:
         RFC 9309 §2.3.1: 4xx means "unavailable" (allow all); 5xx or an
         unreachable server means "assume complete disallow".
         """
+        self._robots_reasons[origin] = "robots_unavailable"
         result = self._get(f"{origin}/robots.txt", obey_robots=False)
         if result is None:
             return None
@@ -357,11 +397,54 @@ class SiteFetcher:
         delay = rules.crawl_delay(self._user_agent)
         if delay is not None:
             if delay > MAX_CRAWL_DELAY_S:
+                self._robots_reasons[origin] = "crawl_delay_too_long"
                 return None
             self._crawl_delay[host] = max(self._crawl_delay.get(host, 0.0), float(delay))
+        self._robots_reasons[origin] = "robots_disallowed"
         return rules
 
     # -- discovery ------------------------------------------------------------
+
+    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
+        """Return a verified acquisition or one site-level failure, including policy skips."""
+        self._site_failure = None
+        self._found_via = {}
+        result = self.discover_menu_url(website)
+        return (
+            result
+            or self._site_failure
+            or CaptureFailure("failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC))
+        )
+
+    def _note_failure(self, result: FetchResult | None) -> None:
+        reason = (
+            self._failure_reason
+            if result is None
+            else (f"http_{result.status}" if 400 <= result.status <= 599 else "not_html")
+        )
+        skipped = reason in {
+            "robots_disallowed",
+            "robots_unavailable",
+            "crawl_delay_too_long",
+            "non_public_host",
+            "redirect_refused",
+            "platform_root",
+            "social_link",
+        }
+        self._site_failure = CaptureFailure(
+            "skipped" if skipped else "failed", reason, datetime.fromtimestamp(self._clock(), UTC)
+        )
+
+    def _discovered(
+        self, result: FetchResult, signal: str, found_via: str | None = None
+    ) -> MenuUrlDiscovery:
+        return MenuUrlDiscovery(
+            result.url,
+            signal,
+            datetime.fromtimestamp(result.fetched_at, UTC),
+            result.content_hash,
+            found_via,
+        )
 
     def discover_menu_url(self, website: str) -> MenuUrlDiscovery | None:
         """Verify a menu URL for a resolved website, honouring robots + rate limit.
@@ -381,14 +464,28 @@ class SiteFetcher:
         (post-redirect) URL.
         """
         if platform_signal(website):
+            if ordering_platform_host(website) is None:
+                self._failure_reason = "social_link"
+                self._note_failure(None)
+                return None
             if not is_platform_venue_page(website):
+                self._failure_reason = "platform_root"
+                self._note_failure(None)
                 return None  # a platform's root belongs to the platform (R33)
             result = self.fetch(website)
-            if result is not None and result.status == 200 and _is_html(result):  # noqa: PLR2004
-                return MenuUrlDiscovery(menu_url=result.url, signal="platform")
+            if (
+                result is not None
+                and result.status == 200
+                and _is_html(result)
+                and is_platform_venue_page(result.url, ordering_only=True)
+            ):  # noqa: PLR2004
+                return self._discovered(result, "platform")
+            self._note_failure(result)
             return None
 
         homepage = self.fetch(website)
+        if homepage is None or homepage.status != 200 or not _is_html(homepage):
+            self._note_failure(homepage)
         base = website
         homepage_html: str | None = None
         homepage_hash: str | None = None
@@ -418,8 +515,10 @@ class SiteFetcher:
                 continue
             if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
                 continue  # identical body to the homepage: a catch-all/soft-404 answer
-            return MenuUrlDiscovery(
-                menu_url=result.url, signal="well_known" if is_well_known else "crawled"
+            return self._discovered(
+                result,
+                "well_known" if is_well_known else "crawled",
+                None if is_well_known else self._found_via.get(candidate, base),
             )
 
         if homepage_html is not None:
@@ -427,8 +526,13 @@ class SiteFetcher:
                 :MAX_PLATFORM_CANDIDATES
             ]:
                 result = self.fetch(platform_url)
-                if result is not None and result.status == 200 and _is_html(result):  # noqa: PLR2004
-                    return MenuUrlDiscovery(menu_url=result.url, signal="platform")
+                if (
+                    result is not None
+                    and result.status == 200
+                    and _is_html(result)
+                    and is_platform_venue_page(result.url, ordering_only=True)
+                ):  # noqa: PLR2004
+                    return self._discovered(result, "platform", base)
         return None
 
     def _is_catch_all_site(self, base_url: str) -> bool:
@@ -462,7 +566,9 @@ class SiteFetcher:
             fetched += 1
             if result is None or result.status != 200:  # noqa: PLR2004
                 continue
-            matches.extend(menu_links_from_sitemap(result.text, base_url))
+            links = menu_links_from_sitemap(result.text, base_url)
+            matches.extend(links)
+            self._found_via.update(dict.fromkeys(links, result.url))
             for child in sitemap_index_children(result.text, base_url):
                 if fetched >= MAX_SITEMAP_CHILDREN:
                     break
@@ -470,7 +576,9 @@ class SiteFetcher:
                 fetched += 1
                 if child_result is None or child_result.status != 200:  # noqa: PLR2004
                     continue
-                matches.extend(menu_links_from_sitemap(child_result.text, base_url))
+                links = menu_links_from_sitemap(child_result.text, base_url)
+                matches.extend(links)
+                self._found_via.update(dict.fromkeys(links, child_result.url))
         return matches
 
     def _sitemap_sources(self, base_url: str) -> list[str]:

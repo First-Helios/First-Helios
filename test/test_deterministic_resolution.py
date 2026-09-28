@@ -66,10 +66,9 @@ def _observation(
         observed_at=observed_at or datetime.now(UTC),
         content_hash=f"sha256:record-{token}",
         source_payload=dict(payload or {"id": external_key, "name": "Source Name"}),
-        evidence_locator="$",
-        evidence_excerpt_hash=f"sha256:evidence-{token}",
-        canonical_url=canonical_url,
-        endpoint_kind="https",
+        evidence_locator="$['id','name']",
+        identity_match_url=canonical_url,
+        source_url=canonical_url or "repo:test/fixture.json",
         capture_content_hash=f"sha256:capture-{token}",
         bundle_path=f"captures/{token}.json",
     )
@@ -853,16 +852,14 @@ def test_source_namespace_kind_and_endpoint_ownership_are_stable(
     session.rollback()
 
     other_namespace = f"step4-other-{token}"
-    with pytest.raises(ValueError, match="belongs to another Source"):
-        resolve_source_record_observation(
-            session,
-            observation=_observation(
-                namespace=other_namespace,
-                external_key="first",
-                canonical_url=url,
-            ),
-            decided_at=datetime.now(UTC),
-        )
+    independent = resolve_source_record_observation(
+        session,
+        observation=_observation(
+            namespace=other_namespace, external_key="first", canonical_url=url
+        ),
+        decided_at=datetime.now(UTC),
+    )
+    assert independent.state == "unresolved"
     session.rollback()
 
     assert (

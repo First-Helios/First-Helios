@@ -95,8 +95,8 @@ def observation() -> BronzeObservation:
         content_hash=f"sha256:{token}",
         source_payload={"id": token},
         evidence_locator="$.id",
-        evidence_excerpt_hash=f"sha256:evidence-{token}",
-        canonical_url=f"https://{token}.example.test/menu",
+        identity_match_url=f"https://{token}.example.test/menu",
+        source_url=f"https://{token}.example.test/menu" or "repo:test/fixture.json",
         capture_content_hash=f"sha256:capture-{token}",
         bundle_path=f"fixture/{token}",
     )
@@ -111,10 +111,13 @@ class ScopeFixture:
     local_input: PersistedBronzeObservation
 
 
-def seed_scope(session: Session) -> ScopeFixture:
+def seed_scope(session: Session, *, legacy_bronze: bool = False) -> ScopeFixture:
     """Caller commits before any tested provider admission."""
-    shared = persist_source_record_observation(session, observation())
-    local = persist_source_record_observation(session, observation())
+    from test.legacy_bronze_support import legacy_observation
+
+    writer = legacy_observation if legacy_bronze else persist_source_record_observation
+    shared = writer(session, observation())
+    local = writer(session, observation())
     place = create_place(session, address="123 Test Street")
     mark_subject_eligible(session, place.id)
     org = create_organization(session, canonical_name="Test", name_fingerprint="test")

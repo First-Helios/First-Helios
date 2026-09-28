@@ -31,9 +31,9 @@ SQL_DIRECTORY = Path(__file__).resolve().parents[1] / "docs/reviews/sql"
 
 @pytest.mark.parametrize("concrete_sql", [False, True], ids=["alembic", "sql-artifacts"])
 def test_seeded_menu_round_trip_preserves_all_providers(
-    disposable_database_engine: Engine, concrete_sql: bool
+    historical_database_engine: Engine, concrete_sql: bool
 ) -> None:
-    engine = disposable_database_engine
+    engine = historical_database_engine
 
     def apply(direction: str) -> None:
         target = PARENT if direction == "downgrade" else HEAD
@@ -48,10 +48,10 @@ def test_seeded_menu_round_trip_preserves_all_providers(
                 connection.scalar(text("SELECT version_num FROM public.alembic_version")) == target
             )
 
-    migrate("upgrade", "head")
+    migrate("upgrade", "12a76ebed458")
     migrate("downgrade", PARENT)
     with Session(engine) as setup, setup.begin():
-        scope = seed_scope(setup)
+        scope = seed_scope(setup, legacy_bronze=True)
         setup.add(
             SubjectName(
                 subject_id=scope.organization.subject_id,
@@ -141,7 +141,7 @@ def test_seeded_menu_round_trip_preserves_all_providers(
             assert provider_rows(connection) == rows and sequence_state(connection) == sequences
             assert signatures(connection) == objects
     finally:
-        migrate("upgrade", "head")
+        migrate("upgrade", "12a76ebed458")
 
 
 def test_menu_sql_artifacts_match_fresh_generation() -> None:

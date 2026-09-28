@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select, text
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 
 
 def _source(session: Session, namespace: str = "overture", kind: str = "dataset") -> Source:
-    source = Source(namespace=namespace, kind=kind)
+    source = Source(namespace=f"{namespace}-{uuid4().hex}", kind=kind)
     session.add(source)
     session.commit()
     return source
@@ -63,7 +64,7 @@ def _capture(
 ) -> Capture:
     capture = Capture(
         source_id=source.id,
-        source_endpoint_id=endpoint.id if endpoint else None,
+        source_endpoint_id=(endpoint or _endpoint(session, source)).id,
         fetched_at=datetime.now(UTC),
         content_hash="sha256:capture",
         bundle_path="captures/example.json",
@@ -109,8 +110,8 @@ def _assert_sql_rejects(session: Session, statement: str, message: str, **params
 
 
 def test_source_namespace_is_canonical_and_unique(session: Session) -> None:
-    _source(session)
-    _assert_rejects(session, Source(namespace="overture", kind="other"))
+    source = _source(session)
+    _assert_rejects(session, Source(namespace=source.namespace, kind="other"))
     _assert_rejects(session, Source(namespace=" overture ", kind="dataset"))
 
 
@@ -122,7 +123,7 @@ def test_endpoint_identity_is_canonical_and_unique(session: Session) -> None:
         SourceEndpoint(
             source_id=source.id,
             canonical_uri="https://example.test/data",
-            endpoint_kind="mirror",
+            endpoint_kind="https",
         ),
     )
     _assert_rejects(
@@ -164,6 +165,7 @@ def test_capture_rejects_blank_optional_locators(
         session,
         Capture(
             source_id=source.id,
+            source_endpoint_id=_endpoint(session, source).id,
             fetched_at=datetime.now(UTC),
             content_hash=content_hash,
             bundle_path=bundle_path,

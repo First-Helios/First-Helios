@@ -170,6 +170,19 @@ def _on_hosts(url: str, domains: frozenset[str]) -> bool:
     return any(host == domain or host.endswith(f".{domain}") for domain in domains)
 
 
+def ordering_platform_host(url: str) -> str | None:
+    """Stable platform record suffix, shared by www/order/venue subdomains."""
+    host = _host(url)
+    return next(
+        (
+            domain
+            for domain in sorted(ORDERING_PLATFORM_HOSTS, key=len, reverse=True)
+            if host == domain or host.endswith("." + domain)
+        ),
+        None,
+    )
+
+
 def platform_signal(url: str) -> bool:
     """True when a URL's host is on, or a subdomain of, a known platform (D3.5)."""
     return _on_hosts(url, PLATFORM_HOSTS)

@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit, urlunsplit
+from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -22,6 +21,14 @@ from packages.helios_core.provenance.models import (
     SourceEndpoint,
     SourceRecord,
     SourceRecordVersion,
+)
+from packages.helios_core.provenance.validation import (
+    canonicalize_http_url as canonicalize_http_url,
+)
+from packages.helios_core.provenance.validation import (
+    canonicalize_source_url,
+    excerpt_hash,
+    validate_outcome,
 )
 
 if TYPE_CHECKING:
@@ -42,13 +49,13 @@ class BronzeObservation:
     content_hash: str
     source_payload: Mapping[str, Any]
     evidence_locator: str
-    evidence_excerpt_hash: str
+    source_url: str
     fetched_at: datetime | None = None
-    canonical_url: str | None = None
-    endpoint_kind: str = "https"
+    identity_match_url: str | None = None
     capture_content_hash: str | None = None
     bundle_path: str | None = None
-    capture_outcome: str = "succeeded"
+    capture_outcome: Literal["succeeded", "rejected"] = "succeeded"
+    reason_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,12 +63,12 @@ class PersistedBronzeObservation:
     """Database identities created or reused for a Bronze observation."""
 
     source_id: int
-    source_endpoint_id: int | None
+    source_endpoint_id: int
     source_record_id: int
     source_record_version_id: int
     capture_id: int
     evidence_id: int
-    canonical_url: str | None
+    identity_match_url: str | None
     source_record_created: bool
     observation_created: bool
 
@@ -146,49 +153,12 @@ def evidence_supports_version(session: Session, evidence_id: int, version_id: in
     )
 
 
-def canonicalize_http_url(url: str) -> str:
-    """Return a deliberately conservative canonical HTTP(S) URL.
-
-    Scheme and host case, an empty path, default ports, and fragments are not
-    resource identity.  Path escaping, query ordering, and trailing slashes
-    are left untouched because normalizing those can merge distinct source
-    resources.
-    """
-    candidate = url.strip()
-    if not candidate or any(character.isspace() for character in candidate):
-        raise ValueError("canonical URL must be nonblank and contain no whitespace")
-
-    parsed = urlsplit(candidate)
-    scheme = parsed.scheme.lower()
-    if scheme not in {"http", "https"} or parsed.hostname is None:
-        raise ValueError("canonical URL must be an absolute HTTP(S) URL")
-    if parsed.username is not None or parsed.password is not None:
-        raise ValueError("canonical URL must not contain user information")
-
-    try:
-        port = parsed.port
-    except ValueError as exc:
-        raise ValueError("canonical URL has an invalid port") from exc
-
-    try:
-        host = parsed.hostname.encode("idna").decode("ascii").lower()
-    except UnicodeError as exc:
-        raise ValueError("canonical URL has an invalid host") from exc
-    if ":" in host:
-        host = f"[{host}]"
-
-    default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
-    netloc = host if port is None or default_port else f"{host}:{port}"
-    path = parsed.path or "/"
-    return urlunsplit((scheme, netloc, path, parsed.query, ""))
-
-
 def _require_trimmed(value: str, label: str) -> None:
     if not value or value != value.strip():
         raise ValueError(f"{label} must be nonblank and trimmed")
 
 
-def persist_source_record_observation(
+def _persist_source_record_observation(
     session: Session,
     observation: BronzeObservation,
 ) -> PersistedBronzeObservation:
@@ -203,8 +173,6 @@ def persist_source_record_observation(
     _require_trimmed(observation.external_key, "external key")
     _require_trimmed(observation.content_hash, "record content hash")
     _require_trimmed(observation.evidence_locator, "Evidence locator")
-    _require_trimmed(observation.evidence_excerpt_hash, "Evidence excerpt hash")
-    _require_trimmed(observation.endpoint_kind, "endpoint kind")
     _require_trimmed(observation.capture_outcome, "capture outcome")
     if observation.capture_content_hash is not None:
         _require_trimmed(observation.capture_content_hash, "capture content hash")
@@ -243,40 +211,14 @@ def persist_source_record_observation(
     if source_record is None:  # pragma: no cover - INSERT/SELECT is atomic in PostgreSQL
         raise RuntimeError("failed to create or reuse Bronze Source Record")
 
-    canonical_url = (
-        canonicalize_http_url(observation.canonical_url)
-        if observation.canonical_url is not None
+    endpoint = _endpoint(session, source.id, canonicalize_source_url(observation.source_url))
+    match_url = (
+        canonicalize_http_url(observation.identity_match_url)
+        if observation.identity_match_url
         else None
     )
-    endpoint: SourceEndpoint | None = None
-    if canonical_url is not None:
-        session.execute(
-            insert(SourceEndpoint)
-            .values(
-                source_id=source.id,
-                canonical_uri=canonical_url,
-                endpoint_kind=observation.endpoint_kind,
-            )
-            .on_conflict_do_nothing(index_elements=[SourceEndpoint.canonical_uri])
-        )
-        # FOR NO KEY UPDATE serializes deterministic URL resolution while
-        # remaining compatible with Capture's FK key-share lock. Identity's
-        # resolver takes this lock itself, after its Subjects and before any
-        # Source Record, so here it is normally already held.
-        endpoint = session.scalar(
-            select(SourceEndpoint)
-            .where(SourceEndpoint.canonical_uri == canonical_url)
-            .with_for_update(key_share=True)
-        )
-        if endpoint is None:  # pragma: no cover - INSERT/SELECT is atomic in PostgreSQL
-            raise RuntimeError("failed to create or reuse Bronze Source Endpoint")
-        if endpoint.source_id != source.id:
-            raise ValueError(f"canonical URL {canonical_url!r} already belongs to another Source")
-        if endpoint.endpoint_kind != observation.endpoint_kind:
-            raise ValueError(
-                f"canonical URL {canonical_url!r} already has endpoint kind "
-                f"{endpoint.endpoint_kind!r}"
-            )
+    match_endpoint = _endpoint(session, source.id, match_url, lock=True) if match_url else None
+    evidence_hash = excerpt_hash(dict(observation.source_payload), observation.evidence_locator)
 
     # FOR NO KEY UPDATE serializes exact-retry detection between concurrent
     # observers of one record (so an identical retry stays idempotent and new
@@ -294,7 +236,7 @@ def persist_source_record_observation(
         raise RuntimeError("Bronze Source Record disappeared during observation")
 
     fetched_at = observation.fetched_at or observation.observed_at
-    endpoint_id = endpoint.id if endpoint is not None else None
+    endpoint_id = endpoint.id
     existing = session.execute(
         select(SourceRecordVersion, Capture, Evidence)
         .join(Capture, Capture.id == SourceRecordVersion.capture_id)
@@ -304,6 +246,8 @@ def persist_source_record_observation(
             SourceRecordVersion.source_id == source.id,
             SourceRecordVersion.observed_at == observation.observed_at,
             SourceRecordVersion.content_hash == observation.content_hash,
+            SourceRecordVersion.identity_match_endpoint_id
+            == (match_endpoint.id if match_endpoint else None),
             SourceRecordVersion.source_payload == dict(observation.source_payload),
             Capture.source_id == source.id,
             Capture.source_endpoint_id == endpoint_id,
@@ -311,8 +255,9 @@ def persist_source_record_observation(
             Capture.content_hash == observation.capture_content_hash,
             Capture.bundle_path == observation.bundle_path,
             Capture.outcome == observation.capture_outcome,
+            Capture.reason_code == observation.reason_code,
             Evidence.locator == observation.evidence_locator,
-            Evidence.excerpt_hash == observation.evidence_excerpt_hash,
+            Evidence.excerpt_hash == evidence_hash,
         )
         .order_by(SourceRecordVersion.id, Evidence.id)
         .limit(1)
@@ -326,7 +271,7 @@ def persist_source_record_observation(
             source_record_version_id=version.id,
             capture_id=capture.id,
             evidence_id=evidence.id,
-            canonical_url=canonical_url,
+            identity_match_url=match_url,
             source_record_created=inserted_record_id is not None,
             observation_created=False,
         )
@@ -338,6 +283,7 @@ def persist_source_record_observation(
         content_hash=observation.capture_content_hash,
         bundle_path=observation.bundle_path,
         outcome=observation.capture_outcome,
+        reason_code=observation.reason_code,
     )
     session.add(capture)
     session.flush()
@@ -349,6 +295,7 @@ def persist_source_record_observation(
         observed_at=observation.observed_at,
         content_hash=observation.content_hash,
         source_payload=deepcopy(dict(observation.source_payload)),
+        identity_match_endpoint_id=match_endpoint.id if match_endpoint else None,
     )
     session.add(version)
     session.flush()
@@ -356,34 +303,35 @@ def persist_source_record_observation(
     evidence = Evidence(
         source_record_version_id=version.id,
         locator=observation.evidence_locator,
-        excerpt_hash=observation.evidence_excerpt_hash,
+        excerpt_hash=evidence_hash,
     )
     session.add(evidence)
     session.flush()
 
     return PersistedBronzeObservation(
         source_id=source.id,
-        source_endpoint_id=endpoint.id if endpoint is not None else None,
+        source_endpoint_id=endpoint.id,
         source_record_id=source_record.id,
         source_record_version_id=version.id,
         capture_id=capture.id,
         evidence_id=evidence.id,
-        canonical_url=canonical_url,
+        identity_match_url=match_url,
         source_record_created=inserted_record_id is not None,
         observation_created=True,
     )
 
 
-def source_record_ids_for_canonical_url(
+def source_record_ids_for_identity_match_url(
     session: Session,
     canonical_url: str,
+    source_namespace: str,
 ) -> tuple[int, ...]:
     """Return record IDs observed at one exact canonical Source Endpoint."""
     statement = (
         select(SourceRecordVersion.source_record_id)
-        .join(Capture, Capture.id == SourceRecordVersion.capture_id)
-        .join(SourceEndpoint, SourceEndpoint.id == Capture.source_endpoint_id)
-        .where(SourceEndpoint.canonical_uri == canonical_url)
+        .join(SourceEndpoint, SourceEndpoint.id == SourceRecordVersion.identity_match_endpoint_id)
+        .join(Source, Source.id == SourceEndpoint.source_id)
+        .where(SourceEndpoint.canonical_uri == canonical_url, Source.namespace == source_namespace)
         .distinct()
         .order_by(SourceRecordVersion.source_record_id)
     )
@@ -406,7 +354,7 @@ def find_source_record_id(
     )
 
 
-def lock_source_endpoint(session: Session, canonical_url: str) -> bool:
+def lock_source_endpoint(session: Session, canonical_url: str, source_namespace: str) -> bool:
     """Lock an existing Source Endpoint with the lock observation persistence takes.
 
     Returns ``False`` when no endpoint exists yet; persistence then creates it.
@@ -414,7 +362,10 @@ def lock_source_endpoint(session: Session, canonical_url: str) -> bool:
     return (
         session.scalar(
             select(SourceEndpoint.id)
-            .where(SourceEndpoint.canonical_uri == canonical_url)
+            .join(Source, Source.id == SourceEndpoint.source_id)
+            .where(
+                SourceEndpoint.canonical_uri == canonical_url, Source.namespace == source_namespace
+            )
             .with_for_update(key_share=True)
         )
         is not None
@@ -437,3 +388,157 @@ def lock_source_record(session: Session, source_record_id: int) -> bool:
         )
         is not None
     )
+
+
+def _endpoint(session: Session, source_id: int, url: str, *, lock: bool = False) -> SourceEndpoint:
+    session.execute(
+        insert(SourceEndpoint)
+        .values(source_id=source_id, canonical_uri=url, endpoint_kind=url.split(":", 1)[0])
+        .on_conflict_do_nothing(
+            index_elements=[SourceEndpoint.source_id, SourceEndpoint.canonical_uri]
+        )
+    )
+    query = select(SourceEndpoint).where(
+        SourceEndpoint.source_id == source_id, SourceEndpoint.canonical_uri == url
+    )
+    if lock:
+        query = query.with_for_update(key_share=True)
+    return session.scalars(query).one()
+
+
+def persist_source_record_observation(
+    session: Session, observation: BronzeObservation
+) -> PersistedBronzeObservation:
+    """Validate before writes and make the complete Bronze operation atomic."""
+    if observation.observed_at.utcoffset() is None:
+        raise ValueError("observed at requires an aware timestamp")
+    if observation.fetched_at is not None and observation.fetched_at.utcoffset() is None:
+        raise ValueError("fetched at requires an aware timestamp")
+    canonicalize_source_url(observation.source_url)
+    if observation.identity_match_url is not None:
+        canonicalize_http_url(observation.identity_match_url)
+    validate_outcome(observation.capture_outcome, observation.reason_code)
+    if observation.capture_outcome not in {"succeeded", "rejected"}:
+        raise ValueError("observations must succeed or be rejected")
+    if observation.capture_outcome == "rejected" and observation.identity_match_url is not None:
+        raise ValueError("rejected observations cannot match Identity")
+    excerpt_hash(dict(observation.source_payload), observation.evidence_locator)
+    with session.begin_nested():
+        return _persist_source_record_observation(session, observation)
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureReference:
+    id: int
+    source_url: str
+    endpoint_kind: str
+    fetched_at: datetime
+    content_hash: str | None
+    outcome: str
+    reason_code: str | None
+
+
+def latest_capture_at(session: Session, namespace: str, url: str) -> CaptureReference | None:
+    row = session.execute(
+        select(Capture, SourceEndpoint)
+        .join(SourceEndpoint, SourceEndpoint.id == Capture.source_endpoint_id)
+        .join(Source, Source.id == Capture.source_id)
+        .where(
+            Source.namespace == namespace,
+            SourceEndpoint.canonical_uri == canonicalize_source_url(url),
+        )
+        .order_by(Capture.fetched_at.desc(), Capture.id.desc())
+        .limit(1)
+    ).one_or_none()
+    return _capture_reference(*row) if row else None
+
+
+def _capture_reference(capture: Capture, endpoint: SourceEndpoint) -> CaptureReference:
+    return CaptureReference(
+        capture.id,
+        endpoint.canonical_uri,
+        endpoint.endpoint_kind,
+        capture.fetched_at,
+        capture.content_hash,
+        capture.outcome,
+        capture.reason_code,
+    )
+
+
+def source_endpoint_for_evidence(session: Session, evidence_id: int) -> CaptureReference:
+    evidence = session.get(Evidence, evidence_id)
+    if evidence is None:
+        raise ValueError("unknown Evidence")
+    capture_id = evidence.capture_id
+    if evidence.source_record_version_id is not None:
+        version = session.get(SourceRecordVersion, evidence.source_record_version_id)
+        if version is not None:
+            capture_id = version.capture_id
+    capture = session.get(Capture, capture_id) if capture_id is not None else None
+    if capture is None:
+        raise ValueError("Evidence has no Capture")
+    endpoint = session.get(SourceEndpoint, capture.source_endpoint_id)
+    if endpoint is None:
+        raise ValueError("Capture has no endpoint")
+    return _capture_reference(capture, endpoint)
+
+
+def source_record_is_rejected_only(session: Session, source_record_id: int) -> bool:
+    """Block rejected-only records, preserving admission of legacy uncaptured Versions.
+
+    SourceRecordVersion.capture_id remains nullable by contract. Such a Version
+    is not a rejected observation; S6 does not change the existing raw admission
+    API for it. A subsequent successful Version also permits normal admission.
+    """
+    outcomes = session.scalars(
+        select(Capture.outcome)
+        .select_from(SourceRecordVersion)
+        .outerjoin(Capture, Capture.id == SourceRecordVersion.capture_id)
+        .where(SourceRecordVersion.source_record_id == source_record_id)
+    ).all()
+    return bool(outcomes) and all(outcome == "rejected" for outcome in outcomes)
+
+
+def record_capture_attempt(
+    session: Session,
+    *,
+    source_namespace: str,
+    source_kind: str,
+    source_url: str,
+    fetched_at: datetime,
+    outcome: Literal["failed", "skipped"],
+    reason_code: str,
+    content_hash: str | None = None,
+) -> CaptureReference:
+    """Record one unsuccessful site attempt; no record, Version or Identity state."""
+    url = canonicalize_source_url(source_url)
+    validate_outcome(outcome, reason_code)
+    if outcome not in {"failed", "skipped"}:
+        raise ValueError("attempts must be failed or skipped")
+    for value, label in ((source_namespace, "namespace"), (source_kind, "kind")):
+        _require_trimmed(value, label)
+    if fetched_at.utcoffset() is None:
+        raise ValueError("fetched at requires an aware timestamp")
+    if content_hash is not None:
+        _require_trimmed(content_hash, "content hash")
+    with session.begin_nested():
+        session.execute(
+            insert(Source)
+            .values(namespace=source_namespace, kind=source_kind)
+            .on_conflict_do_nothing(index_elements=[Source.namespace])
+        )
+        source = session.scalars(select(Source).where(Source.namespace == source_namespace)).one()
+        if source.kind != source_kind:
+            raise ValueError("Source kind mismatch")
+        endpoint = _endpoint(session, source.id, url)
+        capture = Capture(
+            source_id=source.id,
+            source_endpoint_id=endpoint.id,
+            fetched_at=fetched_at,
+            outcome=outcome,
+            reason_code=reason_code,
+            content_hash=content_hash,
+        )
+        session.add(capture)
+        session.flush()
+        return _capture_reference(capture, endpoint)

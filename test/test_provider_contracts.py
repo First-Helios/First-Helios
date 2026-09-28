@@ -390,6 +390,7 @@ def test_bronze_frozen_lookups_ownership_and_canonical_keys(
             source_id=original.source_id,
             source_record_id=original.source_record_id,
             capture_id=original.capture_id,
+            identity_match_endpoint_id=original.identity_match_endpoint_id,
             observed_at=original.observed_at,
             content_hash=original.content_hash,
             source_payload=original.source_payload,
@@ -497,7 +498,7 @@ def test_forged_eligible_parent_without_resolved_feature_is_rejected(
         assert_rejected(session, fixture.establishment)
 
 
-@pytest.mark.parametrize("missing", ["source_endpoint_id", "content_hash", "bundle_path"])
+@pytest.mark.parametrize("missing", ["content_hash", "bundle_path"])
 def test_optional_capture_key_fields_have_total_order(
     scopes: tuple[sessionmaker[Session], ScopeFixture],
     missing: str,
@@ -522,6 +523,7 @@ def test_optional_capture_key_fields_have_total_order(
             source_id=original.source_id,
             source_record_id=original.source_record_id,
             capture_id=partial.id,
+            identity_match_endpoint_id=original.identity_match_endpoint_id,
             observed_at=original.observed_at,
             content_hash=original.content_hash,
             source_payload=original.source_payload,

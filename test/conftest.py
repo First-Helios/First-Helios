@@ -127,3 +127,32 @@ def session(database_engine: Engine) -> Iterator[Session]:
         sess.close()
         outer.rollback()
         connection.close()
+
+
+@pytest.fixture
+def historical_database_engine(
+    disposable_database_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[Engine]:
+    """Isolate historical migration boundaries from current-contract test data.
+
+    S6 intentionally refuses both legacy-data upgrades and populated downgrades.
+    Historical tests must exercise their original revisions in their own database.
+    """
+    from uuid import uuid4
+
+    name = f"helios_history_{uuid4().hex}_test"
+    admin = disposable_database_engine
+    with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        connection.exec_driver_sql(f'CREATE DATABASE "{name}"')
+    url = admin.url.set(database=name).render_as_string(hide_password=False)
+    engine = create_engine(url)
+    monkeypatch.setenv("DATABASE_URL", url)
+    get_settings.cache_clear()
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+        get_settings.cache_clear()
+        with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+            connection.exec_driver_sql(f'DROP DATABASE "{name}" WITH (FORCE)')

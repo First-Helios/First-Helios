@@ -74,7 +74,8 @@ from packages.helios_core.provenance.contracts import (
     lock_source_endpoint,
     lock_source_record,
     persist_source_record_observation,
-    source_record_ids_for_canonical_url,
+    source_record_ids_for_identity_match_url,
+    source_record_is_rejected_only,
 )
 
 if TYPE_CHECKING:
@@ -401,6 +402,8 @@ def admit_source_record(
     adjudication_id: int | None = None,
 ) -> ResolutionEvent:
     """Append Open and materialize explicit indexed ``unresolved`` state."""
+    if source_record_is_rejected_only(session, source_record_id):
+        raise ValueError("rejected-only Source Record cannot enter Identity")
     return _record_resolution(
         session,
         source_record_id=source_record_id,
@@ -583,6 +586,7 @@ def _read_resolution_plan(
     session: Session,
     source_record_id: int | None,
     canonical_url: str | None,
+    source_namespace: str,
 ) -> _ResolutionPlan:
     """Read the record's mapping and URL candidates, taking no locks.
 
@@ -617,7 +621,9 @@ def _read_resolution_plan(
     if canonical_url is not None and prior_state in {None, "unresolved"}:
         url_source_record_ids = tuple(
             record_id
-            for record_id in source_record_ids_for_canonical_url(session, canonical_url)
+            for record_id in source_record_ids_for_identity_match_url(
+                session, canonical_url, source_namespace
+            )
             if record_id != source_record_id
         )
         url_subject_ids = _current_subject_ids_for_source_records(session, url_source_record_ids)
@@ -676,11 +682,13 @@ def resolve_source_record_observation(
     observation is planned once more. A second change raises
     :class:`ResolutionConflictError`.
     """
+    if observation.capture_outcome != "succeeded":
+        raise ValueError("rejected observations cannot enter Identity")
     canonical_url: str | None = None
     # Persistence rejects an invalid URL with its own message.
     with suppress(ValueError):
-        if observation.canonical_url is not None:
-            canonical_url = canonicalize_http_url(observation.canonical_url)
+        if observation.identity_match_url is not None:
+            canonical_url = canonicalize_http_url(observation.identity_match_url)
 
     for _ in range(_RESOLUTION_ATTEMPTS):
         try:
@@ -709,14 +717,16 @@ def _resolve_observation_once(
     source_record_id = find_source_record_id(
         session, observation.source_namespace, observation.external_key
     )
-    plan = _read_resolution_plan(session, source_record_id, canonical_url)
+    plan = _read_resolution_plan(
+        session, source_record_id, canonical_url, observation.source_namespace
+    )
 
     _lock_identity_maintenance(session)
     _lock_resolution_subjects(session, *plan.subject_ids)
     if canonical_url is not None:
         # The endpoint lock keeps other resolvers from adding a same-URL record
         # while this one relies on the URL's candidate set.
-        lock_source_endpoint(session, canonical_url)
+        lock_source_endpoint(session, canonical_url, observation.source_namespace)
     record_ids_to_lock = set(plan.locked_url_source_record_ids)
     if source_record_id is not None:
         record_ids_to_lock.add(source_record_id)
@@ -733,7 +743,12 @@ def _resolve_observation_once(
         .where(CurrentResolution.source_record_id == persisted.source_record_id)
         .with_for_update()
     )
-    if _read_resolution_plan(session, persisted.source_record_id, canonical_url) != plan:
+    if (
+        _read_resolution_plan(
+            session, persisted.source_record_id, canonical_url, observation.source_namespace
+        )
+        != plan
+    ):
         raise _StaleResolutionPlan
 
     def decision(method: str) -> DecisionMetadata:

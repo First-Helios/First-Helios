@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -38,7 +38,10 @@ from packages.helios_core.identity.models import (
     SubjectCurrentness,
 )
 from packages.helios_core.identity.normalize import name_fingerprint, within_radius_m
-from packages.helios_core.provenance.contracts import BronzeObservation
+from packages.helios_core.provenance.contracts import (
+    BronzeObservation,
+    persist_source_record_observation,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -76,7 +79,6 @@ def _sha(value: str) -> str:
 def _observation(poi: OverturePoi, *, observed_at: datetime, release: str) -> BronzeObservation:
     payload_json = json.dumps(poi.raw, sort_keys=True, default=str)
     content_hash = _sha(payload_json)
-    excerpt = f"{poi.name}\x1f{poi.primary_category or ''}"
     return BronzeObservation(
         source_namespace="overture",
         source_kind="poi_snapshot",
@@ -84,13 +86,10 @@ def _observation(poi: OverturePoi, *, observed_at: datetime, release: str) -> Br
         observed_at=observed_at,
         content_hash=content_hash,
         source_payload=poi.raw,
-        evidence_locator=f"overture:place:{poi.gers_id}",
-        evidence_excerpt_hash=_sha(excerpt),
-        # No canonical_url: a brand website is not an Establishment identity key.
-        canonical_url=None,
-        endpoint_kind="https",
+        evidence_locator="$['name','primary_category']",
+        # Identity matching stays opt-in; a release endpoint never identifies a venue.
+        source_url=release,
         capture_content_hash=content_hash,
-        bundle_path=release,
     )
 
 
@@ -209,6 +208,21 @@ def run_discovery(
         # A name that doesn't fit the Organization columns would abort the whole
         # transaction at flush; skip it like a nameless POI (R63).
         if not fingerprint or max(len(poi.name.strip()), len(fingerprint)) > _MAX_NAME_LENGTH:
+            reason = (
+                "blank_name"
+                if not poi.name.strip()
+                else "name_without_letters_or_digits"
+                if not fingerprint
+                else "name_too_long"
+            )
+            persist_source_record_observation(
+                session,
+                replace(
+                    _observation(poi, observed_at=observed_at, release=release),
+                    capture_outcome="rejected",
+                    reason_code=reason,
+                ),
+            )
             report.skipped += 1
             continue
 

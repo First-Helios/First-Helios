@@ -84,8 +84,8 @@ def _observation(token: str) -> BronzeObservation:
         content_hash=f"sha256:{token}",
         source_payload={"id": token},
         evidence_locator="$.id",
-        evidence_excerpt_hash=f"sha256:ev:{token}",
-        canonical_url=f"https://{token}.example.test/menu",
+        identity_match_url=f"https://{token}.example.test/menu",
+        source_url=f"https://{token}.example.test/menu" or "repo:test/fixture.json",
         capture_content_hash=f"sha256:cap:{token}",
         bundle_path=f"fixture/{token}",
     )

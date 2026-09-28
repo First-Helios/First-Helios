@@ -322,6 +322,7 @@ def test_duplicate_bronze_business_identity_replays_without_new_ids(
             source_id=original.source_id,
             source_record_id=original.source_record_id,
             capture_id=original.capture_id,
+            identity_match_endpoint_id=original.identity_match_endpoint_id,
             observed_at=original.observed_at,
             content_hash=original.content_hash,
             source_payload=original.source_payload,

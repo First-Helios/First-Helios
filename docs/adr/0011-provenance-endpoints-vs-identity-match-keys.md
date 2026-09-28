@@ -1,6 +1,7 @@
 # ADR-0011: Provenance endpoints vs identity match keys
 
-**Status:** Proposed
+**Status:** Accepted
+**Accepted:** 2026-09-27, under the owner’s delegated design authority for S6.
 **Date:** 2026-09-23
 **Phase:** 4 (remediation of the 2026-09-22 review, session S5)
 **Decides for:** R06, R17, R58, R101; sets the contract S6 implements (plus R52, R55)
@@ -81,7 +82,8 @@ The Pi database is rebuilt, not migrated.
 | `identity_match_url` | — | Optional, default `None`. The only URL Identity may match on. Must be HTTP(S). |
 | `canonical_url` | provenance + match key | **Removed** (split into the two fields above). |
 | `endpoint_kind` | caller-supplied, default `"https"` | **Removed**; derived from the endpoint's scheme. |
-| `capture_outcome` | free text, always `"succeeded"` | `"succeeded"` only; non-success goes through §4's separate command. |
+| `capture_outcome` | free text, always `"succeeded"` | `"succeeded"` or `"rejected"`; rejected input is persisted in Bronze only. Failed/skipped attempts use §4’s separate command. |
+| `reason_code` | — | `None` for success; a rejection reason for rejected observations. |
 | `evidence_locator` | free text | A §5 JSONPath into `source_payload`. |
 | `evidence_excerpt_hash` | caller-computed | **Removed**; the contract computes it from the locator (§5). |
 
@@ -101,8 +103,8 @@ Identity's URL path keeps its behaviour, but keyed on the match endpoint:
   row lock beyond the key-share lock the Capture FK takes, so one shared release
   endpoint doesn't serialize discovery. Lock order otherwise stays as it is
   today (S8 reviews Identity lock order separately).
-- URL matching stays within one Source, as it is today: the global
-  `canonical_uri` uniqueness already refuses a second Source at the same URL.
+- URL matching stays within one Source, as it is today: the lookup and serialization lock explicitly include the Source namespace;
+  the same URL under another Source is not a candidate.
 - No production caller sets `identity_match_url` after this ADR. ADR-0010's
   registry `location_unique` flag remains the only planned opt-in, and it needs
   its own decision before use.
@@ -144,9 +146,12 @@ fetch that didn't happen.
 | `overture` (`poi_snapshot`) | canonical release prefix, e.g. `s3://overturemaps-us-west-2/release/2026-08-19.0/theme=places/type=place/` | hash of the row JSON (as today) | release date (as today, keeps re-runs exact retries) | `$['name','primary_category']` |
 | `website-resolution` (`website`), origin `overture` | the same Overture release prefix (its own endpoint row) | the Overture Version's `content_hash` | run time | `$.website` |
 | `website-resolution`, origin `registry` | `repo:config/sources.yaml` | SHA-256 of the registry file bytes | run time | `$.website` |
-| `menu-url-discovery` (`menu_url`), discovered | the **final fetched URL** of the verified page (after redirects) | SHA-256 of that page's body bytes as received | time of the actual fetch (from the cache entry when replayed) | `$.menu_url` |
+| `menu-url-discovery` (`menu_url`), discovered | the **final fetched URL** of the verified page (after redirects) | SHA-256 of the response body bytes after HTTP content decoding, before character decoding | time of the actual fetch (from the cache entry when replayed) | `$.menu_url` |
 | `menu-url-discovery`, registry | `repo:config/sources.yaml` | SHA-256 of the registry file bytes | run time | `$.menu_url` |
 
+- Custom registry files must live inside this repository; their `repo:` path
+  identifies that file, and its exact loaded bytes supply the hash. A file
+  outside the repository cannot be persisted under a misleading repo endpoint.
 - The Overture GERS id stays the record's `external_key`. Endpoint + GERS id
   together identify the source row, so "return the original source" for an
   Overture fact means the release location plus the place id.
@@ -178,20 +183,20 @@ A Capture is **one acquisition attempt and its outcome**. This replaces the
 | `rejected` | read, but the input fails validation | required | yes (source-faithful payload), **not** admitted to Identity |
 
 DB CHECKs: `outcome` is one of the four; `reason_code IS NULL` exactly when
-`outcome = 'succeeded'`; `reason_code ~ '^[a-z][a-z0-9_]*$'`. The code list
-lives in the contract as a `Literal`, not in the DB, so adding a code needs no
+`outcome = 'succeeded'`; `reason_code ~ '^[a-z][a-z0-9_]*$'`. The fixed code list and validated `http_<status>` family
+live in the contract, not in the DB, so adding a code needs no
 migration. Initial codes:
 
 - **skipped:** `robots_disallowed`, `robots_unavailable` (5xx, network error,
   refused redirect), `crawl_delay_too_long`, `non_public_host`,
-  `redirect_refused`, `platform_root`
+  `redirect_refused`, `platform_root`, `social_link`
 - **failed:** `http_<status>` (e.g. `http_404`, `http_503`), `network_error`,
   `too_large`, `not_html`, `no_menu_found`
-- **rejected:** `blank_name`
+- **rejected:** `blank_name`, `name_without_letters_or_digits`, `name_too_long`
 
 Recording grain:
 
-- **Menu-URL discovery: at most one Capture per site per attempt**, not one per
+- **Menu-URL discovery: at most one non-success Capture per site per attempt**, not one per
   HTTP request. Its endpoint is the canonical website URL that was attempted,
   and its reason is the attempt's overall result (e.g. robots unreachable →
   `skipped/robots_unavailable`; every candidate rejected →
@@ -210,9 +215,28 @@ Recording grain:
   The raw string is already in the Overture Version, and the run report counts
   it.
 
+**Rejected-observation contract (acceptance correction):** the existing
+`persist_source_record_observation` accepts both successful and rejected
+`BronzeObservation` values. Rejected observations require a rejection reason,
+retain the raw payload and locator-derived Evidence, and cannot carry an
+`identity_match_url`. The Identity observation resolver refuses rejected input
+before any write; admission of a rejected-only Source Record is refused too.
+A later valid observation of the same external key can be admitted normally.
+This is a public-command admission rule, not a new database invariant. The
+existing nullable `source_record_version.capture_id` and low-level admission of
+uncaptured Versions remain supported; S6 does not require every admitted record
+to have a successful Capture. Admission still requires the existing Evidence or
+Adjudication support; nullable Capture linkage does not waive that requirement.
+A universal successful-Capture requirement would
+need an explicit contract change and SQL transition enforcement, rather than
+an accidental restriction in one Python entrypoint.
+Blank, symbol-only, and overlong names are all recorded this way. Failed and
+skipped attempts never create Versions. Public contracts validate outcome/reason
+pairs; HTTP failure codes must be valid 4xx/5xx status codes.
+
 New contract command `record_capture_attempt(session, *, source_namespace,
 source_kind, source_url, fetched_at, outcome, reason_code, content_hash=None)`
-writes a Capture with no Version. A read contract
+accepts only `failed`/`skipped` and writes a Capture with no Version. A read contract
 `latest_capture_at(session, namespace, url)` serves the re-crawl window. A
 failure is **never** written as a Record Version, so the saved menu-URL stays
 the latest version and D3.7 ("replace only when re-discovery succeeds") holds.
@@ -269,7 +293,8 @@ becomes **one Source Record per (venue, menu source)**:
 - `external_key = <gers>|<platform host>` (e.g. `…|toasttab.com`) holds one
   record per ordering platform. The payload adds `"platform": "<host>"`. A
   menu URL on a platform host always goes here, including a venue whose
-  website is itself a platform page.
+  website is itself a platform page. The suffix is the known ordering-platform
+  domain (`toasttab.com`), not its subdomain (`order.toasttab.com`).
 - Each record is versioned, assigned, and needs-review-protected on its own,
   exactly as today (ADR-0010 Amendment 2). Chain venues sharing a platform page
   share one endpoint row, which the per-Source uniqueness of §2 allows.
@@ -356,8 +381,10 @@ CREATE OR REPLACE FUNCTION bronze.record_version_info(...)    -- 'version-v2'
 - The canonical keys are computed on read (Menu replay comparison, selector
   tie-break strings), not stored, so bumping their version tags changes no
   stored data. S6 confirms that Menu/Gold tests stay green.
-- The downgrade reverses each step. It can't restore `NULL` endpoints or global
-  uniqueness if post-ADR data violates them, and it fails loudly if so.
+- The downgrade refuses any populated Bronze database: old application code
+  cannot interpret the new locators/keys safely even if a subset of rows happens
+  to fit the old constraints. Rebuild to roll back; no trigger is weakened.
+  On an empty database the downgrade reverses each step.
 - The ORM models (`provenance/models.py`) change to match, and `alembic check`
   must be clean.
 
@@ -425,7 +452,7 @@ the real pipeline on fixtures and gets back the expected endpoint, kind,
 
 ## Consequences
 
-- **Every Bronze row can answer "where did this come from"** through one walk,
+- **Every observation written by these commands can answer "where did this come from"** through one walk,
   for every namespace. Identity can no longer collapse records by accident,
   because nothing it reads is set by default.
 - **Failures become data:** dead and robots-blocked sites stop being re-crawled
