@@ -35,7 +35,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 4 | S4 Menu-URL quality | D3 | S | [X] #26 |
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 merged; ADR-0011 accepted 2026-09-27 |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; precision review found errors; gate closed |
-| 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [ ] |
+| 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
 | 🚦 | **Pi gate:** after S2/S3/S4/S6 merge AND owner rebuild/new precision audit | | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 |
@@ -43,7 +43,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 10 | S10 Test hardening sweep | — | S | [X] #31 |
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 |
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 merged; ADR-0012 accepted 2026-09-27 |
-| 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [ ] Implemented in draft; merge pending |
+| 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [X] #45 merged |
 | 🚦 | **Phase 5 gate:** after S7/S11/S12/S13 merge AND lifecycle acceptance tests pass | | | [ ] |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
@@ -543,7 +543,7 @@ Branch: `fix/evidence-endpoints` · Stops for review: provenance contract; migra
 Hand-off prompt: `Do session S6b from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `fix/platform-menu-urls` · Not Pi-gating.
 
-- [ ] Collect ordering-platform menu URLs from the homepage even when an own-site menu
+- [X] Collect ordering-platform menu URLs from the homepage even when an own-site menu
   verifies; persist each as `<gers>|<host>` (ADR-0011 §7)
 
 **Recommended approach**
@@ -837,6 +837,7 @@ Agents add one row per session (or per resume).
 | 2026-09-24 | S11 | fix/menu-selector | #33 | Merged (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |
 | 2026-09-24 | S12 | fix/identity-matching | #34 | Merged; ADR-0012 accepted 2026-09-27 | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 is now ready for implementation under the revised accepted ADR) |
 | 2026-09-24 | S14 | fix/schema-tightening | #35 | Merged (migration `12a76ebed458` + models) | — (Uses a new `bronze.whitespace()` instead of `menu.whitespace()`: Bronze/Identity sit below Menu. Existing CHECK names kept. R56's DB rounding stays (would need `ALTER COLUMN TYPE`); Python rejects first. Gold staleness is clamped to 0. Run `docs/reviews/sql/2026-09-22-s14-schema-tightening-precheck.sql` on the Pi before upgrading. `test_legacy_identity_reset` and `test_gold_migration` now compare at `5f3a9c1e7b24`, not head) |
+| 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Open, CI pending (not ⚠) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -881,3 +882,17 @@ Implemented accepted ADR-0012 in isolated `feat/s13-venue-lifecycle`, based on
 See the [S13 review](2026-09-28-s13-venue-lifecycle.md) for the schema contract,
 acceptance matrix, validation, and limitations. Existing worktrees and the Pi
 were untouched. Both gates remain closed; broad duplicate cleanup is deferred.
+
+### 2026-09-28 S6b platform menus
+
+S13 (#45) was confirmed merged (`main@ddb5579`) before starting. Branch
+`fix/platform-menu-urls`, PR #46. Discovery now returns the own-site menu plus
+verified ordering-platform pages (first link per platform host, at most
+`MAX_PLATFORM_CANDIDATES`), and `resolve_urls` persists each under `<gers>` or
+`<gers>|<host>` with S13's per-key rules (needs_review / foreign-Organization keys
+kept as history; fresh verification after a transition). Strict `make ci` on a
+fresh disposable DB: 1028 passed, one expected parsing placeholder skip, 93%
+coverage; `alembic check` clean. No schema change. Open question for the owner in
+the PR: chain homepages linking one platform page per location give every venue
+the first link. The Pi was not touched; the Pi gate stays closed pending the
+precision-review adjudication.
