@@ -37,7 +37,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; precision review found errors; gate closed |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
 | 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 merged (`e61486c`) |
-| 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [X] #PRNUM draft (23 merges in the file; 6 sampled merges + 5 retirements await GERS ids from the Pi) |
+| 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [X] #53 draft (23 merges in the file; 6 sampled merges + 5 retirements await GERS ids from the Pi) |
 | 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [X] part 1 #51 (`4b8608c`), part 2 #52 (`e048740`) merged |
 | 6f | S6f Page rendering: headed Chromium under Xvfb for platform/JS-only pages (ADR-0013 Amendment 1) ⚠ | S6d part 2 merged | M | [ ] |
 | 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
@@ -1052,7 +1052,7 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S6c | feat/location-overrides | #50 | Merged (`e61486c`) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
 | 2026-09-29 | S6d part 2 | feat/page-classifier | #52 | Merged (`e048740`) | — (see "2026-09-29 S6d menu-URL re-verification" below; merge #51 first, then retarget #52 to `main`) |
 | 2026-09-29 | S6d part 1 | feat/menu-url-reverification | #51 | Merged (`4b8608c`; ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
-| 2026-09-29 | S6e | feat/identity-corrections | #PRNUM | Draft ⚠ (new `config/identity_corrections.yaml`, no migration) | — (see "2026-09-29 S6e corrections applier" below; 11 pending entries need GERS ids from the Pi) |
+| 2026-09-29 | S6e | feat/identity-corrections | #53 | Draft ⚠ (new `config/identity_corrections.yaml`, no migration) | — (see "2026-09-29 S6e corrections applier" below; 11 pending entries need GERS ids from the Pi) |
 
 
 ### 2026-09-27 delegated follow-up
