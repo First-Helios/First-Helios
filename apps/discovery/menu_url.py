@@ -109,14 +109,19 @@ ORDERING_PLATFORM_HOSTS: frozenset[str] = frozenset(
         "squareup.com",
         "square.site",
         "clover.com",
+        "cloveronline.com",
         "doordash.com",
         "ubereats.com",
         "grubhub.com",
     },
 )
 # A platform serving venue pages under a second domain: both share one record
-# key (owner decision S6f; a Toast link can redirect to ``toast.app``).
-PLATFORM_HOST_ALIASES: dict[str, str] = {"toast.app": "toasttab.com"}
+# key (owner decisions S6f: Toast links can redirect to ``toast.app``, Clover
+# links to ``<venue>.cloveronline.com``).
+PLATFORM_HOST_ALIASES: dict[str, str] = {
+    "toast.app": "toasttab.com",
+    "cloveronline.com": "clover.com",
+}
 SOCIAL_PLATFORM_HOSTS: frozenset[str] = frozenset(
     {"facebook.com", "instagram.com", "linktr.ee"},
 )

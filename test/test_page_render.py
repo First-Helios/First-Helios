@@ -33,6 +33,7 @@ from apps.menu_pipeline.render import (
     BrowserRenderer,
     BrowserSession,
     RobotsAnswer,
+    _intercept,
     is_challenge,
     launch_headed_chromium,
     robots_rules,
@@ -756,3 +757,23 @@ def test_a_redirect_hop_is_checked_against_robots() -> None:
     assert isinstance(result, CaptureFailure)
     assert (result.outcome, result.reason_code) == ("skipped", "robots_disallowed")
     assert hop in web.aborted and hop not in web.fetched
+
+
+def test_cloveronline_is_a_clover_alias() -> None:
+    assert ordering_platform_host("https://yanagi-austin.cloveronline.com/") == "clover.com"
+    assert stays_on(
+        "https://www.clover.com/online-ordering/yanagi-austin",
+        "https://yanagi-austin.cloveronline.com/",
+    )
+
+
+def test_a_failing_decision_fails_the_request_instead_of_leaving_it_paused() -> None:
+    web = _Web({})
+    page = _Page(web)
+
+    def decide(_url: str, _kind: str, _main: bool) -> str | None:  # noqa: FBT001
+        raise _FakeError("browser closed mid robots.txt read")
+
+    _intercept(_Context(web), page, decide, _FakeError)
+    assert not page.cdp.through("r1", "https://p.example/x.js", "Script", "main")
+    assert page.cdp.verdicts == {"r1": "Fetch.failRequest"}

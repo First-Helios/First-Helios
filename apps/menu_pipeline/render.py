@@ -23,7 +23,8 @@ Etiquette, as for the static fetcher, plus the owner's S6f decisions:
   and must go to a public address. Disallowed or unavailable → aborted and
   counted. Images, fonts and media are never fetched.
 - **Redirects** of the page itself stay on the site, or on the same ordering
-  platform (``toasttab.com`` ↔ ``toast.app``, S6f decision 3).
+  platform (``toasttab.com`` ↔ ``toast.app``, ``clover.com`` ↔
+  ``cloveronline.com``; S6f decisions).
 - **Rate limit:** each navigation hop and robots.txt read waits on the
   fetcher's per-host pacing, with any Crawl-delay the browser-read robots.txt
   sets. Sub-requests are the page's own and are not paced.
@@ -346,6 +347,7 @@ class BrowserRenderer:
                 if kind not in BLOCKED_RESOURCE_TYPES and self._is_public(_host(url))
                 else "blocked"
             ),
+            session.error,
         )
         self._pace(_host(origin), 0.0)
         try:
@@ -416,7 +418,7 @@ class BrowserRenderer:
                     return None
                 return policy.decide(request_url, kind, main_navigation=main)
 
-            _intercept(context, page, decide)
+            _intercept(context, page, decide, session.error)
             try:
                 page.goto(url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
             except session.timeout_error:
@@ -468,6 +470,7 @@ def _intercept(
     context: Any,  # noqa: ANN401 - playwright BrowserContext
     page: Any,  # noqa: ANN401 - playwright Page
     decide: Callable[[str, str, bool], str | None],
+    error: type[Exception],
 ) -> None:
     """Pause every request of ``page`` (redirect hops included) for ``decide``.
 
@@ -487,12 +490,19 @@ def _intercept(
             kind = "image"  # the browser's own favicon fetch: never needed
         main = kind == "document" and event.get("frameId") == main_frame
         request_id = event["requestId"]
-        if decide(url, kind, main) is None:
-            cdp.send("Fetch.continueRequest", {"requestId": request_id})
-        else:
-            cdp.send(
-                "Fetch.failRequest", {"requestId": request_id, "errorReason": "BlockedByClient"}
-            )
+        try:
+            verdict = decide(url, kind, main)
+        except error:  # e.g. the browser failed mid robots.txt read: never leave it paused
+            verdict = "robots_unavailable"
+        # A request the page already cancelled (or a closed page) can't be answered.
+        with contextlib.suppress(error):
+            if verdict is None:
+                cdp.send("Fetch.continueRequest", {"requestId": request_id})
+            else:
+                cdp.send(
+                    "Fetch.failRequest",
+                    {"requestId": request_id, "errorReason": "BlockedByClient"},
+                )
 
     cdp.on("Fetch.requestPaused", paused)
     cdp.send("Fetch.enable", {"patterns": [{"urlPattern": "*", "requestStage": "Request"}]})

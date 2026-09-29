@@ -35,10 +35,13 @@ if TYPE_CHECKING:
 _USER_AGENT = "helios-v2-discovery/0.1 (+https://github.com/First-Helios/First-Helios)"
 
 
-def tree_rss_kb(root: int, proc: Path = Path("/proc")) -> int:
-    """Resident memory (kB) of ``root`` and all its descendants, from ``/proc``."""
+def tree_pss_kb(root: int, proc: Path = Path("/proc")) -> int:
+    """Proportional memory (kB) of ``root`` and all its descendants, from ``/proc``.
+
+    PSS, not RSS: Chromium's processes share most of their pages, so summing
+    RSS would count the shared pages once per process.
+    """
     parents: dict[int, int] = {}
-    rss: dict[int, int] = {}
     for entry in proc.iterdir():
         if not entry.name.isdigit():
             continue
@@ -46,23 +49,33 @@ def tree_rss_kb(root: int, proc: Path = Path("/proc")) -> int:
             status = (entry / "status").read_text(encoding="utf-8")
         except OSError:
             continue  # the process exited while we looked
-        fields = dict(line.split(":", 1) for line in status.splitlines() if ":" in line)
-        pid = int(entry.name)
-        parents[pid] = int(fields.get("PPid", "0").strip() or 0)
-        rss[pid] = int(fields.get("VmRSS", "0 kB").split()[0])  # kB
+        ppid = next(
+            (line.split()[1] for line in status.splitlines() if line.startswith("PPid:")), "0"
+        )
+        parents[int(entry.name)] = int(ppid)
     total, stack, seen = 0, [root], set()
     while stack:
         pid = stack.pop()
         if pid in seen:
             continue
         seen.add(pid)
-        total += rss.get(pid, 0)
+        total += _pss_kb(proc / str(pid))
         stack.extend(child for child, parent in parents.items() if parent == pid)
     return total
 
 
+def _pss_kb(entry: Path) -> int:
+    try:
+        rollup = (entry / "smaps_rollup").read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    return next(
+        (int(line.split()[1]) for line in rollup.splitlines() if line.startswith("Pss:")), 0
+    )
+
+
 class PeakSampler:
-    """Samples a process tree's RSS in a background thread; ``peak_kb`` since reset."""
+    """Samples a process tree's memory in a background thread; ``peak_kb`` since reset."""
 
     def __init__(self, sample: Callable[[], int], interval_s: float = 0.2) -> None:
         self._sample = sample
@@ -115,7 +128,7 @@ def main() -> None:
     rows = []
     with (
         BrowserRenderer(user_agent=_USER_AGENT) as renderer,
-        PeakSampler(lambda: tree_rss_kb(os.getpid())) as sampler,
+        PeakSampler(lambda: tree_pss_kb(os.getpid())) as sampler,
         (args.out / "measure.jsonl").open("w", encoding="utf-8") as sink,
     ):
         for item in items:
@@ -127,7 +140,7 @@ def main() -> None:
             row: dict[str, object] = {
                 **item,
                 "secs": round(time.monotonic() - started, 2),
-                "peak_rss_mb": round(sampler.peak_kb / 1024, 1),
+                "peak_pss_mb": round(sampler.peak_kb / 1024, 1),
                 "subrequests": renderer.stats.subrequests - before[0],
                 "subrequests_blocked": renderer.stats.subrequests_blocked - before[1],
             }
@@ -145,7 +158,7 @@ def main() -> None:
             print(row["outcome"], row.get("reason", ""), row["secs"], url[:80], flush=True)  # noqa: T201
         summary = {
             **renderer.stats.summary(),
-            "peak_rss_mb": max((float(str(r["peak_rss_mb"])) for r in rows), default=None),
+            "peak_pss_mb": max((float(str(r["peak_pss_mb"])) for r in rows), default=None),
         }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1) + "\n", "utf-8")
     print(json.dumps(summary))  # noqa: T201
