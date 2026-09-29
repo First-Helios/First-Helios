@@ -51,7 +51,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [X] #48 draft (ADR-0013 Proposed; stop for review) |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
-| 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
+| 16 | S16 Docs drift sweep | D6.5 | M | [X] draft PR (docs consolidation; CLAUDE.md edits for owner review) |
 | 17 | S17 Close-out | all | S | [ ] |
 
 S15 and S16 have no dependencies; slot them in whenever you're waiting on a review.
@@ -929,10 +929,10 @@ each removed file with its last commit. **Scope: docs, docstrings, code comments
 templates only**, with no behaviour changes. The active trackers (this checklist, the
 hand-off) stay until S17.
 
-- [ ] Every item in review §7 "Doc drift" (README, ROADMAP, ADR statuses and numbers, plans, retro, LEARNING_GUIDE, docstrings, templates)
-- [ ] R51 ADR-0004 vs ADR-0008 on the API reading Identity models (per D6.5)
-- [ ] R97 Fix the misleading "cannot forge" test comment
-- [ ] Pick one file as the single status source; others link to it
+- [X] Every item in review §7 "Doc drift" (README, ROADMAP, ADR statuses and numbers, plans, retro, LEARNING_GUIDE, docstrings, templates)
+- [X] R51 ADR-0004 vs ADR-0008 on the API reading Identity models (per D6.5)
+- [X] R97 Fix the misleading "cannot forge" test comment
+- [X] Pick one file as the single status source; others link to it
 
 **Recommended approach**
 - Make README the single "current status" page; ROADMAP keeps plans and phase
@@ -978,6 +978,7 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Merged (`8cbce26`; main CI green) |
 | 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Merged (`b2bba73`; ADR-0014/0015 still Proposed) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
+| 2026-09-28 | S16 | docs/drift-sweep | draft PR | Draft (CLAUDE.md, `gold/models.py` docstring: owner review) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -1075,3 +1076,27 @@ page classifier ADR-0015's `classifier-v1` verifier (option C), and lists five n
 questions (page scope for per-location platform pages, PDFs, robots for rendered
 sub-requests, spot-check size, promotional rows). Phase 5 code waits for acceptance;
 ADR-0014/0015 are still Proposed (S6c/S6d wait on them).
+
+### 2026-09-28 S16 documentation consolidation
+
+Branch `docs/drift-sweep` from `main@9796aa6` (#48 merged). Owner decision in the S16
+block: Opus lead plus a seven-worker Opus swarm on disjoint files, then an independent
+read-only reviewer. Docs, docstrings, comments and templates only; no Pi access,
+`resolve_urls` not run; S6c/S6d code untouched.
+
+- README.md is the single status page (status, gates 1a/1b with the re-audit label
+  criteria, staging, how to run, ADR index). ROADMAP.md holds phase definitions only;
+  Phases 3/5/6 follow Proposed ADR-0013 (G.b); ADR-number drift and H3 leftovers fixed.
+- 21 historical docs plus the precision-review data deleted after their lasting
+  decisions moved (audits in the PR); [docs/HISTORY.md](../HISTORY.md) lists each with
+  its last commit. Kept: the Step 5 schema proposal (normative for ADR-0005), RFC-0001,
+  the spike README (log trimmed), these trackers, `docs/reviews/sql/`.
+- Accepted ADRs: status lines, permalinks, number fixes and dated implementation notes
+  only; ADR-0008 Amendment 2 records D6.5 (R51). R97 comment fixed.
+- Markdown: 58 files / 14,601 lines → 36 / 9,689. Strict `make ci` on a fresh
+  disposable DB: 1028 passed, one expected parsing placeholder skip, 93% coverage;
+  `alembic check` clean.
+- For the owner: CLAUDE.md accuracy edits (make lint/typecheck, commit-msg scope); the
+  stop-and-ask glob `packages/**/db/models/**` matches nothing and `apps/discovery/models.py`
+  (bronze ORM models) is on no stop list or CODEOWNERS entry; the audit CLI's `--help`
+  text changed with its docstring.

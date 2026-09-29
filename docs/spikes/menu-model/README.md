@@ -107,6 +107,10 @@ ADR-0013 holds the adopted bars.
 
 ## Setup: what was measured
 
+Stages (ADRs and the checklist cite them by letter): **A** sample, **B** labels, **C**
+baselines (JSON-LD/platform parse coverage; the S4 pre-filter rows in Results), **D**
+classifiers, **E** extractor, **F** validator, **G** cuisine (not run), **H** findings.
+
 - **Sample.** The owner ran a read-only candidate export (`sql/export_candidates.sql`:
   current Overture-seeded Establishments with a website, ≤ 2 per host, ≤ 12 per primary
   category, 150 venues). All 150 were fetched with `SiteFetcher`: 219 pages with a 200 or a

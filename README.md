@@ -177,7 +177,7 @@ None of them run in CI. On the Pi they run inside the API container
 
 ```bash
 # Seed venues from an Overture release, then record completion and run lifecycle
-uv run python -m apps.discovery --release <overture-parquet-glob> \
+uv run python -m apps.discovery [--release <overture-parquet-glob>] \
     [--expected-predecessor <prior-release-path>] [--no-geocode]
 
 # Resolve website + menu URL (Pi gate 1b must be open before a Pi run)
@@ -266,7 +266,7 @@ test/                   pytest suite
 
 ## Decisions
 
-The ADR index. Status is as written in each ADR.
+The ADR index. Status is the short form of each ADR's Status line.
 
 | ADR | Title | Status |
 |---|---|---|

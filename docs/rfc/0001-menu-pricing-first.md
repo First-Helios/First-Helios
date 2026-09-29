@@ -31,8 +31,9 @@
 >   JSON-LD reader, accepting it would also change ratified decision 3 and the
 >   "LLM-primary extraction" alternative below.
 > - ADR numbers written here before ADRs were assigned have been corrected: the
->   API conventions ADR is ADR-0008, and the LLM-extraction ADR is Proposed
->   ADR-0013.
+>   API conventions ADR is ADR-0008. The "LLM-fallback ADR" below was never
+>   written as such; Proposed ADR-0013 covers LLM extraction instead, as a
+>   different design (see the bullet above).
 
 ## Summary
 
@@ -79,9 +80,9 @@ These are settled; the worker agent should not re-open them.
 3. **Extraction: rules first, LLM fallback.** JSON-LD and DOM heuristics
    handle the easy majority for free. An LLM extraction pass runs **only**
    on pages that fail rule-based extraction. This adds a runtime dependency
-   and API cost → **requires an LLM-extraction ADR (Proposed ADR-0013)
-   with a budget cap before any LLM code is written** (see Unresolved
-   questions).
+   and API cost → **requires an LLM-fallback ADR with a budget cap before
+   any LLM code is written** (see Unresolved questions; the number was
+   unassigned when written, see the header note).
 4. **Freshness/scale target:** ~monthly re-scrape cadence with change
    detection. First milestone: **300+ Austin/Round Rock venues with priced
    menu items.**
@@ -241,10 +242,9 @@ the core of rungs 1–2.
    residential-bandwidth crawl affordable.
 4. **PDF menus** — text-layer extraction (e.g. `pdfplumber`) feeding the
    same item-price pairing rules. Image-only PDFs fall through to rung 5.
-5. **LLM fallback** — **gated on an LLM-extraction ADR (Proposed
-   ADR-0013)** (model choice, prompt contract, per-run budget cap,
-   output schema = the same sidecar shape as rungs 1–4, confidence
-   marking `source_kind='llm'`). Runs only on pages where rungs 1–4
+5. **LLM fallback** — **gated on an LLM-fallback ADR** (model choice,
+   prompt contract, per-run budget cap, output schema = the same sidecar
+   shape as rungs 1–4, confidence marking `source_kind='llm'`). Runs only on pages where rungs 1–4
    produced nothing but menu-lexicon evidence says a menu is present.
    Not in the first PR train.
 
@@ -325,7 +325,7 @@ owner's careful read.**
 | 9 | `feat(extract): render policy + PDF` | Port `render_policy.py`; Playwright path; pdfplumber rung | Escalation budget respected in tests |
 | 10 | `feat(sched): monthly cadence + change detection` | Cron scheduling, content-hash skip, `last_seen_at` semantics, staleness metrics | Re-run on unchanged site produces 0 new canonical rows |
 | 11 | `feat(api): price index endpoints` | `current_menu`-backed venue menu + first aggregate endpoint | Milestone measurable via the API itself |
-| — | `docs(adr): LLM extraction fallback` (Proposed ADR-0013) | Proposed **only after** rungs 1–4 yield measured coverage; includes budget cap | Owner accepts before any implementation |
+| — | `docs(adr): LLM extraction fallback` | Proposed **only after** rungs 1–4 yield measured coverage; includes budget cap | Owner accepts before any implementation |
 
 Milestone exit: **300+ distinct Austin/Round Rock venues with ≥1 priced
 menu item each, ≥80% observed within 45 days, every price traceable to a
@@ -367,7 +367,7 @@ replay bundle** — measured by a query, stated in the retro.
 
 ## Unresolved questions
 
-1. **LLM-extraction ADR (Proposed ADR-0013):** model, prompt contract, budget cap —
+1. **LLM-fallback ADR:** model, prompt contract, budget cap —
    proposed only after rung 1–4 coverage is measured. Owner accepts.
 2. **Austin-metro polygon definition** (which counties/H3 set) — small,
    but settle in PR 5 config with owner sign-off.

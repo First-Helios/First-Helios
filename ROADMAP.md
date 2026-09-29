@@ -417,7 +417,8 @@ every later phase gets validated against a real deployment instead of a laptop.
   `GET /v1/venues/{venue_id}`, reading Identity.
 - Pydantic response models, separate from ORM models. The wire format is a
   contract; do not leak SQLAlchemy objects into it.
-- A seed path so the endpoints return something real in dev.
+- Real data from Phase 4 discovery behind the endpoints; there is no separate
+  seed path (discovery replaced it, ADR-0009).
 - Structured logging (`structlog`) with request IDs, and CORS for the separate
   frontend repo.
 - **Staging deploy on the Orange Pi:**
@@ -474,9 +475,10 @@ provenance to first-party websites and menu URLs.
 
 **Deliverables** ([ADR-0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md), [ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md), [ADR-0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md), [ADR-0012](./docs/adr/0012-venue-lifecycle.md))
 
-- **Overture seeding** — parquet ingest of food venues within a config-driven
-  metro boundary, landing in Bronze Source Records and explicit Identity
-  resolution state. Scaling to another metro is a config change.
+- **Overture seeding** — parquet ingest of food venues within a metro bounding
+  box (an Austin default in `apps/discovery/overture.py`, overridable with CLI
+  flags), landing in Bronze Source Records and explicit Identity resolution
+  state.
 - Name fingerprinting, address normalization, URL canonicalization, and
   lat/lon proximity (`packages/helios_core/identity/normalize.py`).
 - `packages/helios_core/geo.py` — Nominatim gap-fill with a 1-req/sec throttle
@@ -744,20 +746,18 @@ knowledge they didn't have.
 
 ### 6.1 Branching
 
-- `main` is protected; every change lands via PR.
-- Feature branches: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`.
-- PRs are squash-merged: the PR title becomes the commit on `main`.
+Branch names, squash merging and the PR-title check are in
+[CONTRIBUTING.md → Workflow](./CONTRIBUTING.md#workflow).
 
 ### 6.2 Commits
 
-- [Conventional Commits](https://www.conventionalcommits.org/), e.g. `feat(parsing): add JSON-LD reader`.
-- Enforced locally by the pre-commit `commit-msg` hook (installed by `make install`). CI checks the PR title — the squash-merge message — in `.github/workflows/pr-title.yml`.
+[Conventional Commits](https://www.conventionalcommits.org/); how they are
+enforced is in [CONTRIBUTING.md → Commit messages](./CONTRIBUTING.md#commit-messages).
 
 ### 6.3 Pull Requests
 
-- `.github/pull_request_template.md` asks for: Summary · Related (issue, ADR/RFC) · Changes · Verification (`make ci`, database acceptance when DB code changes, tests, hand-reviewed migrations) · Notes for reviewer.
-- One PR = one concern. Split drive-by refactors.
-- Read your own diff in the PR UI before merging.
+One PR = one concern; split drive-by refactors, and read your own diff before
+merging. The template is `.github/pull_request_template.md`.
 
 ### 6.4 Architectural Decision Records (ADRs)
 
@@ -788,15 +788,10 @@ knowledge they didn't have.
 
 ### 6.7 CI Gates
 
-Five required checks on `main` (`.github/workflows/ci.yml`):
-
-- `Lint & format` — `pre-commit run --all-files` (ruff check + format and housekeeping hooks)
-- `Type check` — `mypy --strict`
-- `Tests` — `pytest` against a PostGIS service with `HELIOS_STRICT_DB_TESTS=1` and a coverage floor (including the OpenAPI snapshot test), then `alembic upgrade head` + `alembic check`
-- `Lockfile up to date` — `uv lock --check`
-- `Docker image` — builds the image and smoke-tests `/healthz`
-
-`make ci` is the local subset; the local equivalent of the strict database run is in [README.md → Database acceptance](./README.md#database-acceptance).
+The five required checks and what each runs are in
+[CONTRIBUTING.md → CI](./CONTRIBUTING.md#ci). `make ci` is the local subset;
+the strict database run is in
+[README.md → Database acceptance](./README.md#database-acceptance).
 
 ---
 
@@ -806,7 +801,7 @@ Phase 5's open questions are in [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.
 
 1. **Multi-city?** — Out of scope for this roadmap, but the schema must not
    *prevent* it: nothing hardcodes Austin, venues carry lat/lon, and the
-   metro boundary is config. When Austin is stable, add an ADR for the
+   metro bounding box is a CLI-overridable default. When Austin is stable, add an ADR for the
    multi-tenant approach (single DB with `region` column vs schema-per-region
    vs DB-per-region).
 
@@ -827,7 +822,7 @@ Phase 5's open questions are in [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.
    franchise and brand-hierarchy modeling; retention or partitioning of Bronze
    payload versions.
 
-4. **Non-food price verticals** (auto repair, plumbing, home services). A
+5. **Non-food price verticals** (auto repair, plumbing, home services). A
    plausible future direction, and the reason venue identity and the
    observation pattern are kept food-agnostic. But **no abstraction is built
    for it now** ([CLAUDE.md](./CLAUDE.md): no speculative scaffolding). The
