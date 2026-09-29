@@ -1,6 +1,9 @@
 # S6 Pi rebuild and gate record
 
-**Status: rebuild complete; Pi URL-resolution gate closed pending confirmation of the new precision audit.**
+**Status (2026-09-28): rebuild complete. The precision audit was adjudicated under owner
+delegation and fails both bars; the Pi gate is now split into 1a (location quality) and
+1b (URL-resolution readiness), both closed. See the
+[checklist's gate criteria](2026-09-22-remediation-checklist.md) (S6b block).**
 
 S2 (#24), S3 (#25), S4 (#26), S14 (#35), and S6 (#42) are merged. The owner
 explicitly authorized the agent to perform the Pi rebuild. It completed on
@@ -71,7 +74,9 @@ bind mount and is not the database volume.
    (below 2%), wrong-geocode rate (below 1%), and website coverage. Old IDs and
    old scores do not satisfy this step.
 
-5. Once that evidence passes, mark the Pi gate open and resume URL resolution:
+5. *(Superseded 2026-09-28: URL resolution is gated by Pi gate 1b, menu-URL
+   precision, not by this audit. Run the command below only after 1b opens.)*
+   Once that evidence passes, mark the Pi gate open and resume URL resolution:
 
    ```bash
    docker compose -f infra/docker-compose.yml --env-file .env exec api \
@@ -87,9 +92,10 @@ bind mount and is not the database volume.
 
 | Gate | Required evidence | Current state |
 |---|---|---|
-| Pi URL resolution | S2/S3/S4/S6 merged; authorized rebuild and new confirmed precision audit | Rebuild complete; audit confirmation pending |
+| Pi gate 1a: location quality | Correction plan; ADR-0014 location overrides; passing fresh-sample re-audit | Closed: adjudicated audit fails both bars (2026-09-28) |
+| Pi gate 1b: URL resolution | Menu-URL re-verification (ADR-0015) and/or page classifier; platform content check; chain-link decision | Closed: ADR-0015 proposed |
 | Platform breadth | S6b collects platform menus alongside own-site menus | Optional for Pi |
-| Phase 5 extraction | S7/S11/S12/S13 merged; lifecycle acceptance including completion, rebrand, replay, and readiness | Closed; S13 not implemented |
+| Phase 5 extraction | S7/S11/S12/S13 merged; lifecycle acceptance including completion, rebrand, replay, and readiness | Gate passed 2026-09-28; code waits for proposed ADR-0013 |
 
 ADR-0012 acceptance authorizes the S13 design; it is not evidence that lifecycle
 code exists. S13 must add its completion/coverage state, fresh URL reassignment,
