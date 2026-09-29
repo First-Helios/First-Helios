@@ -38,7 +38,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
 | 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 merged (`e61486c`) |
 | 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [ ] |
-| 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [ ] part 1 draft PR (ADR-0015 accepted 2026-09-29); part 2 pending |
+| 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [ ] part 1 #51 (ADR-0015 accepted 2026-09-29); part 2 pending |
 | 6f | S6f Page rendering: headed Chromium under Xvfb for platform/JS-only pages (ADR-0013 Amendment 1) ⚠ | S6d part 2 merged | M | [ ] |
 | 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
 | 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; ADR-0015 re-verification with `classifier-v1` as verifier, platform rendering (S6d, S6f) | G.a | | [ ] |
@@ -617,7 +617,7 @@ on venue location or dedupe; does not gate `resolve_urls`. Opens when all hold:
 Independent of 1a. Opens when all hold:
 - [X] Owner decision on [ADR-0015](../adr/0015-menu-url-reverification.md): accepted
   2026-09-29 (option C with Amendment 1), verifier = the ADR-0013 page classifier from
-  the first run. Implemented and merged with strict CI: part 1 (S6d) [ ], part 2
+  the first run. Implemented and merged with strict CI: part 1 (S6d, #51) [ ], part 2
   `classifier-v1` (S6d) [ ], rendering (S6f) [ ].
 - [X] A saved menu URL records its verifier version and is re-checked when the verifier
   changes (or its window expires); a URL the current verifier rejects is withdrawn to
@@ -1037,7 +1037,7 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
 | 2026-09-28 | S16 | docs/drift-sweep | #49 | Merged (`576c137`) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
 | 2026-09-28 | S6c | feat/location-overrides | #50 | Merged (`e61486c`) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
-| 2026-09-29 | S6d part 1 | feat/menu-url-reverification | draft | Draft (ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
+| 2026-09-29 | S6d part 1 | feat/menu-url-reverification | #51 | Open (ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
 
 
 ### 2026-09-27 delegated follow-up
