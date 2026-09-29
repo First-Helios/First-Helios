@@ -205,7 +205,7 @@ decision stayed open for re-debate. V2 writes them down.
 [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) (how
 supersession looks), and [RFC-0001](./docs/rfc/0001-menu-pricing-first.md).
 When to write which is in
-[CONTRIBUTING.md](./CONTRIBUTING.md#when-to-write-an-adr-vs-an-rfc).
+[CONTRIBUTING.md](./CONTRIBUTING.md#adrs-rfcs-and-plans).
 
 ### Self-check
 
