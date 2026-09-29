@@ -51,7 +51,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [X] #48 draft (ADR-0013 Proposed; stop for review) |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
-| 16 | S16 Docs drift sweep | D6.5 | M | [X] draft PR (docs consolidation; CLAUDE.md edits for owner review) |
+| 16 | S16 Docs drift sweep | D6.5 | M | [X] #49 draft (docs consolidation; CLAUDE.md edits for owner review) |
 | 17 | S17 Close-out | all | S | [ ] |
 
 S15 and S16 have no dependencies; slot them in whenever you're waiting on a review.
@@ -978,7 +978,7 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Merged (`8cbce26`; main CI green) |
 | 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Merged (`b2bba73`; ADR-0014/0015 still Proposed) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
-| 2026-09-28 | S16 | docs/drift-sweep | draft PR | Draft (CLAUDE.md, `gold/models.py` docstring: owner review) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
+| 2026-09-28 | S16 | docs/drift-sweep | #49 | Draft (CLAUDE.md, `gold/models.py` docstring: owner review) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
 
 
 ### 2026-09-27 delegated follow-up
