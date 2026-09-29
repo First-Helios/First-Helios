@@ -1298,7 +1298,8 @@ access, `resolve_urls` not run, S6e files untouched; gate 1b stays closed.
   requests, and empty `4xx` robots.txt bodies read as unreachable (which blocked
   every Square menu).
 - **Measurement (laptop):** 67/75 rendered, 8 robots refusals, no challenges; median
-  13.9 s, peak 1.79 GB PSS. Robots rules cost Grubhub's and DoorDash's full menus.
+  13.9 s, peak 1.79 GB PSS. DoorDash/Grubhub full menus don't load even in a plain
+  browser without robots checks (measured control), so the robots rules aren't the cause.
 - **`classifier-v2`:** dialog-skipping segmentation with v1's coefficients; static
   verdicts unchanged, rendered held-out 8/9 at precision 1.0 (v1 1/9).
 - **Verification:** strict `make ci` on a fresh disposable DB: 1195 passed, 0 skipped,

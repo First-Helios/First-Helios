@@ -51,19 +51,30 @@ file keeps the numbers.
   unavailable) or a non-public address, 159 aborted before their host's robots.txt
   was read. Images, fonts, media and favicons are never fetched.
 
-### What the robots rules cost
+### DoorDash and Grubhub: not a robots cost
 
-- **Grubhub:** `featureflags.grubhub.com` answers `525` for robots.txt (5xx =
-  unavailable = blocked). The restaurant page then renders categories without items.
-- **DoorDash:** store pages render reviews and "Featured Items", then "Something went
-  wrong" for the full menu (46 of 453 sub-requests blocked on one page). Two of the
-  three DoorDash menus score 0.04 and 0.16 and are not saved.
-- **Toast gift-card and invoice links:** disallowed by Toast's real robots.txt, which
-  only a browser can read (a static fetch gets a Cloudflare challenge). None of them
-  were menus.
+DoorDash store pages render reviews and "Featured Items", then "Something went wrong"
+for the full menu (2 of 3 DoorDash menus score 0.04 and 0.16 and are not saved).
+Grubhub restaurant pages render categories without items. Blocked sub-requests looked
+like the cause (Grubhub's `featureflags` host answers `525` for robots.txt), so three
+changes were tried on two DoorDash stores and one Grubhub page (2026-09-29):
 
-These follow the owner's S6f decisions (every sub-request checked; unavailable robots
-blocks), and are recorded here rather than worked around.
+| Variant | DoorDash prices (2 stores) | Grubhub prices |
+|---|---|---|
+| As built | 8, 6 | 0 |
+| Up to 6 render passes (4 requests left unchecked instead of 115) | 8, 6 | 0 |
+| Unavailable robots.txt on a sub-request host = allow (explicit `Disallow` still obeyed) | 8, 6 | 0 |
+| **Control: plain headed Chromium, no robots checks at all** | 8, 6 | 0 |
+| Control, scrolled | 0, 0 (content swapped out) | 0 |
+
+The same result without any checks means the robots rules don't cost these menus.
+The sites themselves don't serve their full menus to this browser (possibly
+automation detection or a delivery-address prompt). The S6d probe had 11 Grubhub
+prices on one page earlier the same day. Getting past that would take per-site
+handling or disguising the browser, both excluded (universal pipeline; no stealth). The
+rules stay as the owner decided.
+Toast gift-card and invoice links are disallowed by Toast's real robots.txt (which
+only a browser can read); none of them were menus.
 
 ## classifier-v2
 
