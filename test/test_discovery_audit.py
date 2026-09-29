@@ -10,6 +10,7 @@ proximity) must reach >= 95% precision. It runs each pair through
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -23,7 +24,9 @@ from apps.discovery.audit import (
     _geocode_flag_dict,
     duplicate_rate,
     find_dup_candidates,
+    find_twins,
     geocode_crosscheck,
+    is_location_label,
     name_similarity,
     sample_venues,
     street_key,
@@ -58,6 +61,84 @@ def test_street_key_strips_suite_and_zip() -> None:
     b = street_key("6218 Brodie Ln, Austin, TX, 78745")
     assert a == b == "6218 brodie ln"
     assert street_key(None) == ""
+
+
+def test_street_key_keeps_five_digit_house_numbers() -> None:
+    # R: `_ZIP` used to strip these, so the two addresses collided.
+    a = street_key("13785 Research Blvd, Austin, TX, 78750")
+    b = street_key("14028 Research Blvd, Austin, TX, 78750-1234")
+    assert a == "13785 research blvd"
+    assert a != b
+    assert street_key("13770 N Hwy 183 78750") == "13770 n hwy 183"
+
+
+def test_street_key_folds_spelling_variants() -> None:
+    assert street_key("2800 Hoppe Trail, Round Rock") == street_key("2800 Hoppe Trl")
+    assert street_key("517 W MLK Jr. Blvd., Austin") == street_key(
+        "517 West Martin Luther King Jr Boulevard, Austin"
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "label"),
+    [
+        ("Main St & I-35", True),
+        ("Spirit of Texas Dr & Presidential Blvd", True),
+        ("MLK (24 Hours)", True),
+        ("Congress (Downtown)", True),
+        ("Research Blvd", True),
+        ("Whataburger", False),
+        ("Taqueria Jefes", False),
+        ("Main Street Pizza", False),
+        ("P. Terry's Burger Stand", False),
+        ("Salt & Time", False),
+    ],
+)
+def test_is_location_label(name: str, label: bool) -> None:
+    assert is_location_label(name) is label
+
+
+def _row(subject_id: int, name: str, lat: float | None, lon: float | None, addr: str) -> VenueRow:
+    return replace(_venue(subject_id, name, lat, lon, addr), fingerprint=name_fingerprint(name))
+
+
+def test_find_twins_sees_what_the_colocation_detector_misses() -> None:
+    venues = [
+        # P. Terry's MLK: one record misplaced 1.6 km away at the same address.
+        _row(9336, "P. Terry's Burger Stand", 30.267153, -97.743073, "517 W MLK Jr. Blvd."),
+        _row(14829, "P. Terry's Burger Stand", 30.281900, -97.743300, "517 W MLK Jr Blvd"),
+        # Whataburger #1000 and its locator-label record, 1 m apart.
+        _row(3585, "Main St & I-35", 30.080000, -97.840000, "670 Old San Antonio Rd"),
+        _row(3588, "Whataburger", 30.080009, -97.840000, "670 OLD SAN ANTONIO RD"),
+        # Pinthouse: Trail/Trl, 740 m apart.
+        _row(27480, "Pinthouse Pizza", 30.500000, -97.700000, "2800 Hoppe Trail"),
+        _row(27456, "Pinthouse Pizza", 30.506650, -97.700000, "2800 Hoppe Trl"),
+        # Food hall tenants: different names, one address, close together.
+        _row(1, "Soto", 30.250000, -97.760000, "1100 S Lamar Blvd"),
+        _row(2, "Shake Shack", 30.250050, -97.760000, "1100 S Lamar Blvd"),
+        # A chain 13 km apart.
+        _row(3, "Starbucks", 30.30, -97.70, "1 A St"),
+        _row(4, "Starbucks", 30.40, -97.80, "2 B St"),
+    ]
+    # Control: the co-location detector cannot see the misplaced twin.
+    assert all(
+        {c.a.subject_id, c.b.subject_id} != {9336, 14829} for c in find_dup_candidates(venues)
+    )
+    twins = {(t.a.subject_id, t.b.subject_id): t.reasons for t in find_twins(venues)}
+    assert twins[(9336, 14829)] == ("same_address", "misplaced")
+    assert "location_label" in twins[(3585, 3588)]
+    assert twins[(27456, 27480)] == ("same_address", "misplaced", "same_fingerprint")
+    assert (1, 2) not in twins
+    assert (3, 4) not in twins
+
+
+def test_find_twins_includes_rows_without_coordinates() -> None:
+    venues = [
+        _row(1, "El Sol y La Luna", None, None, "1224 S Congress Ave"),
+        _row(2, "El Sol Y La Luna Restaurant", 30.25, -97.75, "1224 South Congress Avenue"),
+    ]
+    [twin] = find_twins(venues)
+    assert twin.distance_m is None and twin.reasons == ("same_address",)
 
 
 def test_name_similarity_is_bounded() -> None:

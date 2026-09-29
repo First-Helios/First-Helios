@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session
 
+    from apps.discovery.location_overrides import OverrideState
     from apps.discovery.overture import OverturePoi
 
 RELOCATION_RADIUS_M = 50.0
@@ -217,7 +218,16 @@ def project_observation(
     evidence_id: int,
     decided_at: datetime,
     report: LifecycleReport,
+    override: OverrideState | None = None,
+    override_applied: bool = False,
 ) -> None:
+    """Project the winning Overture Version onto its owned venue.
+
+    ``poi`` is already at its effective location (ADR-0014). ``override`` is the
+    record's latest override Version, if any; a Version not yet projected
+    re-opens an already projected release, and ``override_applied`` says the
+    point came from it.
+    """
     from apps.discovery.pipeline import _decision, _to_decimal
 
     lock_lifecycle(session)
@@ -267,7 +277,20 @@ def project_observation(
             DiscoveryLifecycleState.action == "projected",
         )
     )
-    if checkpoint is not None and version.observed_at <= checkpoint:
+    projected = checkpoint is not None and version.observed_at <= checkpoint
+    override_pending = (
+        override is not None
+        and session.scalar(
+            select(DiscoveryLifecycleState.id)
+            .where(
+                DiscoveryLifecycleState.source_record_id == override.record_id,
+                DiscoveryLifecycleState.version_id == override.version_id,
+            )
+            .limit(1)
+        )
+        is None
+    )
+    if projected and not override_pending:
         session.flush()
         return
     if not _owned(session, est, record_id):
@@ -296,6 +319,13 @@ def project_observation(
         float(place.longitude),
         RELOCATION_RADIUS_M,
     )
+    # ADR-0014: an override, or its withdrawal against the Overture Version the
+    # venue already reflects (projected, or minted from it), corrects our data;
+    # the venue did not move, so the change is in place.
+    if override_applied or (
+        override_pending and (projected or version.observed_at <= est.valid_from)
+    ):
+        relocate = False
     if (rebrand or relocate) and version.observed_at <= est.valid_from:
         report.skip(f"venue {est.subject_id}: transition would have empty effective interval")
         return
@@ -365,6 +395,16 @@ def project_observation(
             action="projected",
         )
     )
+    if override is not None and override_pending:
+        session.add(
+            DiscoveryLifecycleState(
+                subject_id=target,
+                source_record_id=override.record_id,
+                version_id=override.version_id,
+                release_at=version.observed_at,
+                action="projected",
+            )
+        )
     session.flush()
 
 
