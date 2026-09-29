@@ -10,7 +10,10 @@ recently observed Overture record):
    locations of one chain never collapse (ADR-0009 hazard, ADR-0010 §4).
 2. **Menu-URL** — a registry ``menu_url`` always wins; otherwise crawl the site
    (robots-aware, rate-limited, cached) for a menu page, then persist + assign
-   it the same way. A saved menu-URL is reused until the registry or the
+   it the same way. The site's own menu is keyed ``<gers>``; each verified
+   ordering-platform page linked from the homepage gets its own
+   ``<gers>|<platform host>`` record, even when an own-site menu verifies
+   (ADR-0011 §7, S6b). A saved menu-URL is reused until the registry or the
    website changes; a failed re-discovery keeps the saved one.
 
 Records are per venue (keyed by GERS id), not per chain (ADR-0010 Amendment 2).
@@ -83,7 +86,9 @@ _Outcome = Literal["assigned", "updated", "unchanged", "needs_review"]
 class MenuUrlResolver(Protocol):
     """The one capability the pipeline needs from the site fetcher."""
 
-    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure: ...
+    def discover_menu_attempt(
+        self, website: str
+    ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure: ...
 
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
@@ -638,7 +643,6 @@ def _resolve_venue(
         session, report=LifecycleReport(), organization_id=venue.organization_subject_id
     )
     # Every existing own-site/platform key is independently verified on transfer.
-    # This does not implement S6b's collection of additional platform links.
     if transition_at is not None:
         worked |= _transfer_menus(
             session,
@@ -659,8 +663,8 @@ def _resolve_venue(
     )
     saved_menu = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=menu_key)
     if saved_menu is None:
-        # S6b can create multiple platform records; any saved verified menu for
-        # this unchanged website keeps S6's existing no-recrawl behavior.
+        # A venue can hold several platform records (S6b); any saved verified
+        # menu for this unchanged website keeps S6's no-recrawl behavior.
         platform_keys = session.scalars(
             select(SourceRecord.external_key)
             .join(Source)
@@ -687,16 +691,15 @@ def _resolve_venue(
     ):
         # An unchanged site's failed verification was already attempted per-key.
         return worked
+    acquired: tuple[MenuUrlDiscovery, ...]
     if entry is not None and entry.menu_url is not None:
-        menu_url, signal = entry.menu_url, "registry"  # the registry always wins
+        # The registry always wins, and is never crawled for platform links.
         if not entry.content_hash or entry.source_url is None:
             raise ValueError("registry provenance requires file bytes and a repo-relative path")
-        menu_source_url, menu_hash, fetched_at, found_via = (
-            entry.source_url,
-            entry.content_hash,
-            observed_at,
-            None,
+        acquired = (
+            MenuUrlDiscovery(entry.menu_url, "registry", observed_at, entry.content_hash, None),
         )
+        registry_source_url: str | None = entry.source_url
     elif (
         saved_menu is not None
         and saved_menu.state == "resolved"
@@ -728,15 +731,46 @@ def _resolve_venue(
             )
             report.menu_urls_absent += 1
             return worked
-        menu_url, signal = discovery.menu_url, discovery.signal
-        menu_source_url, menu_hash, fetched_at, found_via = (
-            discovery.menu_url,
-            discovery.content_hash,
-            discovery.fetched_at,
-            discovery.found_via,
-        )
+        # The own-site menu (if any) plus one per ordering platform (S6b).
+        acquired, registry_source_url = discovery, None
 
-    platform = ordering_platform_host(menu_url)
+    for menu in acquired:
+        worked |= _persist_menu(
+            session,
+            venue,
+            menu,
+            source_url=registry_source_url or menu.menu_url,
+            website=website,
+            resolver=resolver,
+            transition_at=transition_at,
+            observed_at=observed_at,
+            decided_at=decided_at,
+            report=report,
+        )
+    return worked
+
+
+def _persist_menu(
+    session: Session,
+    venue: VenueToResolve,
+    menu: MenuUrlDiscovery,
+    *,
+    source_url: str,
+    website: str,
+    resolver: MenuUrlResolver,
+    transition_at: datetime | None,
+    observed_at: datetime,
+    decided_at: datetime,
+    report: UrlDiscoveryReport,
+) -> bool:
+    """Persist one menu URL under its own key: ``<gers>`` or ``<gers>|<platform host>``.
+
+    Each key is checked on its own (ADR-0011 §7): a disputed key, or one held by
+    an Organization outside this GERS lifecycle, is counted and kept as history
+    without blocking the venue's other menu records. True if it wrote or crawled.
+    """
+    worked = False
+    platform = ordering_platform_host(menu.menu_url)
     menu_key = f"{venue.gers_id}|{platform}" if platform else venue.gers_id
     saved_menu = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=menu_key)
     if saved_menu is not None and saved_menu.state == "needs_review":
@@ -754,14 +788,14 @@ def _resolve_venue(
         report.needs_review += 1
         return worked
     if transition_at is not None and (remapping or saved_menu is None):
-        verified = resolver.verify_menu_attempt(website, menu_url, not_before=transition_at)
+        verified = resolver.verify_menu_attempt(website, menu.menu_url, not_before=transition_at)
         worked = True
         if isinstance(verified, CaptureFailure):
             record_capture_attempt(
                 session,
                 source_namespace=MENU_URL_NAMESPACE,
                 source_kind="menu_url",
-                source_url=menu_url,
+                source_url=menu.menu_url,
                 fetched_at=verified.fetched_at,
                 outcome=verified.outcome,
                 reason_code=verified.reason_code,
@@ -774,19 +808,12 @@ def _resolve_venue(
         ):
             report.menu_urls_absent += 1
             return worked
-        menu_url, signal, menu_source_url, menu_hash, fetched_at, found_via = (
-            verified.menu_url,
-            verified.signal,
-            verified.menu_url,
-            verified.content_hash,
-            verified.fetched_at,
-            verified.found_via,
-        )
+        menu, source_url = verified, verified.menu_url
     menu_payload: dict[str, object] = {
-        "menu_url": menu_url,
-        "signal": signal,
+        "menu_url": menu.menu_url,
+        "signal": menu.signal,
         "website": website,
-        "found_via": found_via,
+        "found_via": menu.found_via,
     }
     if platform:
         menu_payload["platform"] = platform
@@ -799,13 +826,13 @@ def _resolve_venue(
             external_key=menu_key,
             payload=menu_payload,
             locator="$.menu_url",
-            source_url=menu_source_url,
-            capture_hash=menu_hash,
-            fetched_at=fetched_at,
+            source_url=source_url,
+            capture_hash=menu.content_hash,
+            fetched_at=menu.fetched_at,
             observed_at=observed_at,
         ),
         to_subject_id=venue.organization_subject_id,
-        method=f"menu-url-{signal}",
+        method=f"menu-url-{menu.signal}",
         allow_remap=remapping,
         decided_at=decided_at,
     )

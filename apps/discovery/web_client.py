@@ -35,8 +35,10 @@ requires the fetched page's own title/heading/path to carry a menu word
 (:func:`apps.discovery.menu_url.page_menu_signal`) with body content that
 actually differs from the homepage's. A website on a known platform host
 (Toast, Square, Facebook, …) is never probed at its own well-known paths — the
-page itself is the candidate (signal ``"platform"``); an own-site venue with
-no verified menu falls back to a homepage link into one of those platforms.
+page itself is the candidate (signal ``"platform"``). An own-site venue's
+homepage links into ordering platforms are verified too, whether or not an
+own-site menu verifies (review session S6b, ADR-0011 §7): one result per
+platform host, each persisted as its own ``<gers>|<host>`` record.
 """
 
 from __future__ import annotations
@@ -412,13 +414,13 @@ class SiteFetcher:
 
     # -- discovery ------------------------------------------------------------
 
-    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
-        """Return a verified acquisition or one site-level failure, including policy skips."""
+    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+        """Verified acquisitions (own-site first) or one site-level failure, incl. policy skips."""
         self._site_failure = None
         self._found_via = {}
-        result = self.discover_menu_url(website)
+        found = self.discover_menu_url(website)
         return (
-            result
+            found
             or self._site_failure
             or CaptureFailure("failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC))
         )
@@ -497,8 +499,8 @@ class SiteFetcher:
             found_via,
         )
 
-    def discover_menu_url(self, website: str) -> MenuUrlDiscovery | None:
-        """Verify a menu URL for a resolved website, honouring robots + rate limit.
+    def discover_menu_url(self, website: str) -> tuple[MenuUrlDiscovery, ...]:
+        """Verify menu URLs for a resolved website, honouring robots + rate limit.
 
         A website already on a shared platform host (Toast, Square, Facebook,
         …) is never probed at its own well-known paths (R33): the page itself
@@ -509,20 +511,24 @@ class SiteFetcher:
         GET each ranked candidate in order and accept the first that is
         robots-allowed, resolves to a 200 HTML page distinct from the
         homepage, and whose own content carries a menu word
-        (:func:`apps.discovery.menu_url.page_menu_signal`). If nothing
-        verifies, fall back to a homepage link into a known platform host
-        (D3.5b). Candidates are built from the homepage's final
-        (post-redirect) URL.
+        (:func:`apps.discovery.menu_url.page_menu_signal`). Then, whether or
+        not an own-site menu verified, verify the homepage's links into
+        ordering platforms (D3.5b, S6b): at most one per platform host and
+        :data:`MAX_PLATFORM_CANDIDATES` in all. Candidates are built from the
+        homepage's final (post-redirect) URL.
+
+        Returns the own-site result first (when one verified), then platform
+        results in homepage order; empty when nothing verified.
         """
         if platform_signal(website):
             if ordering_platform_host(website) is None:
                 self._failure_reason = "social_link"
                 self._note_failure(None)
-                return None
+                return ()
             if not is_platform_venue_page(website):
                 self._failure_reason = "platform_root"
                 self._note_failure(None)
-                return None  # a platform's root belongs to the platform (R33)
+                return ()  # a platform's root belongs to the platform (R33)
             result = self.fetch(website)
             if (
                 result is not None
@@ -530,9 +536,9 @@ class SiteFetcher:
                 and _is_html(result)
                 and is_platform_venue_page(result.url, ordering_only=True)
             ):  # noqa: PLR2004
-                return self._discovered(result, "platform")
+                return (self._discovered(result, "platform"),)
             self._note_failure(result)
-            return None
+            return ()
 
         homepage = self.fetch(website)
         if homepage is None or homepage.status != 200 or not _is_html(homepage):
@@ -552,6 +558,7 @@ class SiteFetcher:
         well_known = {url.rstrip("/") for url in path_candidates(base)}
         is_catch_all: bool | None = None  # probed lazily: only a 200 well-known path needs it
 
+        found: list[MenuUrlDiscovery] = []
         for candidate in candidates:
             result = self.fetch(candidate)
             if result is None or result.status != 200 or not _is_html(result):  # noqa: PLR2004
@@ -566,13 +573,18 @@ class SiteFetcher:
                 continue
             if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
                 continue  # identical body to the homepage: a catch-all/soft-404 answer
-            return self._discovered(
-                result,
-                "well_known" if is_well_known else "crawled",
-                None if is_well_known else self._found_via.get(candidate, base),
+            found.append(
+                self._discovered(
+                    result,
+                    "well_known" if is_well_known else "crawled",
+                    None if is_well_known else self._found_via.get(candidate, base),
+                )
             )
+            break
 
         if homepage_html is not None:
+            # One link per platform host, and a redirect can't leave that host,
+            # so each platform result lands on its own <gers>|<host> key.
             for platform_url in platform_links_from_html(homepage_html, base)[
                 :MAX_PLATFORM_CANDIDATES
             ]:
@@ -583,8 +595,8 @@ class SiteFetcher:
                     and _is_html(result)
                     and is_platform_venue_page(result.url, ordering_only=True)
                 ):  # noqa: PLR2004
-                    return self._discovered(result, "platform", base)
-        return None
+                    found.append(self._discovered(result, "platform", base))
+        return tuple(found)
 
     def _is_catch_all_site(self, base_url: str) -> bool:
         """True when a random, almost-certainly-nonexistent path 200s as HTML.

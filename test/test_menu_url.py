@@ -271,6 +271,21 @@ def test_platform_links_skip_platform_roots() -> None:
     assert links == ["https://www.doordash.com/store/kerbey-123/"]
 
 
+def test_platform_links_keep_the_first_link_per_platform_host() -> None:
+    # S6b: one record per (venue, platform host), keyed by the platform domain,
+    # so a second Toast link on another subdomain is the same menu source.
+    html = (
+        '<a href="https://order.toasttab.com/online/kerbey">Order pickup</a>'
+        '<a href="https://www.toasttab.com/kerbey/giftcards">Gift cards</a>'
+        '<a href="https://www.doordash.com/store/kerbey-123/">Delivery</a>'
+    )
+    links = platform_links_from_html(html, "https://kerbey.com/")
+    assert links == [
+        "https://order.toasttab.com/online/kerbey",
+        "https://www.doordash.com/store/kerbey-123/",
+    ]
+
+
 def test_is_platform_venue_page_requires_a_non_root_path() -> None:
     assert is_platform_venue_page("https://www.facebook.com/kerbeylane")
     assert not is_platform_venue_page("https://www.facebook.com/")

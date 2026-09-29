@@ -286,6 +286,9 @@ def platform_links_from_html(html: str, base_url: str) -> list[str]:
     of a known ordering platform is itself the signal (owner decision D3.5b) —
     e.g. a homepage link to ``toasttab.com/<venue>`` or a DoorDash store page.
     Social links and platform roots (a "Powered by Toast" footer) are skipped.
+    Only the first link to each ordering platform is kept: a venue has one
+    menu record per platform host (ADR-0011 §7), so ``order.toasttab.com``
+    and ``www.toasttab.com`` links are one candidate, not two.
     """
     parser = _AnchorCollector()
     parser.feed(html)
@@ -299,9 +302,9 @@ def platform_links_from_html(html: str, base_url: str) -> list[str]:
         absolute = urljoin(link_base, href)
         if urlsplit(absolute).scheme not in {"http", "https"}:
             continue
-        if not is_platform_venue_page(absolute, ordering_only=True):
+        key = ordering_platform_host(absolute)
+        if key is None or not is_platform_venue_page(absolute, ordering_only=True):
             continue
-        key = _dedupe_key(absolute)
         if key in seen:
             continue
         seen.add(key)

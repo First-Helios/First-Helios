@@ -121,18 +121,21 @@ class _Resolver:
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
     ) -> MenuUrlDiscovery | CaptureFailure:
-        return self.discover_menu_attempt(website)
+        found = self.discover_menu_attempt(website)
+        return found if isinstance(found, CaptureFailure) else found[0]
 
-    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
+    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
         if website != self._website:
             return CaptureFailure(
                 "failed", "no_menu_found", _NOW
             )  # other committed venues in a shared *_test database
-        return MenuUrlDiscovery(
-            menu_url=self._menu_url,
-            signal="crawled",
-            fetched_at=_NOW,
-            content_hash="sha256:fixture-page",
+        return (
+            MenuUrlDiscovery(
+                menu_url=self._menu_url,
+                signal="crawled",
+                fetched_at=_NOW,
+                content_hash="sha256:fixture-page",
+            ),
         )
 
 

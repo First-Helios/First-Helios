@@ -273,7 +273,9 @@ def test_real_pipeline_recovers_page_bytes_redirect_and_cache_time(
     clock = FakeClock()
     first_time = datetime.fromtimestamp(clock.wall, UTC)
     with _fetcher(tmp_path, routes, clock=clock) as fetcher:
-        cached = fetcher.discover_menu_attempt(website)
+        attempt = fetcher.discover_menu_attempt(website)
+    assert isinstance(attempt, tuple)
+    (cached,) = attempt
     clock.wall += 3600
     calls: list[str] = []
     with _fetcher(tmp_path, routes, clock=clock, calls=calls) as fetcher:
@@ -293,7 +295,7 @@ def test_real_pipeline_recovers_page_bytes_redirect_and_cache_time(
     assert capture.fetched_at == first_time
     assert version.source_payload["found_via"] == website
     assert calls == []
-    assert cached.content_hash == capture.content_hash  # type: ignore[union-attr]
+    assert cached.content_hash == capture.content_hash
     website_evidence, website_version = _namespace_evidence(
         session, WEBSITE_NAMESPACE, "evidence-cache"
     )
