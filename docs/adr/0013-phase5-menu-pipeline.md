@@ -447,3 +447,16 @@ render triggers in `apps/discovery/web_client.py`):
    Compose runs the worker with `init: true` (`xvfb-run` hangs as PID 1) and
    `shm_size: 1gb`. `resolve_urls --render` turns rendering on; it stays off for Pi
    runs until the Pi measurement below is recorded.
+8. **Measured (laptop), Pi pending.** On the S6d probe's 60 URLs plus 15 held-out
+   platform links: 67/75 rendered, 8 robots.txt refusals, no bot challenge (Toast and
+   DoorDash load headed); median 13.9 s, max 65.6 s per render; peak 1.79 GB PSS for
+   the whole process tree. Robots-blocked sub-requests cost Grubhub's and DoorDash's
+   full menus. Details and the owner-run Pi steps:
+   [S6f render measurement](../reviews/2026-09-29-s6f-render-measurement.md). The
+   §4 gate (Pi time and memory) stays open until the Pi numbers are recorded.
+9. **`classifier-v2`.** Segmentation (stage [2]) now skips dialogs (`role=dialog`,
+   `alertdialog`, `aria-modal`): rendered Toast pages open with a consent dialog
+   whose text filled the classifier's input. v2 keeps v1's coefficients; its static
+   verdicts equal v1's on every spike page, and on rendered pages it accepts 8/9
+   held-out menus (v1: 1/9) with no false positive. Retraining on rendered pages
+   gave no gain. The segmenter change also applies to extraction when it is built.

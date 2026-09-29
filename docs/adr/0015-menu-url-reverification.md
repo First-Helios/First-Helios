@@ -189,3 +189,7 @@ Owner decisions at the start of session S6d, with the code facts that shaped the
    marketing-signup and gift-card pages, which the content check now rejects).
    Rendering is new session S6f (ADR-0013 Amendment 1). Until it lands, platform
    pages in practice fail the page check and are not saved.
+   *S6f (2026-09-29): rendering built (`resolve_urls --render`, ADR-0013
+   Amendment 2) and the verifier bumped to `classifier-v2`, which accepts rendered
+   Toast menus; the bump makes the next run re-check every URL `classifier-v1`
+   saved.*
