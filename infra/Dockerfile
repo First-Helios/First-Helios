@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:1
 #
-# Single image, multiple entrypoints: the API runs the default CMD, future
-# scraper workers (Phase 4+) override it. Build context is the repo root:
+# Two targets. The default (last) stage `runtime` is the API image; discovery
+# CLIs that need no extras can run in it too. `worker` adds the `menu` extra
+# (the page classifier runtime, ADR-0013) for the discovery and menu-pipeline
+# CLIs. Build context is the repo root:
 #   docker build -f infra/Dockerfile -t helios-api .
+#   docker build -f infra/Dockerfile --target worker -t helios-worker .
 
 # Pinned by digest for reproducible builds; tag kept in the comment (R90).
 FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS builder
@@ -28,19 +31,36 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
+# The worker's environment: the same sync plus the `menu` extra.
+FROM builder AS builder-menu
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra menu
 
-# Run as a non-root user. psycopg[binary] bundles libpq, so no apt packages
-# are needed at runtime.
+
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS base
+
+# Run as a non-root user. psycopg[binary] bundles libpq, and onnxruntime's
+# wheel bundles its own libraries, so no apt packages are needed at runtime.
 RUN groupadd --system --gid 999 helios \
     && useradd --system --uid 999 --gid 999 --create-home helios
 
 WORKDIR /app
-COPY --from=builder --chown=helios:helios /app /app
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
+
+
+# Model files are never baked in: they live in var/models/ (a volume) and are
+# checked against config/models.yaml before use (ADR-0013 §3).
+FROM base AS worker
+COPY --from=builder-menu --chown=helios:helios /app /app
+USER helios
+CMD ["python", "-m", "apps.menu_pipeline.models", "verify"]
+
+
+FROM base AS runtime
+COPY --from=builder --chown=helios:helios /app /app
 
 USER helios
 EXPOSE 8000

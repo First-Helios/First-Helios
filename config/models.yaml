@@ -1,0 +1,25 @@
+# Model files the menu pipeline downloads into var/models/<name>/ (ADR-0013 §3).
+# `python -m apps.menu_pipeline.models download` fetches each file from
+# <source>/resolve/<revision>/<file> and refuses a checksum mismatch; the page
+# classifier refuses to load a directory whose files differ from this list.
+potion-base-8M:
+  licence: MIT
+  embedding_model: minishlab/potion-base-8M  # fastembed's name for it
+  source: https://huggingface.co/minishlab/potion-base-8m-onnx
+  revision: e893cf44cf35e6a1bf2be5f0e9354b76eb9277ac
+  files:
+    config.json:
+      sha256: fb8703c8be022a8919ff743f0e261806eae3f573039b9217bd9b9fe2e5c11325
+      size: 23
+    model.onnx:
+      sha256: b955aeda5bb8eaedb3c302dc3757ad3bcbe2efc4e1b6091be21c28b3a3f392eb
+      size: 30251506
+    special_tokens_map.json:
+      sha256: 8c58a7430a870819c0903c2053065e1de8755bffa512a0ed8880da23bd2567f1
+      size: 26
+    tokenizer.json:
+      sha256: de5ce11544e30d2ba33803be93fe5008c4697089b2d4b9c471a45b147aa43429
+      size: 682879
+    tokenizer_config.json:
+      sha256: 45926823d9b06fd37de31058d6ca2dc4872e142366226f0ff7368b7f92a85e3d
+      size: 271

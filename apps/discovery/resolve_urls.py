@@ -12,7 +12,10 @@ need work. Records a human put in ``needs_review`` are never re-assigned. A
 saved menu URL is re-verified when the page verifier changes or 90 days after
 its last pass, and withdrawn to ``needs_review`` if it no longer verifies
 (ADR-0015); the report counts ``menu_urls_reverified``, ``menu_urls_withdrawn``,
-``menu_urls_reverify_deferred`` and ``platform_ambiguous``. Crawls
+``menu_urls_reverify_deferred`` and ``platform_ambiguous``. The page verifier
+is the ADR-0013 page classifier (``classifier-v1``): it needs the ``menu`` extra
+(the worker image) and model files matching ``config/models.yaml`` under
+``--model-root`` (``python -m apps.menu_pipeline.models download``). Crawls
 live restaurant sites (robots + rate limited), so it makes network calls and is
 not exercised in CI.
 """
@@ -27,6 +30,8 @@ from pathlib import Path
 from apps.discovery.registry import load_registry
 from apps.discovery.url_pipeline import resolve_urls
 from apps.discovery.web_client import SiteFetcher
+from apps.menu_pipeline.classifier import load_page_classifier
+from apps.menu_pipeline.models import DEFAULT_ROOT
 from packages.helios_core.db.session import get_sessionmaker
 
 _USER_AGENT = "helios-v2-discovery/0.1 (+https://github.com/First-Helios/First-Helios)"
@@ -50,12 +55,21 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--limit", type=int, default=None, help="max venues that need work (a write or crawl)"
     )
+    parser.add_argument(
+        "--model-root", type=Path, default=DEFAULT_ROOT, help="verified model files (ADR-0013)"
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
     registry = load_registry(args.config or _DEFAULT_CONFIG, missing_ok=args.config is None)
+    try:
+        page_check = load_page_classifier(model_root=args.model_root)
+    except ModuleNotFoundError as error:
+        raise SystemExit(
+            f"the page classifier needs the `menu` extra (worker image): {error}"
+        ) from error
     now = datetime.now(UTC)
 
     with (
@@ -63,6 +77,7 @@ def main() -> None:
             cache_dir=args.cache_dir,
             user_agent=_USER_AGENT,
             min_interval_s=args.min_interval,
+            page_check=page_check,
         ) as fetcher,
         get_sessionmaker()() as session,
     ):

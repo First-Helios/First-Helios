@@ -686,10 +686,11 @@ ADR-0013 Amendment 1:
 - [X] Tests: saved URL from an older verifier is re-checked; a rejected URL is withdrawn,
   not reused; registry entries are never withdrawn; platform page without menu content is
   not saved; transient failures keep the URL; window; recovery; chain guard
-- [ ] Part 2 ⚠: `classifier-v1` (ADR-0013 slices 1 without `llama-server`, and 4):
+- [X] Part 2 ⚠: `classifier-v1` (ADR-0013 slices 1 without `llama-server`, and 4):
   segmentation + price-token features, checked-in weights trained on the spike labels,
   `menu` extra (`fastembed`/`onnxruntime`), model manifest + checksum-refusing download,
-  worker image target, `resolve_urls` uses it; a recorded evaluation (ADR-0013 §8)
+  worker image target, `resolve_urls` uses it; a recorded evaluation (ADR-0013 §8):
+  [classifier-v1 evaluation](./2026-09-29-classifier-v1-evaluation.md)
 
 ### S6f — Page rendering ⚠ · size M · needs S6d part 2 merged
 Branch: `feat/page-render` · ADR-0013 Amendment 1 (render part of slice 6, for discovery).
@@ -702,6 +703,11 @@ Branch: `feat/page-render` · ADR-0013 Amendment 1 (render part of slice 6, for 
 - [ ] Measure (ADR-0013 §4): render success and classifier quality on rendered platform
   pages (label the probe's pages in `var/spikes/menu-model/render-probe-2026-09-29/`),
   Pi time and peak RAM per render; enable for Pi runs only after it is recorded
+- [ ] `classifier-v1` rejects every rendered Toast order page (0.004–0.28, threshold 0.508;
+  Square/Clover/Grubhub pass): label rendered platform pages, train and evaluate a
+  successor version (`classifier-v2`; the verifier bump re-checks saved URLs)
+- [ ] One Toast link redirected to `toast.app` (not in `ORDERING_PLATFORM_HOSTS`): decide
+  whether platform host lists grow (a generic list change, not a per-platform parser)
 
 ### S7 — Gold refresh fix · size M · needs D5
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`

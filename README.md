@@ -42,8 +42,11 @@ This section is the single current-status page. Other docs link here.
   re-verified when it changes or after 90 days; one that fails is re-discovered
   or withdrawn to `needs_review`. Platform pages pass the same page check, and a
   chain homepage's platform links are kept only for the location whose address
-  the page shows (ADR-0015). The verifier is still the S4 heuristic (`s4-v1`);
-  `classifier-v1` and page rendering are pending (S6d part 2, S6f).
+  the page shows (ADR-0015). The verifier is the ADR-0013 page classifier
+  `classifier-v1` (`apps/menu_pipeline/classifier.py`, weights
+  `config/page_classifier_v1.json`, model files pinned in `config/models.yaml`;
+  [evaluation](./docs/reviews/2026-09-29-classifier-v1-evaluation.md)); it runs in
+  the `worker` image target. Page rendering is pending (S6f).
 - **Venue lifecycle**: `apps/discovery/lifecycle.py`, `apps/discovery/models.py`.
   Release completion evidence and completion-gated closure, run at the end of
   each discovery run (ADR-0012). Limits: closure needs a completed baseline plus
@@ -184,15 +187,21 @@ uv run python -m apps.api.export_openapi   # after an intentional API change
 Discovery and `resolve_urls` make network calls and write to the database
 `DATABASE_URL` names; the audit reads a venue export and needs no database.
 None of them run in CI. On the Pi they run inside the API container
-(`docker compose exec api ...`).
+(`docker compose exec api ...`), except `resolve_urls`: its page verifier is the
+ADR-0013 page classifier, which needs the `menu` extra and verified model files,
+so it runs in the worker image
+(`docker compose --profile menu run --rm worker python -m ...`).
 
 ```bash
 # Seed venues from an Overture release, then record completion and run lifecycle
 uv run python -m apps.discovery [--release <overture-parquet-glob>] \
     [--expected-predecessor <prior-release-path>] [--no-geocode]
 
+# Page-classifier model files into var/models/, checked against config/models.yaml
+uv run --extra menu python -m apps.menu_pipeline.models download
+
 # Resolve website + menu URL (Pi gate 1b must be open before a Pi run)
-uv run python -m apps.discovery.resolve_urls --config config/sources.yaml [--limit N]
+uv run --extra menu python -m apps.discovery.resolve_urls --config config/sources.yaml [--limit N]
 
 # Precision audit over a venue export (no database)
 uv run python -m apps.discovery.audit --export <venue-export.json> [--geocode-check]
@@ -256,7 +265,10 @@ alembic/                migrations (hand-reviewed)
 apps/
   api/                  FastAPI read API and OpenAPI snapshot
   discovery/            Overture discovery, URL resolution, lifecycle, audit
+  menu_pipeline/        page classifier runtime, model files, training script
 config/sources.yaml     manual website / menu-URL registry
+config/models.yaml      pinned model files (sha256, size, licence)
+config/page_classifier_v1.json  page classifier weights
 docs/
   adr/                  architecture decisions (index below)
   rfc/  plans/          proposals and build plans
@@ -272,6 +284,7 @@ packages/helios_core/
   domains/menu/         Menu
   gold/                 Gold read models
   geo.py                Nominatim client
+packages/helios_parsing/  pure page parsing: segmentation, price tokens, classifier features
 test/                   pytest suite
 ```
 
