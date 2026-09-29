@@ -1,10 +1,12 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Proposed, except the page classifier: its parts were accepted
-2026-09-29 (owner, session S6d; [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
-The LLM extraction, `llama-server`, validator, Menu writes and the open questions
-below remain Proposed. Rendering for discovery was built in session S6f and open
-question 3 decided ([Amendment 2](#amendment-2-2026-09-29-rendering-built-open-question-3-decided)).
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–3.
+The page classifier parts were accepted earlier the same day (session S6d;
+[Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
+Rendering for discovery was built in session S6f and open question 3 decided
+([Amendment 2](#amendment-2-2026-09-29-rendering-built-open-question-3-decided)).
+Open questions 1, 2, 4 and 5 were answered at acceptance
+([Amendment 3](#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -194,7 +196,8 @@ New runtime dependencies (each needs owner approval by accepting this ADR):
 
 - **Namespace.** Menu page content is Bronze source `menu-page`, with the same
   external keys as the menu-URL records (`<gers>`, `<gers>|<platform host>`), and is
-  assigned to the same Subject as that menu-URL record.
+  assigned to the same Subject as that menu-URL record. *Amendment 3: a platform
+  page (`<gers>|<platform host>`) is assigned to the venue's Establishment instead.*
 - **Capture per fetch or render**, with the raw-body `content_hash` and a durable
   **bundle** at `bundle_path` (the replay bundle ADR-0011 §3 reserved the column
   for): `var/replay/menu-page/<yyyy>/<mm>/<sha256>.json.gz` holding the raw body, the
@@ -226,7 +229,8 @@ New runtime dependencies (each needs owner approval by accepting this ADR):
 - **Scope.** The page takes the scope of its `menu-page` record's Subject. Today
   menu-URL records are assigned to the Organization, so pages are Organization
   content and prices (ADR-0005 §11: shared prices are Organization claims, never
-  invented location prices). See open question 1.
+  invented location prices). *Open question 1, decided in Amendment 3: platform
+  pages take the venue's Establishment scope; own-site pages stay Organization.*
 - **Shown to users (Q6).** Accepted `llm` prices flow to Gold and the API like any
   interpretation, ranked lowest, with their kind visible (`price_source_kind`).
   Price confidence is a named constant per outcome, lower on pages flagged
@@ -271,12 +275,15 @@ version**:
   harness's unit tests on synthetic fixtures (no live network, no real pages).
 - A held-out set that was scored and then used for tuning is no longer held out.
 - **Monthly spot check:** a small random sample of newly extracted pages is checked
-  by hand to catch new layouts (spike finding 9).
+  by hand to catch new layouts (spike finding 9). *Size, labeller and what a failure
+  triggers: Amendment 3.*
 
 ### 9. Out of scope
 
 Cuisine or other tags (Q9; ADR-0006 deferral stands, separate ADR), per-platform
-parsers, images and OCR, the NPU, and deals/promotions (Phase 10).
+parsers, images and OCR, the NPU, and deals/promotions (Phase 10). PDF menus are
+skipped and counted in v1; promotional rows are deferred to a promo classifier
+(Amendment 3).
 
 ## Alternatives considered
 
@@ -313,15 +320,28 @@ parsers, images and OCR, the NPU, and deals/promotions (Phase 10).
 ## Implementation slices (after acceptance)
 
 Each slice is a PR; ⚠ slices touch deps or `infra/` and stop for owner review.
+State as of 2026-09-29 (Amendment 3):
 
 1. ⚠ Worker image target, `menu` extra, `llama-server` service and model manifest.
+   *Built except `llama-server`:* the `worker` target, `menu` extra and checksummed
+   manifest came with slice 4 (S6d part 2, #52). Remaining: the `llama-server`
+   Compose service and the Qwen3-4B manifest entry.
 2. `packages/helios_parsing`: segmentation, text hash, JSON-LD reader, chunking,
-   repairs, validator, with the ported harness and synthetic tests.
+   repairs, validator, with the ported harness and synthetic tests. *Segmentation
+   and the v3 price tokens exist (#52; dialog skip #54).* The harness's gold-label
+   format carries the `promo` mark (Amendment 3).
 3. `menu-page` Bronze writes (Captures, bundles, Versions, locators) and the batch
-   CLI, without extraction.
+   CLI, without extraction. Platform pages are assigned to the Establishment, and
+   PDF menu links are counted in discovery and the run report (Amendment 3).
 4. Classifier runtime; ADR-0015 verifier bump to `classifier-v1` (after S6d).
+   *Built:* S6d part 1 (#51, re-verification) and part 2 (#52, `classifier-v1`);
+   S6f (#54) bumped the verifier to `classifier-v2`.
 5. Extraction and Menu writes; first held-out evaluation recorded.
 6. ⚠ Headless render, its measurement on the 32 JS-only pages, then enablement.
+   *Built in S6f (#54):* headed Chromium under Xvfb (Amendments 1–2), measured on a
+   laptop over 75 URLs, 23 of them the spike's JS-only own-site pages. Remaining: the
+   owner-run Pi time and memory measurement (Pi gate 1b), and the §8 quality bars on
+   rendered pages, which need slice 5.
 7. Owner: rknpu upgrade runbook (independent of 1–6).
 
 ## Open questions for the owner
@@ -330,20 +350,25 @@ Each slice is a PR; ⚠ slices touch deps or `infra/` and stop for owner review.
    Organization, so every extracted price is an Organization claim. For a chain,
    a per-location platform page (`<gers>|<host>`) really describes one location.
    Recommended: Organization scope for v1; per-location scope for platform pages in
-   a follow-up once ADR-0015's chain-homepage guard exists.
+   a follow-up once ADR-0015's chain-homepage guard exists. *Decided 2026-09-29:
+   platform pages take Establishment scope from v1
+   ([Amendment 3](#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).*
 2. **PDF menus** (linked from ≥ 6 sample sites; `SiteFetcher` decodes bodies to text,
    so the spike never read them): v1 skips them as `pdf` Captures, or add a PDF
    text-layer reader (a new dependency) feeding the same segmentation and LLM path?
+   *Decided 2026-09-29: skipped and counted in v1 (Amendment 3).*
 3. **Rendered sub-requests.** robots.txt is checked for the page Helios navigates
    to; the requests the page's own scripts make (e.g. a platform's menu API) are not
    checked separately, as in a normal browser. Acceptable, or check robots for each
    sub-request host too? *Decided 2026-09-29: check every sub-request
    ([Amendment 2](#amendment-2-2026-09-29-rendering-built-open-question-3-decided)).*
 4. **Spot-check size and owner:** e.g. 5 pages per monthly run, labelled by an agent
-   and confirmed by the owner?
+   and confirmed by the owner? *Decided 2026-09-29: 10 pages, labelled blind by an
+   agent, the owner confirms disagreements (Amendment 3).*
 5. **Promotional rows** ("BOGO", "half off") in menus: ROADMAP §2 / Phase 5 wants them
    excluded from menu prices; the spike did not measure them. Handle as a generic
-   repair now, or leave to Phase 10?
+   repair now, or leave to Phase 10? *Decided 2026-09-29: deferred to a promo
+   classifier, no rule now; label foundations in Phase 5 (Amendment 3).*
 
 ## References
 
@@ -461,3 +486,103 @@ render triggers in `apps/discovery/web_client.py`):
    verdicts equal v1's on every spike page, and on rendered pages it accepts 8/9
    held-out menus (v1: 1/9) with no false positive. Retraining on rendered pages
    gave no gain. The segmenter change also applies to extraction when it is built.
+
+## Amendment 3 (2026-09-29): accepted; open questions 1, 2, 4, 5 decided
+
+Owner decisions in session P5-0, with the code and data facts checked before the
+questions were put:
+
+1. **Accepted as a whole.** This approves the remaining runtime dependencies in §3:
+   the `llama-server` Compose service (pinned llama.cpp build, `menu` profile) and
+   the Qwen3-4B-Instruct-2507 Q4_0 entry in the model manifest. Each ⚠ slice still
+   stops for owner review of its diff. Acceptance does not switch anything on: the
+   §4 Pi measurement still gates `--render` on Pi runs, and §8's held-out evaluation
+   still gates each pipeline version.
+2. **Open question 1, page scope: platform pages take Establishment scope.**
+   - *Facts.* Discovery mints one Organization per new Establishment
+     (`apps/discovery/pipeline.py`, `_mint_establishment`); there is no chain
+     Organization, so Organization scope doesn't mix locations today. But
+     [ADR-0007](./0007-gold-price-index-projection.md) §5 excludes Organization-scoped
+     rows from the lat/lon price index, so Organization scope alone would leave that
+     index empty, and switching later would remap every page stream (ADR-0005 §5).
+     ADR-0015's chain-homepage guard (Amendment 1 item 6, #51), the stated
+     precondition, exists.
+   - *Rule.* A `menu-page` record keyed `<gers>|<platform host>` is assigned to the
+     Establishment that the Overture record `<gers>` resolves to. An own-site
+     `<gers>` page keeps its menu-URL record's Subject, the Organization. When one
+     platform URL is the saved menu URL of more than one current venue, nothing ties
+     it to one location, so those pages stay Organization. Menu-URL records are
+     unchanged (still Organization), which keeps Organization readiness as
+     [ADR-0012](./0012-venue-lifecycle.md) §5.2 defines it.
+   - *Eligibility.* Menu admission needs an eligible Establishment (ADR-0005 §7);
+     ADR-0012 §5.3 promotes one when its Place and Organization are eligible, and the
+     Organization is eligible once its website is assigned, before any menu URL. A
+     page whose Establishment is not eligible yet keeps its Capture and Version; its
+     Menu write is counted (`scope_not_eligible`) and retried next run.
+   - *No migration.* `PageInput.subject_kind` and `gold.current_menu`
+     (`ck_gold_scope_kind`) already allow `establishment`; `assign_source_record` is
+     kind-agnostic.
+   - *Selection and Gold.* Establishment prices are local contenders (ADR-0005 §11)
+     and enter the ADR-0007 geo index; own-site Organization prices stay separate
+     Organization claims, never merged or fanned out. Own-site menus of
+     single-location venues therefore stay out of the geo index; that gap belongs to
+     the price-index implementation (ADR-0007), not to this ADR.
+   - *Residual risk.* A venue whose Overture website is itself a platform page gets
+     no address check (the guard reads homepages); only the shared-URL rule above
+     covers it.
+3. **Open question 2, PDF menus: skipped and counted in v1.**
+   - *Facts.* Discovery saves only HTML (`web_client._is_html`; anything else is
+     `not_html`, an ADR-0015 withdrawal reason), and `config/sources.yaml` names no
+     PDF, so verified menu URLs contain no PDFs by construction. A PDF-only venue
+     ends with no menu URL, which Phase 5's "done when" cannot see. Estimate from the
+     spike sample (250 venues, `pages.jsonl`, a heuristic over unlabelled pages): 17
+     (6.8%) link a menu-named PDF; about 12 of them also have a priced HTML page;
+     about 5 (2% of venues) look PDF-only.
+   - *Rule.* No PDF reader in v1. A menu fetch that returns a PDF (e.g. after a
+     redirect) is a skipped Capture `pdf`. The loss is counted where it is seen:
+     discovery counts venues left without a menu URL whose fetched pages link a
+     menu-named PDF (`menu_pdf_only`), and the menu-pipeline run report counts
+     menu pages that link one. A reader is decided on the first Pi pass's numbers;
+     it would be a new dependency (stop-and-ask) and would need discovery to accept
+     PDF menu URLs (an ADR-0010/0015 amendment) and a classifier path for PDF text.
+     Rows an LLM reads from PDF text are kind `llm`; ADR-0005's `pdf` rank is for a
+     deterministic PDF parse.
+4. **Open question 4, spot check: 10 pages, agent-labelled, owner confirms
+   disagreements.**
+   - Each monthly run samples 10 newly extracted pages at random (all of them if
+     fewer), with the seed recorded in the run report.
+   - An agent labels them blind, in the gold-label format, from the Capture bundles,
+     without seeing the pipeline's output. The harness scores the §8 extraction bars
+     (price accuracy on accepted rows, item recall; usable prices recorded). The owner
+     reviews only the rows where the agent's label and the pipeline disagree; the
+     confirmed labels are final.
+   - Pass = the §8 bars on the pooled sample. A failure is recorded as a finding in
+     `docs/reviews/`, the sampled pages become the next held-out set (scored before
+     any tuning on them), and the next pipeline version must pass on them. The run
+     and Gold are not blocked.
+   - Why labels: spike finding 9's failure (a repair accepting printed but wrong
+     prices on an unseen layout) passes the validator, so label-free signals (reject
+     rate, coverage) cannot see it. The spike's gold averaged ~65 prices per page, so
+     10 pages is ~650 prices.
+5. **Open question 5, promotional rows: deferred to a promo classifier; no rule
+   now.**
+   - The owner's plan is a classifier model for promo detection and parsing, which
+     should outperform a generic lexicon rule, so no rule-based flag or repair is
+     built now. The promo classifier is planned for ROADMAP Phase 10.
+   - *Foundations now (Phase 5).* The gold-label format carries a `promo` mark per
+     row, and every set labelled from now on (held-out sets, spot checks) marks promo
+     rows, so the future classifier has training and evaluation data. The harness
+     reports promo-marked rows that the pipeline stored as prices (recorded, not
+     gated). Bundles already keep the segmented blocks and locators (§5), so the
+     classifier can re-read stored pages without refetching; it ships as a
+     pipeline-version bump, i.e. a re-interpretation (ADR-0005).
+   - *Accepted risk.* Until then, a promo row with a printed price may be stored as an
+     `llm` price: the validator cannot reject a grounded non-item (spike finding 2),
+     ADR-0005 has no recurring schedules (a happy-hour price reads as always-on), and
+     the ≥ 0.98 price-accuracy bar does not see promos on sets labelled before this
+     amendment.
+   - ROADMAP §2 and Phase 10 are amended: promotional rows are not parked during
+     Phase 5 extraction; Phase 10 starts with the promo classifier over stored bundles.
+6. **Implementation slices updated** to what is built: slice 4 (#51, #52, #54),
+   slice 1 except `llama-server` (#52), part of slice 2 (#52, #54) and slice 6 except
+   the Pi measurement and the rendered-page quality bars (#54).

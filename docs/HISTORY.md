@@ -7,7 +7,7 @@ Git keeps them: open one at its last commit with the link, or run
 
 | File | What it was | Last commit |
 |---|---|---|
-| [docs/plans/0001-map-and-menu-collection.md](https://github.com/First-Helios/First-Helios/blob/e87039e5229b5661b3b6fe60214810eca424cb13/docs/plans/0001-map-and-menu-collection.md) | Plan 0001: the first map-data and menu-collection build sequence for RFC-0001; replaced by Plan 0002 and ADRs 0004, 0009, 0010 and 0013 (Proposed) | `e87039e` |
+| [docs/plans/0001-map-and-menu-collection.md](https://github.com/First-Helios/First-Helios/blob/e87039e5229b5661b3b6fe60214810eca424cb13/docs/plans/0001-map-and-menu-collection.md) | Plan 0001: the first map-data and menu-collection build sequence for RFC-0001; replaced by Plan 0002 and ADRs 0004, 0009, 0010 and 0013 | `e87039e` |
 | [docs/plans/0002-identity-foundation-before-menu.md](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md) | Plan 0002: the approved Steps 1–6 (Bronze, Identity, legacy reset, resolution, Menu, Gold) implementing ADR-0004; all built | `f77292a` |
 | [docs/reviews/0002-step-5-readiness-reassessment.md](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-readiness-reassessment.md) | Step 5 readiness reassessment: the owner-accepted Menu defaults that ADR-0005 records | `dde2dc3` |
 | [docs/reviews/0002-step-5-menu-design-reconciliation.md](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-menu-design-reconciliation.md) | Step 5 Menu design reconciliation: worked input/selection examples reviewed with ADR-0005 | `dde2dc3` |

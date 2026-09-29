@@ -3,7 +3,7 @@
 **Status:** Done, 2026-09-23 to 2026-09-27: stages A–F and H plus a usable-price session; G
 (cuisine) not run. Winner: Qwen3-4B-Instruct-2507 Q4_0 on the Pi CPU, process v2.3 + stitch v3 +
 validator v3. This is the evidence for
-[ADR-0013](../../adr/0013-phase5-menu-pipeline.md) (Proposed). Project status lives in the
+[ADR-0013](../../adr/0013-phase5-menu-pipeline.md) (Accepted). Project status lives in the
 [README](../../../README.md#status).
 **Opened:** 2026-09-23 by the owner
 **Fed:** the menu-page classifier per

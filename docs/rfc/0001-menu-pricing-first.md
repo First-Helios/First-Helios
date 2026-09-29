@@ -23,16 +23,16 @@
 >   H3: venues carry lat/lon only, so every H3 cell below (D1.3, D2, PR 5,
 >   unresolved question 2) is superseded. It also settles unresolved questions 2
 >   (Travis + Williamson bounding box) and 3 (DuckDB).
-> - [ADR-0013](../adr/0013-phase5-menu-pipeline.md) (Proposed, not accepted)
->   is the LLM-extraction ADR. It would replace the D4 extraction ladder and the
+> - [ADR-0013](../adr/0013-phase5-menu-pipeline.md) (accepted 2026-09-29)
+>   is the LLM-extraction ADR. It replaces the D4 extraction ladder and the
 >   PR 7 scraper-framework spike with one on-device pipeline (page classifier,
 >   LLM extraction, validator), and D5's `content_hash` change signal with a hash
 >   of the segmented text. Because the LLM becomes the main extractor after the
->   JSON-LD reader, accepting it would also change ratified decision 3 and the
+>   JSON-LD reader, its acceptance also changes ratified decision 3 and the
 >   "LLM-primary extraction" alternative below.
 > - ADR numbers written here before ADRs were assigned have been corrected: the
 >   API conventions ADR is ADR-0008. The "LLM-fallback ADR" below was never
->   written as such; Proposed ADR-0013 covers LLM extraction instead, as a
+>   written as such; ADR-0013 covers LLM extraction instead, as a
 >   different design (see the bullet above).
 
 ## Summary
@@ -320,7 +320,7 @@ owner's careful read.**
 | 4 | `feat(api): venues read endpoints` | ROADMAP Phase 2 as written (First Light: cursor pagination, ADR-0008, staging deploy) | Phase 2 "Done when" |
 | 5 | `feat(discovery): Overture/OSM venue seeding` | Parquet ingest → `venue_source` → identity resolution (ports Phase 4 fingerprinting) → Nominatim geocode → H3 | 1000 Overture rows → <2% dup venues, <1% bad geocodes (hand-labeled 100-sample) |
 | 6 | `feat(discovery): website + menu-URL resolution` | Overture/OSM URL resolver, canonicalization, liveness check, menu-URL frontier | Measured %-coverage reported for the metro |
-| 7 | `feat(scraper): fetch + replay core` | Scraper-framework spike/decision first (ROADMAP Phase 5; replaced by Proposed ADR-0013), then: rate-limited fetcher, replay bundles, capture index writes | Fixture-tested; no live calls in CI |
+| 7 | `feat(scraper): fetch + replay core` | Scraper-framework spike/decision first (ROADMAP Phase 5; replaced by ADR-0013), then: rate-limited fetcher, replay bundles, capture index writes | Fixture-tested; no live calls in CI |
 | 8 | `feat(extract): JSON-LD + DOM ladder` | Port `menu_sidecar.py` rungs 1–2 into `packages/helios_parsing/` (pure functions) + ingest to canonical | 20+ golden-file fixtures from real Austin sites; idempotent re-ingest proven |
 | 9 | `feat(extract): render policy + PDF` | Port `render_policy.py`; Playwright path; pdfplumber rung | Escalation budget respected in tests |
 | 10 | `feat(sched): monthly cadence + change detection` | Cron scheduling, content-hash skip, `last_seen_at` semantics, staleness metrics | Re-run on unchanged site produces 0 new canonical rows |
