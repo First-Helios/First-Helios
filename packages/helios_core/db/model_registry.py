@@ -5,6 +5,7 @@ module code must import domain contracts instead of reaching through this
 registry.
 """
 
+from apps.discovery.models import DiscoveryLifecycleState, DiscoveryReleaseCompletion
 from packages.helios_core.domains.menu.models import (
     Currency,
     EvidenceLink,
@@ -44,6 +45,8 @@ from packages.helios_core.provenance.models import (
 )
 
 __all__ = [
+    "DiscoveryLifecycleState",
+    "DiscoveryReleaseCompletion",
     "Adjudication",
     "AppliedSubjectChange",
     "Capture",

@@ -225,6 +225,20 @@ def mark_subject_eligible(session: Session, subject_id: int) -> Subject:
     return subject
 
 
+def refresh_subject_readiness(session: Session, subject_id: int) -> Subject:
+    """Refresh stored readiness for any grain under the shared lock order."""
+    _lock_identity_maintenance(session)
+    subject, currentness, locked_ids = lock_subject_readiness_inputs(session, subject_id)
+    if subject is None:
+        raise ValueError(f"Unknown Subject {subject_id}")
+    ready = bool(currentness and currentness.is_current) and subject_meets_readiness_policy(
+        session, subject_id, lock_features=True, locked_subject_ids=locked_ids
+    )
+    subject.readiness = "eligible" if ready else "provisional"
+    session.flush()
+    return subject
+
+
 def _refresh_subject_readiness(session: Session, subject_id: int) -> None:
     """Keep an Organization's stored readiness aligned with the feature policy.
 

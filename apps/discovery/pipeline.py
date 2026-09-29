@@ -21,8 +21,15 @@ from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import aliased
 
+from apps.discovery.lifecycle import (
+    LifecycleReport,
+    lock_lifecycle,
+    project_observation,
+    winning_version,
+)
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
     assign_source_record,
@@ -61,6 +68,7 @@ _MAX_NAME_LENGTH = 255  # Organization canonical_name and name_fingerprint
 class DiscoveryReport:
     """Counts from one discovery run; totals reconcile to ``fetched``."""
 
+    lifecycle: LifecycleReport = field(default_factory=LifecycleReport)
     fetched: int = 0
     reused: int = 0
     minted: int = 0
@@ -131,12 +139,20 @@ def _dedupe_candidates(
     radius_m: float,
 ) -> list[int]:
     """Current Establishment subject ids matching name fingerprint within radius."""
+    org_current = aliased(SubjectCurrentness)
+    place_current = aliased(SubjectCurrentness)
     rows = session.execute(
         select(Establishment.subject_id, Place.latitude, Place.longitude)
         .join(Organization, Organization.subject_id == Establishment.organization_subject_id)
         .join(Place, Place.subject_id == Establishment.place_subject_id)
         .join(SubjectCurrentness, SubjectCurrentness.subject_id == Establishment.subject_id)
+        .join(org_current, org_current.subject_id == Organization.subject_id)
+        .join(place_current, place_current.subject_id == Place.subject_id)
         .where(
+            org_current.is_current.is_(True),
+            place_current.is_current.is_(True),
+            Establishment.operating_status != "closed",
+            or_(Establishment.valid_to.is_(None), Establishment.valid_to > func.now()),
             Organization.name_fingerprint == fingerprint,
             SubjectCurrentness.is_current.is_(True),
             Place.latitude.is_not(None),
@@ -198,9 +214,11 @@ def run_discovery(
     ``batch_size`` POIs, bounding what one crash (e.g. a Nominatim error) can lose.
     """
     report = DiscoveryReport()
+    lock_lifecycle(session)
     for poi in pois:
         if on_batch is not None and report.fetched and report.fetched % batch_size == 0:
             on_batch()
+            lock_lifecycle(session)
         report.fetched += 1
         # A name with no letters or digits has no match key; skip it rather than
         # fall back to the raw string, which would bypass normalization (R18).
@@ -231,7 +249,25 @@ def run_discovery(
             observation=_observation(poi, observed_at=observed_at, release=release),
             decided_at=decided_at,
         )
+        winner = winning_version(session, result.source_record_id)
+        if winner is None:
+            report.lifecycle.skip(f"record {result.source_record_id}: conflicting latest release")
+            report.ambiguous += 1
+            continue
+        if winner.id != result.source_record_version_id:
+            report.reused += 1
+            continue
         if result.state == "resolved":
+            with session.begin_nested():
+                project_observation(
+                    session,
+                    poi=poi,
+                    record_id=result.source_record_id,
+                    version_id=result.source_record_version_id,
+                    evidence_id=result.evidence_id,
+                    decided_at=decided_at,
+                    report=report.lifecycle,
+                )
             report.reused += 1
             continue
         if result.state == "needs_review":

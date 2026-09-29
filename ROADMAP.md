@@ -701,6 +701,17 @@ that is a finding worth stopping on rather than scraping around.
 
 **Done when:** the metro is seeded, < 2% duplicate venues and < 1% wrong geocodes (both measured against a hand-labeled 100-row sample), and website/menu-URL coverage is measured and written down.
 
+**Current remediation status (2026-09-28).** S6 merged and the owner-authorized
+Pi rebuild completed. The [precision review](./docs/reviews/2026-09-28-precision-review.md)
+contains agent assessments, not owner-confirmed labels: 23 supported duplicate
+pairs, 4 distinct, 16 unresolved; 20 corroborated geocodes, 3 supported errors,
+22 unresolved. Broad duplicate cleanup is deferred. The Pi URL-resolution gate
+remains closed pending correction/adjudication and a passing confirmed audit;
+S6b is not Pi-gating. S13 implements accepted ADR-0012 in a draft PR, with
+[implementation and validation details](./docs/reviews/2026-09-28-s13-venue-lifecycle.md).
+Phase 5 remains closed until S13 is merged and lifecycle acceptance tests pass.
+The older status below is historical and does not establish present acceptance.
+
 **Status (2026-09-21).** Seeding + identity + geocoding are done and the
 precision gate is **met** — see the retro
 ([docs/retro/2026-09-21-phase-4.md](./docs/retro/2026-09-21-phase-4.md)):

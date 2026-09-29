@@ -2,7 +2,7 @@
 
 A venue is a projection of ``identity.establishment`` -- one Organization
 operating at one Place. Only current (non-retired) Establishments are served;
-``operating_status`` is surfaced, never used to silently hide a closed venue.
+closed/expired venues and venues with non-current parents are hidden (ADR-0012).
 Reads Identity models directly (``apps`` is the composition root, ADR-0004); it
 never mutates them.
 """
@@ -12,8 +12,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends, Path, Query
-from sqlalchemy import select
-from sqlalchemy.orm import Session  # noqa: TC002 - FastAPI resolves this at runtime for Depends
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import (
+    Session,  # noqa: TC002 - FastAPI resolves this at runtime for Depends
+    aliased,
+)
 
 from apps.api.db import get_session
 from apps.api.errors import NotFoundError
@@ -60,12 +63,22 @@ def _to_venue(
 
 
 def _current_venue_select() -> Select[tuple[Establishment, Organization, Place]]:
+    org_current = aliased(SubjectCurrentness)
+    place_current = aliased(SubjectCurrentness)
     return (
         select(Establishment, Organization, Place)
         .join(Organization, Organization.subject_id == Establishment.organization_subject_id)
         .join(Place, Place.subject_id == Establishment.place_subject_id)
         .join(SubjectCurrentness, SubjectCurrentness.subject_id == Establishment.subject_id)
-        .where(SubjectCurrentness.is_current.is_(True))
+        .join(org_current, org_current.subject_id == Organization.subject_id)
+        .join(place_current, place_current.subject_id == Place.subject_id)
+        .where(
+            SubjectCurrentness.is_current.is_(True),
+            org_current.is_current.is_(True),
+            place_current.is_current.is_(True),
+            Establishment.operating_status != "closed",
+            or_(Establishment.valid_to.is_(None), Establishment.valid_to > func.now()),
+        )
     )
 
 

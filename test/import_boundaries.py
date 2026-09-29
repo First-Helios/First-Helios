@@ -97,7 +97,7 @@ def boundary_violations(source: str, path: Path) -> list[str]:
                 and len(target.split(".")) >= 5
                 and target.split(".")[4] == "models"
             )
-            if owner == _REGISTRY and registry_model:
+            if owner == _REGISTRY and (registry_model or _within(target, "apps.discovery.models")):
                 forbidden = False
         if forbidden:
             violations.append(f"{path}:{line}: {target}")

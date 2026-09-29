@@ -33,19 +33,22 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, Protocol
 from urllib.parse import urlsplit
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import aliased
 
 from apps.discovery.menu_url import ordering_platform_host, platform_signal
+from apps.discovery.models import DiscoveryLifecycleState
 from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
     assign_source_record,
+    remap_source_record,
     resolve_source_record_observation,
 )
 from packages.helios_core.identity.models import (
     CurrentResolution,
     Establishment,
+    ResolutionEvent,
     SubjectCurrentness,
 )
 from packages.helios_core.provenance.contracts import (
@@ -81,6 +84,10 @@ class MenuUrlResolver(Protocol):
     """The one capability the pipeline needs from the site fetcher."""
 
     def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure: ...
+
+    def verify_menu_attempt(
+        self, website: str, menu_url: str, *, not_before: datetime
+    ) -> MenuUrlDiscovery | CaptureFailure: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +131,7 @@ class _SavedRecord:
 
     state: str
     payload: dict[str, object]
+    subject_id: int | None
 
 
 def _sha(value: str) -> str:
@@ -171,6 +179,7 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
     by subject id so the caller can commit between pages.
     """
     organization_currentness = aliased(SubjectCurrentness)
+    place_currentness = aliased(SubjectCurrentness)
     statement = (
         select(
             Establishment.subject_id,
@@ -182,6 +191,7 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
             SourceRecordVersion.content_hash,
         )
         .join(SubjectCurrentness, SubjectCurrentness.subject_id == Establishment.subject_id)
+        .join(place_currentness, place_currentness.subject_id == Establishment.place_subject_id)
         .outerjoin(
             organization_currentness,
             organization_currentness.subject_id == Establishment.organization_subject_id,
@@ -195,6 +205,10 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
         .where(
             SubjectCurrentness.is_current.is_(True),
             CurrentResolution.state == "resolved",
+            place_currentness.is_current.is_(True),
+            Establishment.operating_status != "closed",
+            or_(Establishment.valid_to.is_(None), Establishment.valid_to > func.now()),
+            Capture.outcome == "succeeded",
             Source.namespace == "overture",
         )
         .distinct(Establishment.subject_id)
@@ -220,6 +234,15 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
             source_url,
             content_hash,
         ) in rows:
+            from apps.discovery.lifecycle import winning_version
+
+            record_id = session.scalar(
+                select(SourceRecord.id)
+                .join(Source)
+                .where(Source.namespace == "overture", SourceRecord.external_key == external_key)
+            )
+            if record_id is None or winning_version(session, record_id) is None:
+                continue
             raw = payload.get("websites") if isinstance(payload, dict) else None
             websites = (
                 tuple(str(item) if item is not None else "" for item in raw)
@@ -242,7 +265,11 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
 
 def _saved_record(session: Session, *, namespace: str, external_key: str) -> _SavedRecord | None:
     row = session.execute(
-        select(CurrentResolution.state, SourceRecordVersion.source_payload)
+        select(
+            CurrentResolution.state,
+            SourceRecordVersion.source_payload,
+            CurrentResolution.subject_id,
+        )
         .select_from(SourceRecord)
         .join(Source, Source.id == SourceRecord.source_id)
         .join(CurrentResolution, CurrentResolution.source_record_id == SourceRecord.id)
@@ -253,8 +280,8 @@ def _saved_record(session: Session, *, namespace: str, external_key: str) -> _Sa
     ).one_or_none()
     if row is None:
         return None
-    state, payload = row
-    return _SavedRecord(state=state, payload=payload)
+    state, payload, subject_id = row
+    return _SavedRecord(state=state, payload=payload, subject_id=subject_id)
 
 
 def _observation(
@@ -303,6 +330,7 @@ def _persist_and_assign(
     to_subject_id: int,
     method: str,
     decided_at: datetime,
+    allow_remap: bool = False,
 ) -> _Outcome:
     """Persist a URL observation unless unchanged; assign it only if unresolved.
 
@@ -313,6 +341,7 @@ def _persist_and_assign(
     if (
         saved is not None
         and saved.state == "resolved"
+        and saved.subject_id == to_subject_id
         and saved.payload == dict(observation.source_payload)
     ):
         return "unchanged"
@@ -320,6 +349,29 @@ def _persist_and_assign(
         session, observation=observation, decided_at=decided_at
     )
     if result.state == "resolved":
+        if result.subject_id != to_subject_id:
+            if (
+                not allow_remap
+                or saved is None
+                or result.subject_id is None
+                or result.subject_id != saved.subject_id
+            ):
+                return "needs_review"
+            remap_source_record(
+                session,
+                source_record_id=result.source_record_id,
+                from_subject_id=result.subject_id,
+                to_subject_id=to_subject_id,
+                evidence_ids=[result.evidence_id],
+                decision=_decision(
+                    "overture-lifecycle-derived-url",
+                    decided_at=decided_at,
+                    observed_at=observation.observed_at,
+                ),
+            )
+            from apps.discovery.lifecycle import LifecycleReport, refresh_readiness
+
+            refresh_readiness(session, report=LifecycleReport(), organization_id=result.subject_id)
         return "updated"  # a new version of an already-assigned record
     if result.state == "needs_review":
         return "needs_review"
@@ -339,6 +391,151 @@ def _first_overture_website(websites: tuple[str, ...]) -> str | None:
         if website is not None:
             return website
     return None
+
+
+def _transition_at(session: Session, venue: VenueToResolve) -> datetime | None:
+    return session.scalar(
+        select(func.max(DiscoveryLifecycleState.recorded_at))
+        .select_from(ResolutionEvent)
+        .join(SourceRecord, SourceRecord.id == ResolutionEvent.source_record_id)
+        .join(Source, Source.id == SourceRecord.source_id)
+        .join(Establishment, Establishment.subject_id == ResolutionEvent.to_subject_id)
+        .join(
+            DiscoveryLifecycleState,
+            (DiscoveryLifecycleState.subject_id == Establishment.subject_id)
+            & (DiscoveryLifecycleState.source_record_id == SourceRecord.id)
+            & (DiscoveryLifecycleState.release_at == ResolutionEvent.effective_at)
+            & (DiscoveryLifecycleState.action == "projected"),
+        )
+        .where(
+            Source.namespace == "overture",
+            SourceRecord.external_key == venue.gers_id,
+            ResolutionEvent.method == "overture-lifecycle-rebrand",
+            Establishment.organization_subject_id == venue.organization_subject_id,
+        )
+    )
+
+
+def _predecessor_organization(
+    session: Session, venue: VenueToResolve, organization_id: int | None
+) -> bool:
+    """Only transfer records belonging to this GERS lifecycle ancestry."""
+    rows = session.execute(
+        select(ResolutionEvent.from_subject_id, ResolutionEvent.to_subject_id)
+        .join(SourceRecord, SourceRecord.id == ResolutionEvent.source_record_id)
+        .join(Source, Source.id == SourceRecord.source_id)
+        .where(
+            Source.namespace == "overture",
+            SourceRecord.external_key == venue.gers_id,
+            ResolutionEvent.operation == "remap",
+            ResolutionEvent.method.startswith("overture-lifecycle-"),
+        )
+    ).all()
+    pending, seen = [venue.establishment_subject_id], set()
+    while pending:
+        child = pending.pop()
+        if child in seen:
+            continue
+        seen.add(child)
+        for parent, successor in rows:
+            if successor == child and parent is not None:
+                est = session.get(Establishment, parent)
+                if est is not None and est.organization_subject_id == organization_id:
+                    return True
+                pending.append(parent)
+    return False
+
+
+def _transfer_menus(
+    session: Session,
+    venue: VenueToResolve,
+    *,
+    website: str,
+    resolver: MenuUrlResolver,
+    observed_at: datetime,
+    decided_at: datetime,
+    not_before: datetime,
+    report: UrlDiscoveryReport,
+) -> bool:
+    keys = session.scalars(
+        select(SourceRecord.external_key)
+        .join(Source)
+        .where(
+            Source.namespace == MENU_URL_NAMESPACE,
+            or_(
+                SourceRecord.external_key == venue.gers_id,
+                SourceRecord.external_key.startswith(venue.gers_id + "|"),
+            ),
+        )
+    ).all()
+    worked = False
+    for key in keys:
+        saved = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
+        if saved is None or saved.subject_id == venue.organization_subject_id:
+            continue
+        if (
+            saved.state != "resolved"
+            or observed_at < not_before
+            or not _predecessor_organization(session, venue, saved.subject_id)
+        ):
+            report.needs_review += 1
+            continue
+        url = saved.payload.get("menu_url")
+        if not isinstance(url, str):
+            continue
+        result = resolver.verify_menu_attempt(website, url, not_before=not_before)
+        worked = True
+        if isinstance(result, CaptureFailure):
+            record_capture_attempt(
+                session,
+                source_namespace=MENU_URL_NAMESPACE,
+                source_kind="menu_url",
+                source_url=url,
+                fetched_at=result.fetched_at,
+                outcome=result.outcome,
+                reason_code=result.reason_code,
+            )
+            report.menu_urls_absent += 1
+            continue
+        if result.fetched_at < not_before:
+            report.menu_urls_absent += 1
+            continue
+        platform = ordering_platform_host(result.menu_url)
+        intended_key = f"{venue.gers_id}|{platform}" if platform else venue.gers_id
+        if key != intended_key:
+            report.needs_review += 1
+            continue
+        payload = dict(
+            saved.payload,
+            menu_url=result.menu_url,
+            website=website,
+            signal=result.signal,
+            found_via=result.found_via,
+        )
+        outcome = _persist_and_assign(
+            session,
+            saved=saved,
+            observation=_observation(
+                namespace=MENU_URL_NAMESPACE,
+                kind="menu_url",
+                external_key=key,
+                payload=payload,
+                locator="$.menu_url",
+                source_url=result.menu_url,
+                capture_hash=result.content_hash,
+                fetched_at=result.fetched_at,
+                observed_at=observed_at,
+            ),
+            to_subject_id=venue.organization_subject_id,
+            method="overture-lifecycle-menu-url",
+            allow_remap=True,
+            decided_at=decided_at,
+        )
+        if outcome == "needs_review":
+            report.needs_review += 1
+        else:
+            report.menu_urls_updated += 1
+    return worked
 
 
 def _resolve_venue(
@@ -368,6 +565,18 @@ def _resolve_venue(
         return False
 
     saved_website = _saved_record(session, namespace=WEBSITE_NAMESPACE, external_key=venue.gers_id)
+    transition_at = _transition_at(session, venue)
+    if (
+        saved_website
+        and saved_website.state == "resolved"
+        and saved_website.subject_id != venue.organization_subject_id
+    ) and (
+        transition_at is None
+        or observed_at < transition_at
+        or not _predecessor_organization(session, venue, saved_website.subject_id)
+    ):
+        report.needs_review += 1
+        return False
     if saved_website is not None and saved_website.state == "needs_review":
         report.needs_review += 1  # a human disputed this website: don't write or crawl
         return False
@@ -410,6 +619,7 @@ def _resolve_venue(
         ),
         to_subject_id=venue.organization_subject_id,
         method=f"website-{origin}",
+        allow_remap=transition_at is not None,
         decided_at=decided_at,
     )
     if website_outcome == "needs_review":
@@ -422,6 +632,24 @@ def _resolve_venue(
     else:
         report.websites_reused += 1
     worked = website_outcome != "unchanged"
+    from apps.discovery.lifecycle import LifecycleReport, refresh_readiness
+
+    refresh_readiness(
+        session, report=LifecycleReport(), organization_id=venue.organization_subject_id
+    )
+    # Every existing own-site/platform key is independently verified on transfer.
+    # This does not implement S6b's collection of additional platform links.
+    if transition_at is not None:
+        worked |= _transfer_menus(
+            session,
+            venue,
+            website=website,
+            resolver=resolver,
+            observed_at=observed_at,
+            decided_at=decided_at,
+            not_before=transition_at,
+            report=report,
+        )
 
     platform_host = ordering_platform_host(entry.menu_url if entry and entry.menu_url else website)
     menu_key = (
@@ -449,6 +677,16 @@ def _resolve_venue(
     if saved_menu is not None and saved_menu.state == "needs_review":
         report.needs_review += 1
         return worked
+    if (
+        saved_menu
+        and saved_menu.subject_id != venue.organization_subject_id
+        and (
+            transition_at is None
+            or (saved_menu.payload.get("website") == website and not (entry and entry.menu_url))
+        )
+    ):
+        # An unchanged site's failed verification was already attempted per-key.
+        return worked
     if entry is not None and entry.menu_url is not None:
         menu_url, signal = entry.menu_url, "registry"  # the registry always wins
         if not entry.content_hash or entry.source_url is None:
@@ -462,6 +700,7 @@ def _resolve_venue(
     elif (
         saved_menu is not None
         and saved_menu.state == "resolved"
+        and saved_menu.subject_id == venue.organization_subject_id
         and saved_menu.payload.get("website") == website
     ):
         report.menu_urls_reused += 1
@@ -503,6 +742,46 @@ def _resolve_venue(
     if saved_menu is not None and saved_menu.state == "needs_review":
         report.needs_review += 1
         return worked
+    remapping = saved_menu is not None and saved_menu.subject_id != venue.organization_subject_id
+    if (
+        saved_menu is not None
+        and remapping
+        and (
+            transition_at is None
+            or not _predecessor_organization(session, venue, saved_menu.subject_id)
+        )
+    ):
+        report.needs_review += 1
+        return worked
+    if transition_at is not None and (remapping or saved_menu is None):
+        verified = resolver.verify_menu_attempt(website, menu_url, not_before=transition_at)
+        worked = True
+        if isinstance(verified, CaptureFailure):
+            record_capture_attempt(
+                session,
+                source_namespace=MENU_URL_NAMESPACE,
+                source_kind="menu_url",
+                source_url=menu_url,
+                fetched_at=verified.fetched_at,
+                outcome=verified.outcome,
+                reason_code=verified.reason_code,
+            )
+            report.menu_urls_absent += 1
+            return worked
+        if (
+            verified.fetched_at < transition_at
+            or ordering_platform_host(verified.menu_url) != platform
+        ):
+            report.menu_urls_absent += 1
+            return worked
+        menu_url, signal, menu_source_url, menu_hash, fetched_at, found_via = (
+            verified.menu_url,
+            verified.signal,
+            verified.menu_url,
+            verified.content_hash,
+            verified.fetched_at,
+            verified.found_via,
+        )
     menu_payload: dict[str, object] = {
         "menu_url": menu_url,
         "signal": signal,
@@ -527,6 +806,7 @@ def _resolve_venue(
         ),
         to_subject_id=venue.organization_subject_id,
         method=f"menu-url-{signal}",
+        allow_remap=remapping,
         decided_at=decided_at,
     )
     if menu_outcome == "needs_review":
@@ -562,6 +842,9 @@ def resolve_urls(
     Overture already gives a website for; supplying a website to a venue Overture
     has none for is a later unit (it needs a name/Subject key, not a host).
     """
+    from apps.discovery.lifecycle import lock_lifecycle
+
+    lock_lifecycle(session)
     report = UrlDiscoveryReport()
     worked = 0
     for venue in iter_venues_to_resolve(session, page_size=batch_size):
@@ -580,4 +863,5 @@ def resolve_urls(
             worked += 1
         if on_batch is not None and report.venues % batch_size == 0:
             on_batch()
+            lock_lifecycle(session)
     return report

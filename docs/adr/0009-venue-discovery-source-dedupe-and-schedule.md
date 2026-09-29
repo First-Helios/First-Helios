@@ -321,3 +321,15 @@ the ledger.
 Overture observations record a canonical release endpoint and field-path Evidence. Rejected POIs remain in Bronze without Identity admission. Release aliases are exact retries; discovery no longer uses bundle_path for provenance. See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.
 
 Operational follow-up: [S6 Pi rebuild and gate record](../reviews/2026-09-27-s6-pi-rebuild.md). The owner performs the rebuild and a new precision audit before reopening URL resolution; S6b is not a prerequisite.
+
+### S13 lifecycle implementation (2026-09-28)
+
+Accepted [ADR-0012](0012-venue-lifecycle.md) supersedes the mint-once behavior
+in §2. Discovery now projects the latest unambiguous successful release;
+rebrand/relocation creates an evented successor. The CLI records an immutable
+completion after iterator exhaustion and committed observations, then runs the
+lifecycle pass. `--expected-predecessor` names the immediately previous published
+release; omission, custom coverage, conflicting completion claims, count
+anomalies, or an unknown/skipped predecessor veto absence inference.
+See the [S13 implementation review](../reviews/2026-09-28-s13-venue-lifecycle.md).
+This implementation does not authorize Pi execution or reopen the precision gate.

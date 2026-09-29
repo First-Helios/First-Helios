@@ -95,7 +95,7 @@ def test_model_registry_exports_every_alembic_registered_model() -> None:
     assert exported_tables == set(Base.metadata.tables)
 
 
-def test_bronze_owns_exactly_the_provenance_tables_in_step_one() -> None:
+def test_bronze_owns_provenance_and_discovery_completion_evidence() -> None:
     bronze_tables = {
         table.name for table in Base.metadata.sorted_tables if table.schema == SCHEMA_BRONZE
     }
@@ -103,6 +103,8 @@ def test_bronze_owns_exactly_the_provenance_tables_in_step_one() -> None:
         "source",
         "source_endpoint",
         "capture",
+        "discovery_release_completion",
+        "discovery_lifecycle_state",
         "source_record",
         "source_record_version",
         "evidence",
@@ -229,7 +231,10 @@ def test_source_payload_json_exists_only_on_bronze_record_versions() -> None:
         for column in table.columns
         if isinstance(column.type, JSON)
     }
-    assert bronze_json_columns == {"bronze.source_record_version.source_payload"}
+    assert bronze_json_columns == {
+        "bronze.source_record_version.source_payload",
+        "bronze.discovery_release_completion.coverage",
+    }
 
 
 def test_foundation_import_boundaries() -> None:

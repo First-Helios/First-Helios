@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import argparse
 import re
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from apps.discovery.lifecycle import record_completion, run_lifecycle
 from apps.discovery.overture import DEFAULT_RELEASE, MetroBbox, OvertureConfig, read_overture_pois
 from apps.discovery.pipeline import DEFAULT_DEDUPE_RADIUS_M, run_discovery
 from packages.helios_core.db.session import get_sessionmaker
@@ -30,7 +32,7 @@ def _observed_at(release: str) -> datetime:
     """Use the release date as the observation time so a re-run of it is a no-op."""
     match = _RELEASE_DATE.search(release)
     if match is None:
-        return datetime.now(UTC)
+        raise ValueError("release must contain a stable YYYY-MM-DD publication date")
     year, month, day = (int(part) for part in match.groups())
     return datetime(year, month, day, tzinfo=UTC)
 
@@ -38,6 +40,10 @@ def _observed_at(release: str) -> datetime:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m apps.discovery", description=__doc__)
     parser.add_argument("--release", default=DEFAULT_RELEASE, help="Overture parquet path/glob")
+    parser.add_argument(
+        "--expected-predecessor",
+        help="Exact prior published release path; omission disables absence across this edge",
+    )
     bbox = MetroBbox.austin()
     parser.add_argument("--lat-min", type=float, default=bbox.lat_min)
     parser.add_argument("--lat-max", type=float, default=bbox.lat_max)
@@ -83,10 +89,23 @@ def main() -> None:
                 on_batch=session.commit,  # commit every 100 POIs (D3.3)
             )
             session.commit()
+            record_completion(
+                session,
+                config=config,
+                release_at=observed_at,
+                poi_count=report.fetched,
+                expected_predecessor=args.expected_predecessor,
+            )
+            session.commit()
+            lifecycle = run_lifecycle(
+                session, release=args.release, decided_at=decided_at, on_batch=session.commit
+            )
+            session.commit()
     finally:
         if geocoder is not None:
             geocoder.close()
 
+    print(asdict(report.lifecycle), asdict(lifecycle))  # noqa: T201
     print(  # noqa: T201 - CLI output
         "discovery complete: "
         f"fetched={report.fetched} minted={report.minted} deduped={report.deduped} "

@@ -118,6 +118,11 @@ class _Resolver:
         self._website = website
         self._menu_url = menu_url
 
+    def verify_menu_attempt(
+        self, website: str, menu_url: str, *, not_before: datetime
+    ) -> MenuUrlDiscovery | CaptureFailure:
+        return self.discover_menu_attempt(website)
+
     def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
         if website != self._website:
             return CaptureFailure(
