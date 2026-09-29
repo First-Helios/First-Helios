@@ -1,31 +1,44 @@
 # Contributing
 
 This project is built primarily by AI agents (Claude Code or similar) with a
-human reviewer. If you're an agent working in this repo, read
-[CLAUDE.md](./CLAUDE.md) first — it has agent-specific instructions this
-document doesn't repeat.
+human reviewer. Agents read [CLAUDE.md](./CLAUDE.md) first: it has the working
+rules, the stop-and-ask list, and the verification rules this document doesn't
+repeat. Setup and current status are in [README.md](./README.md).
 
 ## Workflow
 
 1. Branch off `main`: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, or
    `docs/<slug>`.
-2. Make your change. Keep PRs scoped to one logical change — a bug fix
-   doesn't need a drive-by refactor riding along.
-3. Run `make ci` locally before opening the PR. It is the local subset of
-   CI: lint, typecheck, tests, and the lockfile check. CI additionally runs
-   the database tests in strict mode against PostGIS with a coverage floor,
-   runs `alembic check`, and builds the Docker image. For database
-   acceptance, run the disposable-database commands below.
-4. Open a PR against `main`. Fill out the PR template.
-5. All five CI jobs must pass — they're required status checks and they are
-   the *only* mechanical gate (see below).
-6. Read your own diff in the PR UI before merging. This is the review.
-7. Merge is squash-only; the head branch auto-deletes.
+2. Keep each PR to one logical change. A bug fix doesn't need a drive-by
+   refactor riding along.
+3. Run `make ci` before opening the PR. For database changes, also run the
+   database acceptance commands in
+   [README.md](./README.md#database-acceptance).
+4. Open a PR against `main` and fill out the
+   [PR template](./.github/pull_request_template.md). If you skipped a check or
+   are unsure a change is correct, say so under "Notes for reviewer".
+5. The five CI checks must pass (see [CI](#ci)).
+6. Read your own diff in the PR UI before merging. That is the review.
+7. Merges are squashed, so the PR title becomes the commit on `main`.
+
+## Local checks
+
+| Target | Runs |
+|---|---|
+| `make install` | `uv sync`, then installs the pre-commit and commit-msg hooks |
+| `make lint` | `pre-commit run --all-files`: whitespace/EOF/line-ending fixers, YAML/TOML checks, large-file (500 KB) and merge-conflict checks, stray-debugger check, `ruff --fix`, `ruff-format`, and `mypy .` |
+| `make typecheck` | `mypy .` with `strict = True` over the whole repo ([mypy.ini](./mypy.ini); tests get a relaxed decorator rule) |
+| `make test` | `pytest --cov=.` |
+| `make ci` | `uv lock --check`, then lint, typecheck, test |
+
+`make lint` rewrites files (ruff and the fixers); re-stage after it runs.
+Optional database tests skip locally when PostgreSQL is unavailable or
+`DATABASE_URL` doesn't name a disposable `*_test` database; a run with skipped
+database tests is not database acceptance.
 
 ## Commit messages
 
-[Conventional Commits](https://www.conventionalcommits.org/), enforced by a
-pre-commit hook on the commit message:
+[Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
 <type>(<optional scope>): <description>
@@ -35,76 +48,52 @@ pre-commit hook on the commit message:
 
 Common types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `ci`.
 
-Merges are squashed, so the PR title becomes the commit on `main`; the
-`PR title` workflow checks it against the same format.
+Commit messages are checked locally by the `conventional-pre-commit`
+commit-msg hook (installed by `make install`), not in CI. CI checks only the PR
+title, which becomes the squash commit, in the separate `PR title` workflow
+([pr-title.yml](./.github/workflows/pr-title.yml)).
 
-## Local setup
+## CI
 
-```bash
-make install   # uv sync + pre-commit hooks
-make lint      # ruff check + format
-make typecheck # mypy --strict
-make test      # pytest
-make ci        # local subset of CI; see step 3 above
-```
-
-`DATABASE_URL` has no default. Commands that touch a database (Alembic, the
-discovery CLIs, database tests) fail or skip when it is unset; export it
-explicitly for the database you mean to use.
-
-Database acceptance requires a separately provisioned, disposable PostgreSQL
-`*_test` database. Run:
-
-```bash
-HELIOS_STRICT_DB_TESTS=1 DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test make ci
-DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test uv run alembic check
-```
-
-CI enables strict mode: required database tests fail instead of skipping if
-PostgreSQL is unavailable or unsuitable. Any `HELIOS_ALLOW_NONTEST_DB` setting
-is rejected. Migration tests downgrade/rebuild the database and concurrency
-tests commit fixture rows; never use application data. Without strict mode,
-optional local database tests can skip. Such skips are not acceptance evidence.
-The Compose development database is not a disposable test database.
-
-## When to write an ADR vs. an RFC
-
-- **ADR** ([template](./docs/adr/0000-template.md)) — a single decision with
-  a small, already-clear set of alternatives. Naming, a library choice, a
-  migration strategy.
-- **RFC** ([template](./docs/rfc/0000-template.md)) — a proposal where the
-  shape of the solution itself is still open, or that spans multiple
-  subsystems. Write one, get it reviewed, *then* implement.
-
-Both live in `docs/adr/` and `docs/rfc/` respectively, numbered sequentially.
-
-## Code review — what actually gates a merge
-
-This is a solo project, and being honest about that matters more than
-describing an aspirational process.
-
-**GitHub does not allow approving your own pull request.** So a required
-approval count of 1 is unsatisfiable here — it can only be cleared by an
-admin bypass, and a bypass skips *everything*, CI included. Branch protection
-therefore requires **0 approvals**, which makes the five CI checks a real,
-satisfiable gate instead of a formality that gets waived on every merge:
+[ci.yml](./.github/workflows/ci.yml) runs five jobs on every PR and on pushes
+to `main`. They are the required status checks and the only mechanical merge
+gate:
 
 ```
 Lint & format · Type check · Tests · Lockfile up to date · Docker image
 ```
 
-`.github/CODEOWNERS` is kept as a **signal, not a gate**. It flags PRs
-touching `alembic/versions/**`, `packages/helios_core/**/models.py`,
-`packages/helios_core/**/models/**`, and legacy `packages/**/db/models/**` in the UI —
-the paths where a mistake is most expensive — but with a single maintainer it
-cannot block a merge. When you see that flag, slow down and read the diff
-properly. That's a discipline, not an enforcement.
+- **Lint & format**: `pre-commit run --all-files`, the same as `make lint`.
+- **Type check**: `mypy .`.
+- **Tests**: pytest against a PostGIS service with `HELIOS_STRICT_DB_TESTS=1`
+  (database tests fail instead of skipping) and a coverage floor, then
+  `alembic upgrade head` and `alembic check` (models must match migrations).
+- **Lockfile up to date**: `uv lock --check`.
+- **Docker image**: builds `infra/Dockerfile` and smoke-tests `/healthz`.
 
-**Copilot's review does not count as an approval.** It leaves `COMMENTED`,
-never `APPROVED`. Useful as a second pair of eyes; not a gate.
+## Review: what actually gates a merge
 
-If a second maintainer ever joins, turn on `require_code_owner_reviews` and
-raise the approval count — at that point CODEOWNERS starts doing real work.
+This is a solo project. GitHub doesn't allow approving your own PR, so branch
+protection requires 0 approvals and the five CI checks are the gate. CLAUDE.md
+explains the consequences.
+
+[CODEOWNERS](./.github/CODEOWNERS) flags PRs that touch migrations, ORM models,
+the model registry, `alembic/env.py`, workflows and `infra/`. With one
+maintainer it can't block a merge. Treat the flag as a reason to read the diff
+twice. If a second maintainer joins, turn on `require_code_owner_reviews` and
+raise the approval count.
+
+## ADRs, RFCs and plans
+
+- **ADR** ([template](./docs/adr/0000-template.md)): one decision with a small,
+  already-clear set of alternatives, such as naming, a library choice or a
+  migration strategy. The index is in [README.md](./README.md#decisions).
+- **RFC** ([template](./docs/rfc/0000-template.md)): a proposal where the shape
+  of the solution is still open, or that spans several subsystems. Write it, get
+  it reviewed, then implement.
+
+ADRs live in `docs/adr/`, RFCs in `docs/rfc/`, plans in `docs/plans/`, each
+numbered sequentially. A new ADR takes the next free number.
 
 ## License
 
