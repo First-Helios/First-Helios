@@ -24,7 +24,7 @@ lockcheck:
 
 # Local subset of CI (CI also builds/smoke-tests Docker, runs DB tests in strict
 # mode with a coverage floor, and runs `alembic check`). For database
-# acceptance see the disposable-DB command in CONTRIBUTING.md.
+# acceptance see the disposable-DB command in README.md ("Database acceptance").
 ci: lockcheck lint typecheck test
 
 # --- Docker ---------------------------------------------------------------

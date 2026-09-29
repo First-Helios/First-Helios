@@ -1,9 +1,12 @@
 """Opaque cursor pagination (ADR-0008).
 
 Cursors are base64url-encoded tokens over a stable, unique ordering key (the
-Establishment ``subject_id``). Opaque so clients cannot construct or depend on
-the encoding, and stable so a page boundary is insert-safe -- unlike offset
-pagination, which is O(n) at depth and drifts under concurrent writes.
+Establishment ``subject_id``). Opaque means clients are told not to construct or
+depend on the encoding; it is not a security boundary. The token is unsigned, so
+anyone can forge one. That is harmless: the data is public and a cursor is only
+a keyset lower bound, so a forged cursor just starts a page elsewhere. Stable
+means a page boundary is insert-safe -- unlike offset pagination, which is O(n)
+at depth and drifts under concurrent writes.
 """
 
 from __future__ import annotations

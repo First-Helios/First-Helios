@@ -1,8 +1,8 @@
 """Per-request database session dependency for the read API.
 
 Read-only: the session is never committed here. ``apps`` is the composition
-root (ADR-0004) and reads Identity/Gold through their published models; it holds
-no write path.
+root (ADR-0004), so the API reads Identity ORM models directly (owner decision
+D6.5); it holds no write path.
 """
 
 from __future__ import annotations

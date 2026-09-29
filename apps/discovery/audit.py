@@ -5,17 +5,20 @@ duplicate venues** and **< 1% wrong geocodes**, both measured against a
 hand-labeled 100-row sample (plus written-down website coverage). This module is
 the reproducible measurement behind those numbers.
 
-It reads a venue export (the ``psql`` dump documented in the Phase 4 retro),
-finds duplicate *candidates* and geocode anomalies, draws a deterministic
-sample, and computes the two rates from a worksheet a human confirms
-(``auto + confirm flags``): the detectors suggest a label, a reviewer corrects
-the ambiguous ones, and the rates are recomputed from the confirmed labels.
+It reads a venue export (a JSON array of
+``{subject_id, name, fingerprint, lat, lon, address}`` objects, e.g. a ``psql``
+dump of current Establishments; see :func:`load_venues`), finds duplicate
+*candidates* and geocode anomalies, draws a deterministic sample, and writes a
+JSON worksheet where each flag carries a suggested ``label`` for a human to
+confirm or correct. It prints an upper-bound duplicate rate (every candidate
+counted as a duplicate). Nothing here reads a confirmed worksheet back: the
+final rates are computed by hand from the reviewed labels.
 
 Pure and DB-free: the detectors take plain :class:`VenueRow` values so they
 unit-test without a database. The only I/O is reading the export, an optional
 Nominatim cross-check (reusing the disk-cached client from
-:mod:`packages.helios_core.geo`, so a re-run never re-queries), and reading and
-writing JSON worksheets.
+:mod:`packages.helios_core.geo`, so a re-run never re-queries), and writing the
+JSON worksheet.
 """
 
 from __future__ import annotations

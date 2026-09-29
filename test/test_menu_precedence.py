@@ -1018,6 +1018,9 @@ def test_observation_cutoff_filters_head_without_reviving_predecessor(world: Wor
     a1 = _commit(world, _local_page(world, world.a, world.place_a, world.a.v1, o1, amount=1050))
 
     # Head A1 was observed at 09:10; O=09:00 filters it and no older claim exists.
+    # Despite the name, A1 has no predecessor, so this only covers a filtered
+    # head yielding "absent"; predecessor non-revival is covered by
+    # test_observation_cutoff_never_revives_a_real_predecessor.
     result = _select(
         world,
         _est_request(

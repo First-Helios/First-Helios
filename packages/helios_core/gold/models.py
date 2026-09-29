@@ -1,9 +1,10 @@
 """The ``gold.current_menu`` read model (ADR-0006).
 
-One row per projected ``(scope subject, target native path, effective context,
-currency)``: the deterministic ``select_price`` result materialized for fast
-reads. Business columns are a pure function of committed Bronze/Identity/Menu;
-``refreshed_at`` is refresh-run metadata and is excluded from rebuild-equality.
+One row per projected ``(scope subject, source record, root key, target native
+path, effective context, currency)`` (``uq_gold_current_menu``): the
+deterministic ``select_price`` result materialized for fast reads. Business
+columns are a pure function of committed Bronze/Identity/Menu; ``refreshed_at``
+is refresh-run metadata and is excluded from rebuild-equality.
 FKs point only at ``identity``, ``menu`` and ``bronze`` with ``RESTRICT``; no
 authoritative table references Gold, and Gold is never a write target for them.
 """
