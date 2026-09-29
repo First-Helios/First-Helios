@@ -19,6 +19,7 @@ from apps.discovery.web_client import (
     CACHE_TTL_S,
     MAX_BODY_BYTES,
     MenuUrlDiscovery,
+    PageRenderer,
     PageVerifier,
     PlatformAmbiguous,
     SiteFetcher,
@@ -78,6 +79,7 @@ def _fetcher(
     resolve: Callable[[str], Iterable[str]] = _public,
     handler: Callable[[httpx.Request], httpx.Response] | None = None,
     page_check: PageVerifier | None = None,
+    renderer: PageRenderer | None = None,
 ) -> SiteFetcher:
     def handle(request: httpx.Request) -> httpx.Response:
         if calls is not None:
@@ -102,6 +104,7 @@ def _fetcher(
         monotonic=clock.monotonic,
         sleep=clock.sleep,
         page_check=page_check,
+        renderer=renderer,
     )
 
 

@@ -54,7 +54,7 @@ def _weights(threshold: float = 0.5) -> ClassifierWeights:
 
 def test_shipped_weights_match_this_code() -> None:
     weights = ClassifierWeights.load()
-    assert (weights.version, weights.model) == ("classifier-v1", "potion-base-8M")
+    assert (weights.version, weights.model) == ("classifier-v2", "potion-base-8M")
     assert len(weights.coef) == 256 + len(FEATURE_NAMES)  # potion-base-8M is 256-d
     assert 0.0 < weights.threshold < 1.0
     assert weights.model in load_manifest()

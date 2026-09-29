@@ -78,12 +78,19 @@ services:
   # ADR-0013). Behind the `menu` profile, so `make dev` and CI are unchanged:
   #   docker compose --profile menu run --rm worker python -m apps.menu_pipeline.models download
   #   docker compose --profile menu run --rm worker python -m apps.discovery.resolve_urls
+  # With page rendering (headed Chromium needs a display; ADR-0013 §4):
+  #   docker compose --profile menu run --rm worker \
+  #     xvfb-run -a python -m apps.discovery.resolve_urls --render
   worker:
     profiles: ["menu"]
     build:
       context: ..
       dockerfile: infra/Dockerfile
       target: worker
+    # xvfb-run hangs as PID 1 (it waits for Xvfb's ready signal), so an init
+    # process runs first; Chromium needs more shared memory than Docker's 64 MB.
+    init: true
+    shm_size: 1gb
     environment:
       DATABASE_URL: ${HELIOS_COMPOSE_DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
     volumes:

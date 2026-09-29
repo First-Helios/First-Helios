@@ -105,14 +105,23 @@ _TAG = re.compile(r"<[^>]*>")
 ORDERING_PLATFORM_HOSTS: frozenset[str] = frozenset(
     {
         "toasttab.com",
+        "toast.app",
         "squareup.com",
         "square.site",
         "clover.com",
+        "cloveronline.com",
         "doordash.com",
         "ubereats.com",
         "grubhub.com",
     },
 )
+# A platform serving venue pages under a second domain: both share one record
+# key (owner decisions S6f: Toast links can redirect to ``toast.app``, Clover
+# links to ``<venue>.cloveronline.com``).
+PLATFORM_HOST_ALIASES: dict[str, str] = {
+    "toast.app": "toasttab.com",
+    "cloveronline.com": "clover.com",
+}
 SOCIAL_PLATFORM_HOSTS: frozenset[str] = frozenset(
     {"facebook.com", "instagram.com", "linktr.ee"},
 )
@@ -187,9 +196,9 @@ def _on_hosts(url: str, domains: frozenset[str]) -> bool:
 
 
 def ordering_platform_host(url: str) -> str | None:
-    """Stable platform record suffix, shared by www/order/venue subdomains."""
+    """Stable platform record suffix, shared by www/order/venue subdomains and aliases."""
     host = _host(url)
-    return next(
+    domain = next(
         (
             domain
             for domain in sorted(ORDERING_PLATFORM_HOSTS, key=len, reverse=True)
@@ -197,6 +206,7 @@ def ordering_platform_host(url: str) -> str | None:
         ),
         None,
     )
+    return PLATFORM_HOST_ALIASES.get(domain, domain) if domain else None
 
 
 def platform_signal(url: str) -> bool:

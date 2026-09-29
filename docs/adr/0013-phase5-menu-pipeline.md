@@ -3,7 +3,8 @@
 **Status:** Proposed, except the page classifier: its parts were accepted
 2026-09-29 (owner, session S6d; [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 The LLM extraction, `llama-server`, validator, Menu writes and the open questions
-below remain Proposed.
+below remain Proposed. Rendering for discovery was built in session S6f and open
+question 3 decided ([Amendment 2](#amendment-2-2026-09-29-rendering-built-open-question-3-decided)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -336,7 +337,8 @@ Each slice is a PR; ⚠ slices touch deps or `infra/` and stop for owner review.
 3. **Rendered sub-requests.** robots.txt is checked for the page Helios navigates
    to; the requests the page's own scripts make (e.g. a platform's menu API) are not
    checked separately, as in a normal browser. Acceptable, or check robots for each
-   sub-request host too?
+   sub-request host too? *Decided 2026-09-29: check every sub-request
+   ([Amendment 2](#amendment-2-2026-09-29-rendering-built-open-question-3-decided)).*
 4. **Spot-check size and owner:** e.g. 5 pages per monthly run, labelled by an agent
    and confirmed by the owner?
 5. **Promotional rows** ("BOGO", "half off") in menus: ROADMAP §2 / Phase 5 wants them
@@ -398,3 +400,64 @@ Owner decisions in session S6d (ADR-0015 acceptance):
    (nested CV precision 0.976 / recall 0.833; held-out 9/9 menus, 21/21 accepted pages).
    It rejects every rendered Toast order page, so S6f trains a successor on rendered
    platform pages.
+
+## Amendment 2 (2026-09-29): rendering built; open question 3 decided
+
+Owner decisions in session S6f, and what was built (`apps/menu_pipeline/render.py`,
+render triggers in `apps/discovery/web_client.py`):
+
+1. **Open question 3 → check every sub-request.** Each request a rendered page makes
+   (scripts, XHR/fetch, frames) is checked against its own host's robots.txt for the
+   Helios token and must go to a public address; disallowed or unavailable requests
+   are aborted and counted. Googlebot's renderer does the same. Images, fonts, media
+   and favicons are never fetched.
+2. **robots.txt is read through the browser.** A static fetch of
+   `order.toasttab.com/robots.txt` gets a Cloudflare `403` challenge (RFC 9309: allow
+   all) while a browser gets the real file (a redirect to `www.toasttab.com`, which
+   disallows gift cards, cart and checkout). The renderer loads each host's robots.txt
+   in the browser, following up to five redirects: 2xx → its rules; 4xx other than 429
+   → allow all; 429, 5xx, unreachable or still challenged → the host is skipped. The
+   static fetcher is unchanged, and its robots.txt must allow a page before it is
+   rendered at all.
+3. **Platform host aliases.** `toast.app` (a Toast link redirected there) and
+   `cloveronline.com` (Clover links redirect to `<venue>.cloveronline.com`) are added
+   to the ordering-platform list as aliases sharing `toasttab.com` / `clover.com`
+   record keys. A render's own navigation may stay on its site or move within one
+   platform; any other cross-host redirect is refused (`redirect_refused`).
+4. **Interception is Chrome DevTools Protocol `Fetch`, not Playwright routes.** A live
+   check showed Playwright's `page.route` is not called for redirect hops, so a
+   redirect could leave the site unchecked. `Fetch.requestPaused` pauses every hop.
+5. **Sub-request robots.txt is read between passes.** A sub-request to a host whose
+   robots.txt isn't known yet is aborted; after the page settles those hosts are read
+   and, if any aborted request is allowed, the page is rendered again (at most three
+   passes). Reading them inside the interception handler started one read per
+   parallel request and stalled the browser on a DoorDash page (hundreds of requests
+   to one CDN). The robots.txt cache lasts the run.
+6. **Triggers (for discovery).** Rendered only when static robots.txt allows the page
+   and the static result can't verify it: a platform page that answers `403` or fails
+   the classifier; an own-site candidate that looks JavaScript-only (scripts and
+   fewer than 300 characters of segmented text; all 32 spike `js_only` pages qualify),
+   at most two per site; re-verification renders before it rejects. A rendered verdict
+   can withdraw a URL; a render that fails or meets a challenge keeps it
+   (`bot_challenge`, `render_timeout` are not withdrawal reasons). A menu URL verified
+   from a render records `render: headed-chromium` in its payload; a later static pass
+   drops it.
+7. **Worker image.** Playwright 1.63.0 joins the `menu` extra; the `worker` target
+   installs its Chromium (`--no-shell`) with system libraries plus Xvfb (image 1.91 GB).
+   Compose runs the worker with `init: true` (`xvfb-run` hangs as PID 1) and
+   `shm_size: 1gb`. `resolve_urls --render` turns rendering on; it stays off for Pi
+   runs until the Pi measurement below is recorded.
+8. **Measured (laptop), Pi pending.** On the S6d probe's 60 URLs plus 15 held-out
+   platform links: 67/75 rendered, 8 robots.txt refusals, no bot challenge (Toast and
+   DoorDash load headed); median 13.9 s, max 65.6 s per render; peak 1.79 GB PSS for
+   the whole process tree. DoorDash and Grubhub don't serve their full menus to this
+   browser even with no robots checks (a measured control), so that loss is not
+   caused by the robots rules. Details and the owner-run Pi steps:
+   [S6f render measurement](../reviews/2026-09-29-s6f-render-measurement.md). The
+   §4 gate (Pi time and memory) stays open until the Pi numbers are recorded.
+9. **`classifier-v2`.** Segmentation (stage [2]) now skips dialogs (`role=dialog`,
+   `alertdialog`, `aria-modal`): rendered Toast pages open with a consent dialog
+   whose text filled the classifier's input. v2 keeps v1's coefficients; its static
+   verdicts equal v1's on every spike page, and on rendered pages it accepts 8/9
+   held-out menus (v1: 1/9) with no false positive. Retraining on rendered pages
+   gave no gain. The segmenter change also applies to extraction when it is built.

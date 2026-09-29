@@ -63,3 +63,17 @@ def test_layout_features_are_the_seven_named_values() -> None:
     assert values["log_priced_blocks"] == math.log1p(4)
     assert values["heuristic_menu_signal"] == 1.0
     assert layout_features([], heuristic_signal=False) == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+def test_segment_skips_dialogs_but_not_other_hidden_content() -> None:
+    """A consent dialog is not page content (S6f: Toast's rendered pages start with one);
+    a hidden tab panel is, since tabbed menus hide every panel but one."""
+    html = (
+        '<body><div role="alertdialog" aria-hidden="true"><h2>Manage your consent</h2>'
+        "<p>Essential cookies</p><img alt='x'></div>"
+        '<div aria-modal="true"><p>Sign in</p></div>'
+        '<div role="dialog"><p>Item details</p></div>'
+        '<section aria-hidden="true" style="display:none"><p>Tacos $3.50</p></section>'
+        "<h1>Menu</h1><p>Burrito $9.00</p></body>"
+    )
+    assert [block.text for block in segment(html)] == ["Tacos $3.50", "Menu", "Burrito $9.00"]

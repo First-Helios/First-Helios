@@ -43,10 +43,14 @@ This section is the single current-status page. Other docs link here.
   or withdrawn to `needs_review`. Platform pages pass the same page check, and a
   chain homepage's platform links are kept only for the location whose address
   the page shows (ADR-0015). The verifier is the ADR-0013 page classifier
-  `classifier-v1` (`apps/menu_pipeline/classifier.py`, weights
-  `config/page_classifier_v1.json`, model files pinned in `config/models.yaml`;
-  [evaluation](./docs/reviews/2026-09-29-classifier-v1-evaluation.md)); it runs in
-  the `worker` image target. Page rendering is pending (S6f).
+  `classifier-v2` (`apps/menu_pipeline/classifier.py`, weights
+  `config/page_classifier_v2.json`, model files pinned in `config/models.yaml`;
+  evaluations: [v1](./docs/reviews/2026-09-29-classifier-v1-evaluation.md),
+  [v2 and rendering](./docs/reviews/2026-09-29-s6f-render-measurement.md)); it runs
+  in the `worker` image target. `--render` renders platform pages the static fetch
+  can't verify and JavaScript-only own-site pages with headed Chromium under Xvfb
+  (`apps/menu_pipeline/render.py`; ADR-0013 Amendments 1–2); off for Pi runs until
+  the Pi measurement is recorded.
 - **Venue lifecycle**: `apps/discovery/lifecycle.py`, `apps/discovery/models.py`.
   Release completion evidence and completion-gated closure, run at the end of
   each discovery run (ADR-0012). Limits: closure needs a completed baseline plus
@@ -75,10 +79,8 @@ This section is the single current-status page. Other docs link here.
 
 - Phase 5 menu extraction (LLM extraction, validator). Waits on
   [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is Proposed except
-  its page classifier (accepted 2026-09-29, being built as the ADR-0015
-  verifier `classifier-v1`).
-- Page rendering for JavaScript-only and platform menu pages (ADR-0013
-  Amendment 1: headed Chromium under Xvfb; session S6f).
+  its page classifier (accepted 2026-09-29; the ADR-0015 verifier, now
+  `classifier-v2`) and discovery's page rendering (S6f).
 - The Gold price index: target shape accepted in
   [ADR-0007](./docs/adr/0007-gold-price-index-projection.md); no model,
   migration or code.
@@ -133,8 +135,11 @@ This section is the single current-status page. Other docs link here.
   - ADR-0015 accepted 2026-09-29 with the ADR-0013 page classifier as its
     verifier; re-verification, withdrawal, the platform content check and the
     chain guard implemented (S6d part 1); `classifier-v1` implemented and merged
-    with strict CI (S6d part 2); platform-page rendering implemented and measured
-    (S6f);
+    with strict CI (S6d part 2); platform-page rendering implemented (S6f;
+    `classifier-v2` accepts rendered platform menus) and its Pi time and memory
+    recorded (the owner runs the
+    [Pi measurement](./docs/reviews/2026-09-29-s6f-render-measurement.md#pi-measurement-owner-run);
+    a laptop run is recorded there);
   - the owner authorizes the run.
 - **Code review remediation R01–R117: in progress.** Active trackers: the
   [remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md)

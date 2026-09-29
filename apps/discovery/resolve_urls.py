@@ -13,16 +13,23 @@ saved menu URL is re-verified when the page verifier changes or 90 days after
 its last pass, and withdrawn to ``needs_review`` if it no longer verifies
 (ADR-0015); the report counts ``menu_urls_reverified``, ``menu_urls_withdrawn``,
 ``menu_urls_reverify_deferred`` and ``platform_ambiguous``. The page verifier
-is the ADR-0013 page classifier (``classifier-v1``): it needs the ``menu`` extra
+is the ADR-0013 page classifier (``classifier-v2``): it needs the ``menu`` extra
 (the worker image) and model files matching ``config/models.yaml`` under
 ``--model-root`` (``python -m apps.menu_pipeline.models download``). Crawls
 live restaurant sites (robots + rate limited), so it makes network calls and is
 not exercised in CI.
+
+``--render`` renders platform pages the static fetch can't verify and
+JavaScript-only own-site pages with headed Chromium (ADR-0013 §4, session S6f);
+it needs the worker image and a display, so run it under ``xvfb-run -a``. It
+stays off for Pi runs until the Pi measurement is recorded (ADR-0013 §4).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+from contextlib import nullcontext
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +39,7 @@ from apps.discovery.url_pipeline import resolve_urls
 from apps.discovery.web_client import SiteFetcher
 from apps.menu_pipeline.classifier import load_page_classifier
 from apps.menu_pipeline.models import DEFAULT_ROOT
+from apps.menu_pipeline.render import BrowserRenderer
 from packages.helios_core.db.session import get_sessionmaker
 
 _USER_AGENT = "helios-v2-discovery/0.1 (+https://github.com/First-Helios/First-Helios)"
@@ -58,6 +66,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-root", type=Path, default=DEFAULT_ROOT, help="verified model files (ADR-0013)"
     )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="render pages that need JavaScript with headed Chromium (run under xvfb-run -a)",
+    )
     return parser.parse_args()
 
 
@@ -71,13 +84,16 @@ def main() -> None:
             f"the page classifier needs the `menu` extra (worker image): {error}"
         ) from error
     now = datetime.now(UTC)
+    renderer = BrowserRenderer(user_agent=_USER_AGENT) if args.render else None
 
     with (
+        renderer or nullcontext(),
         SiteFetcher(
             cache_dir=args.cache_dir,
             user_agent=_USER_AGENT,
             min_interval_s=args.min_interval,
             page_check=page_check,
+            renderer=renderer,
         ) as fetcher,
         get_sessionmaker()() as session,
     ):
@@ -96,6 +112,8 @@ def main() -> None:
         "url resolution complete: "
         + " ".join(f"{name}={value}" for name, value in asdict(report).items())
     )
+    if renderer is not None:
+        print("renders: " + json.dumps(renderer.stats.summary()))  # noqa: T201 - CLI output
 
 
 if __name__ == "__main__":

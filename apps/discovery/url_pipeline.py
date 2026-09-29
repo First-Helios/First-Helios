@@ -426,6 +426,14 @@ def _persist_and_assign(
     return "assigned"
 
 
+def _with_render(payload: dict[str, object], menu: MenuUrlDiscovery) -> dict[str, object]:
+    """Record the renderer when a browser verified the page; a static pass drops it."""
+    out = {name: value for name, value in payload.items() if name != "render"}
+    if menu.render:
+        out["render"] = menu.render
+    return out
+
+
 def _menu_key(gers_id: str, menu_url: str) -> str:
     platform = ordering_platform_host(menu_url)
     return f"{gers_id}|{platform}" if platform else gers_id
@@ -542,7 +550,9 @@ def _reverify_menus(
         if _menu_key(venue.gers_id, result.menu_url) != key:
             failed[key] = CaptureFailure("failed", "no_menu_found", result.fetched_at)
             continue
-        payload = dict(saved.payload, menu_url=result.menu_url, verifier=resolver.verifier)
+        payload = _with_render(
+            dict(saved.payload, menu_url=result.menu_url, verifier=resolver.verifier), result
+        )
         _persist_and_assign(
             session,
             saved=saved,
@@ -725,13 +735,16 @@ def _transfer_menus(
         if key != _menu_key(venue.gers_id, result.menu_url):
             report.needs_review += 1
             continue
-        payload = dict(
-            saved.payload,
-            menu_url=result.menu_url,
-            website=website,
-            signal=result.signal,
-            found_via=result.found_via,
-            verifier=resolver.verifier,
+        payload = _with_render(
+            dict(
+                saved.payload,
+                menu_url=result.menu_url,
+                website=website,
+                signal=result.signal,
+                found_via=result.found_via,
+                verifier=resolver.verifier,
+            ),
+            result,
         )
         outcome = _persist_and_assign(
             session,
@@ -1104,6 +1117,7 @@ def _persist_menu(
         menu_payload["platform"] = platform
     if menu.signal != "registry":  # a registry menu is never re-verified (D3.2)
         menu_payload["verifier"] = resolver.verifier
+    menu_payload = _with_render(menu_payload, menu)
     menu_outcome = _persist_and_assign(
         session,
         saved=saved_menu,

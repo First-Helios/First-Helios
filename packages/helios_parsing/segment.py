@@ -31,6 +31,14 @@ VOID_TAGS = frozenset(
 CHROME_TAGS = frozenset({"nav", "header", "footer", "aside", "form", "button", "select"})
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 _WS = re.compile(r"\s+")
+_DIALOG_ROLES = frozenset({"dialog", "alertdialog"})
+
+
+def _is_dialog(attrs: dict[str, str | None]) -> bool:
+    """A dialog (``role=dialog|alertdialog`` or ``aria-modal``): a consent prompt or a
+    pop-up over the page, never the page's own content."""
+    role = (attrs.get("role") or "").strip().lower()
+    return role in _DIALOG_ROLES or (attrs.get("aria-modal") or "").strip().lower() == "true"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +56,8 @@ class _Segmenter(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.blocks: list[Block] = []
-        self._stack: list[tuple[str, str]] = []  # (tag, class/id tokens) of open elements
+        # (tag, class/id tokens, inside a dialog) of open elements
+        self._stack: list[tuple[str, str, bool]] = []
         self._buf: list[str] = []
         self._skip = 0
 
@@ -57,9 +66,9 @@ class _Segmenter(HTMLParser):
         self._buf.clear()
         if not text:
             return
-        block_ancestors = [(t, c) for t, c in self._stack if t in BLOCK_TAGS]
+        block_ancestors = [(t, c) for t, c, _ in self._stack if t in BLOCK_TAGS]
         tag, classes = block_ancestors[-1] if block_ancestors else ("body", "")
-        tags = [t for t, _ in self._stack]
+        tags = [t for t, _, _ in self._stack]
         self.blocks.append(
             Block(
                 id=f"b{len(self.blocks) + 1:04d}",
@@ -82,13 +91,15 @@ class _Segmenter(HTMLParser):
             return
         if tag in BLOCK_TAGS:
             self._flush()
-        if tag == "img":  # alt text of an image can carry an item/section name
-            alt = dict(attrs).get("alt") or ""
+        named = dict(attrs)
+        dialog = self._in_dialog() or _is_dialog(named)
+        if tag == "img" and not dialog:  # alt text of an image can carry an item/section name
+            alt = named.get("alt") or ""
             if alt.strip():
                 self._buf.append(f" {alt} ")
         if tag not in VOID_TAGS:
-            named = dict(attrs)
-            self._stack.append((tag, f"{named.get('class') or ''} {named.get('id') or ''}".strip()))
+            classes = f"{named.get('class') or ''} {named.get('id') or ''}".strip()
+            self._stack.append((tag, classes, dialog))
 
     def handle_endtag(self, tag: str) -> None:
         if tag in SKIP_TAGS:
@@ -104,8 +115,11 @@ class _Segmenter(HTMLParser):
                 del self._stack[index:]
                 break
 
+    def _in_dialog(self) -> bool:
+        return bool(self._stack) and self._stack[-1][2]
+
     def handle_data(self, data: str) -> None:
-        if not self._skip:
+        if not self._skip and not self._in_dialog():
             self._buf.append(data)
 
     def close(self) -> None:

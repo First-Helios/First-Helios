@@ -17,6 +17,19 @@ there, then trained on the first export and scored on the second export
 (venues the spike never tuned on): recall on its labelled menus, and the pages
 it calls a menu, listed for a precision check by hand. The shipped weights are
 then refit on every labelled page with the same configuration.
+
+``classifier-v2`` (session S6f) adds rendered pages: ``--rendered`` names a
+``measure_render`` output directory with a ``labels.json`` (rendered file →
+``menu``/``not_menu``; anything else is excluded). Rendered pages from the
+probe set (``"set": "probe"``) join the first export's cross-validation; the
+``"heldout"`` set (venues from the second export's unfetched ranks) is scored
+like the second export, against ``classifier-v1`` too::
+
+    uv run --extra menu --with scikit-learn==1.9.1 \\
+        python -m apps.menu_pipeline.train_page_classifier --version classifier-v2 \\
+        --data var/spikes/menu-model --labels var/spikes/menu_model/labels/pages \\
+        --rendered var/render-measure/laptop \\
+        --out config/page_classifier_v2.json --report var/classifier-v2-report.json
 """
 
 from __future__ import annotations
@@ -93,13 +106,13 @@ def _nested_cv(x: Any, y: Any, groups: Any) -> dict[str, float]:  # noqa: ANN401
     return _scores(y, predicted)
 
 
-def _weights(model: Any, threshold: float) -> dict[str, Any]:  # noqa: ANN401
+def _weights(model: Any, threshold: float, version: str) -> dict[str, Any]:  # noqa: ANN401
     scaler, regression = (
         model.named_steps["standardscaler"],
         model.named_steps["logisticregression"],
     )
     return {
-        "version": VERSION,
+        "version": version,
         "model": MODEL,
         "text": "page_text",
         "layout_features": list(FEATURE_NAMES),
@@ -111,6 +124,18 @@ def _weights(model: Any, threshold: float) -> dict[str, Any]:  # noqa: ANN401
     }
 
 
+def _rendered_pages(directory: Path) -> dict[str, dict[str, Any]]:
+    """Labelled rendered pages from a ``measure_render`` run, keyed ``r:<file>``."""
+    labels = json.loads((directory / "labels.json").read_text(encoding="utf-8"))
+    out: dict[str, dict[str, Any]] = {}
+    for line in (directory / "measure.jsonl").open(encoding="utf-8"):
+        row = json.loads(line)
+        label = labels.get(row.get("html"))
+        if row.get("outcome") == "rendered" and label in {"menu", "not_menu"}:
+            out[f"r:{row['html']}"] = {**row, "label": label}
+    return out
+
+
 def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
     parser = argparse.ArgumentParser(prog="python -m apps.menu_pipeline.train_page_classifier")
     parser.add_argument("--data", type=Path, required=True)
@@ -118,6 +143,14 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
     parser.add_argument("--model-root", type=Path, default=DEFAULT_ROOT)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--version", default=VERSION)
+    parser.add_argument("--rendered", type=Path, default=None, help="measure_render dir (S6f)")
+    parser.add_argument(
+        "--previous",
+        type=Path,
+        default=Path("config/page_classifier_v1.json"),
+        help="the version the rendered held-out set is compared against",
+    )
     args = parser.parse_args()
 
     pages = {
@@ -130,11 +163,17 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
         path.stem: str(json.loads(path.read_text())["page_label"])
         for path in args.labels.glob("*.json")
     }
+    rendered = _rendered_pages(args.rendered) if args.rendered else {}
+    labels.update({page_id: str(row["label"]) for page_id, row in rendered.items()})
 
     def url(page_id: str) -> str:
+        if page_id in rendered:
+            return str(rendered[page_id]["final_url"])
         return str(pages[page_id]["final_url"] or pages[page_id]["url"])
 
     def html(page_id: str) -> str:
+        if page_id in rendered:
+            return str((args.rendered / "rendered" / rendered[page_id]["html"]).read_text("utf-8"))
         return str((args.data / "pages" / f"{page_id}.html").read_text(encoding="utf-8"))
 
     def labelled(second: bool) -> list[str]:
@@ -142,10 +181,15 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
             page_id
             for page_id, label in labels.items()
             if label in {"menu", "not_menu"}
+            and page_id not in rendered
             and (pages[page_id]["gers_id"] in second_export) == second
         )
 
-    first, second = labelled(False), labelled(True)
+    def rendered_set(name: str) -> list[str]:
+        return sorted(page_id for page_id, row in rendered.items() if row["set"] == name)
+
+    first, second = labelled(False) + rendered_set("probe"), labelled(True)
+    heldout = rendered_set("heldout")
     unlabelled = sorted(
         page_id
         for page_id, row in pages.items()
@@ -169,12 +213,14 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
         return np.array([1 if labels[page_id] == "menu" else 0 for page_id in ids])
 
     def venue(ids: list[str]) -> Any:  # noqa: ANN401 - numpy array
-        return np.array([str(pages[page_id]["gers_id"]) for page_id in ids])
+        return np.array(
+            [str((rendered.get(page_id) or pages[page_id])["gers_id"]) for page_id in ids]
+        )
 
     x1, y1, g1 = vectors(first), target(first), venue(first)
     heuristic = np.array([int(page_menu_signal(html(p), url(p))) for p in first])
     report: dict[str, Any] = {
-        "version": VERSION,
+        "version": args.version,
         "trained_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "first_export": {"pages": len(first), "menus": int(y1.sum())},
         "nested_cv_first_export": _nested_cv(x1, y1, g1),
@@ -201,10 +247,33 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
         "s4_called_menu": sum(page_menu_signal(html(p), url(p)) for p in unlabelled),
     }
 
-    every = first + second
+    if heldout:
+        xh, yh = vectors(heldout), target(heldout)
+        predicted = (held_model.predict_proba(xh)[:, 1] >= held_threshold).astype(int)
+        previous = PageClassifier(ClassifierWeights.load(args.previous), embed)
+        report["rendered_heldout"] = {
+            "pages": len(heldout),
+            "menus": int(yh.sum()),
+            **_scores(yh, predicted),
+            "pages_scored": [
+                {"url": url(page_id), "label": labels[page_id], "called_menu": bool(hit)}
+                for page_id, hit in zip(heldout, predicted, strict=True)
+            ],
+        }
+        report["rendered_heldout_previous"] = {
+            "version": previous.name,
+            **_scores(
+                yh,
+                np.array(
+                    [int(previous.is_menu(html(p), url(p), trust_path=False)) for p in heldout]
+                ),
+            ),
+        }
+
+    every = first + second + heldout
     x, y, g = vectors(every), target(every), venue(every)
     final = _lr().fit(x, y)
-    weights = _weights(final, _threshold_for_precision(y, _oof(x, y, g)))
+    weights = _weights(final, _threshold_for_precision(y, _oof(x, y, g)), args.version)
     report["shipped"] = {
         "pages": len(every),
         "menus": int(y.sum()),
