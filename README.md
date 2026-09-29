@@ -72,13 +72,20 @@ This section is the single current-status page. Other docs link here.
 - **Precision audit**: `apps/discovery/audit.py`. DB-free duplicate and geocode
   audit over a venue export, with a hand-labeled worksheet, plus a corpus-wide
   twin search (misplaced twins, location-label records).
+- **Menu parsing stages** (ADR-0013 slice 2, first half): `packages/helios_parsing/`.
+  Pure functions, nothing calls them in production yet: the segmented-text hash
+  and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
+  JSON-LD menu reader (`jsonld.py`), and validator v3 (`validator.py`: per-row
+  accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
+  hashes, the `unlabeled_price_runs` page flag). Validator decisions match the
+  spike's on its saved Pi output and gold rows.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5 menu extraction: the rest of `packages/helios_parsing` (text hash,
-  JSON-LD reader, chunking, repairs, validator, evaluation harness), the
+- Phase 5 menu extraction: the rest of `packages/helios_parsing` (chunking,
+  prompt and grammar, output parsing, repairs, evaluation harness), the
   `llama-server` service, `menu-page` Bronze writes and Menu writes.
   [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) was accepted 2026-09-29;
   its open questions are answered in
@@ -307,7 +314,8 @@ packages/helios_core/
   domains/menu/         Menu
   gold/                 Gold read models
   geo.py                Nominatim client
-packages/helios_parsing/  pure page parsing: segmentation, price tokens, classifier features
+packages/helios_parsing/  pure page parsing: segmentation + text hash, price tokens,
+                          classifier features, JSON-LD reader, validator
 test/                   pytest suite
 ```
 
