@@ -1,8 +1,8 @@
 # S6 precision review: all candidate rows
 
-Reviewed 2026-09-28. **Agent assessments; owner confirmation pending. Pi gate closed.**
+Reviewed 2026-09-28. **This table shows the first-pass agent assessments. Final labels (owner-delegated adjudication, 2026-09-28) are in [reviewed.json](reviewed.json) (`label`, `label_by`, `label_note`) and summarized in the [precision review](../../2026-09-28-precision-review.md); they differ for six geocode rows. Pi gate 1a closed.**
 
-The [summary and next steps](../../2026-09-28-precision-review.md) explain the gate and evidence limits. [Machine-readable worksheet](reviewed.json) retains original suggestions, null owner labels, source record keys, coordinates, and Census results. D01 is original candidate index 0; G numbers are rebuilt Subject IDs.
+The [summary and next steps](../../2026-09-28-precision-review.md) explain the gate and evidence limits. [Machine-readable worksheet](reviewed.json) retains original suggestions, labels, source record keys, coordinates, Census results, and the 100-row `sample_hand_check`. D01 is original candidate index 0; G numbers are rebuilt Subject IDs.
 
 ## Duplicate candidates
 

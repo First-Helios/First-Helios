@@ -8,7 +8,7 @@
       "name_ratio": 1.0,
       "same_street": true,
       "suggested": "duplicate",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 16548,
         "name": "Taco Bell",
@@ -45,14 +45,15 @@
       "evidence_urls": [
         "https://locations.tacobell.com/tx/austin/9900-parmer-lane.html"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 65.1,
       "name_ratio": 1.0,
       "same_street": true,
       "suggested": "duplicate",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 22923,
         "name": "Tacos Y Tortas El Chilango",
@@ -91,14 +92,15 @@
       "evidence_urls": [
         "https://maps.roadtrippers.com/us/austin-tx/food-drink/tacos-y-tortas-el-chilango"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 76.1,
       "name_ratio": 1.0,
       "same_street": true,
       "suggested": "duplicate",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 1104,
         "name": "SLAB BBQ & Beer",
@@ -137,14 +139,15 @@
       "evidence_urls": [
         "https://dopebbq.com/order/slab-bbq-brodie/item-water-bottle_9da92b42-d77d-40d8-8565-858a485f2e5c"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 85.1,
       "name_ratio": 1.0,
       "same_street": true,
       "suggested": "duplicate",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 16194,
         "name": "Baskin-robbins",
@@ -183,14 +186,15 @@
       "evidence_urls": [
         "https://locations.baskinrobbins.com/tx/cedar-park/1335-e-whitestone-blvd-346037-br"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 110.4,
       "name_ratio": 1.0,
       "same_street": true,
       "suggested": "duplicate",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 23184,
         "name": "Baguette House & Cafe",
@@ -228,14 +232,15 @@
         "https://pos.chowbus.com/online-ordering/store/Baguette-House-and-Cafe/15018",
         "https://www.waze.com/live-map/directions/baguette-house-and-cafe-n-lamar-blvd-10901-austin?to=place.w.171901232.1719077854.1588696"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 6.8,
       "name_ratio": 0.96,
       "same_street": true,
       "suggested": "duplicate",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 25812,
         "name": "Austins Pizza",
@@ -275,14 +280,15 @@
         "https://hub.biz/tx/biz_by_letter/a/285",
         "https://locations.austinspizza.com/tx/austin/3750-gattis-school-rd-.html"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 91.6,
       "name_ratio": 1.0,
       "same_street": false,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 3444,
         "name": "IHOP",
@@ -321,14 +327,15 @@
       "evidence_urls": [
         "https://restaurants.ihop.com/en-us/tx/austin/breakfast-8801-south-interstate-hwy-35-3000"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 102.6,
       "name_ratio": 1.0,
       "same_street": false,
       "suggested": "review",
-      "label": null,
+      "label": "distinct",
       "a": {
         "id": 9336,
         "name": "P. Terry's Burger Stand",
@@ -365,17 +372,19 @@
       "review_id": "D08",
       "agent_assessment": "distinct",
       "evidence_urls": [
-        "https://pterrys.com/locations/mlk-517-w-mlk-jr-blvd-austin-texas-78701/",
-        "https://pterrys.com/locations/congress-downtown-515-congress-ave-austin-texas-78701/"
+        "https://pterrys.com/locations/congress-downtown-515-congress-ave-austin-texas-78701/",
+        "https://pterrys.com/locations/mlk-517-w-mlk-jr-blvd-austin-texas-78701/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Distinct confirmed. The MLK outlet is itself duplicated elsewhere in the export: 14829 'P. Terry's Burger Stand' and 14832 'MLK (24 Hours)' (the official page title) sit at 517 W MLK, 1,638 m from 9336's misplaced point."
     },
     {
       "distance_m": 105.9,
       "name_ratio": 1.0,
       "same_street": false,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 12015,
         "name": "The League Kitchen & Tavern",
@@ -414,7 +423,8 @@
       "evidence_urls": [
         "https://www.leaguekitchen.com/contact"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 113.4,
@@ -460,14 +470,15 @@
       "evidence_urls": [
         "https://services.austintexas.gov/water/weirs/index.cfm?fuseaction=report.publicIUPermittee"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 121.9,
       "name_ratio": 1.0,
       "same_street": false,
       "suggested": "review",
-      "label": null,
+      "label": "distinct",
       "a": {
         "id": 8058,
         "name": "Starbucks",
@@ -508,14 +519,15 @@
         "https://downloads.coindesk.com/consensus-side-events.pdf",
         "https://www.sxsw.com/wp-content/uploads/2025/10/SXSW-2026-Season-Launch-Press-Release-1.pdf"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 124.9,
       "name_ratio": 1.0,
       "same_street": false,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 17190,
         "name": "Gatti's Pizza",
@@ -554,7 +566,8 @@
       "evidence_urls": [
         "https://www.yellowpages.com/hutto-tx/gattis-pizza"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 80.6,
@@ -601,14 +614,15 @@
         "https://www.dandb.com/businessdirectory/elpolloricono3-roundrock-tx-25259533.html",
         "https://maps.roadtrippers.com/us/round-rock-tx/food-drink/el-pollo-regio-round-rock"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 18.7,
       "name_ratio": 0.87,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 11523,
         "name": "Austin Tea Exchange Llc",
@@ -647,14 +661,15 @@
       "evidence_urls": [
         "https://www.austinteaxchange.com/contact/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 19.8,
       "name_ratio": 0.867,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 27579,
         "name": "The Salt Lick Bbq",
@@ -693,7 +708,8 @@
       "evidence_urls": [
         "https://www.saltlickbbq.com/round-rock/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 21.3,
@@ -739,14 +755,15 @@
       "evidence_urls": [
         "https://www.nextlevelburger.com/next-level-clucker/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 37.9,
       "name_ratio": 0.851,
       "same_street": false,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 11772,
         "name": "Leftys Pizza Kitchen",
@@ -785,7 +802,8 @@
       "evidence_urls": [
         "https://www.doordash.com/city/austin-tx/b/lefty%E2%80%99s-pizza-kitchen-14087855/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 11.3,
@@ -831,7 +849,8 @@
       "evidence_urls": [
         "https://www.yellowpages.com/austin-tx/mip/fig-italian-kitchen-bar-505239371"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 39.4,
@@ -875,14 +894,15 @@
       "evidence_urls": [
         "https://www.ubereats.com/store/taqueria-monarca/koh8UOyDXUWQvbfcVOWlRg"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 10.3,
       "name_ratio": 0.824,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 14760,
         "name": "House Park BBQ",
@@ -921,14 +941,15 @@
       "evidence_urls": [
         "https://www.houseparkbbq.net/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 23.1,
       "name_ratio": 0.824,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 21243,
         "name": "Stiles Switch BBQ",
@@ -967,7 +988,8 @@
       "evidence_urls": [
         "https://austin.stilesswitchbbq.com/austin-brentwood-stiles-switch-bbq-about"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 121.3,
@@ -1013,7 +1035,8 @@
       "evidence_urls": [
         "https://restaurantguru.com/Fortune-Garden-Georgetown-Texas"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 77.1,
@@ -1055,7 +1078,8 @@
       "review_id": "D23",
       "agent_assessment": "unresolved",
       "evidence_urls": [],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 0.0,
@@ -1097,7 +1121,8 @@
       "evidence_urls": [
         "https://clubfronteniselche.com/texas-taxpayer/32072921359"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 8.4,
@@ -1141,7 +1166,8 @@
       "evidence_urls": [
         "https://austin.eater.com/2022/2/17/22939263/austin-restaurant-closures-2022"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 12.1,
@@ -1185,14 +1211,15 @@
       "evidence_urls": [
         "https://infamousbrewing.com/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 41.8,
       "name_ratio": 0.78,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 14406,
         "name": "Pluckers-wing Factory, Lp",
@@ -1229,14 +1256,15 @@
       "evidence_urls": [
         "https://www.pluckers.com/location/rio-grande"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 15.9,
       "name_ratio": 0.769,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 29625,
         "name": "Papa Johns",
@@ -1275,14 +1303,15 @@
       "evidence_urls": [
         "https://locations.papajohns.com/united-states/tx/78626/georgetown/601-n-austin-ave"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 27.8,
       "name_ratio": 0.769,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 19185,
         "name": "North By Northwest Restaurant",
@@ -1319,14 +1348,15 @@
       "evidence_urls": [
         "https://austin.eater.com/2020/4/17/21225052/north-by-northwest-closed-austin-brewery-restaurant-coronavirus"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 39.9,
       "name_ratio": 0.766,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 23424,
         "name": "Yucatán Tacos & More (Kramer)",
@@ -1361,14 +1391,15 @@
       "evidence_urls": [
         "https://www.ubereats.com/store/yucatan-tacos-and-more-2307-kramer-ln/-gYoP0uQUyeIWyZ88PurBg"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 46.3,
       "name_ratio": 0.766,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 13437,
         "name": "Tinys Milk & Cookies - Austin",
@@ -1407,7 +1438,8 @@
       "evidence_urls": [
         "https://tinysmilkandcookies.com/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 0.0,
@@ -1449,14 +1481,15 @@
       "evidence_urls": [
         "https://naicslist.com/company-profile/enoteca-vespaio-lp-austin-tx-78704"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 0.0,
       "name_ratio": 0.757,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 14322,
         "name": "Qdoba Mexican Grill",
@@ -1495,7 +1528,8 @@
       "evidence_urls": [
         "https://keycommercialcapital.com/wp-content/uploads/2022/05/Qdoba-FDD.pdf"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 50.6,
@@ -1542,14 +1576,15 @@
         "https://www.austintexas.gov/sites/default/files/files/Copy_of_Master_Live_Music_Venue_Database_7.18.16.20xls.pdf",
         "https://www.tripadvisor.com/Restaurant_Review-g30196-d4927579-Reviews-Anderson_Mill_Tavern-Austin_Texas.html"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 56.8,
       "name_ratio": 0.757,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 2190,
         "name": "El Marisquero Seafood",
@@ -1586,14 +1621,15 @@
       "evidence_urls": [
         "https://elmarisqueroseafoodtx.com/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 16.3,
       "name_ratio": 0.75,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "distinct",
       "a": {
         "id": 21423,
         "name": "Haha Kitchen",
@@ -1632,14 +1668,15 @@
       "evidence_urls": [
         "https://atxkitchensorder.com/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 0.0,
       "name_ratio": 0.741,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "distinct",
       "a": {
         "id": 20610,
         "name": "Tailat Kitchen",
@@ -1679,14 +1716,15 @@
         "https://tailatkitchen.com/",
         "https://atishkitchen.com/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 15.4,
       "name_ratio": 0.741,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 10617,
         "name": "Better Half Coffee & Cocktails",
@@ -1725,7 +1763,8 @@
       "evidence_urls": [
         "https://www.betterhalfbar.com/location"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 0.0,
@@ -1767,14 +1806,15 @@
       "evidence_urls": [
         "https://clubfronteniselche.com/texas-taxpayer/32072921359"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 119.7,
       "name_ratio": 0.733,
       "same_street": true,
       "suggested": "review",
-      "label": null,
+      "label": "duplicate",
       "a": {
         "id": 16509,
         "name": "Hunan Ranch",
@@ -1814,7 +1854,8 @@
         "https://hunanranchtx.com/",
         "https://www.hunanranchorder.com/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 0.7,
@@ -1856,7 +1897,8 @@
       "evidence_urls": [
         "https://www.restaurantji.com/tx/lago-vista/wylies-place-/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 3.1,
@@ -1902,7 +1944,8 @@
       "evidence_urls": [
         "https://www.happydragonxiantaste.com/contact-us/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "distance_m": 15.3,
@@ -1949,7 +1992,8 @@
         "https://restaurantguru.com/Fortune-Garden-Georgetown-Texas",
         "https://www.zmenu.com/fortune-garden-georgetown-online-menu/"
       ],
-      "owner_confirmation": "pending"
+      "owner_confirmation": "delegated (G.a)",
+      "label_by": "agent (owner-delegated 2026-09-28)"
     }
   ],
   "geocode_flags": [
@@ -1959,14 +2003,14 @@
       "address": "115 Willie May Way, Elgin, TX, 78621",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Restaurant directory corroborates 115 Willie May Way. Census is 116.0 m away; moderate address-level support. Truck location and current status are not independently measured.",
       "review_id": "G11421",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://www.restaurantji.com/tx/pflugerville/super-tacos-bros-/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.226582,
       "longitude": -97.476738,
       "source_records": [
@@ -1993,7 +2037,8 @@
         "latitude": 30.227623487447,
         "longitude": -97.47680305054,
         "distance_m": 116.0
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 20067,
@@ -2008,7 +2053,7 @@
       "evidence_urls": [
         "https://www.restaurantji.com/tx/manor/don-charly-/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.299616,
       "longitude": -97.474571,
       "source_records": [
@@ -2033,7 +2078,8 @@
         "latitude": 30.301453172294,
         "longitude": -97.473819623294,
         "distance_m": 216.6
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 12705,
@@ -2041,14 +2087,14 @@
       "address": "2525 W Anderson Ln #135, Austin, TX, 78757",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Historical opening report corroborates 2525 W Anderson, but Census 142.6 m is near cutoff and suite pin not verified. Need store-specific historical position and lifecycle check.",
       "review_id": "G12705",
       "agent_assessment": "unresolved",
       "evidence_urls": [
         "https://austin.eater.com/2016/9/14/12921342/austin-restaurants-opening-soon-fall-2016"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.356226,
       "longitude": -97.734451,
       "source_records": [
@@ -2075,7 +2121,9 @@
         "latitude": 30.357393951544,
         "longitude": -97.73383714952,
         "distance_m": 142.6
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Census 142.6 m (<= 150 m) on an address corroborated by a dated opening report."
     },
     {
       "id": 9381,
@@ -2083,7 +2131,7 @@
       "address": "214 W 4th St Ste A, Austin, TX, 78701",
       "distance_m": 500.5,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "Merchant ordering page and Austin FC event announcement identify 214 W 4th Suite A. Census is 46.7 m from saved point; Nominatim 500.5 m discrepancy is likely a geocoder mismatch.",
       "review_id": "G9381",
       "agent_assessment": "ok",
@@ -2091,7 +2139,7 @@
         "https://www.toasttab.com/local/order/the-pub-214-w-4th-st-suite-a/item-malibu_91a8d525-38b7-474b-9451-32834edea269",
         "https://www.austinfc.com/news/the-pub-to-host-austin-fc-vs-real-salt-lake-watch-party-presented-by-heineken"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.266878,
       "longitude": -97.745415,
       "source_records": [
@@ -2118,7 +2166,8 @@
         "latitude": 30.266680195177,
         "longitude": -97.744986279228,
         "distance_m": 46.7
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 16977,
@@ -2133,7 +2182,7 @@
       "evidence_urls": [
         "https://uspto.report/TM/87495371"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.462856,
       "longitude": -97.792809,
       "source_records": [
@@ -2152,7 +2201,8 @@
           "13785 Research Blvd, Austin, TX, 78750",
           "No_Match"
         ]
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 4347,
@@ -2160,14 +2210,14 @@
       "address": "1688 State Highway 71 W, Cedar Creek, TX, 78612",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Merchant delivery listing confirms 1688 State Highway 71 W. Census is 102.6 m away. Marketplace unavailability since 2022 does not prove physical closure; check lifecycle separately.",
       "review_id": "G4347",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://www.ubereats.com/store/bennys-texas-bar-b-que/6yQgpjoDRrOH2b0D7ujESA"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.129929,
       "longitude": -97.445,
       "source_records": [
@@ -2194,7 +2244,8 @@
         "latitude": 30.129172727836,
         "longitude": -97.444388278692,
         "distance_m": 102.6
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 750,
@@ -2209,7 +2260,7 @@
       "evidence_urls": [
         "https://www.encyclopedia.com/books/politics-and-business-magazines/fired-inc"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.253933,
       "longitude": -97.872437,
       "source_records": [
@@ -2236,7 +2287,8 @@
         "latitude": 30.251160975626,
         "longitude": -97.86866331714,
         "distance_m": 475.8
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 22119,
@@ -2244,14 +2296,14 @@
       "address": "8610 N Lamar Blvd #114, Austin, TX, 78753",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official contact page confirms 8610 N Lamar #114. Census is 110.3 m away; supports address-level accuracy.",
       "review_id": "G22119",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://tortilleriataquitomarisquero.com/contacto/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.355619,
       "longitude": -97.704178,
       "source_records": [
@@ -2278,7 +2330,8 @@
         "latitude": 30.354636928495,
         "longitude": -97.704014784375,
         "distance_m": 110.3
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 9336,
@@ -2286,14 +2339,14 @@
       "address": "517 W MLK Jr. Blvd., Austin, TX, 78701",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "wrong",
       "review_note": "Official business page confirms MLK address, and Census normalized-address match is 1,658.3 m from the saved point near Congress. Business identity/official MLK URL agree; coordinate is inconsistent. Independent of uncertainty about the Congress location lifecycle.",
       "review_id": "G9336",
       "agent_assessment": "wrong",
       "evidence_urls": [
         "https://pterrys.com/locations/mlk-517-w-mlk-jr-blvd-austin-texas-78701/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.267153,
       "longitude": -97.743073,
       "source_records": [
@@ -2320,7 +2373,9 @@
         "latitude": 30.282065091265,
         "longitude": -97.743317520041,
         "distance_m": 1658.3
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Census exact match 1,658 m away; independently, records 14829 and 14832 for the same outlet sit at 517 W MLK 1,638 m away, while 9336's point is 102.6 m from the Congress Ave store (10167)."
     },
     {
       "id": 16866,
@@ -2335,7 +2390,7 @@
       "evidence_urls": [
         "https://www.waze.com/live-map/directions/great-american-cookies-lakeline-mall-dr-11200-cedar-park?to=place.w.171835697.1718291431.6176646"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.471882,
       "longitude": -97.803368,
       "source_records": [
@@ -2354,7 +2409,8 @@
           "11200 Lakeline Mall Dr, Cedar Park, TX, 78613",
           "No_Match"
         ]
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 2109,
@@ -2362,14 +2418,14 @@
       "address": "1224 S Congress Ave, Austin, TX, 78704",
       "distance_m": 5429.4,
       "suggested": "wrong",
-      "label": null,
+      "label": "wrong",
       "review_note": "City vendor record confirms historical 1224 S Congress address; independent Census and Nominatim locate that address roughly 5.4 km from Overture point. Historical status/relocation must also be handled separately; point does not match recorded address.",
       "review_id": "G2109",
       "agent_assessment": "wrong",
       "evidence_urls": [
         "https://services.austintexas.gov/edims/document.cfm?id=142912"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.224819,
       "longitude": -97.796432,
       "source_records": [
@@ -2396,7 +2452,9 @@
         "latitude": 30.251897427406,
         "longitude": -97.748878046038,
         "distance_m": 5471.3
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Both geocoders agree (5,429 / 5,471 m). Record 7497 'El Sol Y La Luna Restaurant' at the same address sits on S Congress, 5,413 m from 2109."
     },
     {
       "id": 20388,
@@ -2404,14 +2462,14 @@
       "address": "4700 W Guadalupe St Suite#9, Austin, TX, 78751",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official business page confirms 4700 W Guadalupe Suite 9. Census is 122.6 m away; supports location despite Nominatim no-match.",
       "review_id": "G20388",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://mezzeme.com/about"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.315611,
       "longitude": -97.733536,
       "source_records": [
@@ -2438,7 +2496,8 @@
         "latitude": 30.315084064755,
         "longitude": -97.732413711424,
         "distance_m": 122.6
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 26817,
@@ -2446,14 +2505,14 @@
       "address": "1700 E Palm Valley Blvd #850, Round Rock, TX, 78664",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official location page publishes GeoCoordinates 30.519424059203352,-97.6561558050857, only 6.1 m from saved point. Census is 575.0 m away: demonstrates why interpolated street coordinates must not override a business pin.",
       "review_id": "G26817",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://www.dutchbros.com/locations/tx/round-rock/1700-e-palm-valley-blvd-850"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.519382,
       "longitude": -97.656197,
       "source_records": [
@@ -2488,7 +2547,8 @@
         "source_url": "https://www.dutchbros.com/locations/tx/round-rock/1700-e-palm-valley-blvd-850",
         "retrieved_date": "2026-09-28",
         "method": "GeoCoordinates embedded in official page HTML"
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 16128,
@@ -2496,14 +2556,14 @@
       "address": "1310 E Whitestone Blvd Ste 500, Cedar Park, TX, 78613-2433",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official Grove location page confirms 1310 E Whitestone Suite 500, resolving business-name ambiguity. Census is 147.4 m away, too near cutoff to settle with interpolated street coordinates. Need actual suite pin.",
       "review_id": "G16128",
       "agent_assessment": "unresolved",
       "evidence_urls": [
         "https://www.grovewinebar.com/cedar-park/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.524389,
       "longitude": -97.814331,
       "source_records": [
@@ -2530,7 +2590,9 @@
         "latitude": 30.525525753407,
         "longitude": -97.815121706948,
         "distance_m": 147.4
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Census 147.4 m (<= 150 m) on an address confirmed by the official location page."
     },
     {
       "id": 11715,
@@ -2546,7 +2608,7 @@
         "https://www.allmenus.com/tx/austin/534056-gattis-pizza/menu/",
         "https://recruit.hirebridge.com/v3/jobs/list.aspx?cid=6944"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.31352,
       "longitude": -97.949196,
       "source_records": [
@@ -2573,7 +2635,8 @@
         "latitude": 30.326595174988,
         "longitude": -97.96326968763,
         "distance_m": 1984.6
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 21153,
@@ -2581,7 +2644,7 @@
       "address": "7100 North I-35, Austin, TX, 78752",
       "distance_m": 1194.2,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "Merchant listing explicitly identifies The Meltdown at 7100 N I-35; Denny locator confirms host address. Census is 32.5 m away, supporting saved coordinate over distant Nominatim match. This does not decide whether virtual brand is a separate Establishment.",
       "review_id": "G21153",
       "agent_assessment": "ok",
@@ -2589,7 +2652,7 @@
         "https://www.ubereats.com/store/the-meltdown-7100-north-i-35/L-jd4mPDVGqx5m3E78XMlw",
         "https://locations.dennys.com/tx/austin/245137"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.3325,
       "longitude": -97.705238,
       "source_records": [
@@ -2616,7 +2679,8 @@
         "latitude": 30.332325340173,
         "longitude": -97.704966085823,
         "distance_m": 32.5
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 16647,
@@ -2624,14 +2688,14 @@
       "address": "9222 W Parmer Ln D, Austin, TX, 78717",
       "distance_m": 4259.9,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "Official locator confirms 9222 W Parmer Suite D. Census is 59.7 m away, versus Nominatim 4.26 km. Supported address match; no independent rooftop measurement.",
       "review_id": "G16647",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://locations.papajohns.com/united-states/tx/78717/austin/9222-w-parmer-lane"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.478374,
       "longitude": -97.764908,
       "source_records": [
@@ -2658,7 +2722,8 @@
         "latitude": 30.478150812242,
         "longitude": -97.765474317766,
         "distance_m": 59.7
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 22635,
@@ -2666,7 +2731,7 @@
       "address": "9616 N Lamar Blvd Ste 168, Austin, TX, 78753",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Directory corroborates Express Teriyaki address; current merchant ordering page identifies Viet Alley in suite 168. Census distance 146.0 m is borderline. Need historical suite pin and succession review.",
       "review_id": "G22635",
       "agent_assessment": "unresolved",
@@ -2674,7 +2739,7 @@
         "https://www.menupix.com/austin/restaurants/4310676/Express-Teriyaki-and-Grill-Austin-TX",
         "https://www.toasttab.com/local/order/viet-alley-9616-n-lamar-blvd-168/item-alley-fire-ph-xtra-spicy_af719b82-b039-4032-86ca-84010dc7dbfa"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.36701,
       "longitude": -97.696121,
       "source_records": [
@@ -2701,7 +2766,9 @@
         "latitude": 30.365793106942,
         "longitude": -97.6955481878,
         "distance_m": 146.0
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Census 146.0 m (<= 150 m) on a directory-corroborated suite; the tenant succession (Viet Alley, 22623, same suite) is a lifecycle question, not a coordinate error."
     },
     {
       "id": 25983,
@@ -2709,14 +2776,14 @@
       "address": "18816 Limestone Commercial Dr, Ste. 400, Pflugerville, TX, 78660",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official locator confirms 18816 Limestone Commercial Drive Suite 400. Census is 139.0 m away, near the 150 m cutoff; street interpolation cannot settle actual storefront distance. Need store-specific pin.",
       "review_id": "G25983",
       "agent_assessment": "unresolved",
       "evidence_urls": [
         "https://locations.wingstop.com/wingstop-1112-pflugerville-tx-78660/classic-wings/10-pc-classic-wings"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.469246,
       "longitude": -97.596336,
       "source_records": [
@@ -2743,7 +2810,9 @@
         "latitude": 30.468008830455,
         "longitude": -97.59613050103,
         "distance_m": 139.0
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Census 139.0 m (<= 150 m) on an address confirmed by the official locator."
     },
     {
       "id": 1452,
@@ -2758,7 +2827,7 @@
       "evidence_urls": [
         "https://www.tacobell.com/food?store=030117"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.274006,
       "longitude": -97.799843,
       "source_records": [
@@ -2777,7 +2846,8 @@
           "3201 Bee Cave Rd, Austin, TX, 78746",
           "No_Match"
         ]
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 26850,
@@ -2785,14 +2855,14 @@
       "address": "2111 E Palm Valley Blvd, Round Rock, TX, 78665-4566",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official chain locator confirms 2111 E Palm Valley Boulevard. Census is 80.0 m away.",
       "review_id": "G26850",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://www.rosascafe.com/location"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.51779,
       "longitude": -97.652855,
       "source_records": [
@@ -2819,7 +2889,8 @@
         "latitude": 30.518060517939,
         "longitude": -97.653629226428,
         "distance_m": 80.0
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 13332,
@@ -2827,14 +2898,14 @@
       "address": "4400 N Lamar Blvd Ste 101, Austin, TX, 78756",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official locator confirms 4400 N Lamar. Census is 34.3 m away; Nominatim no-match is not evidence of a bad coordinate.",
       "review_id": "G13332",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://locations.chipotle.com/tx/austin/4400-n-lamar-blvd"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.312473,
       "longitude": -97.738663,
       "source_records": [
@@ -2861,7 +2932,8 @@
         "latitude": 30.312176770012,
         "longitude": -97.738561950668,
         "distance_m": 34.3
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 15861,
@@ -2869,7 +2941,7 @@
       "address": "209 Farley St, Hutto, TX, 78634-4539",
       "distance_m": 21215.7,
       "suggested": "wrong",
-      "label": null,
+      "label": "wrong",
       "review_note": "Official Hutto planning agenda locates La Parrilla food truck at 209 Farley in 2023; merchant ordering page still uses that address. Both Nominatim and Census place it roughly 21.2 km from the saved point. Strong source-coordinate error; not merely a missing address match.",
       "review_id": "G15861",
       "agent_assessment": "wrong",
@@ -2877,7 +2949,7 @@
         "https://swagit-attachments.granicus.com/uploads/video/agenda_file/230381/5-16_HuttoPZ.pdf",
         "https://www.toasttab.com/local/order/laparrilla/item-burrito_89efd551-23c2-456f-9f2b-525ce755d7bc"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.630341,
       "longitude": -97.745056,
       "source_records": [
@@ -2904,7 +2976,9 @@
         "latitude": 30.543904896765,
         "longitude": -97.547431108246,
         "distance_m": 21218.8
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Both geocoders agree (21.2 km); 2023 Hutto planning agenda and current ordering page place the truck at 209 Farley. No evidence it operated near the saved point."
     },
     {
       "id": 17301,
@@ -2912,14 +2986,14 @@
       "address": "11416 N FM 620, Austin, TX, 78726",
       "distance_m": 2733.5,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "Official business site identifies 11416 N FM 620 and publishes GeoCoordinates 30.4538065,-97.8280475, 5.2 m from saved point. Nominatim match 2.73 km away is not the business location.",
       "review_id": "G17301",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://buenossabores.co/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.453783,
       "longitude": -97.828094,
       "source_records": [
@@ -2946,7 +3020,8 @@
         "source_url": "https://buenossabores.co/",
         "retrieved_date": "2026-09-28",
         "method": "GeoCoordinates embedded in official page HTML"
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 22698,
@@ -2954,7 +3029,7 @@
       "address": "9710 N Lamar Blvd, Austin, TX, 78753-4112",
       "distance_m": 173.0,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "Mapping listings identify the truck at 9710 N Lamar; Census is 99.5 m away. Moderate confidence: mapping directories may share upstream data; current truck position not independently measured.",
       "review_id": "G22698",
       "agent_assessment": "ok",
@@ -2962,7 +3037,7 @@
         "https://www.waze.com/live-map/directions/us/tx/austin/machetes-dona-leova?to=place.ChIJc-uhEHnJRIYRC4BlZlNe9b0",
         "https://maps.apple.com/place?place-id=I39E23512EB26936A"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.367472,
       "longitude": -97.695267,
       "source_records": [
@@ -2987,7 +3062,8 @@
         "latitude": 30.36658877701,
         "longitude": -97.695097621001,
         "distance_m": 99.5
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 15606,
@@ -2995,14 +3071,14 @@
       "address": "1500 S, Leander, TX, 78641",
       "distance_m": 2916.2,
       "suggested": "wrong",
-      "label": null,
+      "label": "wrong",
       "review_note": "Official ordering site supplies complete address 1500 S Bagdad Rd and GeoCoordinates 30.55590057373047,-97.8583984375, 2,595.5 m from saved point. Strong suspected source error, but saved address is only 1500 S and historical relocation not excluded. Verify release-time address before labeling wrong or replacing coordinates.",
       "review_id": "G15606",
       "agent_assessment": "unresolved",
       "evidence_urls": [
         "https://lalisonfastfoods.com/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.575928,
       "longitude": -97.872322,
       "source_records": [
@@ -3029,7 +3105,9 @@
         "source_url": "https://lalisonfastfoods.com/",
         "retrieved_date": "2026-09-28",
         "method": "GeoCoordinates embedded in official page HTML"
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Official ordering site pin (30.5559,-97.8584) and address 1500 S Bagdad Rd are 2,595.5 m from the saved point; the record's partial address '1500 S' matches the official house number and nothing indicates a move."
     },
     {
       "id": 14127,
@@ -3044,7 +3122,7 @@
       "evidence_urls": [
         "https://data.austintexas.gov/api/views/ux64-t7is/rows.pdf?accessType=DOWNLOAD"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.290577,
       "longitude": -97.750343,
       "source_records": [
@@ -3071,7 +3149,8 @@
         "latitude": 30.288248858266,
         "longitude": -97.74788803771,
         "distance_m": 350.1
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 24357,
@@ -3084,7 +3163,7 @@
       "review_id": "G24357",
       "agent_assessment": "unresolved",
       "evidence_urls": [],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.40304,
       "longitude": -97.669609,
       "source_records": [
@@ -3109,7 +3188,8 @@
         "latitude": 30.404356184638,
         "longitude": -97.664376011277,
         "distance_m": 522.8
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 3483,
@@ -3117,14 +3197,14 @@
       "address": "729 E Slaughter Ln, Austin, TX, 78744",
       "distance_m": 188.9,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "Official restaurant site confirms 729 E Slaughter. Census is 59.1 m away.",
       "review_id": "G3483",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://kikostacostx.com/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.160198,
       "longitude": -97.777496,
       "source_records": [
@@ -3149,7 +3229,8 @@
         "latitude": 30.160542035777,
         "longitude": -97.777026803577,
         "distance_m": 59.1
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 22284,
@@ -3164,7 +3245,7 @@
       "evidence_urls": [
         "https://www.ubereats.com/store/tikka-shack-indian-grub-austin/CUUBIM1zWgCYDJMfNpiZLA"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.357914,
       "longitude": -97.73291,
       "source_records": [
@@ -3191,7 +3272,8 @@
         "latitude": 30.356465381578,
         "longitude": -97.731271622094,
         "distance_m": 225.1
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 4002,
@@ -3206,7 +3288,7 @@
       "evidence_urls": [
         "https://www.ubereats.com/store/the-burger-den-19020-ih35/UsAbZYL-WMisFPISwj1O-g"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.03097,
       "longitude": -97.849289,
       "source_records": [
@@ -3225,7 +3307,8 @@
           "19020 Interstate 35, Kyle, TX, 78640",
           "No_Match"
         ]
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 10812,
@@ -3240,7 +3323,7 @@
       "evidence_urls": [
         "https://blufmi.com/market.php?zcta=78701"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.272043,
       "longitude": -97.74292,
       "source_records": [
@@ -3257,7 +3340,8 @@
           "1449  Ashton Lane, Austin, TX, 78701",
           "No_Match"
         ]
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 4593,
@@ -3270,7 +3354,7 @@
       "review_id": "G4593",
       "agent_assessment": "unresolved",
       "evidence_urls": [],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.174706,
       "longitude": -97.612846,
       "source_records": [
@@ -3297,7 +3381,8 @@
         "latitude": 30.174886932642,
         "longitude": -97.61290974416,
         "distance_m": 21.0
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 29253,
@@ -3305,14 +3390,14 @@
       "address": "14751 W State Hwy 29, Liberty Hill, TX, 78642",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official location page confirms 14751 Highway 29. Census is 42.9 m away.",
       "review_id": "G29253",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://thirstypenguin.com/index.php/locations/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.674637,
       "longitude": -97.925987,
       "source_records": [
@@ -3339,7 +3424,8 @@
         "latitude": 30.675018096796,
         "longitude": -97.926055611944,
         "distance_m": 42.9
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 4527,
@@ -3347,14 +3433,14 @@
       "address": "6112 US Highway 183 S, Austin, TX, 78744-5420",
       "distance_m": 1621.0,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "City of Austin documents identify Super Moreliana at 6112 US-183. Census is 29.3 m away. Historical address corroborated; current operation and grocery/restaurant categorization are separate questions.",
       "review_id": "G4527",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://www.austintexas.gov/sites/default/files/files/_12-7-17_Development_Information_Packet_.pdf"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.167648,
       "longitude": -97.692429,
       "source_records": [
@@ -3379,7 +3465,8 @@
         "latitude": 30.167570844953,
         "longitude": -97.692137955794,
         "distance_m": 29.3
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 11820,
@@ -3387,7 +3474,7 @@
       "address": "22000 State Highway 71 W, Spicewood, TX, 78669-6978",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Directory corroborates historical 22000 Highway 71 address; Census is 65.4 m away. Restaurant directory reports closure, so coordinate compatibility is not current-venue acceptance.",
       "review_id": "G11820",
       "agent_assessment": "ok",
@@ -3395,7 +3482,7 @@
         "https://www.restaurantji.com/tx/spicewood/little-country-diner-/",
         "https://www.cityof.com/tx/austin/little-country-diner-1931111"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.366262,
       "longitude": -98.071228,
       "source_records": [
@@ -3422,7 +3509,8 @@
         "latitude": 30.365687518518,
         "longitude": -98.071083610793,
         "distance_m": 65.4
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 27129,
@@ -3430,14 +3518,14 @@
       "address": "106 S Mays St #100, Round Rock, TX, 78664",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Merchant pickup location identifies 106 South Mays. Census is 12.2 m away.",
       "review_id": "G27129",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://mimundo-coffee.myshopify.com/products/organic-columbia-medium-roast-coffee-beans-5-lbs"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.508118,
       "longitude": -97.678833,
       "source_records": [
@@ -3464,7 +3552,8 @@
         "latitude": 30.508126317812,
         "longitude": -97.678706067011,
         "distance_m": 12.2
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 19872,
@@ -3477,7 +3566,7 @@
       "review_id": "G19872",
       "agent_assessment": "unresolved",
       "evidence_urls": [],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.30636,
       "longitude": -97.709084,
       "source_records": [
@@ -3504,7 +3593,8 @@
         "latitude": 30.306695871544,
         "longitude": -97.709233658574,
         "distance_m": 40.0
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 11997,
@@ -3512,14 +3602,14 @@
       "address": "1310 Ranch Road 620 S Ste B12, Lakeway, TX, 78734",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Historical local article corroborates 1310 RR 620 S B12, but Census distance 149.5 m is too close to cutoff to settle by street interpolation. Need historical storefront/parcel pin; operating status also unverified.",
       "review_id": "G11997",
       "agent_assessment": "unresolved",
       "evidence_urls": [
         "https://blog.respage.com/paseo-bee-cave-apartments/2014/11/24/jaspers-big-dog-saloon-darts-djs-karaoke-and-cocktails-in-lakeway/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.349838,
       "longitude": -97.965042,
       "source_records": [
@@ -3546,7 +3636,9 @@
         "latitude": 30.350120393057,
         "longitude": -97.963518790462,
         "distance_m": 149.5
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)",
+      "label_note": "Census 149.5 m (<= 150 m) on an address corroborated by a local article; operating status still unverified."
     },
     {
       "id": 12825,
@@ -3559,7 +3651,7 @@
       "review_id": "G12825",
       "agent_assessment": "unresolved",
       "evidence_urls": [],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.33659,
       "longitude": -97.803795,
       "source_records": [
@@ -3584,7 +3676,8 @@
         "latitude": 30.336256254843,
         "longitude": -97.80538179094,
         "distance_m": 156.7
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 24711,
@@ -3592,14 +3685,14 @@
       "address": "1200 W Howard Ln, Austin, TX, 78753-9174",
       "distance_m": 167.8,
       "suggested": "wrong",
-      "label": null,
+      "label": "ok",
       "review_note": "Merchant marketplaces identify Howard outlet at 1200 W Howard Suite D. Census is 109.8 m away.",
       "review_id": "G24711",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://www.doordash.com/business/hay-elotes-14588847/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.42499,
       "longitude": -97.670113,
       "source_records": [
@@ -3624,7 +3717,8 @@
         "latitude": 30.424008001288,
         "longitude": -97.669990186717,
         "distance_m": 109.8
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 24549,
@@ -3639,7 +3733,7 @@
       "evidence_urls": [
         "https://bombayexpressaustin.com/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.41115,
       "longitude": -97.676125,
       "source_records": [
@@ -3658,7 +3752,8 @@
           "13000 N Interstate 35, Austin, TX, 78753",
           "No_Match"
         ]
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 15159,
@@ -3673,7 +3768,7 @@
       "evidence_urls": [
         "https://restaurantguru.com/Casita-Ruby-Leander"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.538237,
       "longitude": -97.940559,
       "source_records": [
@@ -3698,7 +3793,8 @@
         "latitude": 30.53191214196,
         "longitude": -97.935269834829,
         "distance_m": 866.7
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 29178,
@@ -3706,14 +3802,14 @@
       "address": "13282 W State Hwy 29, Liberty Hill, TX, 78642",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official store 1326 confirms 13282 Highway 29. Census is 28.3 m away.",
       "review_id": "G29178",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://locations.goldenchick.com/tx/liberty-hill/1326/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.665014,
       "longitude": -97.90493,
       "source_records": [
@@ -3740,7 +3836,8 @@
         "latitude": 30.664767495821,
         "longitude": -97.904856880539,
         "distance_m": 28.3
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     },
     {
       "id": 21354,
@@ -3748,14 +3845,14 @@
       "address": "7010 Easy Wind Dr Unit 100, Austin, TX, 78752",
       "distance_m": null,
       "suggested": "review",
-      "label": null,
+      "label": "ok",
       "review_note": "Official business site confirms 7010 Easy Wind Unit 100. Census is 18.9 m away.",
       "review_id": "G21354",
       "agent_assessment": "ok",
       "evidence_urls": [
         "https://bamboohouseaustin.com/"
       ],
-      "owner_confirmation": "pending",
+      "owner_confirmation": "delegated (G.a)",
       "latitude": 30.339102,
       "longitude": -97.71843,
       "source_records": [
@@ -3782,17 +3879,18 @@
         "latitude": 30.339258746191,
         "longitude": -97.718505055244,
         "distance_m": 18.9
-      }
+      },
+      "label_by": "agent (owner-delegated 2026-09-28)"
     }
   ],
-  "review_status": "research_complete_confirmation_pending",
+  "review_status": "labels_complete_owner_delegated",
   "deployed_commit": "3faae15e1cd452bcc00abfcd53b951ba3f46ae89",
   "release": "2026-08-19.0",
-  "instructions": "agent_assessment is a research recommendation, not a confirmed label. Owner may set label to duplicate/distinct or wrong/ok after reviewing evidence; leave unresolved labels null. Original worksheet suggestions and original pending review remain unchanged.",
-  "reviewer": "Codex agent",
+  "instructions": "agent_assessment is the first reviewer's research recommendation. label is the owner-delegated adjudication (label_by). null label = unresolved, never counted as correct. The 100-row denominator is unchanged.",
+  "reviewer": "Codex agent (assessments); agent (owner-delegated 2026-09-28) (labels)",
   "reviewed_date": "2026-09-28",
-  "owner_confirmation": "pending",
-  "gate": "closed",
+  "owner_confirmation": "delegated to the agent: Owner decision G.a, 2026-09-22 remediation checklist",
+  "gate": "closed: Pi gate 1a (location quality) fails both ROADMAP bars; see 2026-09-28 precision review",
   "assessment_counts": {
     "dup_candidates": {
       "duplicate": 23,
@@ -3814,7 +3912,8 @@
     "scope": "All 43 candidate pairs and 45 flagged sample rows. The other 55 sample rows retain automated corroboration only, not manual acceptance.",
     "ok_meaning": "Address/pin corroboration supporting saved point. Moderate confidence unless an official business pin is available; not proof of rooftop accuracy, current operation, or independent upstream data.",
     "wrong_meaning": "Supported recorded-address/coordinate conflict. Not an approved replacement coordinate, automatic correction, or final owner label.",
-    "unresolved_meaning": "Evidence insufficient or conflicting. Notes identify follow-up; not counted as correct."
+    "unresolved_meaning": "Evidence insufficient or conflicting. Notes identify follow-up; not counted as correct.",
+    "sample_hand_check": "2026-09-28, owner-delegated. Each of the 55 unflagged rows: the cached Nominatim response from the original audit (var/audits/s6-20260928/geocode) re-measured against the saved point, plus web evidence for the business at that address (official pages fetched where noted; otherwise search-result listings). Every one of the 100 rows was searched for twins in venues.json (see label_criteria). No business was contacted and no imagery was inspected."
   },
   "input_sha256": {
     "venues.json": "1776866faee164bc8f49f1bb2a2b5bb7be27573507284c22b11412928c9bcdfc",
@@ -3822,5 +3921,1689 @@
     "sample.json": "53133ec977f0034826c36e58f23dabb4ca5f4021683c11c550942a56245037ff",
     "review.json": "cc05e3e7eacda6df30c7c3f9e5c173c7c87a631e85ce2dea53ea3e353a7ef4b9",
     "research/source-records.json": "632035ebeb862fe28f3a99e86440683e31707c4de403eb6709b88b547159722f"
-  }
+  },
+  "labeler": "agent (owner-delegated 2026-09-28)",
+  "labeled_date": "2026-09-28",
+  "label_criteria": {
+    "geocode_ok": "The venue's address (or pin) is corroborated by business, municipal or marketplace evidence, and an official business pin or an independent geocoder match of that address lies within 150 m of the saved point (the audit's own tolerance, DEFAULT_GEOCODE_TOLERANCE_M). Where Nominatim and Census disagree, the source within tolerance decides only when the address is corroborated; this packet shows both geocoders missing official pins (Dutch Bros, Buenos Sabores).",
+    "geocode_wrong": "The address is corroborated, nothing indicates the venue moved, and the saved point is more than 1,000 m from an official business pin or an independent geocoder match of that address. 1,000 m is well beyond the largest Census error measured against an official pin in this packet (575 m, Dutch Bros), so street-range interpolation cannot explain it.",
+    "geocode_unresolved": "Anything else: 150-1,000 m discrepancies backed only by interpolating geocoders, no geocoder match, an uncorroborated address or venue, or evidence of a move/address conflict. Not counted as correct.",
+    "duplicate": "Two or more current venue records represent the same operating outlet at the same time: same brand (legal/trading/label name variants included) at the same address. Proximity alone never decides it.",
+    "distinct": "Evidence identifies separate outlets or separate brands.",
+    "duplicate_unresolved": "Rename versus succession cannot be separated (under ADR-0012 a succession is a new business and the defect is lifecycle, not duplication), virtual-brand granularity is undecided, or a candidate twin's identity is unconfirmed.",
+    "sample_duplicate": "A sampled row is a duplicate when some other current record in the 9,996-venue export represents the same outlet. Every sampled row was searched in the export: same house-number street line or name similarity >= 0.6 within 300 m, same fingerprint within 1 km, and same address at any distance. The audit detector alone is not sufficient: it misses twins with a misplaced coordinate and chain location-label records (e.g. Whataburger 'Main St & I-35')."
+  },
+  "label_counts": {
+    "dup_candidates": {
+      "duplicate": 23,
+      "distinct": 4,
+      "unresolved": 16
+    },
+    "geocode_flags": {
+      "ok": 25,
+      "unresolved": 16,
+      "wrong": 4
+    },
+    "sample_geocode": {
+      "ok": 79,
+      "unresolved": 17,
+      "wrong": 4
+    },
+    "sample_duplicate": {
+      "unresolved": 11,
+      "none_found": 83,
+      "duplicate": 6
+    }
+  },
+  "sample_rates": {
+    "denominator": 100,
+    "wrong_geocode_confirmed": 0.04,
+    "wrong_geocode_bounds_if_unresolved_all_ok_or_all_wrong": [
+      0.04,
+      0.21
+    ],
+    "wrong_geocode_clopper_pearson_95": [
+      0.011,
+      0.0993
+    ],
+    "roadmap_wrong_geocode_bar": "< 1%",
+    "rows_with_duplicate_confirmed": 0.06,
+    "rows_with_duplicate_clopper_pearson_95": [
+      0.0223,
+      0.126
+    ],
+    "redundant_row_estimate": 0.0317,
+    "roadmap_duplicate_bar": "< 2%"
+  },
+  "sample_hand_check": [
+    {
+      "subject_id": 8595,
+      "name": "Gatto Nero Llc",
+      "address": "1601 E 6th St, Austin, TX, 78702-3307",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 47.6 m from saved point; address corroborated",
+      "geocode_note": "1601 E 6th hosts New Waterloo's Italian restaurant at The Arnold; 'Gatto Nero' was the announced name, the restaurant operates as Il Brutto.",
+      "evidence_urls": [
+        "https://austin.culturemap.com/news/restaurants-bars/11-18-15-new-waterloo-group-east-austin-italian-restaurants-gatto-nero-enoteca-gattino-the-arnold-mixed-use/",
+        "https://patch.com/texas/eastaustin/long-awaited-il-brutto-italian-restaurant-coming-east-austin"
+      ],
+      "duplicate_label": null,
+      "duplicate_of": [
+        8514
+      ],
+      "duplicate_note": "Probable entity/announced-name record for Il Brutto (same address, 55.6 m).",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "renamed_or_entity_name"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 7635,
+      "name": "South Lamar, Austin",
+      "address": "1100 South Lamar Blvd, Austin, TX, 78704",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 44.4 m from saved point; address corroborated",
+      "geocode_note": "1100 South Lamar Blvd is a multi-restaurant building (Shake Shack, Soto, TLC). The name matches Shake Shack's location label 'South Lamar, Austin' (URL slug); page returned 403.",
+      "evidence_urls": [
+        "https://shakeshack.com/location/south-lamar-austin-tx",
+        "https://www.yelp.com/biz/shake-shack-austin-south-lamar-austin"
+      ],
+      "duplicate_label": null,
+      "duplicate_of": [
+        7638
+      ],
+      "duplicate_note": "Probable Shake Shack label record (7638 Shake Shack at 1100 S Lamar); official page unread (403).",
+      "duplicate_evidence_urls": [
+        "https://shakeshack.com/location/south-lamar-austin-tx"
+      ],
+      "record_flags": [
+        "location_label_name"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 11421,
+      "name": "Super Tacos Bros",
+      "address": "115 Willie May Way, Elgin, TX, 78621",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G11421",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 26124,
+      "name": "Pollo Campero",
+      "address": "549 Louis Henna Blvd, Round Rock, TX, 78664",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 12.6 m from saved point; address corroborated",
+      "geocode_note": "Official Round Rock location; built 2024.",
+      "evidence_urls": [
+        "https://us.campero.com/locations/round-rock",
+        "https://www.loopnet.com/Listing/549-Louis-Henna-Blvd-Round-Rock-TX/33377330/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 14490,
+      "name": "J2 Dining",
+      "address": "201 E 21st St, Austin, TX, 78705",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 80.6 m from saved point; address corroborated",
+      "geocode_note": "UT Jester Center dining hall (university dining; public access not assessed).",
+      "evidence_urls": [
+        "https://housing.utexas.edu/dining/dining-locations/dining-halls/j2-dining"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "institutional"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 20067,
+      "name": "Don Charly",
+      "address": "10309 Hibbs Ln, Manor, TX, 78653",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G20067",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 12771,
+      "name": "Jacob's Bread Co",
+      "address": "6011 Bon Terra Dr, Austin, TX, 78731",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 14.3 m from saved point; address corroborated",
+      "geocode_note": "Bakery lists 6011 Bon Terra Dr; storefront versus home bakery not established.",
+      "evidence_urls": [
+        "https://www.jacobsbreadco.com/contact",
+        "https://www.chamberofcommerce.com/business-directory/texas/austin/bakery/2013257379-jacob-s-bread-co"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "venue_type_unverified"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 12705,
+      "name": "Wayback Burgers",
+      "address": "2525 W Anderson Ln #135, Austin, TX, 78757",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G12705",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 20271,
+      "name": "Polkadots Cupcake Factory",
+      "address": "944 E 51st St, Austin, TX, 78751-2241",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 1.2 m from saved point; address corroborated",
+      "geocode_note": "Official story page: moved to 944 E 51st in August 2024.",
+      "evidence_urls": [
+        "https://polkadotscupcakefactory.com/story/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 9381,
+      "name": "The Pub - Downtown",
+      "address": "214 W 4th St Ste A, Austin, TX, 78701",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G9381",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 16977,
+      "name": "Byte | Serving Up Food + Data",
+      "address": "13785 Research Blvd, Austin, TX, 78750-1873",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G16977",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 4347,
+      "name": "Benny's Texas Bar-B-Que",
+      "address": "1688 State Highway 71 W, Cedar Creek, TX, 78612",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G4347",
+      "duplicate_label": null,
+      "duplicate_of": [
+        4344
+      ],
+      "duplicate_note": "Brewers Smokehouse BBQ at the same standalone address, 7.4 m; succession not assessed.",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 7491,
+      "name": "Snack Bar",
+      "address": "1224 S Congress Ave, Austin, TX, 78704",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 15.2 m from saved point; address corroborated",
+      "geocode_note": "Historical address corroborated; listed as closed.",
+      "evidence_urls": [
+        "https://calendar.austinchronicle.com/location/snack-bar-11830093",
+        "https://www.yelp.com/biz/snack-bar-austin"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "reported_closed"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 26472,
+      "name": "Cool Cafe (school Cafeteria)",
+      "address": "1010 Chisholm Valley Dr, Round Rock, TX, 78681-7344",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 26.7 m from saved point; address corroborated",
+      "geocode_note": "Elementary-school cafeteria listing; not a public food venue.",
+      "evidence_urls": [
+        "https://www.restaurantji.com/tx/round-rock/cool-cafe-school-cafeteria-/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "non_venue"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 1347,
+      "name": "Barstool Bites",
+      "address": "2901 S Capital of Texas Hwy, Austin, TX, 78746-8101",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 103.9 m from saved point; address corroborated",
+      "geocode_note": "Listing at Barton Creek Square; Barstool Bites appears at several unrelated addresses (virtual/delivery brand).",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/barstool-bites-austin-7"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "virtual_brand"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 750,
+      "name": "Fired Up",
+      "address": "7500 Rialto Blvd, Austin, TX, 78735",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G750",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 3222,
+      "name": "Sonic Drive In",
+      "address": "155 W. Slaughter Lane, Austin, TX, 78748",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 55.4 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/sonic-drive-in-austin-74"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 17862,
+      "name": "Mouton's Bistro & Bar",
+      "address": "1821 S Lakeline Blvd #104, Cedar Park, TX, 78613",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 4.6 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://moutonsbistro.com/contact/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 14583,
+      "name": "Heat",
+      "address": "1914 Guadalupe St, Austin, TX, 78705-5607",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 9.4 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/heat-austin"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 22119,
+      "name": "Tortilleria El Taquito Marisquero",
+      "address": "8610 N Lamar Blvd #114, Austin, TX, 78753",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G22119",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 12495,
+      "name": "Eldorado Cafe",
+      "address": "3300 W Anderson Ln, Austin, TX, 78757",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 11.7 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.eldoradocafeatx.com/",
+        "https://order.toasttab.com/online/eldorado-cafe-3300-w-anderson-lane"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 28200,
+      "name": "Bar Louie",
+      "address": "270 Bass Pro Dr, Round Rock, TX, 78665",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 73.5 m from saved point; address corroborated",
+      "geocode_note": "Inside Embassy Suites Round Rock.",
+      "evidence_urls": [
+        "https://www.hilton.com/en/hotels/ausnkes-embassy-suites-round-rock/dining/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 9336,
+      "name": "P. Terry's Burger Stand",
+      "address": "517 W MLK Jr. Blvd., Austin, TX, 78701",
+      "geocode_label": "wrong",
+      "geocode_basis": "see geocode_flags G9336",
+      "duplicate_label": "duplicate",
+      "duplicate_of": [
+        14829,
+        14832
+      ],
+      "duplicate_note": "Three records for the MLK outlet: 9336 (misplaced), 14829, and 14832 'MLK (24 Hours)' (official page title).",
+      "duplicate_evidence_urls": [
+        "https://pterrys.com/locations/mlk-517-w-mlk-jr-blvd-austin-texas-78701/"
+      ],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 16866,
+      "name": "Great American Cookies",
+      "address": "11200 Lakeline Mall Dr, Cedar Park, TX, 78613-1500",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G16866",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 1266,
+      "name": "Chaat Ka Chaskaaa",
+      "address": "4912 Monterey Oaks Blvd, Austin, TX, 78749",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 66.9 m from saved point; address corroborated",
+      "geocode_note": "Food truck.",
+      "evidence_urls": [
+        "https://chaatkachaskaa.com/contact-us"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 2109,
+      "name": "El Sol y La Luna",
+      "address": "1224 S Congress Ave, Austin, TX, 78704",
+      "geocode_label": "wrong",
+      "geocode_basis": "see geocode_flags G2109",
+      "duplicate_label": "duplicate",
+      "duplicate_of": [
+        7497
+      ],
+      "duplicate_note": "'El Sol Y La Luna Restaurant' at the same address with an on-street point.",
+      "duplicate_evidence_urls": [
+        "https://services.austintexas.gov/edims/document.cfm?id=142912"
+      ],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 3510,
+      "name": "CraigO's Pizza, Pastaria, Salads",
+      "address": "11215 S Interstate 35, Austin, TX, 78747-0001",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 8.4 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.craigositalian.com/locations/onion-creek"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 9378,
+      "name": "Halcyon",
+      "address": "218 W 4th St, Austin, TX, 78701",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 65.4 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/halcyon-austin-2"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 20388,
+      "name": "MezzeMe",
+      "address": "4700 W Guadalupe St Suite#9, Austin, TX, 78751",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G20388",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 6087,
+      "name": "McDonald's",
+      "address": "2426 E Riverside Dr, Austin, TX, 78741-3035",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 10.6 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.mcdonalds.com/us/en-us/location/tx/austin/2426-e-riverside/10919.html"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 17058,
+      "name": "Lake Creek Food Arena",
+      "address": "13752 Research Blvd, Austin, TX, 78750",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 0.4 m from saved point; address corroborated",
+      "geocode_note": "Food-truck park (aggregate venue). The nearby 'Lake Creek' record (17076) is P. Terry's Lake Creek label, not this park.",
+      "evidence_urls": [
+        "https://lakecreekfoodpark.com/",
+        "https://pterrys.com/locations/lake-creek-13770-n-hwy-183-austin-texas-78750/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "aggregate_venue"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 26817,
+      "name": "Dutch Bros. Coffee",
+      "address": "1700 E Palm Valley Blvd #850, Round Rock, TX, 78664",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G26817",
+      "duplicate_label": null,
+      "duplicate_of": [
+        26820
+      ],
+      "duplicate_note": "26820 'Palm Valley' shares suite #850, 5.4 m away; the official Dutch Bros page does not use that label, so its identity is unconfirmed.",
+      "duplicate_evidence_urls": [
+        "https://www.dutchbros.com/locations/tx/round-rock/1700-e-palm-valley-blvd-850"
+      ],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 23064,
+      "name": "Rrh Den Llc",
+      "address": "904 E Braker Ln, Austin, TX, 78753-3230",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 46.6 m from saved point; address corroborated",
+      "geocode_note": "Registered address of a Denny's franchisee LLC (OSHA/PPP records); a legal entity, not a customer-facing venue. No Denny's record within 300 m in the export.",
+      "evidence_urls": [
+        "https://www.osha.gov/ords/imis/establishment.inspection_detail?id=1559048.015",
+        "https://www.federalpay.org/paycheck-protection-program/rrh-den-llc-austin-tx"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "non_venue"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 17856,
+      "name": "Dough it Up",
+      "address": "1540 Cypress Creek Road #106, Cedar Park, TX, 78613",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 5.2 m from saved point; address corroborated",
+      "geocode_note": "Opened November 2025.",
+      "evidence_urls": [
+        "https://doughitup.com/locations",
+        "https://communityimpact.com/austin/cedar-park-far-northwest-austin/business/2025/11/13/dough-it-up-now-serving-homemade-pasta-and-pizza-in-cedar-park/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 16128,
+      "name": "Cedar Park Grove Ltd",
+      "address": "1310 E Whitestone Blvd Ste 500, Cedar Park, TX, 78613-2433",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G16128",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 18582,
+      "name": "Super Burrito",
+      "address": "7309 McNeil Dr, Austin, TX, 78729",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 12.0 m from saved point; address corroborated",
+      "geocode_note": "Operates 'at the Water Tank'; the bar (18585) is a separate business at the same address.",
+      "evidence_urls": [
+        "https://ilovesuperburrito.com/superburritoatthewatertank",
+        "https://www.austinwatertank.com/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 11715,
+      "name": "Gatti's Pizza",
+      "address": "3305 Ranch Road 620 S, Austin, TX, 78738",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G11715",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 1557,
+      "name": "Kerbey Lane Cafe",
+      "address": "3003 S Lamar Blvd, Austin, TX, 78704",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 23.6 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.kerbeylanecafe.com/locations/south"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 21153,
+      "name": "The Meltdown",
+      "address": "7100 North I-35, Austin, TX, 78752",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G21153",
+      "duplicate_label": null,
+      "duplicate_of": [
+        21147
+      ],
+      "duplicate_note": "Denny's virtual brand at its host Denny's; Establishment granularity undecided (cf. D16).",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 19413,
+      "name": "Tacos & Mariscos Chelito's",
+      "address": "4509 E Martin Luther King Jr Blvd, Austin, TX, 78721-1356",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 20.8 m from saved point; address corroborated",
+      "geocode_note": "Food truck.",
+      "evidence_urls": [
+        "https://reviews.birdeye.com/tacos-mariscos-chelitos-177779164647798"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 16647,
+      "name": "Papa Johns Pizza",
+      "address": "9222 W Parmer Ln D, Austin, TX, 78717",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G16647",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 2697,
+      "name": "Bamboo Bistro Westgate",
+      "address": "6818 West Gate Blvd, Austin, TX, 78745",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 126.9 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/bamboo-bistro-austin-3"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 3585,
+      "name": "Main St & I-35",
+      "address": "670 OLD SAN ANTONIO RD, BUDA, TX, 78610",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 2.7 m from saved point; address corroborated",
+      "geocode_note": "Official Whataburger #1000 page is titled 'Main St & I-35' at this address.",
+      "evidence_urls": [
+        "https://locations.whataburger.com/tx/buda/670-old-san-antonio-rd.html"
+      ],
+      "duplicate_label": "duplicate",
+      "duplicate_of": [
+        3588
+      ],
+      "duplicate_note": "Location-label record for Whataburger #1000 at the same address, 1.0 m apart.",
+      "duplicate_evidence_urls": [
+        "https://locations.whataburger.com/tx/buda/670-old-san-antonio-rd.html"
+      ],
+      "record_flags": [
+        "location_label_name"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 10326,
+      "name": "Willow Country Bar",
+      "address": "719 W 6th St, Austin, TX, 78701-2707",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 2.7 m from saved point; address corroborated",
+      "geocode_note": "Restaurantguru's Concrete Cowboy URL now shows Willow Country Bar at 719 W 6th.",
+      "evidence_urls": [
+        "https://willowcountrybar.com/",
+        "https://restaurantguru.com/Concrete-Cowboy-Austin"
+      ],
+      "duplicate_label": null,
+      "duplicate_of": [
+        10362
+      ],
+      "duplicate_note": "Concrete Cowboy at the same address; rename versus succession unknown.",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 10986,
+      "name": "Quesoff III",
+      "address": "912 Red River St, Austin, TX, 78701-2625",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 3.6 m from saved point; address corroborated",
+      "geocode_note": "Quesoff is an annual queso cook-off held at The Mohawk (912 Red River); an event, not a venue.",
+      "evidence_urls": [
+        "https://redriverculturaldistrict.org/portfolio-item/quesoff/",
+        "https://www.yelp.com/biz/quesoff-iii-austin"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "non_venue"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 22635,
+      "name": "Express Teriyaki & Grill",
+      "address": "9616 N Lamar Blvd Ste 168, Austin, TX, 78753",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G22635",
+      "duplicate_label": null,
+      "duplicate_of": [
+        22623
+      ],
+      "duplicate_note": "Viet Alley now occupies suite 168 (succession; see G22635).",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 6723,
+      "name": "Big Boss Foods",
+      "address": "1502 S 1st St, Austin, TX, 78704-3043",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 38.7 m from saved point; address corroborated",
+      "geocode_note": "Food truck.",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/big-boss-foods-austin"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 28698,
+      "name": "Eats on 8th",
+      "address": "204 E 8th St, Georgetown, TX, 78626",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 21.2 m from saved point; address corroborated",
+      "geocode_note": "Historical address corroborated; closed after a fire, building demolished.",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/eats-on-8th-georgetown"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "reported_closed"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 25983,
+      "name": "Wingstop",
+      "address": "18816 Limestone Commercial Dr, Ste. 400, Pflugerville, TX, 78660",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G25983",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 5469,
+      "name": "El Pollo Regio",
+      "address": "500 E Ben White Blvd, Austin, TX, 78704-3259",
+      "geocode_label": null,
+      "geocode_basis": "Nominatim (cached audit response) 1.1 m from saved point; address NOT corroborated",
+      "geocode_note": "No evidence of an El Pollo Regio at 500 E Ben White (a multi-tenant center); the chain's Austin branch list does not show it. Nominatim agrees with the address, but the venue is uncorroborated.",
+      "evidence_urls": [
+        "https://www.polloregio.com/branch-location/austin/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "venue_unverified"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 12222,
+      "name": "Tutto Gusto Restaurant",
+      "address": "4300 N Quinlan Park Rd, Austin, TX, 78732-6072",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 73.8 m from saved point; address corroborated",
+      "geocode_note": "Historical address corroborated; reported closed.",
+      "evidence_urls": [
+        "https://www.austinchronicle.com/food/exit-here-to-eat-11672684/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "reported_closed"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 1452,
+      "name": "Taco Bell",
+      "address": "3201 Bee Cave Rd Ste 180, Austin, TX, 78746",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G1452",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 8400,
+      "name": "MezcalerÃ­a TobalÃ¡",
+      "address": "1816 E 6th St, Austin, TX, 78702",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 12.9 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.theinfatuation.com/austin/reviews/mezcaleria-tobala"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 27480,
+      "name": "Pinthouse Pizza",
+      "address": "2800 Hoppe Trail, Round Rock, TX, 78681",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 15.5 m from saved point; address corroborated",
+      "geocode_note": "Single Round Rock location at 2800 Hoppe Trail; twin record 27456 is 739.5 m away.",
+      "evidence_urls": [
+        "https://pinthouse.com/pizza-round-rock"
+      ],
+      "duplicate_label": "duplicate",
+      "duplicate_of": [
+        27456
+      ],
+      "duplicate_note": "Same name and address (Trail/Trl), 739.5 m apart; one Round Rock location.",
+      "duplicate_evidence_urls": [
+        "https://pinthouse.com/pizza-round-rock"
+      ],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 6969,
+      "name": "Hi Sign Brewing",
+      "address": "730 Shady Ln, Austin, TX, 78702",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 11.1 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://hisignbrewing.com/pages/contact"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 26850,
+      "name": "Rosa's Café & Tortilla Factory",
+      "address": "2111 E Palm Valley Blvd, Round Rock, TX, 78665-4566",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G26850",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 13332,
+      "name": "Chipotle Mexican Grill",
+      "address": "4400 N Lamar Blvd Ste 101, Austin, TX, 78756",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G13332",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 4965,
+      "name": "Whataburger",
+      "address": "2901 Spirit of Texas Dr #100, Austin, TX, 78719",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 19.9 m from saved point; address corroborated",
+      "geocode_note": "Official Whataburger #1181 page is titled 'Spirit of Texas Dr & Presidential Blvd'.",
+      "evidence_urls": [
+        "https://locations.whataburger.com/tx/austin/2901-spirit-of-texas-dr-100.html"
+      ],
+      "duplicate_label": "duplicate",
+      "duplicate_of": [
+        4968
+      ],
+      "duplicate_note": "4968 'Spirit of Texas Dr & Presidential Blvd' is Whataburger #1181's label, same suite.",
+      "duplicate_evidence_urls": [
+        "https://locations.whataburger.com/tx/austin/2901-spirit-of-texas-dr-100.html"
+      ],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 15861,
+      "name": "La parrilla LAC , Latin Cuisine",
+      "address": "209 Farley St, Hutto, TX, 78634-4539",
+      "geocode_label": "wrong",
+      "geocode_basis": "see geocode_flags G15861",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 18288,
+      "name": "Fuegosff.atx",
+      "address": "9817 Anderson Mill Rd, Austin, TX, 78750-2227",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 4.9 m from saved point; address corroborated",
+      "geocode_note": "Food truck at the Anderson Mill food-truck court.",
+      "evidence_urls": [
+        "https://www.ubereats.com/store/fuegos-fast-food-anderson-mill-rd/vtjF0jF0Xp6YR13wGrEgPQ",
+        "https://www.instagram.com/fuegosff.atx/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 5049,
+      "name": "Pueblo Viejo",
+      "address": "3901 Promontory Point Dr., Austin, TX, 78744",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 37.6 m from saved point; address corroborated",
+      "geocode_note": "Food truck at Meanwhile Brewing.",
+      "evidence_urls": [
+        "https://order.toasttab.com/online/pueblo-viejo-food-truck-meanwhile-brewing"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 21183,
+      "name": "Jefes",
+      "address": "720 Lamar Pl, Austin, TX, 78752",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 11.3 m from saved point; address corroborated",
+      "geocode_note": "Official site lists one outlet at 720 Lamar Pl Ste B; marketplaces list it as 'Taqueria Jefes'.",
+      "evidence_urls": [
+        "http://www.jefesmex.com/location",
+        "https://www.grubhub.com/restaurant/taqueria-jefes-720-lamar-pl-austin/313987"
+      ],
+      "duplicate_label": "duplicate",
+      "duplicate_of": [
+        21189
+      ],
+      "duplicate_note": "'Taqueria Jefes' at the same address, 7.9 m apart; official site lists one outlet.",
+      "duplicate_evidence_urls": [
+        "http://www.jefesmex.com/location"
+      ],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 24753,
+      "name": "Afrogrill ATX",
+      "address": "1716 W Howard Ln, Austin, TX, 78728",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 33.0 m from saved point; address corroborated",
+      "geocode_note": "Food truck.",
+      "evidence_urls": [
+        "https://www.ubereats.com/store/afrogrill-atx/11tco3EcXCSEY9DloA11-Q"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 27111,
+      "name": "The Alcove Cantina",
+      "address": "119 E Main St, Round Rock, TX, 78664-5242",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 1.6 m from saved point; address corroborated",
+      "geocode_note": "Yelp's alcove-cantina URL now shows 'Sociedad' at 119 E Main (possible rename).",
+      "evidence_urls": [
+        "https://web.roundrockchamber.org/Restaurants,-Caterers,-Food,-and-Beverages/Alcove-Cantina-2679",
+        "https://www.yelp.com/biz/the-alcove-cantina-round-rock"
+      ],
+      "duplicate_label": null,
+      "duplicate_of": [
+        27102
+      ],
+      "duplicate_note": "Sociedad at the same address; rename versus succession unknown.",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 17301,
+      "name": "Buenos Sabores",
+      "address": "11416 N FM 620, Austin, TX, 78726",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G17301",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 22698,
+      "name": "Machetes “doña Leova”",
+      "address": "9710 N Lamar Blvd, Austin, TX, 78753-4112",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G22698",
+      "duplicate_label": null,
+      "duplicate_of": [
+        22920
+      ],
+      "duplicate_note": "Same truck name at 10600 N Lamar, 1,036 m away; current listings show 9710 N Lamar. A second truck or a stale record.",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 15606,
+      "name": "Lali Son Fast Food",
+      "address": "1500 S, Leander, TX, 78641",
+      "geocode_label": "wrong",
+      "geocode_basis": "see geocode_flags G15606",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 14127,
+      "name": "The Cauldron",
+      "address": "2402 San Gabriel St, Austin, TX 78705, United States, Austin, TX, 78705",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G14127",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 14823,
+      "name": "Olamaie",
+      "address": "1610 San Antonio St, Austin, TX, 78701",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 8.8 m from saved point; address corroborated",
+      "geocode_note": "Operated 2012 to 2026-07-19 (closed before the 2026-08-19 release).",
+      "evidence_urls": [
+        "https://en.wikipedia.org/wiki/Olamaie",
+        "https://www.olamaieaustin.com/contact"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "reported_closed"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 1590,
+      "name": "Wholly Cow Burgers",
+      "address": "3010 S Lamar Blvd, Austin, TX, 78704",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 46.4 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://whollycowburgers.com/location.html"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 7503,
+      "name": "Doc's Bar & Grill",
+      "address": "1123 S Congress Ave, Austin, TX, 78704-1727",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 97.1 m from saved point; address corroborated",
+      "geocode_note": "Historical address corroborated; Doc's Motorworks closed 2016-12-23.",
+      "evidence_urls": [
+        "https://www.statesman.com/story/business/2016/11/28/docs-motorworks-closing-on-south-congress/9792202007/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "reported_closed"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 24357,
+      "name": "Tech Ridge Management, Llc",
+      "address": "12510 McCallen Pass, Austin, TX, 78753-5358",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G24357",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 27261,
+      "name": "Sabor Colombia Restaurant",
+      "address": "1318 Round Rock Ave, Round Rock, TX, 78681",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 64.5 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://goroundrock.com/dining/sabor-colombia-restaurant-bakery/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 15378,
+      "name": "Agave Coffee",
+      "address": "1801 Muledeer Run, Leander, TX, 78641-2851",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 14.5 m from saved point; address corroborated",
+      "geocode_note": "Business registry: coffee retailer, 1 employee, on a residential street; not shown to be a public venue.",
+      "evidence_urls": [
+        "https://www.dandb.com/businessdirectory/agavecoffeeinc-leander-tx-27208425.html"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "venue_type_unverified"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 3483,
+      "name": "Kikos Tacos",
+      "address": "729 E Slaughter Ln, Austin, TX, 78744",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G3483",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 22284,
+      "name": "Tikka Shack Indian Grub",
+      "address": "2438 W Anderson Ln. A-1, Austin, TX, 78757",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G22284",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 4002,
+      "name": "The Burger Den",
+      "address": "19020 Ih35, Kyle, TX, 78640",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G4002",
+      "duplicate_label": null,
+      "duplicate_of": [
+        4005
+      ],
+      "duplicate_note": "Denny's virtual brand at its host Denny's; Establishment granularity undecided (cf. D16).",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 10812,
+      "name": "Apollo Cafe",
+      "address": "1449  Ashton Lane, Austin, TX, 78701",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G10812",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 5940,
+      "name": "Goldis Sausage Co.",
+      "address": "3116 S Congress Ave, Austin, TX, 78704",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 14.2 m from saved point; address corroborated",
+      "geocode_note": "Food truck behind Crow Bar; listed as closed.",
+      "evidence_urls": [
+        "https://do512.com/venues/goldis-sausage-company",
+        "https://www.yelp.com/biz/goldis-sausage-company-austin"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "reported_closed"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 4593,
+      "name": "Protein Life",
+      "address": "13301 Dearbonne Dr, Del Valle, TX, 78617-5770",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G4593",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 11256,
+      "name": "Beto's Restaurant",
+      "address": "3306 Oak Springs Dr, Austin, TX, 78721",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 13.6 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/betos-mexican-restaurant-austin-2"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 19449,
+      "name": "Short Stop",
+      "address": "3710 Airport Blvd, Austin, TX, 78722",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 8.0 m from saved point; address corroborated",
+      "geocode_note": "Convenience store/gas station, listed as closed.",
+      "evidence_urls": [
+        "https://www.yellowpages.com/austin-tx/mip/short-stop-468316384"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "reported_closed",
+        "non_venue"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 29253,
+      "name": "Thirsty Penguin",
+      "address": "14751 W State Hwy 29, Liberty Hill, TX, 78642",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G29253",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 7395,
+      "name": "La Catedral Del Marisco",
+      "address": "2711 E Cesar Chavez St, Austin, TX, 78702",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 31.9 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.austinchronicle.com/locations/la-catedral-del-marisco-1019255/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 4527,
+      "name": "Super Moreliana",
+      "address": "6112 US Highway 183 S, Austin, TX, 78744-5420",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G4527",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 11820,
+      "name": "Little Country Diner",
+      "address": "22000 State Highway 71 W, Spicewood, TX, 78669-6978",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G11820",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 27129,
+      "name": "Mi Mundo Coffeehouse and Roastery",
+      "address": "106 S Mays St #100, Round Rock, TX, 78664",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G27129",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 14169,
+      "name": "The Pizza Press",
+      "address": "404 W 26th St, Austin, TX, 78705",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 9.7 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/the-pizza-press-austin"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 2769,
+      "name": "Galaxy Cafe",
+      "address": "9911 Brodie Ln, Austin, TX, 78748",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 145.8 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.galaxycafeaustin.com/"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 19872,
+      "name": "Doc Green's Salads and Grill",
+      "address": "1201 Barbara Jordan Blvd, Austin, TX, 78723",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G19872",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 19398,
+      "name": "Torchy's Tacos",
+      "address": "4501 Springdale Rd, Austin, TX, 78723-6031",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 22.2 m from saved point; address corroborated",
+      "geocode_note": "Torchy's corporate headquarters, not a restaurant; 19395 Success Foods Management Group LLC shares the address.",
+      "evidence_urls": [
+        "https://www.bbb.org/us/tx/austin/profile/restaurants/torchys-tacos-world-hq-0825-1000106897"
+      ],
+      "duplicate_label": null,
+      "duplicate_of": [
+        19395
+      ],
+      "duplicate_note": "Corporate HQ plus parent-company entity record; duplication moot for a non-venue.",
+      "duplicate_evidence_urls": [],
+      "record_flags": [
+        "non_venue"
+      ],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 11997,
+      "name": "Jasper's Big Dog Saloon",
+      "address": "1310 Ranch Road 620 S Ste B12, Lakeway, TX, 78734",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G11997",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 1512,
+      "name": "Nothing Bundt Cakes",
+      "address": "2785 Bee Caves Rd #333, Rollingwood, TX, 78746",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 5.9 m from saved point; address corroborated",
+      "geocode_note": "",
+      "evidence_urls": [
+        "https://www.nothingbundtcakes.com/find-a-bakery/tx/austin/bakery-59.html"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 12825,
+      "name": "Starbucks",
+      "address": "3801 N Capital Of Texas Hwy, Ste G100, Austin, TX, 78746",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G12825",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 24711,
+      "name": "Hay Elotes",
+      "address": "1200 W Howard Ln, Austin, TX, 78753-9174",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G24711",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 24549,
+      "name": "Bombay Express",
+      "address": "13000 N IH-35 Svc Rd SB, Austin, TX, 78753",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G24549",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 15159,
+      "name": "Casita Ruby",
+      "address": "23296 Nameless Rd, Leander, TX, 78641-4047",
+      "geocode_label": null,
+      "geocode_basis": "see geocode_flags G15159",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 29178,
+      "name": "Golden Chick",
+      "address": "13282 W State Hwy 29, Liberty Hill, TX, 78642",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G29178",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 8562,
+      "name": "Tacos Juanita",
+      "address": "1512 E 6th St, Austin, TX, 78702",
+      "geocode_label": "ok",
+      "geocode_basis": "Nominatim (cached audit response) 28.4 m from saved point; address corroborated",
+      "geocode_note": "Also listed as Taqueria Dona Juanita; no twin record in the export.",
+      "evidence_urls": [
+        "https://www.yelp.com/biz/tacos-juanita-austin-texas-2"
+      ],
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    },
+    {
+      "subject_id": 21354,
+      "name": "Bamboo House",
+      "address": "7010 Easy Wind Dr Unit 100, Austin, TX, 78752",
+      "geocode_label": "ok",
+      "geocode_basis": "see geocode_flags G21354",
+      "duplicate_label": "none_found",
+      "duplicate_of": [],
+      "duplicate_note": "",
+      "duplicate_evidence_urls": [],
+      "record_flags": [],
+      "label_by": "agent (owner-delegated 2026-09-28)"
+    }
+  ]
 }

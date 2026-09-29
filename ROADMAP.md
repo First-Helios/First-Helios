@@ -703,14 +703,15 @@ that is a finding worth stopping on rather than scraping around.
 
 **Current remediation status (2026-09-28).** S6 merged and the owner-authorized
 Pi rebuild completed. The [precision review](./docs/reviews/2026-09-28-precision-review.md)
-contains agent assessments, not owner-confirmed labels: 23 supported duplicate
-pairs, 4 distinct, 16 unresolved; 20 corroborated geocodes, 3 supported errors,
-22 unresolved. Broad duplicate cleanup is deferred. The Pi URL-resolution gate
-remains closed pending correction/adjudication and a passing confirmed audit;
-S6b is not Pi-gating. S13 implements accepted ADR-0012 in a draft PR, with
-[implementation and validation details](./docs/reviews/2026-09-28-s13-venue-lifecycle.md).
-Phase 5 remains closed until S13 is merged and lifecycle acceptance tests pass.
-The older status below is historical and does not establish present acceptance.
+was adjudicated under owner delegation: on the 100-row sample, 4 wrong geocodes
+and 6 sampled venues with a confirmed duplicate record, so **both bars fail**.
+The Pi gate is split: 1a (location quality: correction plan, proposed ADR-0014
+location overrides, fresh-sample re-audit) and 1b (URL-resolution readiness:
+menu-URL precision, proposed ADR-0015); both closed, criteria in the
+[remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md).
+S13 merged (#45) and the Phase 5 gate passed; Phase 5 code waits for a proposed
+ADR-0013. The older status below is historical and does not establish present
+acceptance.
 
 **Status (2026-09-21).** Seeding + identity + geocoding are done and the
 precision gate is **met** — see the retro

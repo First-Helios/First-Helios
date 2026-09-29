@@ -36,7 +36,10 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 merged; ADR-0011 accepted 2026-09-27 |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; precision review found errors; gate closed |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
-| 🚦 | **Pi gate:** after S2/S3/S4/S6 merge AND owner rebuild/new precision audit | | | [ ] |
+| 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [ ] |
+| 6d | S6d Menu-URL re-verification (implements ADR-0015) | ADR-0015 accepted | S | [ ] |
+| 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
+| 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; menu-URL precision (ADR-0015 re-verification and/or ADR-0013 classifier) | G.a | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 |
 | 9 | S9 API polish | D7 | M | [X] #32 |
@@ -44,7 +47,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 11 | S11 Menu selector semantics ⚠ | D5 | M | [X] #33 |
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 merged; ADR-0012 accepted 2026-09-27 |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [X] #45 merged |
-| 🚦 | **Phase 5 gate:** after S7/S11/S12/S13 merge AND lifecycle acceptance tests pass | | | [ ] |
+| 🚦 | **Phase 5 gate:** after S7/S11/S12/S13 merge AND lifecycle acceptance tests pass | | | [X] 2026-09-28: #28/#33/#34/#45 merged; main CI green (strict DB, run 36508316467). Next: proposed ADR-0013 before any Phase 5 code (G.b) |
+| 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [ ] |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
 | 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
@@ -57,9 +61,11 @@ S15 and S16 have no dependencies; slot them in whenever you're waiting on a revi
 - **Do S1 first even though it isn't the most severe.** Every later session is run by
   an agent; S1 removes the default that points at the legacy archive and adds the
   `alembic check` gate before any session touches models or migrations.
-- **Don't run `resolve_urls` on the Pi until the Pi gate.** Bronze rows can't be
+- **Don't run `resolve_urls` on the Pi until Pi gate 1b.** Bronze rows can't be
   edited, so every run before S2–S6 writes permanent bad data (duplicate website
-  versions, endpoint-less evidence, wrong menu URLs).
+  versions, endpoint-less evidence, wrong menu URLs). Since 2026-09-28 the gate is
+  split: 1b (menu-URL precision) gates `resolve_urls`; 1a (location quality) gates
+  Phase 4 acceptance, not URL resolution.
 - **Keep at most 2–3 PRs open.** Your review time is the bottleneck, not the agents.
 - **Merge in table order unless a session says otherwise.** Later sessions assume
   earlier fixes (e.g. S4 reads the robots `Sitemap:` lines S2 collects).
@@ -349,6 +355,21 @@ covered by another guard, or documentation of a deliberate trade-off.
 - [ ] R111 No review queue for ambiguous venues → *when a review UI is planned*
 - [ ] R116 Image healthcheck / arm64 CI build → *Phase 8 deploy work*
 
+### G — Gate decisions (owner, 2026-09-28)
+
+Recorded verbatim from the owner's session prompt:
+
+- **(a) Pi gate:** "I defer to the agent to address solving this conflict." The owner
+  delegates adjudication of docs/reviews/2026-09-28-precision-review.md and the gate
+  criteria to the agent.
+- **(b) Phase 5:** Phase 5 menu processing uses the spike's pipeline
+  (docs/spikes/menu-model/README.md: page classifier + LLM extraction + validator),
+  replacing ROADMAP's Scrapy-vs-Crawlee framing.
+
+*Outcome (agent, 2026-09-28):* (a) precision review adjudicated and the Pi gate split
+into 1a/1b with the criteria under S6b below; ADR-0014 and ADR-0015 drafted for owner
+review. (b) Phase 5 gate ticked; Phase 5 code waits for a proposed ADR-0013 (see S13).
+
 ---
 
 ## Part 2 — Work sessions
@@ -553,7 +574,77 @@ Branch: `fix/platform-menu-urls` · Not Pi-gating.
 - Test: a homepage with a site menu and a Toast link writes both records; a re-run
   writes nothing.
 
-🚦 **Pi gate remains closed** — S2/S3/S4/S6 are merged and the owner-authorized Pi rebuild completed 2026-09-28; [precision review](2026-09-28-precision-review.md) found supported errors and unresolved cases. Follow [the S6 runbook](2026-09-27-s6-pi-rebuild.md). S6b is not Pi-gating.
+🚦 **Pi gate — split 2026-09-28 under owner decision G.a.** S2/S3/S4/S6 are merged and
+the Pi was rebuilt 2026-09-28 ([S6 runbook](2026-09-27-s6-pi-rebuild.md)). The agent
+adjudicated the [precision review](2026-09-28-precision-review.md) and verified the gate
+conflict in code:
+
+- URL records are keyed by GERS id (`<gers>`, `<gers>|<platform host>`), and no file in
+  the URL path (`resolve_urls.py`, `url_pipeline.py`, `menu_url.py`, `web_client.py`,
+  `registry.py`) reads a coordinate. Duplicates only add redundant per-POI records that
+  stay true; bad coordinates change nothing the resolver writes. **Location precision
+  does not gate `resolve_urls`.**
+- The URL-data risk is menu-URL precision: the S4 verifier measured 0.605 venue-level
+  precision (spike stage C); S6b platform pages are accepted on 200 + HTML + venue path
+  with no content check (`web_client.py` 585-598); a resolved menu URL on an unchanged
+  website is reused without any fetch (`url_pipeline.py` 704-711), so first-run errors
+  never get re-checked. The Pi has no menu-URL records yet, so the first run matters.
+
+**1a — Phase 4 location quality. Closed.** Gates Phase 4 "done" and anything that relies
+on venue location or dedupe; does not gate `resolve_urls`. Opens when all hold:
+- [ ] Correction plan committed: every confirmed defect classified (source coordinate
+  error, address error, duplicate incl. misplaced twins and chain location-label records,
+  lifecycle/closed or renamed, non-venue), each mapped to its fix: an existing evented
+  command with Evidence (merge, remap, retire) or a location override; a corpus-wide twin
+  search, not only the co-location detector (and fix `audit.street_key` dropping 5-digit
+  house numbers).
+- [ ] [ADR-0014](../adr/0014-location-overrides.md) (location overrides) accepted and
+  implemented, with tests for minting, dedupe, lifecycle projection (no false relocation)
+  and rebuild. Without it the lifecycle pass turns a hand fix into a "relocation" at the bad
+  point (`lifecycle.py` 287-298).
+- [ ] Corrections applied on the Pi in an owner-authorized run (no raw SQL).
+- [ ] Fresh-sample re-audit: new seed, 100 rows, every row hand-labeled under the
+  precision review's criteria (geocode check + twin search), plus a regression check of
+  the corrected cohort. Pass = 0 confirmed wrong geocodes (1/100 is not < 1%), at most 1
+  sampled venue with a confirmed duplicate, and at most 5 unresolved rows per measure,
+  with the worst case (unresolved counted as failures) reported beside it. Never drop rows
+  or change the denominator.
+
+**1b — URL-resolution readiness. Closed.** Gates the first Pi `resolve_urls` run.
+Independent of 1a. Opens when all hold:
+- [ ] Owner decision on [ADR-0015](../adr/0015-menu-url-reverification.md) (re-verify
+  saved menu URLs; recommended) and/or waiting for the ADR-0013 page classifier; the
+  chosen path accepted, implemented and merged with strict CI.
+- [ ] A saved menu URL records its verifier version and is re-checked when the verifier
+  changes (or its window expires); a URL the current verifier rejects is withdrawn to
+  `needs_review`, never reused.
+- [ ] Platform pages pass a content check (not 200 + HTML + path alone).
+- [ ] PR #46's multi-location chain question decided (guard, or accepted with a reason).
+- [ ] Owner authorizes the run. After it: record website/menu-URL coverage (the last
+  Phase 4 "done when" item) and a hand-checked precision sample of saved menu URLs.
+
+S6b is not Pi-gating.
+
+### S6c — Location overrides + correction plan ⚠ · size M · needs ADR-0014 accepted
+Branch: `feat/location-overrides` · Opens nothing by itself: Pi gate 1a also needs the
+owner-authorized Pi corrections and the fresh-sample re-audit.
+
+- [ ] Implement accepted ADR-0014 (Bronze `location-override` namespace, one
+  effective-location function for minting, dedupe and lifecycle; stale overrides disabled)
+- [ ] Correction plan committed (the gate 1a list above), with a corpus-wide twin search
+  that finds misplaced twins and chain location-label records; fix `audit.street_key`
+  dropping 5-digit house numbers
+- [ ] Pi correction and re-audit steps written as a runbook for the owner (not run)
+
+### S6d — Menu-URL re-verification · size S · needs ADR-0015 accepted
+Branch: `feat/menu-url-reverification`
+
+- [ ] Implement accepted ADR-0015: verifier version in the payload, re-verify instead of
+  reuse, withdraw to `needs_review` via `unassign_source_record`, platform content check,
+  chain-homepage decision from PR #46
+- [ ] Tests: saved URL from an older verifier is re-checked; a rejected URL is withdrawn,
+  not reused; registry entries are never withdrawn; platform page without menu content is
+  not saved
 
 ### S7 — Gold refresh fix · size M · needs D5
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`
@@ -737,9 +828,42 @@ Branch: `feat/s13-venue-lifecycle`
   unblocking a Menu write.
 
 Implementation and validation: [S13 review](2026-09-28-s13-venue-lifecycle.md).
-Draft implementation only; merge and gate acceptance remain pending.
+Merged as #45 (`ddb5579`).
 
-🚦 **Phase 5 gate** — start menu extraction after S7, S11, S12, S13 are merged.
+🚦 **Phase 5 gate — passed 2026-09-28.** Conditions verified from `main`, not from
+this file: S7 #28 (`11b0f56`), S11 #33 (`572f1e1`), S12 #34 (`4c2be21`) and S13 #45
+(`ddb5579`) are merged. Main CI run
+[36508316467](https://github.com/First-Helios/First-Helios/actions/runs/36508316467)
+on `8cbce26` (S6b, #46) is green on all five checks with `HELIOS_STRICT_DB_TESTS=1`:
+1028 passed, 1 skipped (the unconditional `packages/helios_parsing has not landed yet`
+placeholder, `test/test_schema_layout.py`), `alembic check` "No new upgrade operations
+detected". The lifecycle acceptance suites (`test_venue_lifecycle.py`,
+`test_lifecycle_cli.py`, `test_lifecycle_urls.py`, `test_lifecycle_migration.py`; 29
+tests, matrix in the S13 review) ran inside that strict job; CI does not print
+per-test names, so "passed" rests on the zero-failure summary plus the single
+known skip.
+
+**Passing this gate does not authorize Phase 5 code.** Per owner decision G.b, Phase 5
+uses the spike's pipeline, so it first needs a **proposed ADR-0013** (next free
+number; ADR-0012 is the highest on `main`), stopped for owner review, because it adds
+new runtime dependencies (llama.cpp / `llama-server`, onnxruntime or fastembed for
+the page classifier, possibly a headless browser for JS-only menus). The spike's open
+questions Q2-Q9 (docs/spikes/menu-model/README.md, "Open questions for the owner")
+are still unanswered and must be asked before drafting it. Not written in this
+session. ROADMAP Phase 5's Scrapy-vs-Crawlee spike and its "ADR-0006: Scraper
+framework choice" number are both stale (ADR-0006 is Gold read models); S16
+absorbs that drift.
+
+### S13b — Phase 5 pipeline ADR (draft, then stop) ⚠ · size S · needs the Phase 5 gate
+Branch: `docs/adr-0013-menu-pipeline`
+
+- [ ] Ask the owner the spike's open questions Q2–Q9 (docs/spikes/menu-model/README.md,
+  "Open questions for the owner") with `AskUserQuestion` before drafting
+- [ ] Draft ADR-0013 "Phase 5 menu pipeline" as Proposed: page classifier → segmentation →
+  LLM extraction → deterministic repairs → validator (owner decision G.b), with the new
+  runtime dependencies (llama.cpp / `llama-server`, onnxruntime or fastembed, possibly a
+  headless browser) and the Docker/Pi deployment story; relate it to ADR-0015 (the
+  classifier becomes the menu-URL verifier). Stop for review; no code.
 
 ### S14 — Schema tightening migration ⚠ · size M · needs D8.1
 Hand-off prompt: `Do session S14 from docs/reviews/2026-09-22-remediation-checklist.md.`
@@ -837,7 +961,8 @@ Agents add one row per session (or per resume).
 | 2026-09-24 | S11 | fix/menu-selector | #33 | Merged (ADR-0005 conformance per D5.5, no amendment) | — (Base-linked targets now carry `("base", <pinned page id>)`, so Gold `target_path` for inherited prices changes. An ambiguous page supplies nothing (no new state, since Gold's `price_state` CHECK would need a migration). `withdrawn` only when every head is a tombstone. See PR "Design choices") |
 | 2026-09-24 | S12 | fix/identity-matching | #34 | Merged; ADR-0012 accepted 2026-09-27 | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 is now ready for implementation under the revised accepted ADR) |
 | 2026-09-24 | S14 | fix/schema-tightening | #35 | Merged (migration `12a76ebed458` + models) | — (Uses a new `bronze.whitespace()` instead of `menu.whitespace()`: Bronze/Identity sit below Menu. Existing CHECK names kept. R56's DB rounding stays (would need `ALTER COLUMN TYPE`); Python rejects first. Gold staleness is clamped to 0. Run `docs/reviews/sql/2026-09-22-s14-schema-tightening-precheck.sql` on the Pi before upgrading. `test_legacy_identity_reset` and `test_gold_migration` now compare at `5f3a9c1e7b24`, not head) |
-| 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Open, CI pending (not ⚠) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
+| 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Merged (`8cbce26`; main CI green) |
+| 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #PR | Draft ⚠ (ADR-0014/0015 proposed; stop for review) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -896,3 +1021,27 @@ coverage; `alembic check` clean. No schema change. Open question for the owner i
 the PR: chain homepages linking one platform page per location give every venue
 the first link. The Pi was not touched; the Pi gate stays closed pending the
 precision-review adjudication.
+
+### 2026-09-28 gate resolution (owner decisions G.a, G.b)
+
+Branch `docs/gate-adjudication` from `main@8cbce26`. Main CI run 36508316467 on
+`8cbce26` was green on all five checks before starting. Docs/data only; no code, no Pi
+access, `resolve_urls` not run.
+
+- **Phase 5 gate ticked** (evidence in the S13 block). Phase 5 code waits for a proposed
+  ADR-0013 (new session S13b); the spike's Q2–Q9 are unanswered.
+- **Precision review adjudicated** under G.a. Labels are in `reviewed.json`
+  (`label_by: "agent (owner-delegated 2026-09-28)"`) with explicit criteria. All 100 sampled
+  rows were hand-checked (the 55 unflagged rows against the business at each address, and
+  every row searched for twin records). Result: 4 wrong geocodes and 6 sampled venues with
+  a confirmed duplicate, so **both ROADMAP bars fail**; 17 / 11 rows stay unresolved. The
+  audit detector misses twins separated by a bad coordinate and chain location-label
+  records.
+- **Gate conflict resolved:** the owner's assessment holds in the code. The Pi gate is
+  split into 1a (location quality) and 1b (URL-resolution readiness), both closed, criteria
+  in the S6b block. ADR-0014 (location overrides, 1a) and ADR-0015 (menu-URL
+  re-verification, 1b) are drafted as Proposed and stop for owner review; their
+  implementation is S6c / S6d.
+- Minimal status fixes so no doc says otherwise: ROADMAP Phase 4 status paragraph and the
+  S6 runbook (step 5 no longer opens URL resolution on the audit alone). Remaining ROADMAP
+  Phase 5 drift (Scrapy-vs-Crawlee, "ADR-0006" scraper number) is left for S16.
