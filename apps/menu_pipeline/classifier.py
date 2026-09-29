@@ -3,7 +3,7 @@
 A static embedding of :func:`~packages.helios_parsing.page_features.page_text`
 plus the seven layout features, scored by a logistic regression whose
 standardization, coefficients and threshold are a checked-in weights file
-(``config/page_classifier_v1.json``). Scoring is plain Python: scikit-learn is
+(``config/page_classifier_v2.json``). Scoring is plain Python: scikit-learn is
 only needed to re-train (``apps.menu_pipeline.train_page_classifier``).
 
 The embedding runs through ``fastembed`` (the ``menu`` extra) on model files
@@ -27,7 +27,9 @@ from packages.helios_parsing.segment import segment
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-WEIGHTS_PATH = Path(__file__).resolve().parents[2] / "config" / "page_classifier_v1.json"
+# classifier-v2 (S6f) keeps classifier-v1's coefficients; its inputs changed:
+# segmentation skips dialogs (consent prompts), which rendered Toast pages open with.
+WEIGHTS_PATH = Path(__file__).resolve().parents[2] / "config" / "page_classifier_v2.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +84,10 @@ class PageClassifier:
     @property
     def name(self) -> str:
         return self._weights.version
+
+    @property
+    def threshold(self) -> float:
+        return self._weights.threshold
 
     def probability(self, html: str, url: str) -> float:
         text, layout = page_vector_inputs(html, url)

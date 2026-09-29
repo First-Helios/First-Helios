@@ -353,6 +353,7 @@ class _Resp:
     location: str | None = None
     subrequests: tuple[tuple[str, str], ...] = ()  # (url, resource type)
     timeout: bool = False
+    fails: bool = False  # Chromium: an empty 4xx/5xx body fails the navigation
 
 
 class _Request:
@@ -461,6 +462,8 @@ class _Page:
             response = _Response(request, answer)
             for listener in self._listeners:
                 listener(response)
+            if answer.fails:
+                raise _FakeError(f"net::ERR_HTTP_RESPONSE_CODE_FAILURE at {url}")
             if answer.location is None:
                 break
             prev, url = request, answer.location
@@ -796,3 +799,32 @@ def test_a_page_whose_unknown_hosts_all_refuse_is_rendered_once() -> None:
     assert renderer.stats.passes == 1
     assert web.fetched.count(url) == 1
     assert renderer.stats.subrequests_unchecked == 1, "aborted before its robots.txt was read"
+
+
+def test_an_empty_4xx_robots_txt_still_allows_all() -> None:
+    """Regression (live measurement): Chromium fails the navigation on an empty 400/404
+    body; the answer is still a 4xx (allow all), not an unreachable host."""
+    url = "https://shop.square.site/"
+    renderer, web, paced = _renderer(
+        {
+            "https://shop.square.site/robots.txt": _ALLOW_ALL,
+            "https://cdn.example/robots.txt": _Resp(400, "", fails=True),
+            url: _Resp(200, _MENU, subrequests=(("https://cdn.example/app.js", "script"),)),
+        }
+    )
+    assert isinstance(_render(renderer, paced, url), FetchResult)
+    assert "https://cdn.example/app.js" in web.fetched
+
+
+def test_an_empty_error_page_is_its_status_not_a_network_error() -> None:
+    url = "https://p.example/menu"
+    renderer, _web, paced = _renderer(
+        {"https://p.example/robots.txt": _ALLOW_ALL, url: _Resp(404, "", fails=True)}
+    )
+    result = _render(renderer, paced, url)
+    assert isinstance(result, CaptureFailure) and result.reason_code == "http_404"
+    renderer, _web, paced = _renderer(
+        {"https://p.example/robots.txt": _ALLOW_ALL, url: _Resp(403, "", fails=True)}
+    )
+    result = _render(renderer, paced, url)
+    assert isinstance(result, CaptureFailure) and result.reason_code == "bot_challenge"

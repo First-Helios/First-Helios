@@ -384,20 +384,24 @@ class BrowserRenderer:
         )
         self._pace(_host(origin), 0.0)
         try:
-            page.goto(f"{origin}/robots.txt", wait_until="load", timeout=NAVIGATION_TIMEOUT_MS)
-            _settle(page, session)
+            try:
+                page.goto(f"{origin}/robots.txt", wait_until="load", timeout=NAVIGATION_TIMEOUT_MS)
+                _settle(page, session)
+            except session.error:
+                # Chromium fails the navigation on an empty 4xx/5xx body
+                # (ERR_HTTP_RESPONSE_CODE_FAILURE), but the response still came.
+                pass
             final = _final_document(documents)
             if final is None:
-                return RobotsAnswer(None)
-            text = str(final.text())
+                return RobotsAnswer(None)  # timeout or network error: unreachable
+            status = int(final.status)
+            text = _body(final, session)
             return RobotsAnswer(
-                int(final.status),
+                status,
                 text,
                 redirects=_redirects(final),
-                challenged=is_challenge(int(final.status), dict(final.headers), text),
+                challenged=is_challenge(status, dict(final.headers), text),
             )
-        except session.error:  # includes timeouts: unreachable
-            return RobotsAnswer(None)
         finally:
             page.close()
 
@@ -475,7 +479,14 @@ class BrowserRenderer:
                 refusal = policy.navigation_refused
                 if refusal is not None:
                     return self._failure("skipped", refusal)
-                return self._failure("failed", "network_error")
+                final = _final_document(documents)
+                if final is None:
+                    return self._failure("failed", "network_error")
+                # An empty 4xx/5xx body fails the navigation, yet it answered.
+                status = int(final.status)
+                if status in _CHALLENGE_STATUSES:
+                    return self._failure("skipped", "bot_challenge")
+                return self._failure("failed", f"http_{status}")
             _settle(page, session)
             return self._result(page, documents, url)
         finally:
@@ -581,6 +592,14 @@ def _final_document(documents: list[Any]) -> Any:  # noqa: ANN401
     """The last main-frame document that is not a redirect (a challenge may reload)."""
     finals = [doc for doc in documents if not 300 <= int(doc.status) < 400]  # noqa: PLR2004
     return finals[-1] if finals else None
+
+
+def _body(response: Any, session: BrowserSession) -> str:  # noqa: ANN401
+    """A response's text, or ``""`` when the browser kept no body for it."""
+    try:
+        return str(response.text())
+    except session.error:
+        return ""
 
 
 def _redirects(response: Any) -> int:  # noqa: ANN401 - playwright Response
