@@ -39,9 +39,9 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 merged (`e61486c`) |
 | 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [X] #53 draft (23 merges in the file; 6 sampled merges + 5 retirements await GERS ids from the Pi) |
 | 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [X] part 1 #51 (`4b8608c`), part 2 #52 (`e048740`) merged |
-| 6f | S6f Page rendering: headed Chromium under Xvfb for platform/JS-only pages (ADR-0013 Amendment 1) ⚠ | S6d part 2 merged | M | [ ] |
+| 6f | S6f Page rendering: headed Chromium under Xvfb for platform/JS-only pages (ADR-0013 Amendment 1) ⚠ | S6d part 2 merged | M | [X] #54 draft (`classifier-v2`; Pi measurement is owner-run, pending) |
 | 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
-| 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; ADR-0015 re-verification with `classifier-v1` as verifier, platform rendering (S6d, S6f) | G.a | | [ ] |
+| 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; ADR-0015 re-verification with `classifier-v1` as verifier, platform rendering (S6d, S6f) | G.a | | [ ] S6f #54 (verifier now `classifier-v2`); open until #54 merges, the Pi render measurement is recorded and the owner authorizes the run |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 |
 | 9 | S9 API polish | D7 | M | [X] #32 |
@@ -715,19 +715,27 @@ Owner decisions at session start (2026-09-29), recorded in ADR-0013 Amendment 2:
 - **`toast.app`: add as a Toast alias** in the generic platform host list (same
   `<gers>|toasttab.com` key); any other cross-host render redirect is refused.
 
-- [ ] Render platform pages (static `403` or failing the classifier) and JS-only own-site
+- [X] Render platform pages (static `403` or failing the classifier) and JS-only own-site
   candidates with headed Chromium under Xvfb in the worker image: Helios UA token,
   robots.txt, per-host rate limit, no stealth or challenge solving; still-`403`/challenge
-  = skipped Capture
-- [ ] Decide ADR-0013 open question 3 (robots for rendered sub-requests) with the owner
+  = skipped Capture (`apps/menu_pipeline/render.py`, `resolve_urls --render`, #54)
+- [X] Decide ADR-0013 open question 3 (robots for rendered sub-requests) with the owner
+  (every sub-request checked; ADR-0013 Amendment 2)
 - [ ] Measure (ADR-0013 §4): render success and classifier quality on rendered platform
   pages (label the probe's pages in `var/spikes/menu-model/render-probe-2026-09-29/`),
-  Pi time and peak RAM per render; enable for Pi runs only after it is recorded
-- [ ] `classifier-v1` rejects every rendered Toast order page (0.004–0.28, threshold 0.508;
+  Pi time and peak RAM per render; enable for Pi runs only after it is recorded.
+  *Laptop measurement and labels done
+  ([S6f render measurement](./2026-09-29-s6f-render-measurement.md); labels in
+  `render-probe-2026-09-29/s6f/`); the Pi run is owner-run (steps in that doc) and
+  still pending, so `--render` stays off for Pi runs.*
+- [X] `classifier-v1` rejects every rendered Toast order page (0.004–0.28, threshold 0.508;
   Square/Clover/Grubhub pass): label rendered platform pages, train and evaluate a
-  successor version (`classifier-v2`; the verifier bump re-checks saved URLs)
-- [ ] One Toast link redirected to `toast.app` (not in `ORDERING_PLATFORM_HOSTS`): decide
+  successor version (`classifier-v2`; the verifier bump re-checks saved URLs).
+  *v2 = v1's coefficients + dialog-skipping segmentation (the consent dialog was the
+  cause); retraining gave no gain. Held-out rendered 8/9, precision 1.0.*
+- [X] One Toast link redirected to `toast.app` (not in `ORDERING_PLATFORM_HOSTS`): decide
   whether platform host lists grow (a generic list change, not a per-platform parser)
+  (owner: `toast.app` and `cloveronline.com` added as aliases)
 
 ### S7 — Gold refresh fix · size M · needs D5
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`
@@ -1065,7 +1073,8 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S6c | feat/location-overrides | #50 | Merged (`e61486c`) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
 | 2026-09-29 | S6d part 2 | feat/page-classifier | #52 | Merged (`e048740`) | — (see "2026-09-29 S6d menu-URL re-verification" below; merge #51 first, then retarget #52 to `main`) |
 | 2026-09-29 | S6d part 1 | feat/menu-url-reverification | #51 | Merged (`4b8608c`; ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
-| 2026-09-29 | S6e | feat/identity-corrections | #53 | Draft ⚠ (new `config/identity_corrections.yaml`, no migration) | — (see "2026-09-29 S6e corrections applier" below; 11 pending entries need GERS ids from the Pi) |
+| 2026-09-29 | S6e | feat/identity-corrections | #53 | Merged (`28bfa61`) | — (see "2026-09-29 S6e corrections applier" below; 11 pending entries need GERS ids from the Pi) |
+| 2026-09-29 | S6f | feat/page-rendering | #54 | Draft ⚠ (Playwright + Chromium + Xvfb in the worker image; `classifier-v2`) | — (see "2026-09-29 S6f page rendering" below; Pi render measurement is owner-run) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -1269,3 +1278,31 @@ untouched; gate 1b stays closed.
   the run that merges the venues.
 - **Verification:** strict `make ci` 1136 passed, 0 skipped (before the skip-path test was
   added; that file then 30/30); `alembic check` clean; corrections module 96% covered.
+
+### 2026-09-29 S6f page rendering
+
+Branch `feat/page-rendering` from `main@28bfa61` (#53 found merged at start). No Pi
+access, `resolve_urls` not run, S6e files untouched; gate 1b stays closed.
+
+- **Owner decisions:** see the S6f block (every sub-request checked; robots.txt read
+  through the browser; `toast.app` and, asked mid-session, `cloveronline.com` as
+  platform aliases). Recorded in ADR-0013 Amendment 2.
+- **Code:** `apps/menu_pipeline/render.py` (`BrowserRenderer`: headed Chromium, CDP
+  `Fetch` interception, since Playwright routes miss redirect hops; sub-request
+  robots.txt read between up to three passes); `PageRenderer` triggers in
+  `web_client.py`; `render` in menu-URL payloads; `resolve_urls --render` (off for Pi
+  runs); worker image with Chromium + Xvfb, Compose `init`/`shm_size`;
+  `measure_render` and `evaluate_page_classifier`. No migration.
+- **Live checks found and fixed four renderer bugs** before measuring: unchecked
+  redirect hops, parallel robots reads stalling DoorDash, unanswered paused
+  requests, and empty `4xx` robots.txt bodies read as unreachable (which blocked
+  every Square menu).
+- **Measurement (laptop):** 67/75 rendered, 8 robots refusals, no challenges; median
+  13.9 s, peak 1.79 GB PSS. Robots rules cost Grubhub's and DoorDash's full menus.
+- **`classifier-v2`:** dialog-skipping segmentation with v1's coefficients; static
+  verdicts unchanged, rendered held-out 8/9 at precision 1.0 (v1 1/9).
+- **Verification:** strict `make ci` on a fresh disposable DB: 1195 passed, 0 skipped,
+  90% coverage (before two evaluation-helper tests were added; that file 4/4);
+  `alembic check` clean; worker image built, headed Chromium smoke-tested in it.
+- **Next for the owner:** review #54; run the Pi render measurement (steps in the
+  measurement doc) and record it; then gate 1b needs only the owner's go-ahead.
