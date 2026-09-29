@@ -169,7 +169,7 @@ the only path to a URL match key, and it is opt-in per row.
 | Menu-URL grain | **Per-site (chosen; per-venue records, Amendment 2)** | Matches reality; chain→one, independent→own | Chain locations share one menu-URL (correct, but coarse per-location) |
 | | Per-Establishment | Explicit per-location menus | Duplicates a shared brand menu across N locations |
 | Discovery client | **httpx + stdlib (chosen)** | No new dep; robots/sitemap/anchor all stdlib | Hand-rolled crawl vs. a framework |
-| | Scrapy/Crawlee now | Batteries included | Framework choice is Phase 5 (now Proposed ADR-0013) — premature here |
+| | Scrapy/Crawlee now | Batteries included | Framework choice is Phase 5 (now ADR-0013) — premature here |
 | Registry format | **YAML / PyYAML (chosen)** | Matches every doc + V1 parity; best human-edit format | One small runtime dep (owner-authorized) |
 | | TOML / stdlib tomllib | Zero dep | Deviates from the documented `.yaml` name |
 | Registry validation | **Hand-rolled + CI test (chosen)** | No dep; precise errors for four fields | Not a formal schema doc |

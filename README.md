@@ -77,10 +77,14 @@ This section is the single current-status page. Other docs link here.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5 menu extraction (LLM extraction, validator). Waits on
-  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is Proposed except
-  its page classifier (accepted 2026-09-29; the ADR-0015 verifier, now
-  `classifier-v2`) and discovery's page rendering (S6f).
+- Phase 5 menu extraction: the rest of `packages/helios_parsing` (text hash,
+  JSON-LD reader, chunking, repairs, validator, evaluation harness), the
+  `llama-server` service, `menu-page` Bronze writes and Menu writes.
+  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) was accepted 2026-09-29;
+  its open questions are answered in
+  [Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided) (platform pages take
+  Establishment scope, PDF menus skipped and counted, a 10-page monthly spot
+  check, promotional rows deferred to a promo classifier).
 - The Gold price index: target shape accepted in
   [ADR-0007](./docs/adr/0007-gold-price-index-projection.md); no model,
   migration or code.
@@ -92,7 +96,8 @@ This section is the single current-status page. Other docs link here.
 - **Phase 5 gate: passed 2026-09-28.** S7 #28, S11 #33, S12 #34 and S13 #45
   merged; main CI run
   [36508316467](https://github.com/First-Helios/First-Helios/actions/runs/36508316467)
-  green with strict DB tests. Phase 5 code still waits on ADR-0013 (Proposed).
+  green with strict DB tests. ADR-0013 accepted 2026-09-29 (P5-0), so Phase 5
+  implementation slices can start.
   Owner decision G.b: the spike's pipeline replaces the Scrapy-vs-Crawlee
   question.
 - **Pi gate 1a, Phase 4 location quality: closed.** The 2026-09-28 adjudication
@@ -324,7 +329,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
 | [0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) | Provenance endpoints vs identity match keys | Accepted |
 | [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
-| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Proposed (page classifier accepted 2026-09-29) |
+| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted |
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted |
 

@@ -57,7 +57,7 @@
 
 **In scope, but after the coverage milestone**
 
-- Restaurant **meal deals** (promotions, limited-time offers, happy hours, combos). Rows that look promotional are *identified and parked* during menu extraction so the deals layer has evidence to build on, but no deal is extracted, scored, or served until the menu graph is populated.
+- Restaurant **meal deals** (promotions, limited-time offers, happy hours, combos). No deal is extracted, scored, or served until the menu graph is populated. Promotional rows are identified later by a promo classifier over the stored page bundles, not during Phase 5 extraction; Phase 5 lays the label foundations ([ADR-0013 Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 
 **Out of scope**
 
@@ -123,9 +123,9 @@ The **V1 source** column points to the file on the `V1-Graveyard` branch.
 | 2 | Temporal parsing | `collectors/meal_deals/temporal.py` | Handles 50+ variants: "Mon-Fri", "Monday through Friday", "3pm–close", em/en dashes, 12-hour AM/PM. | Phase 10, `packages/helios_parsing/`. Returns a structured dataclass. |
 | 3 | Signal-quality scoring | `collectors/meal_deals/quality.py` | 6-factor composite (price 25%, time 20%, description 15%, name 15%, restaurant-match 10%, not-addon 15%) with `reject < 0.20 < review < 0.40 ≤ accept` gates. | Phase 10. Weights + thresholds in config, not constants. |
 | 4 | Venue identity / fingerprinting | `core/venue_identity.py` + `core/normalizer.py::make_fingerprint` | Name canonicalization, address normalization, URL canonicalization, proximity clustering. | `packages/helios_core/identity/normalize.py` ([ADR-0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) §4); golden set in `test/fixtures/golden_matches.json`. |
-| 5 | Replay-manifest pattern | `scripts/build_website_scrape_replay_manifests.py` | Every scrape persists raw HTML + fetch metadata in a deterministic bundle. Diff-able across runs. | Bronze Capture `bundle_path` ([ADR-0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) §3); menu-page bundles under `var/replay/` ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) §5, Proposed). |
-| 6 | Expectation-vs-capture diffing | `scripts/compare_website_scrape_expectations.py` | Asserts "we should see $X at site Y" against real captures; catches regressions. | Replaced in Phase 5 by held-out evaluation and a monthly spot check ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) §8, Proposed). |
-| 7 | Collector registry decorator | `collectors/meal_deals/registry.py` | Self-registration so the scheduler auto-discovers scrapers. | Not needed: one universal pipeline, no per-site scrapers ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), Proposed). |
+| 5 | Replay-manifest pattern | `scripts/build_website_scrape_replay_manifests.py` | Every scrape persists raw HTML + fetch metadata in a deterministic bundle. Diff-able across runs. | Bronze Capture `bundle_path` ([ADR-0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) §3); menu-page bundles under `var/replay/` ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) §5). |
+| 6 | Expectation-vs-capture diffing | `scripts/compare_website_scrape_expectations.py` | Asserts "we should see $X at site Y" against real captures; catches regressions. | Replaced in Phase 5 by held-out evaluation and a monthly spot check ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) §8). |
+| 7 | Collector registry decorator | `collectors/meal_deals/registry.py` | Self-registration so the scheduler auto-discovers scrapers. | Not needed: one universal pipeline, no per-site scrapers ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md)). |
 | 8 | Config-driven strategy routing | `config/meal_deal_sources.yaml` | One YAML maps domain → strategy + selectors + rate limit. | Only the manual website / menu-URL registry survives, as `config/sources.yaml` ([ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md) §4); no per-site strategy. |
 | 9 | Multi-layer data model (pattern) | `core/database.py` — `DealObservation → DealApplicability → DealMaterialization` | Observation is the canonical atom; applicability fans out to many venues; materialization is the pre-computed consumer view. | Bronze → Menu → Gold ([ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md), [ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md), [ADR-0006](./docs/adr/0006-gold-menu-read-models.md)); deal tables in Phase 10. |
 
@@ -183,7 +183,7 @@ docs/                  # adr/, rfc/, plans/, spikes/, reviews/, diagrams/
 makefile, pyproject.toml, uv.lock, ruff.toml, mypy.ini, alembic.ini, .pre-commit-config.yaml
 ```
 
-Planned by [ADR-0013 §2](./docs/adr/0013-phase5-menu-pipeline.md#2-code-layout) (Proposed): `packages/helios_parsing/` (pure pipeline stages, Phase 3) and `apps/menu_pipeline/` (the pipeline's I/O, Phase 5).
+Per [ADR-0013 §2](./docs/adr/0013-phase5-menu-pipeline.md#2-code-layout): `packages/helios_parsing/` (pure pipeline stages, Phase 3) and `apps/menu_pipeline/` (the pipeline's I/O, Phase 5). Both exist; so far they hold segmentation, price tokens, the page classifier and the renderer.
 
 ### 4.2 Environments (Dev → Staging → Prod)
 
@@ -211,7 +211,7 @@ The Orange Pi is the **staging** environment, not production.
 
 - The Compose stack from `infra/docker-compose.yml` (Postgres → one-shot migrate → API). Postgres runs in Compose alongside the app.
 - A systemd unit that starts the stack on boot and restarts on failure; migrations are an explicit deploy step, never on container start. *(Phase 2)*
-- Monthly discovery ([ADR-0009 §3](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)) and the menu pipeline as a low-priority batch job ([ADR-0013 §3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment), Proposed). *(Phases 5–6)*
+- Monthly discovery ([ADR-0009 §3](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)) and the menu pipeline as a low-priority batch job ([ADR-0013 §3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)). *(Phases 5–6)*
 - Daily `pg_dump` to an external drive and Prometheus node-exporter. *(Phase 8)*
 
 **What prod will run (Phase 8)**
@@ -269,7 +269,7 @@ The Orange Pi is the **staging** environment, not production.
 - **Menu reading (Phase 5):** one universal pipeline for every site — page
   classifier → segmentation → JSON-LD reader / on-device LLM extraction →
   generic repairs → validator — per
-  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) (Proposed), which
+  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) (accepted 2026-09-29), which
   replaces the earlier Scrapy-vs-Crawlee framing (owner decision G.b). No
   per-platform parsers.
 - **Replay:** every fetch or render is a Bronze Capture with a durable bundle,
@@ -440,7 +440,8 @@ OpenAPI schema at `/openapi.json` describes it accurately.
 ### Phase 3 — Parsing Library: pure menu-pipeline stages
 
 > Built inside Phase 5's slice train ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md#implementation-slices-after-acceptance)
-> slice 2). ADR-0013 is **Proposed**; this code waits for its acceptance.
+> slice 2). ADR-0013 was accepted 2026-09-29. Segmentation and the price tokens
+> already exist (built with the page classifier, S6d/S6f); the rest is slice 2.
 
 **Learning module to review against:** [M4](./LEARNING_GUIDE.md#m4--testing)
 
@@ -494,7 +495,8 @@ provenance to first-party websites and menu URLs.
 
 Follow-ups: location overrides ([ADR-0014](./docs/adr/0014-location-overrides.md),
 accepted and implemented) and menu-URL re-verification
-([ADR-0015](./docs/adr/0015-menu-url-reverification.md), Proposed).
+([ADR-0015](./docs/adr/0015-menu-url-reverification.md), accepted 2026-09-29 and
+implemented in S6d/S6f: #51, #52, #54).
 
 **Port hints (`V1-Graveyard` branch):** `core/venue_identity.py`,
 `core/normalizer.py::make_fingerprint`, `collectors/geocoding.py` (including the
@@ -510,8 +512,8 @@ website/menu-URL coverage is measured and written down. Gate state:
 
 ### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
-> Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is
-> **Proposed**; Phase 5 code waits for its acceptance. It replaces this
+> Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), accepted
+> 2026-09-29 (Amendments 1–3). It replaces this
 > phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
 > plan (owner decision G.b), on the evidence of the
 > [menu-model spike](./docs/spikes/menu-model/README.md).
@@ -523,37 +525,43 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
 
 **Deliverables** (the I/O half, `apps/menu_pipeline/`; ADR-0013 slices 1 and 3–6)
 
-- ⚠ Worker image target, `menu` Python extra, `llama-server` Compose service
-  behind a profile, and a checksummed model manifest ([§3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)).
+- *Built (S6d/S6f, #51, #52, #54):* the worker image target, `menu` extra and
+  model manifest; the page-classifier runtime, now discovery's menu-URL verifier
+  `classifier-v2` ([§7](./docs/adr/0013-phase5-menu-pipeline.md#7-relation-to-adr-0015-the-classifier-becomes-the-menu-url-verifier));
+  headed-Chromium rendering for discovery (`resolve_urls --render`).
+- ⚠ `llama-server` Compose service behind the `menu` profile and the extraction
+  model's manifest entry ([§3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)).
   New runtime dependencies: stop for owner review.
 - `menu-page` Bronze writes — a Capture per fetch or render, durable bundles,
   Versions keyed on the segmented-text hash, Capture-targeted Evidence
-  locators — and a resumable batch CLI ([§5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators)).
-- Page-classifier runtime, which also becomes discovery's menu-URL verifier
-  ([§7](./docs/adr/0013-phase5-menu-pipeline.md#7-relation-to-adr-0015-the-classifier-becomes-the-menu-url-verifier)).
+  locators — and a resumable batch CLI. Platform pages (`<gers>|<platform host>`)
+  take the venue's Establishment scope, own-site pages the Organization's; PDF
+  menus are skipped and counted ([§5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators)).
 - LLM extraction and Menu writes through `persist_menu`, with `llm`/`jsonld`
   source kinds and trust labels ([§6](./docs/adr/0013-phase5-menu-pipeline.md#6-menu-writes-and-trust-q5-q6)).
-- ⚠ Headless render for JavaScript-only pages, measured on the spike's
-  JS-only pages before it is switched on ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
+- Rendering for the menu pipeline reuses discovery's renderer. Switching it on
+  for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
+  on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
 
 **Scraping etiquette is a hard requirement, not a nicety.** Honor
 `robots.txt`, identify with a real User-Agent, respect per-host rate limits,
 and never bypass a paywall, login or bot challenge (§2, "public data only").
 A fetcher that gets the project IP-banned costs more than the data was worth.
 
-**Promotional rows** ("half off", "BOGO"): the standing intent (§2) is that
-they never enter menu prices and are parked for the Phase 10 deals layer.
-Whether Phase 5 handles them now is
-[ADR-0013 open question 5](./docs/adr/0013-phase5-menu-pipeline.md#open-questions-for-the-owner),
-alongside PDF menus and page scope.
+**Promotional rows** ("half off", "BOGO"): deferred to a promo classifier
+(Phase 10); no rule-based flag now. Phase 5 lays the foundations: gold labels
+mark promo rows, and the harness reports promo rows stored as prices. Until the
+classifier exists, a promo row with a printed price may be stored as an `llm`
+price ([ADR-0013 Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 
-**Done when** (proposed, from [ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5)):
+**Done when** ([ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5)):
 a pipeline version has one recorded evaluation on a held-out set that meets
 classifier precision ≥ 0.95 (recall ≥ the previous verifier's), exact price
 accuracy on accepted rows ≥ 0.98, item recall ≥ 0.85, validator corruption
 catch ≥ 0.97 and false reject ≤ 0.12, with usable prices, Pi pages/hour and
 peak RAM recorded; and a first pass on the Pi has left every verified menu URL
-with either a Menu page aggregate or a skipped Capture with a reason code.
+with either a Menu page aggregate or a skipped Capture with a reason code, and
+venues whose only menu is a PDF are counted (no menu URL reaches them).
 
 ---
 
@@ -575,7 +583,7 @@ re-runnable from stored evidence.
   changed hash of the segmented text) or a pipeline-version bump; raw-body
   hashes and ETags are never the change signal. Queue order: new pages, then
   changed pages, then re-interpretations
-  ([ADR-0013 §5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators), Proposed).
+  ([ADR-0013 §5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators)).
   Pipeline-version bumps are batched, because each one means a
   re-interpretation pass of up to the full first-pass time.
 - **Nothing is deleted:** an item that disappears from a page keeps its history;
@@ -590,8 +598,9 @@ re-runnable from stored evidence.
 - **Run report:** pages fetched / changed / extracted, outcomes by reason code,
   SoC temperature and throttling ([ADR-0013 §3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)),
   and venue freshness against the 45-day target (§2).
-- **Monthly spot check** of a small random sample of newly extracted pages
-  ([ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5)).
+- **Monthly spot check:** 10 random newly extracted pages, labelled blind by an
+  agent, the owner confirming disagreements; a failure makes them the next
+  held-out set ([ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5), Amendment 3).
 
 **Done when:** Menu Silver and Gold can be reconstructed from replay bundles,
 Bronze provenance, and durable Identity decisions without changing those
@@ -696,7 +705,7 @@ gets a real denominator.
 - `packages/helios_parsing/` ports of V1's sub-deal regex chain (pattern list in YAML, property tests), temporal parsing (a structured `Validity` dataclass: `weekdays`, `start`, `end | "close"`), and the 6-factor quality scorer (weights + thresholds in config).
 - `DealObservation` and `DealApplicability` models, deferred here from Phase 1; placement follows ADR-0004.
 - Applicability fan-out: chain-wide deals create N rows, one per active venue of that brand.
-- Promotional rows parked during Phase 5 extraction become the initial input — the evidence is already captured and replayable.
+- A promo classifier model that finds and parses promotional rows in stored menu-page bundles, trained and evaluated on the `promo` marks that Phase 5's gold labels carry. It ships as a menu pipeline-version bump (a re-interpretation), so the evidence is already captured and replayable ([ADR-0013 Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 - Gold deal materialization + `/v1/deals` endpoints.
 
 **Port hints (`V1-Graveyard` branch):** `collectors/meal_deals/sub_deals.py`, `temporal.py`, `quality.py`, `semantic_layer.py`, `core/database.py` (~L1283, ~L1356, ~L1395).
@@ -798,7 +807,7 @@ the strict database run is in
 
 ## 7. Open Questions
 
-Phase 5's open questions are in [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md#open-questions-for-the-owner).
+Phase 5's open questions were answered at ADR-0013's acceptance ([Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 
 1. **Multi-city?** — Out of scope for this roadmap, but the schema must not
    *prevent* it: nothing hardcodes Austin, venues carry lat/lon, and the

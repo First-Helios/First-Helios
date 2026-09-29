@@ -25,7 +25,7 @@ the build order.
 | 0 — Foundations & tooling | M1, M2, M3 |
 | 1 — Domain model & migrations | M5, M6 |
 | 2 — First Light (read API + staging) | M11, M12 |
-| 3, 5, 6 — Menu reading and ingest ([Proposed ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md)) | M4, M7, M8, M9 |
+| 3, 5, 6 — Menu reading and ingest ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md)) | M4, M7, M8, M9 |
 | 4 — Venue discovery, identity & geocoding | M7, M10 |
 | 7 — API surface | M11 |
 | 8 — Operations | M12 |
@@ -259,7 +259,7 @@ menu pipeline is judged by quality bars against a labelled gold set.
   a mock transport, no live network.
 - [`test/test_menu_schema.py`](./test/test_menu_schema.py) — heavy use of
   `parametrize`.
-- The menu pipeline's quality bars: [Proposed ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md)
+- The menu pipeline's quality bars: [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md)
   and the [menu-model spike](./docs/spikes/menu-model/README.md).
 
 ### Self-check
@@ -445,7 +445,7 @@ candidate logic (homepage links, sitemaps) is in
 pages, not crawling them. Owner decision G.b replaced ROADMAP's
 Scrapy-vs-Crawlee framework question with the spike's pipeline — page
 classifier, LLM extraction, validator — written up as
-[Proposed ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md). You need to be
+[ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md). You need to be
 able to judge that pipeline's quality claims.
 
 ### Core concepts
@@ -479,7 +479,12 @@ able to judge that pipeline's quality claims.
 
 ### In this repo
 
-Not built yet. Read [Proposed ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md)
+Partly built: segmentation
+([`packages/helios_parsing/segment.py`](./packages/helios_parsing/segment.py)),
+the page classifier
+([`apps/menu_pipeline/classifier.py`](./apps/menu_pipeline/classifier.py)) and
+the renderer; LLM extraction and the validator are not built yet. Read
+[ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md)
 and the [menu-model spike](./docs/spikes/menu-model/README.md) for the numbers
 behind it. The Menu domain it writes into already exists
 ([`packages/helios_core/domains/menu/`](./packages/helios_core/domains/menu/),
