@@ -920,6 +920,15 @@ Branch: `chore/infra-tooling` · Split into an `infra/` PR and a config-only PR.
 Hand-off prompt: `Do session S16 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `docs/drift-sweep` · CLAUDE.md edits (if any remain after S1): owner review.
 
+*Owner decision (2026-09-28, end of S13b):* S16 grows into a full documentation
+consolidation run by an **Opus 5.5 lead with an agent swarm** (overrides the §2 model row
+and hand-off rule 3.4 "don't spawn subagents" for this session only). Goal: code,
+planning and status neat and concise. **Historical docs are deleted** once their lasting
+decisions live in an ADR, README or the code; git keeps them, and `docs/HISTORY.md` lists
+each removed file with its last commit. **Scope: docs, docstrings, code comments and
+templates only**, with no behaviour changes. The active trackers (this checklist, the
+hand-off) stay until S17.
+
 - [ ] Every item in review §7 "Doc drift" (README, ROADMAP, ADR statuses and numbers, plans, retro, LEARNING_GUIDE, docstrings, templates)
 - [ ] R51 ADR-0004 vs ADR-0008 on the API reading Identity models (per D6.5)
 - [ ] R97 Fix the misleading "cannot forge" test comment
