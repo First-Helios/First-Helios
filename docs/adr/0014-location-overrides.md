@@ -12,7 +12,7 @@ decision G.b), so this draft takes the next number after it.
 ## Context
 
 The owner-delegated adjudication of the S6 precision audit
-([precision review](../reviews/2026-09-28-precision-review.md)) found **4 wrong
+([precision review](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-28-precision-review.md)) found **4 wrong
 geocodes in the unchanged 100-row sample** (95% interval 1.1-9.9%), against the
 ROADMAP Phase 4 bar of < 1%. Each is an Overture coordinate that disagrees with
 the venue's corroborated address by 1.6-21 km (P. Terry's MLK, El Sol y La Luna,
@@ -125,7 +125,8 @@ still worth doing in parallel as a courtesy, not as the fix.
   the bug; tests must cover minting, dedupe, relocation and rebuild.
 - The override file becomes a CODEOWNERS-reviewed input. Entries need evidence of
   the stated `basis`; the adjudication's 150 m / 1,000 m rules
-  ([precision review](../reviews/2026-09-28-precision-review.md)) are the review
+  ([README gate 1a label criteria](../../README.md#gates); source:
+  [precision review](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-28-precision-review.md)) are the review
   standard for adding one.
 - Rebuilding the Pi from the same release after this lands produces corrected
   points without hand edits.
@@ -142,8 +143,8 @@ still worth doing in parallel as a courtesy, not as the fix.
 
 ## References
 
-- [Precision review, adjudication section](../reviews/2026-09-28-precision-review.md)
-  and `docs/reviews/data/2026-09-28-precision-review/reviewed.json`
+- [Precision review, adjudication section](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-28-precision-review.md#adjudicated-results)
+  (historical) and [`reviewed.json`](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/data/2026-09-28-precision-review/reviewed.json)
 - [ADR-0012](./0012-venue-lifecycle.md) §1 (audit options), §2 (relocation rule)
 - [ADR-0010](./0010-website-and-menu-url-resolution.md) §4 (registry precedence);
   [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) (registry provenance)

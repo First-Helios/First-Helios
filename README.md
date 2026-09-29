@@ -1,182 +1,318 @@
 # Helios V2
 
-A trustworthy, queryable price index of food in Austin — restaurant menus
-and what they actually cost, rebuilt from scratch with professional rigor.
+A trustworthy, queryable price index of food in Austin: restaurant menus and
+what they actually cost, across the Austin / Round Rock metro. V2 is a
+from-scratch rebuild; the scope was set menus-first by
+[RFC-0001](./docs/rfc/0001-menu-pricing-first.md). It is built by AI agents
+with a human reviewer in the loop: see [CLAUDE.md](./CLAUDE.md) for agent
+instructions and [CONTRIBUTING.md](./CONTRIBUTING.md) for the PR workflow.
 
-**Status (2026-09-18):** Bronze provenance and shared Identity are implemented
-through Plan 0002 Step 4. Menu persistence has a reconciled [proposal](./docs/plans/0002-step-5-menu-schema-proposal.md)
-and [accepted ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md).
-The [provider prerequisite and concrete SQL](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md)
-are accepted by the owner after CI-image PostGIS validation; the API has
-health endpoints only. Menu collection and the price-index product are not
-implemented yet.
+## Status
 
-The [current reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md)
-records verified behavior, verification hardening before Menu, and the
-next product demonstration.
+This section is the single current-status page. Other docs link here.
 
-The [provider prerequisite gate check](./docs/reviews/0002-step-5-provider-prerequisite-gates.md)
-preserves the earlier access failures and now links the completed CI-image gate.
-ADR-0005 owner acceptance is recorded. The provider diff and
-[upgrade/downgrade SQL](./docs/reviews/0002-step-5-provider-prerequisite.md#migration-and-concrete-sql)
-are now accepted; Menu implementation has not started.
+**Built** (schemas are owned per module; see
+[`packages/helios_core/db/base.py`](./packages/helios_core/db/base.py)):
 
-The [provider technical review](./docs/reviews/0002-step-5-provider-review.md)
-fixed stale-snapshot admission after remap/unassign. Final strict CI passed
-278 tests with no failures/skips, including direct SQL preservation checks;
-Alembic found no drift. Owner acceptance of the corrected provider and both SQL
-directions is recorded in the [acceptance and Menu handoff](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md).
-
-The [owner-disposition packet](./docs/reviews/0002-step-5-provider-owner-disposition.md)
-binds the corrected implementation and both SQL artifacts to exact hashes.
-Fresh strict CI again passed 278 tests with zero failures/skips and no drift;
-the disposable test container was removed. Fortune subsequently approved all
-presented items on 2026-09-18. The provider unit is complete; the bounded Menu
-persistence/writer handoff is ready for separate implementation authorization
-in a new session.
-
-**Update (2026-09-19):** the bounded Menu writer, revision `d83f0a21c592`, and
-both concrete Menu SQL directions were accepted "Accept as-is"
-([writer technical review](./docs/reviews/0002-step-5-menu-writer-technical-review.md)).
-The [read-side selection/ranking unit](./docs/reviews/0002-step-5-menu-selector-technical-review.md)
-is now implemented (`packages/helios_core/domains/menu/selection.py` and
-`test/test_menu_precedence.py`, 22 focused tests) and was **accepted by the owner
-on 2026-09-19**; it adds no migration. Fresh strict `make ci` passed **530 tests,
-zero failures/skips**, coverage 98%, `alembic check` no drift (single head
-`d83f0a21c592`). Integrated M01–M14 final acceptance — the accepted writer, both
-Menu SQL directions, and the selector exercised together across the full ADR-0005
-matrix on a fresh CI-image database — was **accepted by the owner on 2026-09-19**
-([integrated acceptance record](./docs/reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)).
-Step 5 Menu engineering is complete; Gold read models are Step 6.
-
-The scope was set menus-first on 2026-07-31 by
-[RFC-0001](./docs/rfc/0001-menu-pricing-first.md): menu and item-price
-coverage across the Austin / Round Rock metro is the product, and meal deals
-become a layer built on top of it (Phase 10) rather than the foundation.
-
-This build is **agent-driven with a human reviewer in the loop**. See
-[CLAUDE.md](./CLAUDE.md) for agent working instructions and
-[CONTRIBUTING.md](./CONTRIBUTING.md) for the PR/review workflow.
-
-## Start here
-
-- [ROADMAP.md](./ROADMAP.md) — what we're building, in what order, and why.
-- [LEARNING_GUIDE.md](./LEARNING_GUIDE.md) — the module-by-module skills
-  course (originally paced for a human learner; now primarily a curriculum
-  for reviewing agent-authored work — see [ADR-0001](./docs/adr/0001-stack-choice.md)
-  for context on the agent-driven shift).
-- [docs/adr/](./docs/adr/) — standing architectural decisions.
-
-## What's here now
-
-- `packages/helios_core/provenance/` — six Bronze tables for sources,
-  endpoints, captures, source records/versions, and Evidence; replay-safe
-  observation persistence.
-- `packages/helios_core/identity/` — Subject, Place, Organization, and
-  Establishment; append-only resolution and lineage decisions; deterministic
-  external-key/URL resolution and readiness guards.
-- `packages/helios_core/db/` — shared model registration, schema ownership,
-  and session/engine setup. The legacy `Venue` scaffold has been removed.
-- `packages/helios_core/gold/` — the first `gold` read model,
-  `gold.current_menu`, a rebuildable projection of the accepted Menu selector.
-  The bounded per-scope refresh and the **full-catalog refresh**
-  (`refresh_full_catalog` over `enumerate_current_requests`) are implemented and
-  **owner-accepted (2026-09-20, "Accept as-is")**
-  ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md),
-  [Step 6 review](./docs/reviews/0002-step-6-gold-read-models.md),
-  [full-catalog review](./docs/reviews/0002-step-6-gold-full-catalog-refresh.md)).
-  The price index remains deferred to its own ADR.
-- `apps/api/` — FastAPI service. `/healthz` (liveness) and `/readyz`
-  (checks the database) so far.
-- `alembic/` — migrations. `alembic upgrade head` builds the schema from
+- **Bronze provenance**: `packages/helios_core/provenance/`. Sources, endpoints,
+  captures, source records and versions, and Evidence (`bronze` schema);
+  replay-safe observation persistence.
+- **Identity**: `packages/helios_core/identity/`. Subject, Place, Organization,
+  Establishment; append-only resolution and Subject-change lineage;
+  deterministic external-key/URL resolution and readiness (`identity` schema).
+- **Menu**: `packages/helios_core/domains/menu/`. Immutable Menu snapshots and
+  their writer, plus the pure current/history price selector
+  (`menu` schema, ADR-0005). Nothing writes menus in production yet.
+- **Gold read model**: `packages/helios_core/gold/`. `gold.current_menu`, a
+  rebuildable projection of the Menu selector, with bounded per-scope and
+  full-catalog refresh (ADR-0006).
+- **Read API**: `apps/api/`. FastAPI, conventions per ADR-0008:
+  - `GET /healthz`: liveness, no database.
+  - `GET /readyz`: readiness, checks the database.
+  - `GET /v1/venues`: current venues, cursor-paginated (`limit`, `cursor`).
+  - `GET /v1/venues/{venue_id}`: one current venue.
+- **Overture discovery**: `apps/discovery/` (`__main__.py`, `overture.py`,
+  `pipeline.py`). Seeds food venues from Overture Places into Bronze and
+  Identity, with conservative dedupe and Nominatim gap-fill
+  (`packages/helios_core/geo.py`) (ADR-0009).
+- **Website and menu-URL resolution**: `apps/discovery/resolve_urls.py`,
+  `url_pipeline.py`, `menu_url.py`, `web_client.py`, `registry.py`
+  (+ `config/sources.yaml`). Bronze-first, robots-aware, rate-limited
+  (ADR-0010, ADR-0011).
+- **Venue lifecycle**: `apps/discovery/lifecycle.py`, `apps/discovery/models.py`.
+  Release completion evidence and completion-gated closure, run at the end of
+  each discovery run (ADR-0012). Limits: closure needs a completed baseline plus
+  two linked completed releases (none recorded yet; completion is never
+  back-filled); completion trusts iterator exhaustion, not upstream
+  completeness; a > 50 m coordinate change counts as a relocation even when the
+  upstream point was wrong (ADR-0014, Proposed); not yet run on the Pi.
+- **Precision audit**: `apps/discovery/audit.py`. DB-free duplicate and geocode
+  audit over a venue export, with a hand-labeled worksheet.
+- **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
-- `infra/` — `Dockerfile` (multi-stage, non-root) and `docker-compose.yml`
-  (Postgres/PostGIS → one-shot migrate → API).
-- Tooling: `ruff`, `mypy --strict`, `pytest`, `pre-commit`, all wired into
-  CI as required status checks on `main`.
 
-The Menu schema (Step 5) and the Gold `gold.current_menu` read model (Step 6) —
-including both the bounded and the full-catalog refresh — are implemented and
-owner-accepted; the Gold price index, discovery ingestion, extraction, scraping,
-and product API endpoints are not. Staging/production deployment has not been
-verified by the current repository assessment.
+**Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-## Local setup
+- Phase 5 menu extraction (page classifier, LLM extraction, validator). Waits on
+  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is Proposed.
+- Location overrides ([ADR-0014](./docs/adr/0014-location-overrides.md),
+  Proposed) and menu-URL re-verification
+  ([ADR-0015](./docs/adr/0015-menu-url-reverification.md), Proposed).
+- The Gold price index: target shape accepted in
+  [ADR-0007](./docs/adr/0007-gold-price-index-projection.md); no model,
+  migration or code.
+- Price-index API endpoints, the staging deploy (ADR-0008 Unit B), production,
+  and the deals layer.
 
-Run the whole stack in Docker — Postgres, migrations, and the API:
+## Gates
+
+- **Phase 5 gate: passed 2026-09-28.** S7 #28, S11 #33, S12 #34 and S13 #45
+  merged; main CI run
+  [36508316467](https://github.com/First-Helios/First-Helios/actions/runs/36508316467)
+  green with strict DB tests. Phase 5 code still waits on ADR-0013 (Proposed).
+  Owner decision G.b: the spike's pipeline replaces the Scrapy-vs-Crawlee
+  question.
+- **Pi gate 1a, Phase 4 location quality: closed.** The 2026-09-28 adjudication
+  of the 100-row precision sample found 4 wrong geocodes and 6 sampled venues
+  with a confirmed duplicate, so both ROADMAP Phase 4 bars fail (< 1% wrong
+  geocodes, < 2% duplicates). Does not gate `resolve_urls`. Opens when all hold:
+  - a correction plan is committed (every confirmed defect classified and mapped
+    to an evented command with Evidence or a location override; corpus-wide
+    twin search, because the co-location detector misses twins separated by a
+    bad coordinate and chain location-label records; fix `audit.street_key`,
+    which strips 5-digit house numbers as ZIP codes);
+  - ADR-0014 is accepted and implemented (session S6c);
+  - corrections are applied on the Pi in an owner-authorized run (no raw SQL);
+  - a fresh-sample re-audit passes: new seed, 100 hand-labeled rows plus a
+    regression check of the corrected cohort; 0 confirmed wrong geocodes, at most
+    1 sampled venue with a confirmed duplicate, at most 5 unresolved rows per
+    measure, worst case reported, denominator never changed.
+
+  Label criteria for the re-audit (from the 2026-09-28 adjudication; unresolved
+  never counts as correct):
+  - *Geocode ok:* address corroborated (business, municipal or marketplace
+    evidence) and an official pin or independent geocoder match within 150 m.
+  - *Geocode wrong:* address corroborated, no evidence of a move, saved point
+    more than 1,000 m from an official pin or geocoder match.
+  - *Duplicate:* another current record for the same outlet at the same time
+    (legal, trading and location-label names count); proximity alone never
+    decides.
+  - *Twin search, every sampled row:* same house-number street line, or name
+    similarity ≥ 0.6 within 300 m; same fingerprint within 1 km; same address at
+    any distance.
+  - *Unresolved:* 150–1,000 m on interpolating geocoders only, no geocode,
+    uncorroborated venue, address conflict, rename-vs-succession pairs (a
+    succession is a new business, ADR-0012), virtual-brand granularity.
+  - Corrected-cohort input: `reviewed.json` in the
+    [removed precision-review data](https://github.com/First-Helios/First-Helios/tree/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/data/2026-09-28-precision-review)
+    ([docs/HISTORY.md](./docs/HISTORY.md)).
+- **Pi gate 1b, URL-resolution readiness: closed.** Gates the first Pi
+  `resolve_urls` run; independent of 1a. Opens when all hold:
+  - the owner decides on ADR-0015 (Proposed) and/or waits for the ADR-0013 page
+    classifier, and the chosen path is accepted, implemented and merged with
+    strict CI;
+  - a saved menu URL records its verifier version and is re-checked when the
+    verifier changes; a URL the current verifier rejects goes to
+    `needs_review`;
+  - platform menu pages pass a content check;
+  - PR #46's multi-location chain question is decided;
+  - the owner authorizes the run.
+- **Code review remediation R01–R117: in progress.** Active trackers: the
+  [remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md)
+  (full gate criteria in its S6b block) and the
+  [session hand-off](./docs/reviews/2026-09-22-session-handoff.md).
+
+## Quick start / How to run
+
+### Local setup
+
+Run Postgres/PostGIS, migrations and the API in Docker
+([`infra/docker-compose.yml`](./infra/docker-compose.yml): `postgres`, a one-shot
+`migrate`, then `api` on `127.0.0.1:8000`):
 
 ```bash
 git clone https://github.com/First-Helios/First-Helios.git
 cd First-Helios
-
 cp .env.example .env
-make dev        # builds + starts postgres -> migrate -> api
-
+make dev                      # build + start postgres -> migrate -> api
 curl localhost:8000/healthz   # {"status":"ok"}
 curl localhost:8000/readyz    # {"status":"ok"} once Postgres is up
 ```
 
-`make dev-logs` tails the stack, `make dev-down` stops it. `.env` is read only
-by these Docker Compose targets (`--env-file .env`); the app, Alembic, and
-pytest below read `DATABASE_URL` straight from the process environment and
-never load `.env`, so the Compose stack's variable is named
-`HELIOS_COMPOSE_DATABASE_URL` — that keeps a shell's own `DATABASE_URL` (set
-for the commands below) from leaking into the containers.
+`make dev-logs` tails the stack, `make dev-down` stops it, `make migrate` re-runs
+the one-shot migration. `.env` is read only by these Compose targets
+(`--env-file .env`), and the containers take their database from
+`HELIOS_COMPOSE_DATABASE_URL`. Everything else (the app, Alembic, pytest, the
+CLIs) reads `DATABASE_URL` from the process environment only and never loads
+`.env`. `DATABASE_URL` has no default: commands that need a database fail and
+database tests skip when it is unset
+([`packages/helios_core/config.py`](./packages/helios_core/config.py)).
 
-To work on the code directly (tests, linting, type checking):
+### Develop
 
 ```bash
-make install   # uv sync + pre-commit hooks
-make ci        # lint + typecheck + test + lockfile check
+make install     # uv sync + pre-commit and commit-msg hooks
+make lint        # pre-commit on all files (hygiene hooks, ruff, ruff-format, mypy)
+make typecheck   # mypy .
+make test        # pytest with coverage
+make ci          # lockcheck + lint + typecheck + test (local subset of CI)
+make build       # build the API image on its own
 ```
 
-`make ci` runs local lint, type, test, and lockfile checks. GitHub CI also
-runs the database tests in strict mode with a coverage floor, runs
-`alembic check`, and builds and smoke-tests the Docker image.
-`DATABASE_URL` has no default: Alembic and the discovery CLIs refuse to run
-without it, and database tests skip. A local green run with skipped
-database tests does not establish database acceptance.
+Run migrations or the API outside Docker by exporting `DATABASE_URL` first:
 
-For full database verification, provision a separate disposable `*_test`
-database first, then use its connection URL. For example, with a separately
-created local `helios_test` database and the example development credentials:
+```bash
+export DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios
+uv run alembic upgrade head
+uv run uvicorn apps.api.main:app
+uv run python -m apps.api.export_openapi   # after an intentional API change
+```
+
+### Discovery CLIs
+
+Discovery and `resolve_urls` make network calls and write to the database
+`DATABASE_URL` names; the audit reads a venue export and needs no database.
+None of them run in CI. On the Pi they run inside the API container
+(`docker compose exec api ...`).
+
+```bash
+# Seed venues from an Overture release, then record completion and run lifecycle
+uv run python -m apps.discovery [--release <overture-parquet-glob>] \
+    [--expected-predecessor <prior-release-path>] [--no-geocode]
+
+# Resolve website + menu URL (Pi gate 1b must be open before a Pi run)
+uv run python -m apps.discovery.resolve_urls --config config/sources.yaml [--limit N]
+
+# Precision audit over a venue export (no database)
+uv run python -m apps.discovery.audit --export <venue-export.json> [--geocode-check]
+```
+
+Each takes `--help` for the full flag list. The audit's venue export:
+
+```bash
+psql -At -f - <<'SQL' > venues.json
+SELECT json_agg(row_to_json(t)) FROM (
+  SELECT e.subject_id, o.canonical_name AS name, o.name_fingerprint AS fingerprint,
+         p.latitude::float8 AS lat, p.longitude::float8 AS lon, p.address
+  FROM identity.establishment e
+  JOIN identity.subject_currentness sc ON sc.subject_id = e.subject_id AND sc.is_current
+  JOIN identity.organization o ON o.subject_id = e.organization_subject_id
+  JOIN identity.place p ON p.subject_id = e.place_subject_id
+) t;
+SQL
+```
+
+### Staging (Pi)
+
+- An Orange Pi 5 Plus (ARM64) on the owner's LAN runs the `helios` Compose
+  stack from `infra/docker-compose.yml` (`postgres`, one-shot `migrate`, `api`),
+  bound to 127.0.0.1. Discovery CLIs run inside the API container:
+  `docker compose -f infra/docker-compose.yml --env-file .env exec api python -m apps.discovery ...`.
+- The deploy directory is a source snapshot of one merged commit (`git archive`),
+  with a `DEPLOYED_COMMIT` file recording its SHA; `var/` is a host bind mount
+  (caches, audit packets under `var/audits/`).
+- Database volume `helios_postgres_data`. The pre-ADR-0011 volume
+  `infra_postgres_data` is kept offline: never attach it to the current image.
+  Backups are custom-format `pg_dump` files under `~/helios-backups/<run>/`; no
+  restore has been rehearsed.
+- Rebuild outline: stop runs and back up; deploy the commit; `down`; remove
+  `helios_postgres_data` only after confirming it belongs to this stack;
+  `up -d --build` (`migrate` exits 0 at head); check `alembic check`, `/healthz`,
+  `/readyz`; run discovery (`--expected-predecessor` once a completed release
+  exists); re-export and re-audit.
+- Last rebuild: 2026-09-28 at `3faae15` (migration `c91a6f02de73`), before the
+  S13 lifecycle migration; no completed discovery baseline yet.
+
+### Database acceptance
+
+A local `make ci` with skipped database tests is not database acceptance. Use a
+separately provisioned, disposable PostgreSQL `*_test` database (never the
+Compose dev database or application data):
 
 ```bash
 HELIOS_STRICT_DB_TESTS=1 DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test make ci
 DATABASE_URL=postgresql+psycopg://helios:helios@localhost:5432/helios_test uv run alembic check
 ```
 
-Strict mode is enabled in CI. It fails instead of skipping when PostgreSQL
-is unavailable or unsuitable and rejects any `HELIOS_ALLOW_NONTEST_DB` setting.
-Without strict mode, optional local database tests can still skip.
+CI runs the same strict tests and `alembic check`. See
+[CLAUDE.md](./CLAUDE.md#verification--run-before-calling-anything-done) for the
+rules.
 
-The migration tests downgrade and rebuild that database, and concurrency
-tests commit fixture rows. Do not point them at application data or set
-`HELIOS_ALLOW_NONTEST_DB`. On 2026-09-17, a temporary PostgreSQL 16 cluster
-passed strict `make ci`: 180 passed, zero failed/skipped, including the
-migration and concurrency tests, using a percent-encoded socket URL.
-`alembic check` reported no changes. That result was native PostgreSQL acceptance
-only. On 2026-09-18 the CI PostGIS image passed strict pre-implementation
-validation; the [provider review](./docs/reviews/0002-step-5-provider-prerequisite.md)
-records its exact image versions, provider checks, and remaining limits.
+## Repository layout
 
-## V1 archive
-
-The prior version of this project lives on the
-[`V1-Graveyard`](https://github.com/First-Helios/First-Helios/tree/V1-Graveyard)
-branch — reference material for porting proven patterns (see
-[ROADMAP.md §3](./ROADMAP.md#3-part-a--distilled-assets)), not a dependency
-of `main`.
-
-```bash
-# browse V1 code without affecting your V2 working copy
-git fetch origin V1-Graveyard
-git worktree add ../helios-v1 V1-Graveyard
 ```
+alembic/                migrations (hand-reviewed)
+apps/
+  api/                  FastAPI read API and OpenAPI snapshot
+  discovery/            Overture discovery, URL resolution, lifecycle, audit
+config/sources.yaml     manual website / menu-URL registry
+docs/
+  adr/                  architecture decisions (index below)
+  rfc/  plans/          proposals and build plans
+  reviews/              review trackers and migration SQL artifacts
+  spikes/menu-model/    menu-model spike (ADR-0013 evidence)
+  diagrams/             ERD and context diagrams
+infra/                  Dockerfile and docker-compose.yml
+packages/helios_core/
+  config.py             settings (DATABASE_URL, CORS)
+  db/                   Base, schema ownership, model registry, sessions
+  provenance/           Bronze
+  identity/             Identity
+  domains/menu/         Menu
+  gold/                 Gold read models
+  geo.py                Nominatim client
+test/                   pytest suite
+```
+
+## Decisions
+
+The ADR index. Status is the short form of each ADR's Status line.
+
+| ADR | Title | Status |
+|---|---|---|
+| [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack choices | Accepted |
+| [0002](./docs/adr/0002-containerization.md) | Containerization, and pulling it forward from Phase 8 | Accepted |
+| [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 |
+| [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
+| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted |
+| [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted |
+| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; implementation deferred) |
+| [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted |
+| [0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) | Venue discovery: source, ingestion, dedupe/minting, and schedule | Accepted |
+| [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
+| [0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) | Provenance endpoints vs identity match keys | Accepted |
+| [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
+| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Proposed |
+| [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Proposed |
+| [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Proposed |
+
+Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
+scope) and the
+[Step 5 menu schema proposal](./docs/plans/0002-step-5-menu-schema-proposal.md)
+(normative detail for ADR-0005). New ADRs start from the
+[template](./docs/adr/0000-template.md).
+
+## Docs
+
+- [ROADMAP.md](./ROADMAP.md): phases, plans, and why.
+- [CONTRIBUTING.md](./CONTRIBUTING.md): workflow, commits, CI checks.
+- [CLAUDE.md](./CLAUDE.md): agent instructions and verification rules.
+- [LEARNING_GUIDE.md](./LEARNING_GUIDE.md): module-by-module curriculum for
+  reviewing the work.
+- [docs/HISTORY.md](./docs/HISTORY.md): index of removed historical docs.
+- [docs/spikes/menu-model/README.md](./docs/spikes/menu-model/README.md): the
+  menu-model spike (ADR-0013 evidence).
+- Review trackers: [full codebase review](./docs/reviews/2026-09-22-full-codebase-review.md),
+  [remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md),
+  [session hand-off](./docs/reviews/2026-09-22-session-handoff.md).
+
+The V1 code lives on the
+[`V1-Graveyard`](https://github.com/First-Helios/First-Helios/tree/V1-Graveyard)
+branch: reference material, not a dependency of `main`.
 
 ## License
 
-[Business Source License 1.1](./LICENSE) — source-visible, non-commercial
-use only until the Change Date, after which it converts to Apache License
-2.0. See the LICENSE file for the current parameters, or contact
+[Business Source License 1.1](./LICENSE): source-visible, non-commercial use
+only until the Change Date, after which it converts to Apache License 2.0. See
+the LICENSE file for the current parameters, or contact
 abdullahhijazi3@gmail.com for a commercial license.

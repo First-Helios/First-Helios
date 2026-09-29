@@ -51,7 +51,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [X] #48 draft (ADR-0013 Proposed; stop for review) |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
-| 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
+| 16 | S16 Docs drift sweep | D6.5 | M | [X] #49 draft (docs consolidation; CLAUDE.md edits for owner review) |
 | 17 | S17 Close-out | all | S | [ ] |
 
 S15 and S16 have no dependencies; slot them in whenever you're waiting on a review.
@@ -360,7 +360,7 @@ covered by another guard, or documentation of a deliberate trade-off.
 Recorded verbatim from the owner's session prompt:
 
 - **(a) Pi gate:** "I defer to the agent to address solving this conflict." The owner
-  delegates adjudication of docs/reviews/2026-09-28-precision-review.md and the gate
+  delegates adjudication of [docs/reviews/2026-09-28-precision-review.md](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-28-precision-review.md) and the gate
   criteria to the agent.
 - **(b) Phase 5:** Phase 5 menu processing uses the spike's pipeline
   (docs/spikes/menu-model/README.md: page classifier + LLM extraction + validator),
@@ -575,8 +575,8 @@ Branch: `fix/platform-menu-urls` · Not Pi-gating.
   writes nothing.
 
 🚦 **Pi gate — split 2026-09-28 under owner decision G.a.** S2/S3/S4/S6 are merged and
-the Pi was rebuilt 2026-09-28 ([S6 runbook](2026-09-27-s6-pi-rebuild.md)). The agent
-adjudicated the [precision review](2026-09-28-precision-review.md) and verified the gate
+the Pi was rebuilt 2026-09-28 ([S6 runbook](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-27-s6-pi-rebuild.md)). The agent
+adjudicated the [precision review](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-28-precision-review.md) and verified the gate
 conflict in code:
 
 - URL records are keyed by GERS id (`<gers>`, `<gers>|<platform host>`), and no file in
@@ -827,7 +827,7 @@ Branch: `feat/s13-venue-lifecycle`
   Organization merge seen through `/v1/venues`, and Establishment promotion
   unblocking a Menu write.
 
-Implementation and validation: [S13 review](2026-09-28-s13-venue-lifecycle.md).
+Implementation and validation: [S13 review](https://github.com/First-Helios/First-Helios/blob/ddb5579dbd439005468581fde99f254a64a2d824/docs/reviews/2026-09-28-s13-venue-lifecycle.md).
 Merged as #45 (`ddb5579`).
 
 🚦 **Phase 5 gate — passed 2026-09-28.** Conditions verified from `main`, not from
@@ -929,10 +929,10 @@ each removed file with its last commit. **Scope: docs, docstrings, code comments
 templates only**, with no behaviour changes. The active trackers (this checklist, the
 hand-off) stay until S17.
 
-- [ ] Every item in review §7 "Doc drift" (README, ROADMAP, ADR statuses and numbers, plans, retro, LEARNING_GUIDE, docstrings, templates)
-- [ ] R51 ADR-0004 vs ADR-0008 on the API reading Identity models (per D6.5)
-- [ ] R97 Fix the misleading "cannot forge" test comment
-- [ ] Pick one file as the single status source; others link to it
+- [X] Every item in review §7 "Doc drift" (README, ROADMAP, ADR statuses and numbers, plans, retro, LEARNING_GUIDE, docstrings, templates)
+- [X] R51 ADR-0004 vs ADR-0008 on the API reading Identity models (per D6.5)
+- [X] R97 Fix the misleading "cannot forge" test comment
+- [X] Pick one file as the single status source; others link to it
 
 **Recommended approach**
 - Make README the single "current status" page; ROADMAP keeps plans and phase
@@ -978,6 +978,7 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Merged (`8cbce26`; main CI green) |
 | 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Merged (`b2bba73`; ADR-0014/0015 still Proposed) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
+| 2026-09-28 | S16 | docs/drift-sweep | #49 | Draft (CLAUDE.md, `gold/models.py` docstring: owner review) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -992,7 +993,7 @@ database: 957 passed, one expected parsing-package placeholder skip, 92% coverag
 At that point S6 awaited review and merge. It subsequently merged as #42 and the
 owner-authorized Pi rebuild completed 2026-09-28. The new precision audit still
 requires confirmation; Phase 5 remains closed. Current operational status is in the
-[S6 runbook](2026-09-27-s6-pi-rebuild.md). This supersedes earlier proposed/draft
+[S6 runbook](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-27-s6-pi-rebuild.md). This supersedes earlier proposed/draft
 status text in the historical session log.
 
 ### 2026-09-28 Pi rebuild
@@ -1002,13 +1003,13 @@ backed up the Pi database and source snapshot, retained the previous
 `infra_postgres_data` volume offline, and deployed the merged commit into a fresh
 `helios_postgres_data` volume. Discovery completed with 10,014 observations and
 9,996 venues; every observation has the full provenance chain. The API and
-schema checks passed. See [the execution record](2026-09-28-pi-rebuild-results.md).
+schema checks passed. See [the execution record](https://github.com/First-Helios/First-Helios/blob/46d81d4e56612ef040eb552b02247b984f187c90/docs/reviews/2026-09-28-pi-rebuild-results.md).
 URL resolution remains stopped pending confirmation of the new precision audit.
 
 ### 2026-09-28 precision review
 
 All 43 duplicate pairs and 45 geocode flags have evidence-backed agent
-assessments or explicit unresolved notes in the [precision review](2026-09-28-precision-review.md).
+assessments or explicit unresolved notes in the [precision review](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-28-precision-review.md).
 Results: 23 duplicate pairs, 4 distinct, 16 unresolved; 20 corroborated
 geocodes, 3 supported wrong, 22 unresolved. Owner labels remain pending.
 The Pi gate remains closed; confirm/correct the coordinate defects and resolve
@@ -1019,7 +1020,7 @@ outstanding evidence before acceptance. S6b is not Pi-gating.
 
 Implemented accepted ADR-0012 in isolated `feat/s13-venue-lifecycle`, based on
 `main@46d81d4` (PRs #43 and #44 were already merged; no open PRs at start).
-See the [S13 review](2026-09-28-s13-venue-lifecycle.md) for the schema contract,
+See the [S13 review](https://github.com/First-Helios/First-Helios/blob/ddb5579dbd439005468581fde99f254a64a2d824/docs/reviews/2026-09-28-s13-venue-lifecycle.md) for the schema contract,
 acceptance matrix, validation, and limitations. Existing worktrees and the Pi
 were untouched. Both gates remain closed; broad duplicate cleanup is deferred.
 
@@ -1075,3 +1076,27 @@ page classifier ADR-0015's `classifier-v1` verifier (option C), and lists five n
 questions (page scope for per-location platform pages, PDFs, robots for rendered
 sub-requests, spot-check size, promotional rows). Phase 5 code waits for acceptance;
 ADR-0014/0015 are still Proposed (S6c/S6d wait on them).
+
+### 2026-09-28 S16 documentation consolidation
+
+Branch `docs/drift-sweep` from `main@9796aa6` (#48 merged). Owner decision in the S16
+block: Opus lead plus a seven-worker Opus swarm on disjoint files, then an independent
+read-only reviewer. Docs, docstrings, comments and templates only; no Pi access,
+`resolve_urls` not run; S6c/S6d code untouched.
+
+- README.md is the single status page (status, gates 1a/1b with the re-audit label
+  criteria, staging, how to run, ADR index). ROADMAP.md holds phase definitions only;
+  Phases 3/5/6 follow Proposed ADR-0013 (G.b); ADR-number drift and H3 leftovers fixed.
+- 21 historical docs plus the precision-review data deleted after their lasting
+  decisions moved (audits in the PR); [docs/HISTORY.md](../HISTORY.md) lists each with
+  its last commit. Kept: the Step 5 schema proposal (normative for ADR-0005), RFC-0001,
+  the spike README (log trimmed), these trackers, `docs/reviews/sql/`.
+- Accepted ADRs: status lines, permalinks, number fixes and dated implementation notes
+  only; ADR-0008 Amendment 2 records D6.5 (R51). R97 comment fixed.
+- Markdown: 58 files / 14,601 lines → 36 / 9,689. Strict `make ci` on a fresh
+  disposable DB: 1028 passed, one expected parsing placeholder skip, 93% coverage;
+  `alembic check` clean.
+- For the owner: CLAUDE.md accuracy edits (make lint/typecheck, commit-msg scope); the
+  stop-and-ask glob `packages/**/db/models/**` matches nothing and `apps/discovery/models.py`
+  (bronze ORM models) is on no stop list or CODEOWNERS entry; the audit CLI's `--help`
+  text changed with its docstring.

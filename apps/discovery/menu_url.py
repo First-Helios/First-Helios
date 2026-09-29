@@ -7,9 +7,13 @@ candidate actually resolves, and honours robots.txt and rate limits. Keeping
 this module pure and dependency-free (stdlib only) makes the lexicon and
 ranking exhaustively unit-testable without a network (ADR-0010 §3).
 
-Menu-URL grain is per-site (ADR-0010, owner decision 3): candidates are always
-restricted to the same registrable site as the resolved website, so crawling a
-chain's brand site yields that chain's menu and never wanders off-host.
+Menu-URL grain is per-site (ADR-0010, owner decision 3; records are per venue,
+Amendment 2): own-site candidates are restricted to the resolved website's host,
+so crawling a chain's brand site yields that chain's menu and never wanders
+off-host. "Same site" compares hosts lowercased with a leading ``www.`` removed;
+it is not a registrable-domain (public-suffix) check, so ``order.example.com``
+counts as a different site from ``example.com``. Ordering-platform venue pages
+are the one deliberate exception (:func:`platform_links_from_html`).
 
 Verification (ADR-0010 Amendment 3 / owner decisions D3.4-D3.5, review session
 S4): a candidate is not "any 200 HTML page". A real menu page must (a) not be
@@ -17,11 +21,12 @@ the homepage itself under another name (``#``, a bare anchor, a redirect back
 to `/`), (b) carry a menu word in its URL path, ``<title>``, or first heading
 (subject to a blocklist that vetoes lookalikes like "menu-of-services"), and
 (c) have body content that actually differs from the homepage's — all cheap,
-deterministic, dependency-free checks; a content classifier is deferred to a
-Phase 5 ADR (see the checklist's D3.4 note). Shared platform hosts (Toast,
-Square, Facebook, …) are handled separately (D3.5): never probed at their own
-root paths, used as the menu URL directly when the venue's website already is
-one, and otherwise only as a fallback behind an own-site candidate.
+deterministic, dependency-free checks; a content classifier is deferred to
+Phase 5 (the page classifier in ADR-0013, Proposed; see the checklist's D3.4
+note). Shared platform hosts (Toast, Square, Facebook, …) are handled
+separately (D3.5): never probed at their own root paths, used as the menu URL
+directly when the venue's website already is one, and otherwise only as a
+fallback behind an own-site candidate.
 """
 
 from __future__ import annotations
@@ -106,13 +111,13 @@ _HEADING_TAGS: frozenset[str] = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 
 
 def _host(url: str) -> str:
-    """Return a comparable registrable host: lowercased, ``www.`` stripped."""
+    """Return a comparable host: lowercased, a leading ``www.`` stripped."""
     host = (urlsplit(url).hostname or "").lower()
     return host[4:] if host.startswith("www.") else host
 
 
 def same_site(a: str, b: str) -> bool:
-    """True when two absolute URLs share a registrable host (``www.`` ignored)."""
+    """True when two absolute URLs share a host (a leading ``www.`` ignored)."""
     host_a, host_b = _host(a), _host(b)
     return bool(host_a) and host_a == host_b
 

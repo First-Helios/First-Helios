@@ -1,9 +1,10 @@
 # ADR-0004 identity and provenance logical ERD
 
-This is a logical model, not an approved migration. Names may be refined in
-the schema PR, but the grains, ownership, and dependency directions are
-fixed by accepted ADR-0004. `MENU_ROOT` shows only the future vertical's
-dependency seam; it is not a generic offering model or a complete menu ERD.
+This is a logical model: entity names map to the tables in the `bronze`,
+`identity`, `menu` and `gold` schemas, and each entity shows a subset of its
+columns. The grains, ownership, and dependency directions are fixed by
+accepted ADR-0004. `MENU_PAGE` shows only the Menu vertical's dependency seam;
+it is not a generic offering model or a complete menu ERD.
 
 ```mermaid
 erDiagram
@@ -153,18 +154,19 @@ erDiagram
         bigint evidence_id PK,FK
     }
 
-    MENU_ROOT {
+    MENU_PAGE {
         bigint id PK
-        bigint scope_subject_id FK
-        string scope_subject_kind FK
+        bigint subject_id FK
+        string subject_kind FK
         bigint source_record_version_id FK
     }
 
-    GOLD_MENU_READ_MODEL {
+    GOLD_CURRENT_MENU {
         bigint id PK
-        bigint menu_root_id
-        bigint scope_subject_id
-        datetime as_of
+        bigint subject_id FK
+        string subject_kind FK
+        bigint price_page_id FK
+        datetime effective_instant
     }
 
     BRONZE_SOURCE ||--o{ BRONZE_CAPTURE : produces
@@ -200,16 +202,17 @@ erDiagram
     BRONZE_EVIDENCE ||--o{ IDENTITY_SUBJECT_CHANGE_EVIDENCE : evidence
     IDENTITY_ADJUDICATION o|--o{ IDENTITY_SUBJECT_CHANGE : justifies
 
-    IDENTITY_SUBJECT ||--o{ MENU_ROOT : scopes
-    BRONZE_SOURCE_RECORD_VERSION ||--o{ MENU_ROOT : derived_from
-    MENU_ROOT ||--o{ GOLD_MENU_READ_MODEL : projects
+    IDENTITY_SUBJECT ||--o{ MENU_PAGE : scopes
+    BRONZE_SOURCE_RECORD_VERSION ||--o{ MENU_PAGE : derived_from
+    MENU_PAGE o|--o{ GOLD_CURRENT_MENU : projects
+    IDENTITY_SUBJECT ||--o{ GOLD_CURRENT_MENU : scopes
 ```
 
 `BRONZE_EVIDENCE` has exactly one of `source_record_version_id` or
 `capture_id`. Each decision has one or more Evidence links or one immutable
 Adjudication. Database constraints must also ensure that each Subject has
 exactly one typed row, Establishment references typed Organization and Place
-Subjects, and a menu root permits only Organization or Establishment
+Subjects, and a menu page permits only Organization or Establishment
 Subjects. Composite `(subject_id, subject_kind)` FKs enforce the typed
 references against Subject's unique `(id, kind)` pair; the duplicated kind
 columns are intentional constraint anchors. Resolution state requires a
@@ -218,3 +221,8 @@ an explicit null-target row. An append-only `Open` event creates the initial
 `unresolved` row, so `last_event_id` is always present and the projection is
 rebuildable. Subjects begin `provisional`, and vertical roots may reference
 only Subjects that pass the approved identity-readiness gate.
+
+Not drawn: `identity.subject_currentness`, `identity.subject_lineage`,
+`identity.applied_subject_change`, the ADR-0011 `identity_match_endpoint_id` on
+Source Record Version, and the discovery-owned `bronze.discovery_*` tables
+(`apps/discovery/models.py`).

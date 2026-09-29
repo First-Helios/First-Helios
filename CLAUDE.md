@@ -42,8 +42,9 @@ Never report a task complete without running this. If you can't run it
 A `make ci` run with skipped database tests is not database acceptance; CI
 also runs strict DB tests, `alembic check`, and the Docker build.
 
-- `make lint` — ruff check + format
-- `make typecheck` — mypy --strict on `packages.helios_core.*`
+- `make lint` — `pre-commit run --all-files`: every pre-commit hook (ruff
+  with `--fix`, ruff format, mypy, file hygiene) except the commit-msg hook
+- `make typecheck` — `mypy .`, strict over the whole repo (`mypy.ini`)
 - `make test` — pytest; optional local database tests skip when PostgreSQL is
   unavailable or the URL does not name a `*_test` database.
 - Database acceptance: `HELIOS_STRICT_DB_TESTS=1 DATABASE_URL=... make ci`,
@@ -72,7 +73,8 @@ also runs strict DB tests, `alembic check`, and the Docker build.
   `db/session.py`, Alembic, and tests consume those settings. It has no
   default (the old one was the V1 archive's address): unset means fail/skip.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
-  (enforced by pre-commit's commit-msg hook).
+  (enforced locally by pre-commit's commit-msg hook; CI checks only the PR
+  title, which becomes the squash commit, in `.github/workflows/pr-title.yml`).
 
 ## Stop and ask the human when
 

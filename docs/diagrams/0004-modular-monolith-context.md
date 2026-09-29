@@ -77,3 +77,7 @@ flowchart LR
 The review command is an in-process entrypoint, not a service boundary. Its
 UI and operational workflow are deferred; the append-only decision contract
 is not.
+
+In the code, the collector is the discovery CLIs in `apps/discovery/`, which also own two
+`bronze.discovery_*` tables (`apps/discovery/models.py`). For what is built, see
+[README.md → Status](../../README.md#status).

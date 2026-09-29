@@ -14,7 +14,9 @@ def test_cursor_round_trips(subject_id: int) -> None:
 
 
 def test_cursor_is_opaque() -> None:
-    # Not the bare integer; a client cannot trivially forge or infer it.
+    # Not the bare integer, so clients don't mistake it for an id. It is
+    # unsigned base64 and forgeable by design; that is harmless because the
+    # data is public and a cursor is only a keyset lower bound (D9, R97).
     assert encode_cursor(42) != "42"
 
 

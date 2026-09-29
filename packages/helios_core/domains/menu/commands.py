@@ -202,9 +202,12 @@ def _replay(session: Session, aggregate: MenuAggregate, record_id: int) -> Persi
 def persist_menu(session: Session, aggregate: MenuAggregate) -> PersistedMenu:
     """Flush a whole initial/observation/correction/withdrawal/restoration aggregate.
 
-    Exact replay returns original IDs without admission or new writes, even
-    after remap/retirement. All other writes receive the full provider batch
-    before Menu locks. Integrity exceptions require caller rollback.
+    Exact replay returns the original IDs and writes no Menu rows. A replay of
+    an already-committed aggregate is detected before scope checks and
+    admission, so it succeeds even after remap/retirement; one committed by a
+    competing writer while this call waited is detected after the admission
+    lock. All other writes receive the full provider batch before Menu locks.
+    Integrity exceptions require caller rollback.
     """
     session.flush()
     # A caller may catch a shape/reference error. Never leave a supported prefix

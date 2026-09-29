@@ -16,7 +16,7 @@ All tracked files at `557fa3c`: `alembic/`, `packages/helios_core/`, `apps/api/`
 `apps/discovery/`, `config/`, `test/`, `infra/`, `.github/`, tooling config, and the
 docs tree (README, ROADMAP, CLAUDE.md, CONTRIBUTING, ADR-0001–0010, RFC-0001, plans,
 reviews, retro). ADRs and the
-[ADR-0004 review guide](./0004-architecture-review-guide.md) "accepted interpretation"
+[ADR-0004 review guide](https://github.com/First-Helios/First-Helios/blob/e87039e5229b5661b3b6fe60214810eca424cb13/docs/reviews/0004-architecture-review-guide.md) "accepted interpretation"
 table were the reference; where docs and code disagree the code was treated as
 ground truth and the drift is listed in [§7](#7-doc-drift).
 
@@ -441,10 +441,10 @@ Grouped by file. "Code wins" per CLAUDE.md; each item is a docs-only fix unless 
 - Plan 0001 (`:86`, `:154`, `:158`, `:178`, `:196`): only Step 0 marked done;
   `config/regions.yaml` does not exist.
 - Plan 0002 Step 5 proposal (`:5`, `:8`): "No Menu schema or contract is implemented".
-- Step-6 reviews (`0002-step-6-gold-read-models.md:44-45`, `:62`;
-  `…full-catalog-refresh.md:97`) say the import-boundary test covers Gold (R26); the
+- Step-6 reviews ([`0002-step-6-gold-read-models.md:44-45`](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/reviews/0002-step-6-gold-read-models.md), `:62`;
+  [`…full-catalog-refresh.md:97`](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/reviews/0002-step-6-gold-full-catalog-refresh.md)) say the import-boundary test covers Gold (R26); the
   full-catalog review says a broken mapping "yields no rows" (it crashes, R01).
-- Retro `2026-09-21-phase-4.md:86-87`, `:131-135`: menu-URL "not built" (PR #21
+- Retro [`2026-09-21-phase-4.md:86-87`](https://github.com/First-Helios/First-Helios/blob/45003519932cc2040f855e3141876829811f04a1/docs/retro/2026-09-21-phase-4.md), `:131-135`: menu-URL "not built" (PR #21
   built it).
 - `docs/HumanDevNotes/MLDataExtractionPlan.md:24` links an absolute local path.
 - `LEARNING_GUIDE.md`: `packages/core/`/`packages/parsing/` paths (`:280`, `:282`,

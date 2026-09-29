@@ -411,18 +411,23 @@ contrary to the modular-monolith decision.
 **Acceptance effects**
 
 - ADR-0003 is `Superseded by ADR-0004`.
-- [Plan 0002](../plans/0002-identity-foundation-before-menu.md) becomes the
+- [Plan 0002](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md) becomes the
   implementation sequence for the affected portions of Plan 0001.
 - No schema implementation begins until the owner separately authorizes the
   migration PRs required by CLAUDE.md.
+
+## Implementation notes (2026-09-28)
+
+- References: `packages/helios_core/db/models/venue.py` and `test/test_venue_identity_schema.py`
+  no longer exist; Identity models are in `packages/helios_core/identity/models.py`, tests in `test/test_identity_schema.py`.
 
 ## References
 
 - [ADR-0003](./0003-three-layer-schema.md)
 - [RFC-0001](../rfc/0001-menu-pricing-first.md)
-- [Plan 0001](../plans/0001-map-and-menu-collection.md)
-- [Plan 0002](../plans/0002-identity-foundation-before-menu.md)
-- [Human review guide](../reviews/0004-architecture-review-guide.md)
+- [Plan 0001](https://github.com/First-Helios/First-Helios/blob/e87039e5229b5661b3b6fe60214810eca424cb13/docs/plans/0001-map-and-menu-collection.md)
+- [Plan 0002](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md)
+- [Human review guide](https://github.com/First-Helios/First-Helios/blob/e87039e5229b5661b3b6fe60214810eca424cb13/docs/reviews/0004-architecture-review-guide.md)
 - `packages/helios_core/db/models/venue.py`
 - `alembic/versions/a466cf4bc4e0_venue_identity_schema_and_three_layer_.py`
 - `test/test_schema_layout.py`

@@ -1,10 +1,10 @@
 # ADR-0005: Immutable Menu snapshots and scoped selection
 
-**Status:** Accepted — design acceptance; provider implementation remains gated on CI-image PostGIS validation.
+**Status:** Accepted
 **Date:** 2026-09-17
 **Accepted:** 2026-09-17 by project owner Fortune, in this session: “Accept ADR-0005 design”.
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md)
-**Implements:** [Plan 0002 Step 5](../plans/0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts)
+**Implements:** [Plan 0002 Step 5](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts)
 
 ## Context
 
@@ -16,7 +16,7 @@ Subject-dependent revision key also allowed ambiguous history after remapping.
 
 The owner accepted immutable snapshots, explicit support and inheritance,
 persistent pins, withdrawal/restoration, accepted-claim history, and a narrow
-first implementation in the [readiness reassessment](../reviews/0002-step-5-readiness-reassessment.md#accepted-review-defaults-and-remaining-technical-work).
+first implementation in the [readiness reassessment](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-readiness-reassessment.md#accepted-review-defaults-and-remaining-technical-work).
 Those defaults are settled. This ADR records their accepted concrete semantics;
 it does not reopen them or rewrite ADR-0004's acceptance history.
 
@@ -30,7 +30,7 @@ and prices with their Organization scope and provenance explicit.
 The [reconciled proposal](../plans/0002-step-5-menu-schema-proposal.md) defines
 columns, operation shapes, time rules, enforcement and focused tests. The
 following decisions are normative; examples in the
-[reconciliation record](../reviews/0002-step-5-menu-design-reconciliation.md#input-and-selection-examples)
+[reconciliation record](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-menu-design-reconciliation.md#input-and-selection-examples)
 are the human review surface.
 
 1. **Nine Menu tables, one immutable page aggregate.** Currency, page, section,
@@ -150,7 +150,7 @@ Owner acceptance covers this design and its reconciled proposal. The current
 request authorizes only the narrow provider prerequisite after strict CI-image
 PostGIS validation passes. Concrete migration SQL remains separately reviewable;
 Menu implementation and application-data execution are not authorized here.
-See the [provider gate record](../reviews/0002-step-5-provider-prerequisite-gates.md)
+See the [provider gate record](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-provider-prerequisite-gates.md)
 for the acceptance and remaining access limitation.
 
 Review the concrete node shapes, lifecycle/time examples and enforcement matrix.
@@ -160,11 +160,16 @@ provider prerequisite, after design acceptance and the pre-implementation image
 validation gate. Its Python/SQL parity, pending-lineage order, lock races and
 provider preservation must be demonstrated before Menu depends on it.
 
+## Implementation notes (2026-09-28)
+
+- The text says provider and Menu work wait on CI-image PostGIS validation; both have merged
+  (revisions `b72e6a90c431` provider, `d83f0a21c592` Menu; `packages/helios_core/domains/menu/`).
+
 ## References
 
 - [Detailed Menu proposal](../plans/0002-step-5-menu-schema-proposal.md)
-- [Examples, verification and next-work prompt](../reviews/0002-step-5-menu-design-reconciliation.md)
-- [Original readiness reassessment](../reviews/0002-step-5-readiness-reassessment.md)
-- [Plan 0002](../plans/0002-identity-foundation-before-menu.md)
+- [Examples, verification and next-work prompt](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-menu-design-reconciliation.md)
+- [Original readiness reassessment](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-readiness-reassessment.md)
+- [Plan 0002](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md)
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md)
 - [RFC-0001](../rfc/0001-menu-pricing-first.md)

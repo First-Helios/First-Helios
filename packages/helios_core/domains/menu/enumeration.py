@@ -10,8 +10,8 @@ Identity/operating gate. It reads committed Menu/Identity/Bronze and returns
 ``SelectionRequest`` values; it performs no writes and never re-implements
 selection precedence (that stays in :func:`select_price`).
 
-Scope of this first full-catalog unit (deliberately bounded; see the Step 6
-full-catalog review):
+Scope of this first full-catalog unit (deliberately bounded; see ADR-0006,
+"Full-catalog refresh follow-up accepted"):
 
 * **Price-driven.** One request per grain-unique ``(scope subject, source-local
   family, target, effective context, currency)`` that has a live
