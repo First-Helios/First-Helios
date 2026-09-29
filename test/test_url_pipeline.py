@@ -80,6 +80,7 @@ _NOW = datetime.now(UTC)
 
 
 class _FakeResolver:
+    verifier = "s4-v1"
     """A menu-URL resolver that records calls and returns canned results.
 
     ``platform_urls`` are extra verified ordering-platform pages returned after
@@ -108,7 +109,9 @@ class _FakeResolver:
             return found
         return next((item for item in found if item.menu_url == menu_url), found[0])
 
-    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+    def discover_menu_attempt(
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
         self.calls.append(website)
         found = tuple(
             MenuUrlDiscovery(
@@ -568,7 +571,9 @@ class _FailingResolver(_FakeResolver):
         super().__init__("https://example.com/menu")
         self._fail_on = fail_on
 
-    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+    def discover_menu_attempt(
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
         if website == self._fail_on:
             raise RuntimeError("simulated crash mid-run")
         return super().discover_menu_attempt(website)
@@ -647,7 +652,7 @@ def test_site_menu_and_toast_link_write_both_records_and_a_rerun_writes_nothing(
             "text/html",
         ),
         "/menu": (200, "<title>Menu</title><p>Tacos $5</p>", "text/html"),
-        toast: (200, "<html>Toast ordering</html>", "text/html"),
+        toast: (200, "<title>S6b Kitchen | Menu</title>", "text/html"),
     }
     _seed(session, [_poi("S6b Kitchen", 30.29, -97.74, gers_id="p1", websites=(website,))])
 
@@ -673,6 +678,7 @@ def test_site_menu_and_toast_link_write_both_records_and_a_rerun_writes_nothing(
         "website": website,
         "found_via": website,
         "platform": "toasttab.com",
+        "verifier": "s4-v1",
     }
     before = _bronze_row_counts(session)
 

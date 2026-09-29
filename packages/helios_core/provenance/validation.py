@@ -114,7 +114,9 @@ def excerpt_hash(payload: object, locator: str) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode()).hexdigest()
 
 
-REJECTION_REASONS = frozenset({"blank_name", "name_without_letters_or_digits", "name_too_long"})
+REJECTION_REASONS = frozenset(
+    {"blank_name", "name_without_letters_or_digits", "name_too_long", "menu_not_verified"}
+)
 SKIP_REASONS = frozenset(
     {
         "robots_disallowed",

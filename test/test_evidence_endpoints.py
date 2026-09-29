@@ -255,6 +255,7 @@ def test_real_pipeline_recovers_page_bytes_redirect_and_cache_time(
     session: Session, tmp_path: Path
 ) -> None:
     from apps.discovery.url_pipeline import resolve_urls
+    from apps.discovery.web_client import MenuUrlDiscovery
     from test.test_url_pipeline import _poi as url_poi
     from test.test_url_pipeline import _seed
     from test.test_web_client import FakeClock, _fetcher
@@ -276,6 +277,7 @@ def test_real_pipeline_recovers_page_bytes_redirect_and_cache_time(
         attempt = fetcher.discover_menu_attempt(website)
     assert isinstance(attempt, tuple)
     (cached,) = attempt
+    assert isinstance(cached, MenuUrlDiscovery)
     clock.wall += 3600
     calls: list[str] = []
     with _fetcher(tmp_path, routes, clock=clock, calls=calls) as fetcher:

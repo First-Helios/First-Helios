@@ -1,6 +1,9 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Proposed (draft for owner review; not implemented)
+**Status:** Proposed, except the page classifier: its parts were accepted
+2026-09-29 (owner, session S6d; [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
+The LLM extraction, `llama-server`, validator, Menu writes and the open questions
+below remain Proposed.
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -354,3 +357,31 @@ Each slice is a PR; ⚠ slices touch deps or `infra/` and stop for owner review.
 - Code: `apps/discovery/web_client.py` (`SiteFetcher`), `apps/discovery/url_pipeline.py`
   (menu-URL keys and assignment), `packages/helios_core/domains/menu/contracts.py`
   (`PageInput`, `SourceKind`), `test/import_boundaries.py` (`helios_parsing` rule)
+
+## Amendment 1 (2026-09-29): page classifier accepted early; rendering decision
+
+Owner decisions in session S6d (ADR-0015 acceptance):
+
+1. **Accepted now:** stage [1] page classifier (`potion-base-8M` + layout features +
+   logistic regression, weights checked in, §1); its runtime dependencies
+   (`fastembed` on `onnxruntime`, the `menu` extra, §3); the model manifest and
+   checksum-refusing download (§3); the worker image target that discovery runs
+   from (§3); and §7, the classifier as ADR-0015's verifier `classifier-v1` for
+   own-site **and** platform pages. Slices 1 (without `llama-server`) and 4 are
+   pulled forward into S6d, ahead of slices 2–3; the segmentation and price-token
+   code the classifier's features need comes with it. Everything else in this
+   ADR stays Proposed.
+2. **Rendering (§4), for session S6f.** A probe of the spike sample's platform links
+   (ADR-0015 Amendment 1 item 8) showed Toast answers `403` to the static fetcher
+   and to headless Chromium, but loads for **headed** Chromium; Square, Clover and
+   Grubhub render headless. The owner chose: render with headed Chromium under a
+   virtual display (Xvfb) in the worker image, the User-Agent always carrying the
+   Helios token, robots.txt obeyed and the per-host rate limit applied; never
+   stealth plugins, User-Agent spoofing or challenge solving. A page that still
+   answers `403` or a bot challenge is a skipped Capture. Consequently §4's trigger
+   widens: a platform page is rendered when its static fetch is refused (`403`) or
+   fails the classifier, not only after a successful static fetch. Platform terms
+   of service may forbid automated access even where robots.txt allows it; the
+   owner accepted that risk for robots-allowed pages. The §4 measurement (render
+   success, quality bars on rendered pages, Pi time and RAM) still gates enabling
+   it on Pi runs.

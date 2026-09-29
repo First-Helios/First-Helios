@@ -114,6 +114,8 @@ def test_discovery_mint_dedupe_and_rerun_commit(committed: sessionmaker[Session]
 
 
 class _Resolver:
+    verifier = "s4-v1"
+
     def __init__(self, website: str, menu_url: str) -> None:
         self._website = website
         self._menu_url = menu_url
@@ -124,7 +126,9 @@ class _Resolver:
         found = self.discover_menu_attempt(website)
         return found if isinstance(found, CaptureFailure) else found[0]
 
-    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+    def discover_menu_attempt(
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
         if website != self._website:
             return CaptureFailure(
                 "failed", "no_menu_found", _NOW

@@ -8,7 +8,11 @@ Idempotent and re-runnable: a venue whose website and menu-URL records are
 current and unchanged is skipped without writing or crawling, and commits land
 every 100 venues, so a re-run after an interruption skips the committed work.
 Failed/skipped sites are recorded in Bronze and retried after 20 days. ``--limit`` counts only venues that
-need work. Records a human put in ``needs_review`` are never re-assigned. Crawls
+need work. Records a human put in ``needs_review`` are never re-assigned. A
+saved menu URL is re-verified when the page verifier changes or 90 days after
+its last pass, and withdrawn to ``needs_review`` if it no longer verifies
+(ADR-0015); the report counts ``menu_urls_reverified``, ``menu_urls_withdrawn``,
+``menu_urls_reverify_deferred`` and ``platform_ambiguous``. Crawls
 live restaurant sites (robots + rate limited), so it makes network calls and is
 not exercised in CI.
 """

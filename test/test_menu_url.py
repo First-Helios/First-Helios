@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from apps.discovery.menu_url import (
     MAX_CANDIDATES,
+    address_on_page,
     is_platform_venue_page,
     looks_like_menu,
     menu_links_from_html,
     menu_links_from_sitemap,
     ordered_menu_candidates,
     page_menu_signal,
+    platform_links_by_host,
     platform_links_from_html,
     platform_signal,
+    rank_by_address,
     same_resource,
     same_site,
     sitemap_index_children,
@@ -291,3 +294,41 @@ def test_is_platform_venue_page_requires_a_non_root_path() -> None:
     assert not is_platform_venue_page("https://www.facebook.com/")
     assert not is_platform_venue_page("https://www.facebook.com/kerbeylane", ordering_only=True)
     assert is_platform_venue_page("https://order.toasttab.com/online/kerbey", ordering_only=True)
+
+
+def test_platform_links_by_host_lists_each_distinct_venue_page() -> None:
+    html = (
+        '<a href="https://order.toasttab.com/online/joes-north">North</a>'
+        '<a href="https://order.toasttab.com/online/joes-north/">North again</a>'
+        '<a href="https://www.toasttab.com/joes-south">South</a>'
+        '<a href="https://www.doordash.com/store/joes-1/">Delivery</a>'
+        '<a href="https://pos.toasttab.com/">Powered by Toast</a>'
+    )
+    assert platform_links_by_host(html, "https://joes.com/") == {
+        "toasttab.com": [
+            "https://order.toasttab.com/online/joes-north",
+            "https://www.toasttab.com/joes-south",
+        ],
+        "doordash.com": ["https://www.doordash.com/store/joes-1/"],
+    }
+
+
+def test_address_on_page_needs_the_house_number_then_the_street_name() -> None:
+    address = "1501 E 6th St, Austin, TX 78702"
+    assert address_on_page("<p><span>1501</span> E. 6th Street</p>", address)
+    assert address_on_page("1501 East 6th St Austin", address)
+    assert not address_on_page("<p>1600 E 6th St</p>", address), "a sibling location"
+    assert not address_on_page("<p>1501 Lamar Blvd ... 6th floor</p>", address)
+    assert not address_on_page("<script>var a='1501 E 6th St'</script>", address)
+    assert not address_on_page("1501 E 6th St", None)
+    assert not address_on_page("1501 E 6th St", "E 6th St"), "no house number to match"
+
+
+def test_rank_by_address_tries_the_slug_naming_the_address_first() -> None:
+    urls = [
+        "https://order.toasttab.com/online/joes-north-lamar",
+        "https://order.toasttab.com/online/joes-1501-e-6th",
+        "https://order.toasttab.com/online/joes-6th",
+    ]
+    assert rank_by_address(urls, "1501 E 6th St") == [urls[1], urls[2], urls[0]]
+    assert rank_by_address(urls, None) == urls

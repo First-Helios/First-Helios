@@ -25,12 +25,15 @@ deterministic, dependency-free checks; a content classifier is deferred to
 Phase 5 (the page classifier in ADR-0013, Proposed; see the checklist's D3.4
 note). Shared platform hosts (Toast, Square, Facebook, …) are handled
 separately (D3.5): never probed at their own root paths, used as the menu URL
-directly when the venue's website already is one, and otherwise only as a
-fallback behind an own-site candidate.
+directly when the venue's website already is one, and otherwise taken from the
+homepage's links beside the own-site menu. Either way the fetched platform page
+must pass the same page check as an own-site candidate (ADR-0015 item 4).
 """
 
 from __future__ import annotations
 
+import re
+from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 from xml.etree import ElementTree as ET
@@ -84,8 +87,16 @@ MAX_CANDIDATES = 8
 # more than this many child/declared sitemap documents for one site.
 MAX_SITEMAP_CHILDREN = 5
 
-# Bound homepage links to a fallback platform page tried per site (D3.5b).
+# Bound the ordering platforms whose homepage links are tried per site (D3.5b).
 MAX_PLATFORM_CANDIDATES = 3
+
+# Bound the pages fetched for one platform when a (chain) homepage links several
+# venue pages on it; they are tried best address match first (ADR-0015 item 5).
+MAX_CHAIN_CANDIDATES = 3
+
+_TOKEN_SPLIT = re.compile(r"[^0-9a-z]+")
+_SCRIPT_STYLE = re.compile(r"<(script|style)\b.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+_TAG = re.compile(r"<[^>]*>")
 
 # Shared food-ordering / social platforms whose own pages are accepted as a
 # venue's menu source (owner decision D3.5): a website hosted here is never
@@ -283,24 +294,23 @@ def menu_links_from_html(html: str, base_url: str) -> list[str]:
     return out
 
 
-def platform_links_from_html(html: str, base_url: str) -> list[str]:
-    """Absolute homepage-anchor URLs to a venue page on an ordering platform, in order.
+def platform_links_by_host(html: str, base_url: str) -> dict[str, list[str]]:
+    """Homepage-anchor URLs to venue pages on each ordering platform, in order.
 
     Unlike :func:`menu_links_from_html` these deliberately leave the page's own
-    site (that is the point) and need no menu wording: landing on a venue page
-    of a known ordering platform is itself the signal (owner decision D3.5b) —
-    e.g. a homepage link to ``toasttab.com/<venue>`` or a DoorDash store page.
-    Social links and platform roots (a "Powered by Toast" footer) are skipped.
-    Only the first link to each ordering platform is kept: a venue has one
-    menu record per platform host (ADR-0011 §7), so ``order.toasttab.com``
-    and ``www.toasttab.com`` links are one candidate, not two.
+    site (that is the point): a homepage link to ``toasttab.com/<venue>`` or a
+    DoorDash store page is a candidate (owner decision D3.5b), still subject to
+    the fetched page's content check. Social links and platform roots (a
+    "Powered by Toast" footer) are skipped. Keys are platform record suffixes
+    (:func:`ordering_platform_host`), so ``order.toasttab.com`` and
+    ``www.toasttab.com`` links share one key; each key lists its distinct pages,
+    so a chain homepage linking one page per location shows up as several.
     """
     parser = _AnchorCollector()
     parser.feed(html)
     parser.close()
     link_base = _resolve_link_base(base_url, parser)
-    seen: set[str] = set()
-    out: list[str] = []
+    out: dict[str, list[str]] = {}
     for href, _text in parser.anchors:
         if not href or href.startswith("#"):
             continue
@@ -310,11 +320,68 @@ def platform_links_from_html(html: str, base_url: str) -> list[str]:
         key = ordering_platform_host(absolute)
         if key is None or not is_platform_venue_page(absolute, ordering_only=True):
             continue
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(absolute)
+        links = out.setdefault(key, [])
+        if not any(same_resource(absolute, seen) for seen in links):
+            links.append(absolute)
     return out
+
+
+def platform_links_from_html(html: str, base_url: str) -> list[str]:
+    """The first venue-page link to each ordering platform, in homepage order.
+
+    A venue has one menu record per platform host (ADR-0011 §7).
+    """
+    return [links[0] for links in platform_links_by_host(html, base_url).values()]
+
+
+_DIRECTIONS = frozenset(
+    {"n", "s", "e", "w", "ne", "nw", "se", "sw", "north", "south", "east", "west"}
+)
+
+
+def _address_parts(address: str | None) -> tuple[str, str] | None:
+    """(house number, street name token) of a street line, e.g. ``("1501", "6th")``."""
+    if not address:
+        return None
+    words = _ordered_tokens(address.split(",")[0])
+    if len(words) < 2 or not words[0][0].isdigit():  # noqa: PLR2004
+        return None
+    name = next((word for word in words[1:] if word not in _DIRECTIONS), None)
+    return (words[0], name) if name else None
+
+
+def _ordered_tokens(value: str) -> list[str]:
+    return [token for token in _TOKEN_SPLIT.split(value.lower()) if token]
+
+
+def _page_text(html: str) -> str:
+    return unescape(_TAG.sub(" ", _SCRIPT_STYLE.sub(" ", html)))
+
+
+def address_on_page(html: str, address: str | None) -> bool:
+    """True when a page shows the venue's house number followed by its street name.
+
+    The chain-homepage guard (ADR-0015 item 5) uses it to tell one location's
+    platform page from its siblings' without a manual entry.
+    """
+    parts = _address_parts(address)
+    if parts is None:
+        return False
+    house, name = parts
+    words = _ordered_tokens(_page_text(html))
+    for index, word in enumerate(words):
+        if word == house:
+            # Only a direction ("E", "East") may sit between the number and the name.
+            following = (token for token in words[index + 1 :] if token not in _DIRECTIONS)
+            if next(following, None) == name:
+                return True
+    return False
+
+
+def rank_by_address(urls: list[str], address: str | None) -> list[str]:
+    """Order candidate URLs by how many of the address's parts their path names."""
+    parts = set(_address_parts(address) or ())
+    return sorted(urls, key=lambda url: -len(parts & _tokens(urlsplit(url).path)))
 
 
 class _PageSignalParser(HTMLParser):
