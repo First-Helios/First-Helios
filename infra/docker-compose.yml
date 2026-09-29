@@ -87,6 +87,10 @@ services:
       context: ..
       dockerfile: infra/Dockerfile
       target: worker
+    # xvfb-run hangs as PID 1 (it waits for Xvfb's ready signal), so an init
+    # process runs first; Chromium needs more shared memory than Docker's 64 MB.
+    init: true
+    shm_size: 1gb
     environment:
       DATABASE_URL: ${HELIOS_COMPOSE_DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
     volumes:

@@ -21,7 +21,13 @@ Etiquette, as for the static fetcher, plus the owner's S6f decisions:
   navigation, each redirect hop and every sub-request the page's own scripts
   make are checked against their own host's robots.txt for the Helios token,
   and must go to a public address. Disallowed or unavailable → aborted and
-  counted. Images, fonts and media are never fetched.
+  counted. Images, fonts and media are never fetched. A sub-request to a host
+  whose robots.txt isn't known yet is aborted too; once the page settles those
+  hosts' robots.txt are read and, if any aborted request turns out allowed, the
+  page is rendered again (at most :data:`MAX_RENDER_PASSES` times). Reading them
+  inside the interception handler instead would start one read per parallel
+  request (a page firing dozens of requests at one CDN stalled the browser).
+  The robots.txt cache lasts the run, so later pages need one pass.
 - **Redirects** of the page itself stay on the site, or on the same ordering
   platform (``toasttab.com`` ↔ ``toast.app``, ``clover.com`` ↔
   ``cloveronline.com``; S6f decisions).
@@ -65,6 +71,7 @@ NAVIGATION_TIMEOUT_MS = 30_000
 # (long-polling pages never do).
 SETTLE_TIMEOUT_MS = 15_000
 MAX_ROBOTS_REDIRECTS = 5
+MAX_RENDER_PASSES = 3
 BLOCKED_RESOURCE_TYPES = frozenset({"image", "font", "media"})
 _CHALLENGE_STATUSES = frozenset({403, 429})
 # Generic interstitial markers (not per-platform parsing): a challenge page,
@@ -97,10 +104,12 @@ class RenderStats:
 
     renders: int = 0
     rendered: int = 0
+    passes: int = 0
     failures: Counter[str] = field(default_factory=Counter)
     seconds: list[float] = field(default_factory=list)
-    subrequests: int = 0
+    subrequests: int = 0  # the final pass's, per render
     subrequests_blocked: int = 0
+    subrequests_unchecked: int = 0  # robots.txt still unknown after the last pass
     blocked_hosts: Counter[str] = field(default_factory=Counter)
 
     def summary(self) -> dict[str, object]:
@@ -108,11 +117,13 @@ class RenderStats:
         return {
             "renders": self.renders,
             "rendered": self.rendered,
+            "passes": self.passes,
             "failures": dict(self.failures),
             "median_s": round(ordered[len(ordered) // 2], 1) if ordered else None,
             "max_s": round(ordered[-1], 1) if ordered else None,
             "subrequests": self.subrequests,
             "subrequests_blocked": self.subrequests_blocked,
+            "subrequests_unchecked": self.subrequests_unchecked,
         }
 
 
@@ -161,11 +172,17 @@ class RobotsCache:
         self._user_agent = user_agent
         self._rules: dict[str, tuple[Protego | None, str]] = {}
 
-    def check(self, url: str) -> tuple[str | None, float]:
-        """``(None, crawl delay)`` when allowed, else ``(reason, 0)``."""
-        origin = _origin(url)
+    def known(self, url: str) -> bool:
+        return _origin(url) in self._rules
+
+    def load(self, origin: str) -> None:
         if origin not in self._rules:
             self._rules[origin] = robots_rules(self._load(origin))
+
+    def check(self, url: str) -> tuple[str | None, float]:
+        """``(None, crawl delay)`` when allowed, else ``(reason, 0)``; reads if unknown."""
+        origin = _origin(url)
+        self.load(origin)
         rules, reason = self._rules[origin]
         if rules is None:
             return reason, 0.0
@@ -178,7 +195,12 @@ class RobotsCache:
 
 
 class RequestPolicy:
-    """Allow or abort each request of one render (the interception handler's decisions)."""
+    """Allow or abort each request of one render pass (the interception handler's decisions).
+
+    The main navigation and its redirect hops come one at a time, so their
+    robots.txt is read on demand. A sub-request to an origin whose robots.txt
+    isn't known is aborted and listed in :attr:`pending` for the next pass.
+    """
 
     def __init__(
         self,
@@ -187,14 +209,15 @@ class RequestPolicy:
         robots: RobotsCache,
         public_host: Callable[[str], bool],
         pace: Callable[[str, float], None],
-        stats: RenderStats,
     ) -> None:
         self._start = start_url
         self._robots = robots
         self._public_host = public_host
         self._pace = pace
-        self._stats = stats
         self.navigation_refused: str | None = None
+        self.pending: dict[str, list[str]] = {}  # origin -> aborted sub-request URLs
+        self.subrequests = 0
+        self.blocked_hosts: Counter[str] = Counter()
 
     def decide(self, url: str, resource_type: str, *, main_navigation: bool) -> str | None:
         """``None`` to let the request through, else the reason it is aborted."""
@@ -203,11 +226,19 @@ class RequestPolicy:
             if reason is not None:
                 self.navigation_refused = reason
         elif resource_type not in BLOCKED_RESOURCE_TYPES:
-            self._stats.subrequests += 1
-            if reason is not None:
-                self._stats.subrequests_blocked += 1
-                self._stats.blocked_hosts[_host(url)] += 1
+            self.subrequests += 1
+            if reason == "robots_pending":
+                self.pending.setdefault(_origin(url), []).append(url)
+            elif reason is not None:
+                self.blocked_hosts[_host(url)] += 1
         return reason
+
+    def commit(self, stats: RenderStats) -> None:
+        """Add this pass's sub-request counts to the run's."""
+        stats.subrequests += self.subrequests
+        stats.subrequests_blocked += sum(self.blocked_hosts.values())
+        stats.subrequests_unchecked += sum(len(urls) for urls in self.pending.values())
+        stats.blocked_hosts.update(self.blocked_hosts)
 
     def _reason(self, url: str, resource_type: str, *, main_navigation: bool) -> str | None:
         split = urlsplit(url)
@@ -221,6 +252,8 @@ class RequestPolicy:
             return "redirect_refused"
         if split.path == "/robots.txt":
             return None  # robots.txt itself is never subject to robots.txt
+        if not main_navigation and not self._robots.known(url):
+            return "robots_pending"
         reason, delay = self._robots.check(url)
         if reason is not None:
             return reason
@@ -392,13 +425,28 @@ class BrowserRenderer:
         return CaptureFailure(outcome, reason, datetime.fromtimestamp(self._clock(), UTC))
 
     def _render(self, url: str) -> FetchResult | CaptureFailure:
-        policy = RequestPolicy(
-            url,
-            robots=self._robots,
-            public_host=self._is_public,
-            pace=self._pace,
-            stats=self.stats,
-        )
+        """Render passes until no aborted sub-request turns out to be allowed."""
+        for done in range(1, MAX_RENDER_PASSES + 1):
+            policy = RequestPolicy(
+                url, robots=self._robots, public_host=self._is_public, pace=self._pace
+            )
+            outcome = self._render_pass(url, policy)
+            again = False
+            if done < MAX_RENDER_PASSES and not isinstance(outcome, CaptureFailure):
+                for origin in policy.pending:
+                    self._robots.load(origin)
+                again = any(
+                    self._robots.check(pending)[0] is None
+                    for urls in policy.pending.values()
+                    for pending in urls
+                )
+            if not again:
+                policy.commit(self.stats)
+                self.stats.passes += done
+                return outcome
+        raise AssertionError("unreachable: the last pass always returns")  # pragma: no cover
+
+    def _render_pass(self, url: str, policy: RequestPolicy) -> FetchResult | CaptureFailure:
         # The first navigation is decided before a context exists, so a refused
         # page never opens one.
         refused = policy.decide(url, "document", main_navigation=True)

@@ -60,7 +60,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 FROM base AS worker
 COPY --from=builder-menu --chown=helios:helios /app /app
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN playwright install --with-deps chromium \
+RUN playwright install --with-deps --no-shell chromium \
     && apt-get install -y --no-install-recommends xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 USER helios

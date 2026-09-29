@@ -630,6 +630,10 @@ def test_every_sub_request_is_checked_against_its_own_robots() -> None:
     assert (stats.subrequests, stats.subrequests_blocked) == (4, 2), "images are not counted"
     assert stats.blocked_hosts == {"api.example": 1, "lan.example": 1}
     assert ("api.example", 0.0) in paced, "a sub-request host's robots read is paced"
+    assert stats.passes == 2, "unknown sub-request hosts: aborted, read, rendered again"
+    assert web.fetched.count("https://api.example/robots.txt") == 1
+    assert isinstance(_render(renderer, paced, url), FetchResult)
+    assert stats.passes == 3, "the robots cache lasts the run: one more pass"
 
 
 def test_redirect_off_the_site_is_refused_but_a_platform_alias_is_not() -> None:
@@ -777,3 +781,18 @@ def test_a_failing_decision_fails_the_request_instead_of_leaving_it_paused() -> 
     _intercept(_Context(web), page, decide, _FakeError)
     assert not page.cdp.through("r1", "https://p.example/x.js", "Script", "main")
     assert page.cdp.verdicts == {"r1": "Fetch.failRequest"}
+
+
+def test_a_page_whose_unknown_hosts_all_refuse_is_rendered_once() -> None:
+    url = "https://p.example/menu"
+    renderer, web, paced = _renderer(
+        {
+            "https://p.example/robots.txt": _ALLOW_ALL,
+            "https://ads.example/robots.txt": _Resp(200, "User-agent: *\nDisallow: /\n"),
+            url: _Resp(200, _MENU, subrequests=(("https://ads.example/t.js", "script"),)),
+        }
+    )
+    assert isinstance(_render(renderer, paced, url), FetchResult)
+    assert renderer.stats.passes == 1
+    assert web.fetched.count(url) == 1
+    assert renderer.stats.subrequests_unchecked == 1, "aborted before its robots.txt was read"
