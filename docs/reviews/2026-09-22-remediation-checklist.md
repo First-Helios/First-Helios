@@ -48,7 +48,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 merged; ADR-0012 accepted 2026-09-27 |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [X] #45 merged |
 | 🚦 | **Phase 5 gate:** after S7/S11/S12/S13 merge AND lifecycle acceptance tests pass | | | [X] 2026-09-28: #28/#33/#34/#45 merged; main CI green (strict DB, run 36508316467). Next: proposed ADR-0013 before any Phase 5 code (G.b) |
-| 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [X] draft PR (ADR-0013 Proposed; stop for review) |
+| 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [X] #48 draft (ADR-0013 Proposed; stop for review) |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
 | 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
@@ -968,7 +968,7 @@ Agents add one row per session (or per resume).
 | 2026-09-24 | S14 | fix/schema-tightening | #35 | Merged (migration `12a76ebed458` + models) | — (Uses a new `bronze.whitespace()` instead of `menu.whitespace()`: Bronze/Identity sit below Menu. Existing CHECK names kept. R56's DB rounding stays (would need `ALTER COLUMN TYPE`); Python rejects first. Gold staleness is clamped to 0. Run `docs/reviews/sql/2026-09-22-s14-schema-tightening-precheck.sql` on the Pi before upgrading. `test_legacy_identity_reset` and `test_gold_migration` now compare at `5f3a9c1e7b24`, not head) |
 | 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Merged (`8cbce26`; main CI green) |
 | 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Merged (`b2bba73`; ADR-0014/0015 still Proposed) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
-| 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | (this PR) | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
+| 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
 
 
 ### 2026-09-27 delegated follow-up
