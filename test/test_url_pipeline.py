@@ -15,7 +15,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from apps.discovery.overture import OverturePoi
 from apps.discovery.pipeline import run_discovery
@@ -37,9 +37,11 @@ from packages.helios_core.identity.models import (
     CurrentResolution,
     Establishment,
     Organization,
+    ResolutionEvent,
     SubjectCurrentness,
 )
 from packages.helios_core.provenance.models import (
+    Capture,
     Evidence,
     Source,
     SourceRecord,
@@ -48,6 +50,7 @@ from packages.helios_core.provenance.models import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
     from sqlalchemy.orm import Session
 
@@ -77,28 +80,50 @@ _NOW = datetime.now(UTC)
 
 
 class _FakeResolver:
-    """A menu-URL resolver that records calls and returns a canned result."""
+    """A menu-URL resolver that records calls and returns canned results.
 
-    def __init__(self, menu_url: str | None, *, signal: str = "crawled") -> None:
+    ``platform_urls`` are extra verified ordering-platform pages returned after
+    the own-site menu, as the real fetcher does since S6b.
+    """
+
+    def __init__(
+        self,
+        menu_url: str | None,
+        *,
+        signal: str = "crawled",
+        platform_urls: tuple[str, ...] = (),
+    ) -> None:
         self._menu_url = menu_url
         self._signal = signal
+        self._platform_urls = platform_urls
         self.calls: list[str] = []
+        self.verified: list[str] = []
 
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
     ) -> MenuUrlDiscovery | CaptureFailure:
-        return self.discover_menu_attempt(website)
+        self.verified.append(menu_url)
+        found = self.discover_menu_attempt(website)
+        if isinstance(found, CaptureFailure):
+            return found
+        return next((item for item in found if item.menu_url == menu_url), found[0])
 
-    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
+    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
         self.calls.append(website)
-        if self._menu_url is None:
-            return CaptureFailure("failed", "no_menu_found", _NOW)
-        return MenuUrlDiscovery(
-            menu_url=self._menu_url,
-            signal=self._signal,
-            fetched_at=_NOW,
-            content_hash="sha256:fixture-page",
+        found = tuple(
+            MenuUrlDiscovery(
+                menu_url=url,
+                signal=signal,
+                fetched_at=_NOW,
+                content_hash="sha256:fixture-page",
+                found_via=None if signal != "platform" else website,
+            )
+            for url, signal in (
+                *(((self._menu_url, self._signal),) if self._menu_url else ()),
+                *((url, "platform") for url in self._platform_urls),
+            )
         )
+        return found or CaptureFailure("failed", "no_menu_found", _NOW)
 
 
 def _poi(
@@ -543,7 +568,7 @@ class _FailingResolver(_FakeResolver):
         super().__init__("https://example.com/menu")
         self._fail_on = fail_on
 
-    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
+    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
         if website == self._fail_on:
             raise RuntimeError("simulated crash mid-run")
         return super().discover_menu_attempt(website)
@@ -594,3 +619,126 @@ def test_coerce_website_rejects_garbage() -> None:
     assert _coerce_website("not a url") is None
     assert _coerce_website("") is None
     assert _coerce_website("   ") is None
+
+
+# --- Review remediation S6b: platform menus alongside site menus (ADR-0011 §7) ---
+
+
+def _bronze_row_counts(session: Session) -> tuple[int | None, ...]:
+    return tuple(
+        session.scalar(select(func.count()).select_from(model))
+        for model in (SourceRecordVersion, Capture, Evidence, ResolutionEvent)
+    )
+
+
+def test_site_menu_and_toast_link_write_both_records_and_a_rerun_writes_nothing(
+    session: Session, tmp_path: Path
+) -> None:
+    from test.test_web_client import _fetcher
+
+    website = "https://s6b-kitchen.com/"
+    toast = "https://order.toasttab.com/online/s6b-kitchen"
+    routes = {
+        "/robots.txt": (404, "", "text/plain"),
+        "/": (
+            200,
+            f'<a href="/menu">Our Menu</a><a href="{toast}">Order Online</a>'
+            '<a href="https://www.instagram.com/s6b">Instagram</a>',
+            "text/html",
+        ),
+        "/menu": (200, "<title>Menu</title><p>Tacos $5</p>", "text/html"),
+        toast: (200, "<html>Toast ordering</html>", "text/html"),
+    }
+    _seed(session, [_poi("S6b Kitchen", 30.29, -97.74, gers_id="p1", websites=(website,))])
+
+    with _fetcher(tmp_path, routes) as fetcher:
+        first = resolve_urls(
+            session, resolver=fetcher, registry={}, decided_at=_NOW, observed_at=_NOW
+        )
+
+    org = _org_subject(session, "s6b kitchen")
+    assert first.menu_urls_found == 2
+    assert _url_record_subject(session, MENU_URL_NAMESPACE, "p1") == org
+    assert _url_record_subject(session, MENU_URL_NAMESPACE, "p1|toasttab.com") == org
+    (own,) = _versions(session, MENU_URL_NAMESPACE, "p1")
+    (platform,) = _versions(session, MENU_URL_NAMESPACE, "p1|toasttab.com")
+    assert (own["menu_url"], own["signal"], "platform" in own) == (
+        "https://s6b-kitchen.com/menu",
+        "well_known",
+        False,
+    )
+    assert platform == {
+        "menu_url": toast,
+        "signal": "platform",
+        "website": website,
+        "found_via": website,
+        "platform": "toasttab.com",
+    }
+    before = _bronze_row_counts(session)
+
+    calls: list[str] = []
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        second = resolve_urls(
+            session, resolver=fetcher, registry={}, decided_at=_LATER, observed_at=_LATER
+        )
+
+    assert (second.menu_urls_found, second.menu_urls_updated, second.menu_urls_reused) == (0, 0, 1)
+    assert _bronze_row_counts(session) == before, "a re-run writes nothing"
+    assert calls == [], "a saved menu for an unchanged website is not re-crawled"
+
+
+def test_platform_menus_are_persisted_per_host(session: Session) -> None:
+    _seed(session, [_poi("Multi", 30.28, -97.73, gers_id="p2", websites=("multi.com",))])
+    resolver = _FakeResolver(
+        "https://multi.com/menu",
+        platform_urls=(
+            "https://order.toasttab.com/online/multi",
+            "https://www.doordash.com/store/multi-1/",
+        ),
+    )
+
+    report = _resolve_at(session, resolver, at=_NOW)
+
+    assert report.menu_urls_found == 3
+    org = _org_subject(session, "multi")
+    for key in ("p2", "p2|toasttab.com", "p2|doordash.com"):
+        assert _url_record_subject(session, MENU_URL_NAMESPACE, key) == org
+    assert _versions(session, MENU_URL_NAMESPACE, "p2|doordash.com")[0]["platform"] == (
+        "doordash.com"
+    )
+
+
+def test_platform_only_menu_is_reused_without_a_recrawl(session: Session) -> None:
+    _seed(session, [_poi("Toast Only", 30.27, -97.71, gers_id="p3", websites=("toastonly.com",))])
+    resolver = _FakeResolver(None, platform_urls=("https://order.toasttab.com/online/only",))
+
+    _resolve_at(session, resolver, at=_NOW)
+    report = _resolve_at(session, resolver, at=_LATER)
+
+    assert _versions(session, MENU_URL_NAMESPACE, "p3") == []
+    assert len(_versions(session, MENU_URL_NAMESPACE, "p3|toasttab.com")) == 1
+    assert report.menu_urls_reused == 1
+    assert resolver.calls == ["https://toastonly.com/"]
+
+
+def test_a_disputed_platform_key_is_kept_and_does_not_block_the_site_menu(
+    session: Session,
+) -> None:
+    _seed_website(session, "p4", "https://old-p4.com", at=_NOW)
+    toast = "https://order.toasttab.com/online/p4"
+    _resolve_at(session, _FakeResolver("https://old-p4.com/menu", platform_urls=(toast,)), at=_NOW)
+    _human_unassign(session, MENU_URL_NAMESPACE, "p4|toasttab.com")
+    _seed_website(session, "p4", "https://p4.com", at=_LATER)
+    resolver = _FakeResolver("https://p4.com/menu", platform_urls=(toast + "-new",))
+
+    report = _resolve_at(session, resolver, at=_LATER)
+
+    assert (report.menu_urls_updated, report.needs_review) == (1, 1)
+    assert _record(session, MENU_URL_NAMESPACE, "p4|toasttab.com").state == "needs_review"
+    assert [v["menu_url"] for v in _versions(session, MENU_URL_NAMESPACE, "p4|toasttab.com")] == [
+        toast
+    ], "the disputed platform record keeps its history and gets no new version"
+    assert [v["menu_url"] for v in _versions(session, MENU_URL_NAMESPACE, "p4")] == [
+        "https://old-p4.com/menu",
+        "https://p4.com/menu",
+    ]

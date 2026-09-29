@@ -361,4 +361,4 @@ checklist) settle:
 
 ## Amendment — ADR-0011 (accepted 2026-09-27)
 
-Website provenance points to the upstream release or registry. Verified menu provenance retains response hashes, final URLs and fetch times. Failed/skipped sites are recorded with a 20-day retry window. Ordering-platform records use independent per-GERS/domain keys; collecting them alongside an own-site menu remains S6b. See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.
+Website provenance points to the upstream release or registry. Verified menu provenance retains response hashes, final URLs and fetch times. Failed/skipped sites are recorded with a 20-day retry window. Ordering-platform records use independent per-GERS/domain keys; since S6b, homepage links to ordering platforms are verified and saved even when an own-site menu verifies (first link per platform host, at most `MAX_PLATFORM_CANDIDATES`). See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.

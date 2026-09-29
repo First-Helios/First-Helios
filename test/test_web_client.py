@@ -186,7 +186,7 @@ def test_robots_disallow_is_honoured(tmp_path: Path) -> None:
         assert fetcher.allowed("https://k.com/about") is True
         assert fetcher.allowed("https://k.com/menu") is False
         # A robots-disallowed menu must not be discovered even though it 200s.
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
     assert "https://k.com/menu" not in calls
 
 
@@ -228,7 +228,7 @@ def test_robots_5xx_skips_the_site(tmp_path: Path, status: int) -> None:
     calls: list[str] = []
     routes = {"/robots.txt": (status, "", _TEXT), "/menu": (200, "<html>m</html>", _HTML)}
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
     assert calls == ["https://k.com/robots.txt"], "nothing but robots.txt is requested"
 
 
@@ -338,7 +338,7 @@ def test_host_resolving_to_a_private_address_is_refused(tmp_path: Path) -> None:
 
     with _fetcher(tmp_path, {}, calls=calls, resolve=resolve) as fetcher:
         assert fetcher.fetch("https://intranet.k.com/") is None
-        assert fetcher.discover_menu_url("https://intranet.k.com/") is None
+        assert fetcher.discover_menu_url("https://intranet.k.com/") == ()
     assert calls == []
 
 
@@ -388,8 +388,7 @@ def test_discover_finds_well_known_menu_path(tmp_path: Path) -> None:
         "/menu": (200, "<html>the menu</html>", _HTML),
     }
     with _fetcher(tmp_path, routes) as fetcher:
-        found = fetcher.discover_menu_url("https://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://k.com/")
     assert found.menu_url == "https://k.com/menu"
     assert found.signal == "well_known"
 
@@ -400,8 +399,7 @@ def test_discover_falls_back_to_homepage_anchor(tmp_path: Path) -> None:
         "/specials-menu": (200, "<html>menu</html>", _HTML),
     }
     with _fetcher(tmp_path, routes) as fetcher:
-        found = fetcher.discover_menu_url("https://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://k.com/")
     assert found.menu_url == "https://k.com/specials-menu"
     assert found.signal == "crawled"
 
@@ -414,15 +412,14 @@ def test_discover_resolves_links_against_the_post_redirect_homepage(tmp_path: Pa
         "https://www.k.com/en/dinner-menu": (200, "<title>Dinner Menu</title>", _HTML),
     }
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
-        found = fetcher.discover_menu_url("http://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("http://k.com/")
     assert found.menu_url == "https://www.k.com/en/dinner-menu"
     assert "http://k.com/menu" not in calls, "well-known paths use the final homepage URL"
 
 
 def test_discover_returns_none_when_no_candidate_resolves(tmp_path: Path) -> None:
     with _fetcher(tmp_path, {"/": (200, "<html>no menu here</html>", _HTML)}) as fetcher:
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
 
 
 # --- Review remediation S4 (R08, R33, R34, R75, R76) ----------------------------
@@ -434,7 +431,7 @@ def test_candidate_redirecting_back_to_homepage_is_rejected(tmp_path: Path) -> N
         "/menu": (301, "/", _HTML),
     }
     with _fetcher(tmp_path, routes) as fetcher:
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
 
 
 def test_candidate_with_body_identical_to_homepage_is_rejected(tmp_path: Path) -> None:
@@ -445,7 +442,7 @@ def test_candidate_with_body_identical_to_homepage_is_rejected(tmp_path: Path) -
         "/menu": (200, "<html>Welcome home</html>", _HTML),
     }
     with _fetcher(tmp_path, routes) as fetcher:
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
 
 
 def test_catch_all_site_rejects_a_well_known_path_with_no_real_title(tmp_path: Path) -> None:
@@ -460,7 +457,7 @@ def test_catch_all_site_rejects_a_well_known_path_with_no_real_title(tmp_path: P
         # /menu 200s (like every other path on this catch-all host) but its
         # own content never says "menu" anywhere but the URL, which a
         # catch-all site must not be trusted for (R08).
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
 
 
 def test_catch_all_site_still_accepts_a_well_known_path_with_a_real_title(tmp_path: Path) -> None:
@@ -476,8 +473,7 @@ def test_catch_all_site_still_accepts_a_well_known_path_with_a_real_title(tmp_pa
         )
 
     with _fetcher(tmp_path, {}, handler=handle) as fetcher:
-        found = fetcher.discover_menu_url("https://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://k.com/")
     assert (found.menu_url, found.signal) == ("https://k.com/menu", "well_known")
 
 
@@ -488,8 +484,7 @@ def test_platform_website_is_verified_directly_with_no_root_probe(tmp_path: Path
     calls: list[str] = []
     routes = {"/venue-1": (200, "<html>order here</html>", _HTML)}
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
-        found = fetcher.discover_menu_url("https://order.toasttab.com/venue-1")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://order.toasttab.com/venue-1")
     assert (found.menu_url, found.signal) == ("https://order.toasttab.com/venue-1", "platform")
     assert "https://order.toasttab.com/menu" not in calls, "R33: no root-path probe on a platform"
 
@@ -498,7 +493,7 @@ def test_platform_root_website_is_not_a_menu(tmp_path: Path) -> None:
     calls: list[str] = []
     routes = {"/": (200, "<html>facebook</html>", _HTML)}
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
-        assert fetcher.discover_menu_url("https://www.facebook.com/") is None
+        assert fetcher.discover_menu_url("https://www.facebook.com/") == ()
     assert calls == [], "a platform's root belongs to the platform (R33)"
 
 
@@ -508,20 +503,20 @@ def test_own_site_never_falls_back_to_a_social_link(tmp_path: Path) -> None:
         "https://www.facebook.com/kerbey": (200, "<html>fb</html>", _HTML),
     }
     with _fetcher(tmp_path, routes) as fetcher:
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
 
 
 def test_catch_all_probe_only_runs_when_a_well_known_path_answers(tmp_path: Path) -> None:
     calls: list[str] = []
     routes = {"/": (200, "<html>no menu here</html>", _HTML)}
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
-        assert fetcher.discover_menu_url("https://k.com/") is None
+        assert fetcher.discover_menu_url("https://k.com/") == ()
     assert not [c for c in calls if "helios-probe-" in c], "no 200 well-known path, no probe"
 
 
 def test_platform_website_that_fails_to_fetch_yields_no_menu(tmp_path: Path) -> None:
     with _fetcher(tmp_path, {}) as fetcher:  # /venue-1 falls through to the 404 default
-        assert fetcher.discover_menu_url("https://order.toasttab.com/venue-1") is None
+        assert fetcher.discover_menu_url("https://order.toasttab.com/venue-1") == ()
 
 
 def test_own_site_falls_back_to_a_homepage_platform_link(tmp_path: Path) -> None:
@@ -530,12 +525,11 @@ def test_own_site_falls_back_to_a_homepage_platform_link(tmp_path: Path) -> None
         "https://order.toasttab.com/venue-1": (200, "<html>order</html>", _HTML),
     }
     with _fetcher(tmp_path, routes) as fetcher:
-        found = fetcher.discover_menu_url("https://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://k.com/")
     assert (found.menu_url, found.signal) == ("https://order.toasttab.com/venue-1", "platform")
 
 
-def test_own_site_menu_wins_over_a_platform_fallback_link(tmp_path: Path) -> None:
+def test_a_platform_link_that_fails_to_verify_keeps_the_own_site_menu(tmp_path: Path) -> None:
     routes = {
         "/": (
             200,
@@ -544,11 +538,93 @@ def test_own_site_menu_wins_over_a_platform_fallback_link(tmp_path: Path) -> Non
             _HTML,
         ),
         "/menu": (200, "<title>Our Menu</title>", _HTML),
+        # the Toast page falls through to the 404 default
     }
     with _fetcher(tmp_path, routes) as fetcher:
-        found = fetcher.discover_menu_url("https://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://k.com/")
     assert (found.menu_url, found.signal) == ("https://k.com/menu", "well_known")
+
+
+# -- platform menus alongside the site's own (S6b, ADR-0011 §7) ---------------------
+
+
+def test_own_site_menu_and_a_platform_menu_are_both_returned(tmp_path: Path) -> None:
+    routes = {
+        "/": (
+            200,
+            '<a href="/menu">Our Menu</a>'
+            '<a href="https://order.toasttab.com/venue-1">Order Online</a>',
+            _HTML,
+        ),
+        "/menu": (200, "<title>Our Menu</title>", _HTML),
+        "https://order.toasttab.com/venue-1": (200, "<html>order</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        own, toast = fetcher.discover_menu_url("https://k.com/")
+    assert (own.menu_url, own.signal, own.found_via) == ("https://k.com/menu", "well_known", None)
+    assert (toast.menu_url, toast.signal, toast.found_via) == (
+        "https://order.toasttab.com/venue-1",
+        "platform",
+        "https://k.com/",
+    )
+
+
+def test_platform_menus_are_one_per_host_and_capped(tmp_path: Path) -> None:
+    calls: list[str] = []
+    pages = [
+        "https://order.toasttab.com/online/venue",
+        "https://www.toasttab.com/venue/giftcards",  # same host as the first: not tried
+        "https://www.doordash.com/store/venue-1/",
+        "https://www.grubhub.com/restaurant/venue-2",
+        "https://www.ubereats.com/store/venue-3",  # past MAX_PLATFORM_CANDIDATES
+    ]
+    routes: dict[str, Route] = {
+        "/": (200, "".join(f'<a href="{url}">Order</a>' for url in pages), _HTML),
+        "/menu": (200, "<title>Menu</title>", _HTML),
+        **dict.fromkeys(pages, (200, "<html>platform page</html>", _HTML)),
+    }
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        found = fetcher.discover_menu_url("https://k.com/")
+    assert [f.menu_url for f in found] == [
+        "https://k.com/menu",
+        "https://order.toasttab.com/online/venue",
+        "https://www.doordash.com/store/venue-1/",
+        "https://www.grubhub.com/restaurant/venue-2",
+    ]
+    assert pages[1] not in calls and pages[4] not in calls
+
+
+def test_social_links_and_platform_roots_stay_excluded_beside_a_site_menu(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+    routes = {
+        "/": (
+            200,
+            '<a href="/menu">Menu</a>'
+            '<a href="https://www.facebook.com/venue">Facebook</a>'
+            '<a href="https://linktr.ee/venue">Links</a>'
+            '<a href="https://pos.toasttab.com/">Powered by Toast</a>',
+            _HTML,
+        ),
+        "/menu": (200, "<title>Menu</title>", _HTML),
+    }
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        (found,) = fetcher.discover_menu_url("https://k.com/")
+    assert found.menu_url == "https://k.com/menu"
+    assert not [c for c in calls if "facebook" in c or "linktr" in c or "toasttab" in c]
+
+
+def test_discover_attempt_returns_every_verified_menu(tmp_path: Path) -> None:
+    routes = {
+        "/": (200, '<a href="https://www.doordash.com/store/v-1/">Delivery</a>', _HTML),
+        "/menu": (200, "<title>Menu</title>", _HTML),
+        "https://www.doordash.com/store/v-1/": (200, "<html>store</html>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        found = fetcher.discover_menu_attempt("https://k.com/")
+    assert isinstance(found, tuple)
+    assert [f.signal for f in found] == ["well_known", "platform"]
 
 
 # -- sitemaps (R75) --------------------------------------------------------------
@@ -568,8 +644,7 @@ def test_sitemap_url_comes_from_robots_sitemap_directive(tmp_path: Path) -> None
         "/dinner-menu": (200, "<title>Dinner Menu</title>", _HTML),
     }
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
-        found = fetcher.discover_menu_url("https://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://k.com/")
     assert found.menu_url == "https://k.com/dinner-menu"
     assert "https://k.com/custom-sitemap.xml" in calls
     assert "https://k.com/sitemap.xml" not in calls
@@ -595,8 +670,7 @@ def test_sitemap_index_children_are_expanded_for_menu_matches(tmp_path: Path) ->
         "/lunch-menu": (200, "<title>Lunch Menu</title>", _HTML),
     }
     with _fetcher(tmp_path, routes, calls=calls) as fetcher:
-        found = fetcher.discover_menu_url("https://k.com/")
-    assert found is not None
+        (found,) = fetcher.discover_menu_url("https://k.com/")
     assert found.menu_url == "https://k.com/lunch-menu"
     assert "https://k.com/sitemap-pages.xml" in calls, "index children must be fetched"
     assert "https://k.com/sitemap-pages.xml" not in [c for c in calls if c == found.menu_url], (

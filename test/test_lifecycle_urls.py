@@ -70,8 +70,8 @@ class Resolver:
         self.failure, self.stale = failure, stale
         self.verified: list[str] = []
 
-    def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
-        return MenuUrlDiscovery(URLS[0], "crawled", NOW, "sha256:menu")
+    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+        return (MenuUrlDiscovery(URLS[0], "crawled", NOW, "sha256:menu"),)
 
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
@@ -334,8 +334,10 @@ def test_changed_website_rediscovers_and_verifies_new_own_site_menu(session: Ses
     ingest(session, [changed], 1)
 
     class ChangedSite(Resolver):
-        def discover_menu_attempt(self, website: str) -> MenuUrlDiscovery | CaptureFailure:
-            return MenuUrlDiscovery(website + "menu", "crawled", NOW, "sha256:old-candidate")
+        def discover_menu_attempt(
+            self, website: str
+        ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+            return (MenuUrlDiscovery(website + "menu", "crawled", NOW, "sha256:old-candidate"),)
 
         def verify_menu_attempt(
             self, website: str, menu_url: str, *, not_before: datetime
@@ -351,3 +353,52 @@ def test_changed_website_rediscovers_and_verifies_new_own_site_menu(session: Ses
     assert saved and saved.payload["menu_url"] == "https://new.example.com/menu"
     assert saved.subject_id == mapped(session, first.gers_id).organization_subject_id
     assert "https://new.example.com/menu" in resolver.verified
+
+
+@pytest.mark.parametrize("stale", [False, True])
+def test_rebrand_verifies_each_newly_discovered_platform_menu_fresh(
+    session: Session, stale: bool
+) -> None:
+    # S6b: discovery after a rebrand can return platform menus alongside the
+    # site's own; each new <gers>|<host> key needs its own post-transition fetch.
+    first = poi()
+    ingest(session, [first], 0)
+    old = mapped(session, first.gers_id)
+    seed_urls(session, first.gers_id, old)
+    changed = poi(key=first.gers_id, name="New Business")
+    changed = replace(
+        changed,
+        websites=("https://new.example.com/",),
+        raw=dict(changed.raw, websites=["https://new.example.com/"]),
+    )
+    ingest(session, [changed], 1)
+    doordash = "https://www.doordash.com/store/new-business-1/"
+
+    class NewPlatform(Resolver):
+        def discover_menu_attempt(
+            self, website: str
+        ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+            return (
+                MenuUrlDiscovery(website + "menu", "crawled", NOW, "sha256:old-candidate"),
+                MenuUrlDiscovery(doordash, "platform", NOW, "sha256:old-platform", website),
+            )
+
+        def verify_menu_attempt(
+            self, website: str, menu_url: str, *, not_before: datetime
+        ) -> MenuUrlDiscovery | CaptureFailure:
+            if menu_url == URLS[0]:  # the old site's menu is off-site for the new website
+                self.verified.append(menu_url)
+                return CaptureFailure("failed", "no_menu_found", not_before + timedelta(seconds=1))
+            return super().verify_menu_attempt(website, menu_url, not_before=not_before)
+
+    resolver = NewPlatform(stale=stale)
+    run_urls(session, resolver, after=True)
+    assert doordash in resolver.verified
+    saved = _saved_record(
+        session, namespace=MENU_URL_NAMESPACE, external_key=f"{first.gers_id}|doordash.com"
+    )
+    if stale:
+        assert saved is None, "pre-transition bytes never create a record"
+    else:
+        assert saved and saved.payload["platform"] == "doordash.com"
+        assert saved.subject_id == mapped(session, first.gers_id).organization_subject_id
