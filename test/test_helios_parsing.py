@@ -1,4 +1,4 @@
-"""Pure parsing stages the page classifier's features use (ADR-0013 §1-2)."""
+"""Pure parsing stages: segmentation, text hash and the classifier's features (ADR-0013 §1-2, §5)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from packages.helios_parsing.page_features import FEATURE_NAMES, layout_features, page_text
 from packages.helios_parsing.prices import price_tokens
-from packages.helios_parsing.segment import segment
+from packages.helios_parsing.segment import SEGMENTER_VERSION, segment, text_hash
 
 _PAGE = """<html><head><title>Kitchen  Menu</title><script>var x = "$99.99";</script></head>
 <body><nav><a href="/">Home</a> <a href="/menu">Menu</a></nav>
@@ -77,3 +77,21 @@ def test_segment_skips_dialogs_but_not_other_hidden_content() -> None:
         "<h1>Menu</h1><p>Burrito $9.00</p></body>"
     )
     assert [block.text for block in segment(html)] == ["Tacos $3.50", "Menu", "Burrito $9.00"]
+
+
+def test_text_hash_ignores_markup_and_follows_text_and_structure() -> None:
+    """ADR-0013 §5: the change signal is the segmented text, not the raw body."""
+    page = "<body><h2>Tacos</h2><div>Carne Asada</div><div>$3.50</div><footer>Hours</footer></body>"
+    churned = (
+        '<body class="v9"><script>var csrf = "a1b2";</script><h2 id="t">Tacos</h2>'
+        '<div class="x"><span>Carne   Asada</span></div><div>$3.50</div><footer>Hours</footer></body>'
+    )
+    base = text_hash(segment(page))
+    assert base.startswith("sha256:") and len(base) == len("sha256:") + 64
+    assert text_hash(segment(churned)) == base
+    assert text_hash(segment(page.replace("$3.50", "$3.75"))) != base, "a price change"
+    assert text_hash(segment(page.replace("h2", "p"))) != base, "a heading became body text"
+    assert text_hash(segment(page.replace("Hours", "Hours 9-5"))) != base, "chrome text counts"
+    decomposed = page.replace("Carne", "Café")  # "é" as e + combining accent
+    assert text_hash(segment(decomposed)) == text_hash(segment(page.replace("Carne", "Café")))
+    assert SEGMENTER_VERSION == "segment-v2"

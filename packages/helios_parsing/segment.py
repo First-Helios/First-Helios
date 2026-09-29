@@ -4,13 +4,20 @@ No per-site code and no parser dependency (stdlib ``html.parser``). A block is
 the inline text between two block-level boundaries, so "Carne Asada Taco" and a
 sibling "$3.50" in separate ``<div>``s become two adjacent blocks, while
 "Carne Asada Taco ....... $3.50" in one ``<p>`` stays one block. Every block
-keeps its id, document order, tag path and text. Ported unchanged from the
-menu-model spike (``spikes/menu_model/segment.py``).
+keeps its id, document order, tag path and text. Ported from the menu-model
+spike (``spikes/menu_model/segment.py``); dialogs are skipped since S6f
+(ADR-0013 Amendment 2 item 9).
+
+``SEGMENTER_VERSION`` names this output: Evidence locators cite it, so a change
+to what ``segment`` returns for the same HTML needs a new version. ``text_hash``
+is the page's change signal (ADR-0013 §5).
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
@@ -32,6 +39,8 @@ CHROME_TAGS = frozenset({"nav", "header", "footer", "aside", "form", "button", "
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 _WS = re.compile(r"\s+")
 _DIALOG_ROLES = frozenset({"dialog", "alertdialog"})
+# v1: the spike's segmenter; v2: dialogs skipped (S6f).
+SEGMENTER_VERSION = "segment-v2"
 
 
 def _is_dialog(attrs: dict[str, str | None]) -> bool:
@@ -133,3 +142,18 @@ def segment(html: str) -> list[Block]:
     parser.feed(html)
     parser.close()
     return parser.blocks
+
+
+def text_hash(blocks: list[Block]) -> str:
+    """``sha256:`` digest of the normalized segmented text, the Bronze change signal.
+
+    One line per block, in order: its heading and chrome flags, then its text
+    (whitespace already collapsed by ``segment``), NFC-normalized. Those are the
+    block fields chunking and the validator read, so markup, class names and
+    scripts can change without changing the hash, while anything the later
+    stages could see changes it. Chrome text counts: chunking drops it, but the
+    validator grounds names over every block and block ids are positional.
+    """
+    lines = (f"{'h' if b.heading else '-'}{'c' if b.in_chrome else '-'} {b.text}" for b in blocks)
+    text = unicodedata.normalize("NFC", "\n".join(lines))
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
