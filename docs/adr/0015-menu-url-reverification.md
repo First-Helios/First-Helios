@@ -116,6 +116,8 @@ automatically rather than frozen.
 ## References
 
 - [Spike README](../spikes/menu-model/README.md) (stage C baselines; classifier result)
+- [ADR-0013](./0013-phase5-menu-pipeline.md) (Proposed) §7: the page classifier as
+  verifier `classifier-v1` (option C), with render-before-reject for JS-only pages
 - [ADR-0010](./0010-website-and-menu-url-resolution.md) Amendment 3;
   [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) §7;
   [ADR-0012](./0012-venue-lifecycle.md) §2 (derived URLs on transition)

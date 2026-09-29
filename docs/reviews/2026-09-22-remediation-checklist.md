@@ -48,7 +48,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 12 | S12 Fingerprint fix + venue-lifecycle ADR draft ⚠ | D6 | M | [X] #34 merged; ADR-0012 accepted 2026-09-27 |
 | 13 | S13 Venue-lifecycle implementation ⚠ | S12 ADR accepted | M | [X] #45 merged |
 | 🚦 | **Phase 5 gate:** after S7/S11/S12/S13 merge AND lifecycle acceptance tests pass | | | [X] 2026-09-28: #28/#33/#34/#45 merged; main CI green (strict DB, run 36508316467). Next: proposed ADR-0013 before any Phase 5 code (G.b) |
-| 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [ ] |
+| 13b | S13b Phase 5 pipeline ADR-0013 draft (ask the owner spike Q2–Q9 first) ⚠ | Phase 5 gate | S | [X] #48 draft (ADR-0013 Proposed; stop for review) |
 | 14 | S14 Schema tightening migration ⚠ | D8 | M | [X] #35 merged |
 | 15 | S15 Infra and tooling cleanup ⚠ | D8 | S | [X] #40, #41 merged |
 | 16 | S16 Docs drift sweep | D6.5 | M | [ ] |
@@ -857,9 +857,14 @@ absorbs that drift.
 ### S13b — Phase 5 pipeline ADR (draft, then stop) ⚠ · size S · needs the Phase 5 gate
 Branch: `docs/adr-0013-menu-pipeline`
 
-- [ ] Ask the owner the spike's open questions Q2–Q9 (docs/spikes/menu-model/README.md,
+- [X] Ask the owner the spike's open questions Q2–Q9 (docs/spikes/menu-model/README.md,
   "Open questions for the owner") with `AskUserQuestion` before drafting
-- [ ] Draft ADR-0013 "Phase 5 menu pipeline" as Proposed: page classifier → segmentation →
+  *Answered 2026-09-28:* Q2 Pi batch job · Q3 hash of the segmented text + pipeline
+  version · Q4 headless browser in ADR-0013 now · Q5 catch ≥ 0.97, false reject ≤ 0.12,
+  price accuracy ≥ 0.98 · Q6 show accepted `llm` prices, labelled · Q7 plan an rknpu
+  ≥ 0.9.7 upgrade (own runbook) · Q8 cooling recommended, not required · Q9 cuisine
+  separate (ADR-0006 deferral stands)
+- [X] Draft ADR-0013 "Phase 5 menu pipeline" as Proposed: page classifier → segmentation →
   LLM extraction → deterministic repairs → validator (owner decision G.b), with the new
   runtime dependencies (llama.cpp / `llama-server`, onnxruntime or fastembed, possibly a
   headless browser) and the Docker/Pi deployment story; relate it to ADR-0015 (the
@@ -915,6 +920,15 @@ Branch: `chore/infra-tooling` · Split into an `infra/` PR and a config-only PR.
 Hand-off prompt: `Do session S16 from docs/reviews/2026-09-22-remediation-checklist.md.`
 Branch: `docs/drift-sweep` · CLAUDE.md edits (if any remain after S1): owner review.
 
+*Owner decision (2026-09-28, end of S13b):* S16 grows into a full documentation
+consolidation run by an **Opus 5.5 lead with an agent swarm** (overrides the §2 model row
+and hand-off rule 3.4 "don't spawn subagents" for this session only). Goal: code,
+planning and status neat and concise. **Historical docs are deleted** once their lasting
+decisions live in an ADR, README or the code; git keeps them, and `docs/HISTORY.md` lists
+each removed file with its last commit. **Scope: docs, docstrings, code comments and
+templates only**, with no behaviour changes. The active trackers (this checklist, the
+hand-off) stay until S17.
+
 - [ ] Every item in review §7 "Doc drift" (README, ROADMAP, ADR statuses and numbers, plans, retro, LEARNING_GUIDE, docstrings, templates)
 - [ ] R51 ADR-0004 vs ADR-0008 on the API reading Identity models (per D6.5)
 - [ ] R97 Fix the misleading "cannot forge" test comment
@@ -962,7 +976,8 @@ Agents add one row per session (or per resume).
 | 2026-09-24 | S12 | fix/identity-matching | #34 | Merged; ADR-0012 accepted 2026-09-27 | — (D6.2 confirmed: no recompute script, rely on the Pi rebuild; ADR-0009 Amendment 1 records the fingerprint rule. Symbol-only names are now skipped before Bronze (S6: record them like blank names). ADR-0012 §5 goes beyond D6.4: Places must be promoted too, or no Establishment can ever be eligible. S13 is now ready for implementation under the revised accepted ADR) |
 | 2026-09-24 | S14 | fix/schema-tightening | #35 | Merged (migration `12a76ebed458` + models) | — (Uses a new `bronze.whitespace()` instead of `menu.whitespace()`: Bronze/Identity sit below Menu. Existing CHECK names kept. R56's DB rounding stays (would need `ALTER COLUMN TYPE`); Python rejects first. Gold staleness is clamped to 0. Run `docs/reviews/sql/2026-09-22-s14-schema-tightening-precheck.sql` on the Pi before upgrading. `test_legacy_identity_reset` and `test_gold_migration` now compare at `5f3a9c1e7b24`, not head) |
 | 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Merged (`8cbce26`; main CI green) |
-| 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Draft ⚠ (ADR-0014/0015 proposed; stop for review) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
+| 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Merged (`b2bba73`; ADR-0014/0015 still Proposed) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
+| 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -1045,3 +1060,18 @@ access, `resolve_urls` not run.
 - Minimal status fixes so no doc says otherwise: ROADMAP Phase 4 status paragraph and the
   S6 runbook (step 5 no longer opens URL resolution on the audit alone). Remaining ROADMAP
   Phase 5 drift (Scrapy-vs-Crawlee, "ADR-0006" scraper number) is left for S16.
+
+### 2026-09-28 S13b Phase 5 pipeline ADR
+
+Branch `docs/adr-0013-menu-pipeline` from `main@b2bba73` (#47 merged). Docs only; no
+code, no Pi access, `resolve_urls` not run. The owner answered the spike's Q2–Q9 at
+session start (answers in the S13b block and in ADR-0013). Two answers differ from the
+agent's recommendation and shape the ADR: **Q4** puts the headless browser (Playwright +
+Chromium) into ADR-0013 now, so §4 adds a measure-before-enable step on the spike's 32
+JS-only pages (the one stage the spike never measured); **Q7** plans an rknpu ≥ 0.9.7
+kernel upgrade as a separate owner-run operation, while Phase 5 stays CPU-only.
+ADR-0013 also settles ADR-0011's deferred Capture-targeted Evidence locators, makes the
+page classifier ADR-0015's `classifier-v1` verifier (option C), and lists five new open
+questions (page scope for per-location platform pages, PDFs, robots for rendered
+sub-requests, spot-check size, promotional rows). Phase 5 code waits for acceptance;
+ADR-0014/0015 are still Proposed (S6c/S6d wait on them).
