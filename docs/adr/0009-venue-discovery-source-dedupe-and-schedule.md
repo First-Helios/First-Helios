@@ -293,6 +293,13 @@ wrong merges). ASCII-only names fingerprint exactly as before. The geocoder
 cache key (`normalize_address`) shares the rule, so non-ASCII addresses get
 new cache keys (one extra lookup each).
 
+## Implementation notes (2026-09-28)
+
+- §1 "an unchanged POI re-uses its immutable version": only an exact retry (same release date, payload
+  and Capture) reuses it; a later release appends a new Version (`packages/helios_core/provenance/contracts.py`).
+- §3 LAN serving (`0.0.0.0`): `infra/docker-compose.yml` publishes the API on `127.0.0.1:8000` and
+  Postgres on `127.0.0.1:5432`, so neither is LAN-reachable as committed.
+
 ## References
 
 - [ROADMAP.md](../../ROADMAP.md) Phase 4; [RFC-0001](../rfc/0001-menu-pricing-first.md) §D3–D6, PRs 5–6
@@ -313,14 +320,15 @@ ROADMAP §6.4's ADR ledger is stale: it lists 0007 = "Prod hosting" and
 `0007-gold-price-index-projection.md` and `0008-read-api-conventions.md`
 (both Accepted). RFC-0001 §D4 also still refers to the LLM-fallback ADR as
 "ADR-0008". Flagging per CLAUDE.md; a docs-only PR should renumber/realign
-the ledger.
+the ledger. *Resolved in S16 (2026-09-28): the ledger is gone;
+[README.md](../../README.md#decisions) is the ADR index.*
 
 
 ## Amendment — ADR-0011 (accepted 2026-09-27)
 
 Overture observations record a canonical release endpoint and field-path Evidence. Rejected POIs remain in Bronze without Identity admission. Release aliases are exact retries; discovery no longer uses bundle_path for provenance. See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.
 
-Operational follow-up: [S6 Pi rebuild and gate record](../reviews/2026-09-27-s6-pi-rebuild.md). The owner performs the rebuild and a new precision audit before reopening URL resolution; S6b is not a prerequisite.
+Operational follow-up: [S6 Pi rebuild and gate record](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-27-s6-pi-rebuild.md). The owner performs the rebuild and a new precision audit before reopening URL resolution; S6b is not a prerequisite.
 
 ### S13 lifecycle implementation (2026-09-28)
 
@@ -331,5 +339,5 @@ completion after iterator exhaustion and committed observations, then runs the
 lifecycle pass. `--expected-predecessor` names the immediately previous published
 release; omission, custom coverage, conflicting completion claims, count
 anomalies, or an unknown/skipped predecessor veto absence inference.
-See the [S13 implementation review](../reviews/2026-09-28-s13-venue-lifecycle.md).
+See the [S13 implementation review](https://github.com/First-Helios/First-Helios/blob/ddb5579dbd439005468581fde99f254a64a2d824/docs/reviews/2026-09-28-s13-venue-lifecycle.md).
 This implementation does not authorize Pi execution or reopen the precision gate.

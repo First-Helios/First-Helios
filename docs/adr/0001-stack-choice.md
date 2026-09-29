@@ -1,6 +1,6 @@
 # ADR-0001: Language, framework, and data stack choices
 
-**Status:** Accepted
+**Status:** Accepted — web-framework deferral closed by [ADR-0008](./0008-read-api-conventions.md)
 **Date:** 2026-07-29
 
 ## Context
@@ -73,6 +73,14 @@ conventions that rely on a reviewer remembering to check them by hand.
 - Deferring the web framework decision means Phase 1 (schema) and Phase 2
   (parsing) work can proceed without blocking on it, but Phase 7 will need
   its own ADR before `apps/api/` is scaffolded.
+
+## Implementation notes (2026-09-28)
+
+- Database image: the text says `postgis/postgis`; dev and CI run
+  `imresamu/postgis` 16-3.4 (`infra/docker-compose.yml`, `.github/workflows/ci.yml`; see ADR-0002).
+- CI: the text lists four jobs; `.github/workflows/ci.yml` has five (adds `Docker image`, ADR-0002).
+- mypy: the text scopes `--strict` to `packages.helios_core.*`; `mypy.ini` sets `strict = True`
+  repo-wide and `make typecheck` / CI run `mypy .`. `mypy.ini` has no `helios_parsing` stanza.
 
 ## References
 

@@ -62,7 +62,7 @@ service, and cheap to avoid now rather than after it corrupts something.
 arch-agnostic (both `python:3.12-slim` and `uv` publish arm64 and amd64), so
 it builds natively wherever it runs — arm64 on the Pi, amd64 in CI. The
 *publishing* question (multi-arch buildx vs. arm64-only) is deferred to
-ADR-0007 in Phase 8, when there's actually a registry and a chosen prod host.
+an ADR (next free number) in Phase 8, when there's actually a registry and a chosen prod host.
 
 ## Alternatives considered
 
@@ -91,6 +91,11 @@ ADR-0007 in Phase 8, when there's actually a registry and a chosen prod host.
 - At acceptance, this renumbered the roadmap's then-planned ADRs. Planned
   identifiers have moved again as intervening ADRs were written; the current
   ROADMAP ADR ledger is authoritative.
+
+## Implementation notes (2026-09-28)
+
+- Required checks: the Consequences say `Docker image` is not yet a required status check;
+  [CLAUDE.md](../../CLAUDE.md) lists it among the five required checks (branch protection is not in the repo).
 
 ## References
 

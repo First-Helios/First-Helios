@@ -1,15 +1,14 @@
 # ADR-0007: Gold price-index projection — grain, aggregation, and its blocking dependencies
 
-**Status:** Accepted (target shape) — **implementation deferred to ROADMAP
-Phase 6/7. No model, migration, or code until the `course` category axis and
-real catalog data exist.**
+**Status:** Accepted (target shape) — implementation deferred: no model,
+migration, or code until the `course` category axis and real catalog data exist.
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune — adopt the shape below
 (lat/lon grid geospatial axis), defer the build.
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md),
 [ADR-0005](./0005-immutable-menu-snapshots-and-selection.md),
 [ADR-0006](./0006-gold-menu-read-models.md)
-**Implements (proposes):** [Plan 0002 Step 6](../plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models),
+**Implements (proposes):** [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models),
 the price-index portion; [ROADMAP Phase 7](../../ROADMAP.md#phase-7--api-surface-full-including-the-price-index)
 
 > **ADR-number drift (flagged per CLAUDE.md "the code wins").** ROADMAP still
@@ -18,8 +17,10 @@ the price-index portion; [ROADMAP Phase 7](../../ROADMAP.md#phase-7--api-surface
 > before ADRs were assigned in creation order; **ADR-0006 was actually assigned
 > to the Gold menu read models**, so this price-index ADR takes the next free
 > number, **0007**. The scraper-framework and prod-hosting ADRs will take the
-> next free numbers when written (0008+). This ADR does not renumber anything;
+> next free numbers when written. This ADR does not renumber anything;
 > it records the divergence for the owner to reconcile in ROADMAP.
+> *Resolved in S16 (2026-09-28): ROADMAP no longer carries planned ADR numbers;
+> [README.md](../../README.md#decisions) is the ADR index.*
 
 ## Context
 
@@ -265,6 +266,13 @@ They authorize **no** model, migration, or code — the build stays gated on the
 `course` category axis (extraction) and real catalog data. When those inputs
 exist, implementation lands under this accepted shape as its own reviewed unit.
 
+## Implementation notes (2026-09-28)
+
+- Context, alternatives and References cite ROADMAP §4.3 as naming `h3-pg`; §4.3 no longer does
+  (H3 dropped per ADR-0009).
+- "Extraction ladder (ROADMAP Phase 3)": menu extraction is now ROADMAP Phase 5, per Proposed
+  [ADR-0013](./0013-phase5-menu-pipeline.md).
+
 ## References
 
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) — Gold
@@ -279,10 +287,10 @@ exist, implementation lands under this accepted shape as its own reviewed unit.
 - [RFC-0001 §D2/§D6/§D7](../rfc/0001-menu-pricing-first.md) — `price_index_*`
   intent (median by H3/course, sample size), conflict resolution, and the
   deferred cross-venue item taxonomy.
-- [Plan 0002 Step 6](../plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
+- [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
   and §8 fitness tests (Gold rebuildability, FK direction, import direction).
 - ROADMAP [§4.3](../../ROADMAP.md#43-data-layer) (data layer, names `h3-pg`),
-  [Phase 6](../../ROADMAP.md#phase-6--ingest-pipeline--freshness) (materialization
+  [Phase 6](../../ROADMAP.md#phase-6--monthly-runs--freshness) (materialization
   refresh), [Phase 7](../../ROADMAP.md#phase-7--api-surface-full-including-the-price-index)
   (price-index API).
 - `packages/helios_core/gold/models.py` — the `gold.current_menu` shape this
@@ -291,5 +299,3 @@ exist, implementation lands under this accepted shape as its own reviewed unit.
   `Establishment` (Place/Organization join path).
 - `packages/helios_core/domains/menu/selection.py` — the accepted `select_price`
   contract, reused transitively via `current_menu`, never re-implemented.
-</content>
-</invoke>

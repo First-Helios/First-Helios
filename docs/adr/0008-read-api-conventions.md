@@ -1,13 +1,16 @@
 # ADR-0008: Read-API framework and conventions (First Light)
 
-**Status:** Accepted — Unit A (venues read endpoints) reviewed and **accepted by
-the owner on 2026-09-20**; all four open conventions confirmed as-implemented (see
-[Owner decision](#owner-decision)). Unit B (staging deploy) not done — a separate
-reviewed unit.
+**Status:** Accepted — Unit A (venues read endpoints); Unit B (staging deploy)
+not built, a separate reviewed unit
 **Date:** 2026-09-20
+**Accepted:** 2026-09-20 by the owner (Unit A); all four open conventions
+confirmed as-implemented, see [Owner decision](#owner-decision)
 **Amended:** 2026-09-23 — error `code` enum, `/readyz` envelope, CORS/timeouts/
 request-id hardening, see [Amendment 1](#amendment-1-2026-09-23-api-polish)
 (review session S9; owner decisions D7)
+**Amended:** 2026-09-28 — the API may read Identity ORM models directly, see
+[Amendment 2](#amendment-2-2026-09-28-api-reads-identity-models-directly)
+(review session S16; owner decision D6.5)
 **Closes:** the web-framework deferral in
 [ADR-0001](./0001-stack-choice.md) ("Web framework (Phase 7+): not yet chosen in
 code … reaffirmed or revised in a dedicated ADR once `apps/api/` exists").
@@ -25,6 +28,8 @@ boundaries), [ADR-0006](./0006-gold-menu-read-models.md) (Gold read models).
 > prod-hosting ADRs take the next free numbers when written. This ADR does not
 > renumber anything; it records the divergence for the owner to reconcile in
 > ROADMAP.
+> *Resolved in S16 (2026-09-28): ROADMAP no longer carries planned ADR numbers;
+> [README.md](../../README.md#decisions) is the ADR index.*
 
 ## Context
 
@@ -291,6 +296,31 @@ between this ADR's conventions and the shipped code. Owner decisions D7
   disposition below; `httpx2` is not a real, usable replacement — swapping
   back was out of scope for this session and is not a one-line change).
 
+## Amendment 2 (2026-09-28): API reads Identity models directly
+
+Review finding R51: Decision point 9 says `apps/api` reads "via published
+contracts/queries" only, while [ADR-0004 §7](./0004-modular-monolith-identity-and-lifecycle.md)'s
+import diagram allows `apps -> identity`. The shipped routes import
+`Establishment`, `Organization`, `Place` and `SubjectCurrentness` from
+`packages/helios_core/identity/models.py` (`apps/api/routes/venues.py`). Owner
+decision D6.5 (remediation checklist) settles it in ADR-0004's favour:
+
+- A read-only app (`apps/api`) may import Identity ORM models directly to query
+  them. `apps` is the composition root (ADR-0004 §7).
+- This covers reads only. `apps/api` has no write path: its session is never
+  committed (`apps/api/db.py`) and it adds no rows. Changes to which Subject a
+  record belongs to go through Identity commands
+  (`packages/helios_core/identity/commands.py`), as ADR-0004 §8 and
+  [ADR-0012 §1](./0012-venue-lifecycle.md) require.
+- Pydantic response models stay separate from the ORM (Decision point 5): no
+  SQLAlchemy object reaches the wire.
+
+## Implementation notes (2026-09-28)
+
+- Owner decision 4 and its disposition call `httpx2` bogus and `httpx` a dev dependency. `httpx` is a
+  runtime dependency (`pyproject.toml`; used by `packages/helios_core/geo.py` and `apps/discovery/web_client.py`),
+  and Starlette's `TestClient` now warns to install `httpx2` (review R47).
+
 ## References
 
 - [ADR-0001](./0001-stack-choice.md) — stack; the deferred web-framework choice
@@ -311,9 +341,8 @@ between this ADR's conventions and the shipped code. Owner decisions D7
   the venue resource's source grains.
 - `packages/helios_core/config.py` — settings surface a `cors_allow_origins`
   addition extends.
-</content>
 
-### S13 venue lifecycle filtering (2026-09-28)
+## S13 venue lifecycle filtering (2026-09-28)
 
 Accepted [ADR-0012 §3–§4](0012-venue-lifecycle.md) changes both venue routes:
 `/v1/venues` and `/v1/venues/{id}` serve only current Establishments with current

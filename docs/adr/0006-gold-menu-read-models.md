@@ -3,11 +3,11 @@
 **Status:** Accepted
 **Date:** 2026-09-19
 **Accepted:** 2026-09-19 by project owner Fortune. Proposed defaults accepted;
-the first unit materializes a **bounded input set** (full-catalog enumeration
-deferred). See [Owner decision](#owner-decision).
+the first unit materializes a **bounded input set**. The full-catalog refresh
+follow-up was accepted on 2026-09-20. See [Owner decision](#owner-decision).
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md),
 [ADR-0005](./0005-immutable-menu-snapshots-and-selection.md)
-**Implements:** [Plan 0002 Step 6](../plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
+**Implements:** [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
 
 ## Context
 
@@ -15,7 +15,7 @@ Step 5 is complete. The immutable Menu writer (revision `d83f0a21c592`), both
 concrete Menu SQL directions, and the pure read-side selector
 (`packages/helios_core/domains/menu/selection.py`) received integrated M01–M14
 final acceptance from the owner on 2026-09-19
-([record](../reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)). Step 6
+([record](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)). Step 6
 adds the first `gold` projection over accepted Menu/Identity/Bronze.
 
 **What is already settled at the ADR level** (do not reopen):
@@ -227,8 +227,8 @@ as-is" by owner Fortune on 2026-09-20** (`refresh_full_catalog` /
 `enumerate_current_requests`; price-driven grain; current-eligible-operating
 exclusion; enumeration kept in the Menu domain), jointly with the bounded unit it
 builds on. See the
-[full-catalog review](../reviews/0002-step-6-gold-full-catalog-refresh.md) and the
-[Step 6 review](../reviews/0002-step-6-gold-read-models.md). The price index, an
+[full-catalog review](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/reviews/0002-step-6-gold-full-catalog-refresh.md) and the
+[Step 6 review](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/reviews/0002-step-6-gold-read-models.md). The price index, an
 API, and deployment remain unauthorized and still require their own owner-accepted
 ADR/decision.
 
@@ -243,6 +243,16 @@ observation cutoff are rejected: `gold.current_menu` holds current answers only.
 In current mode only the requested subject's own stream heads count, and every
 one of them must still be live.
 
+## Implementation notes (2026-09-28)
+
+- Point 4 `as_of`: `gold.current_menu` has no `as_of` column; `effective_instant` plays that role,
+  with `staleness_seconds` as the age (`packages/helios_core/gold/models.py`).
+- Point 4 `price_state`: the text lists three values; `ck_gold_price_state` allows eight
+  (`_PRICE_STATES` in `packages/helios_core/gold/models.py`; migration `5f3a9c1e7b24`).
+- Owner decision 4: there is no `scope` column. Establishment rows carry `organization_claim_count`;
+  Organization-scoped prices are separate rows with `subject_kind = 'organization'`.
+- Context cites ROADMAP §4.3 for `h3-pg`; §4.3 no longer names it (H3 dropped per ADR-0009).
+
 ## References
 
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) — Gold
@@ -251,7 +261,7 @@ one of them must still be live.
   snapshots and the selection semantics Gold projects.
 - [ADR-0003](./0003-three-layer-schema.md) — why derived read models are
   refreshed tables, not matviews (superseded, reasoning retained).
-- [Plan 0002 Step 6](../plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
+- [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
   and §8 Gold rebuildability fitness test.
 - [RFC-0001 §D2/§D6/§D7](../rfc/0001-menu-pricing-first.md) — current-menu and
   price-index intent, conflict resolution, deferred item taxonomy.
@@ -259,6 +269,4 @@ one of them must still be live.
   (price-index API).
 - `packages/helios_core/domains/menu/selection.py` — the accepted `select_price`
   contract Gold reuses.
-- [Integrated M01–M14 acceptance](../reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md).
-</content>
-</invoke>
+- [Integrated M01–M14 acceptance](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md).

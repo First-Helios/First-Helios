@@ -13,9 +13,9 @@ Phase 5 extraction ADR"; the verifier that
 **Evidence:** [menu-model spike](../spikes/menu-model/README.md) (stages A–F, H and
 the usable-price session). Owner answers to its open questions Q2–Q9 are recorded
 below (2026-09-28).
-**Numbering:** ROADMAP Phase 5 plans a "Scraper framework choice" ADR under the
+**Numbering:** ROADMAP Phase 5 planned a "Scraper framework choice" ADR under the
 number 0006, which Gold read models already use. This ADR replaces that plan; S16
-fixes the ROADMAP text.
+rewrote ROADMAP Phases 3, 5 and 6 around it.
 
 ## Context
 
@@ -304,7 +304,7 @@ parsers, images and OCR, the NPU, and deals/promotions (Phase 10).
   prices (held-out 0.74–0.77 usable, tuning pages 0.84); the largest share (8–13%)
   belongs to items the model never extracts, closed only by a better model or better
   generic data preparation.
-- **Docs:** ROADMAP Phases 3, 5 and 6 need rewriting around this pipeline (S16).
+- **Docs:** ROADMAP Phases 3, 5 and 6 were rewritten around this pipeline in S16.
 
 ## Implementation slices (after acceptance)
 
@@ -336,7 +336,7 @@ Each slice is a PR; ⚠ slices touch deps or `infra/` and stop for owner review.
    sub-request host too?
 4. **Spot-check size and owner:** e.g. 5 pages per monthly run, labelled by an agent
    and confirmed by the owner?
-5. **Promotional rows** ("BOGO", "half off") in menus: ROADMAP Phase 3 wanted them
+5. **Promotional rows** ("BOGO", "half off") in menus: ROADMAP §2 / Phase 5 wants them
    excluded from menu prices; the spike did not measure them. Handle as a generic
    repair now, or leave to Phase 10?
 

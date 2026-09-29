@@ -30,7 +30,7 @@ construction:
    the S4 verifier (ADR-0010 Amendment 3) at **venue-level precision 0.605, recall
    0.676**; its false positives were press releases, blog posts, a Toast marketing
    signup, another city's IHOP, chain location/hub pages and `/menus` landings
-   ([spike README](../spikes/menu-model/README.md), Results and log entry C).
+   ([spike README](../spikes/menu-model/README.md), Results, stage C rows).
 2. **Platform pages have no content check.** S6b accepts an ordering-platform link
    from the homepage on `200` + HTML + a venue-page path alone
    (`web_client.py` 585-598; `menu_url.platform_links_from_html` needs no menu

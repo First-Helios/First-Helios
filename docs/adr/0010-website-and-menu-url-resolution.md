@@ -13,7 +13,7 @@
 [ADR-0009](./0009-venue-discovery-source-dedupe-and-schedule.md) shipped the
 coverage subsystem: Overture Places → Bronze → conservative mint into
 `identity.establishment`, seeded metro-wide (9,996 current venues, precision
-gate met — see [retro](../retro/2026-09-21-phase-4.md)). It deliberately left
+gate met — see [retro](https://github.com/First-Helios/First-Helios/blob/45003519932cc2040f855e3141876829811f04a1/docs/retro/2026-09-21-phase-4.md)). It deliberately left
 two Phase 4 deliverables as a follow-on unit (RFC-0001 PR 6): **website
 resolution** and **menu-URL discovery**. This ADR settles that unit.
 
@@ -169,7 +169,7 @@ the only path to a URL match key, and it is opt-in per row.
 | Menu-URL grain | **Per-site (chosen; per-venue records, Amendment 2)** | Matches reality; chain→one, independent→own | Chain locations share one menu-URL (correct, but coarse per-location) |
 | | Per-Establishment | Explicit per-location menus | Duplicates a shared brand menu across N locations |
 | Discovery client | **httpx + stdlib (chosen)** | No new dep; robots/sitemap/anchor all stdlib | Hand-rolled crawl vs. a framework |
-| | Scrapy/Crawlee now | Batteries included | Framework choice is Phase 5 / ADR-0006 — premature here |
+| | Scrapy/Crawlee now | Batteries included | Framework choice is Phase 5 (now Proposed ADR-0013) — premature here |
 | Registry format | **YAML / PyYAML (chosen)** | Matches every doc + V1 parity; best human-edit format | One small runtime dep (owner-authorized) |
 | | TOML / stdlib tomllib | Zero dep | Deviates from the documented `.yaml` name |
 | Registry validation | **Hand-rolled + CI test (chosen)** | No dep; precise errors for four fields | Not a formal schema doc |
@@ -349,12 +349,20 @@ checklist) settle:
   URL shape, not a website — and was silently turned into
   `https://http/site.com`. That retry is now rejected instead.
 
+## Implementation notes (2026-09-28)
+
+- Decision summary "adds no runtime dependency": the unit adds PyYAML (owner decision 4) and, since
+  Amendment 1, `protego` (`pyproject.toml`).
+- §3 "HEAD/GET": the client sends GET only (`apps/discovery/web_client.py`, `_client.stream("GET", ...)`).
+- Stop-and-ask asks whether JSON-Schema validation belongs in CI; owner decision 4 settled it:
+  validation is hand-rolled in `apps/discovery/registry.py`, no `jsonschema`.
+
 ## References
 
 - [ROADMAP.md](../../ROADMAP.md) Phase 4; [RFC-0001](../rfc/0001-menu-pricing-first.md) §D3, PR 6
 - [ADR-0009](./0009-venue-discovery-source-dedupe-and-schedule.md) (source/dedupe/schedule; the hazard this preserves)
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) (Gold vs identity placement, composition root)
-- [Phase 4 retro](../retro/2026-09-21-phase-4.md) (82.1% website coverage, menu-URL = 0)
+- [Phase 4 retro](https://github.com/First-Helios/First-Helios/blob/45003519932cc2040f855e3141876829811f04a1/docs/retro/2026-09-21-phase-4.md) (82.1% website coverage, menu-URL = 0)
 - V1 port hints (`V1-Graveyard`): `collectors/meal_deals/osm_url_resolver.py`
   (URL canonicalization), `config/meal_deal_sources.yaml` (registry shape)
 
