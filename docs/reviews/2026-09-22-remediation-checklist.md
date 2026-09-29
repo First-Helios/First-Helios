@@ -38,7 +38,7 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
 | 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 merged (`e61486c`) |
 | 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [ ] |
-| 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [ ] part 1 #51 (ADR-0015 accepted 2026-09-29); part 2 pending |
+| 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [ ] part 1 #51 (ADR-0015 accepted 2026-09-29); part 2 #52 draft ⚠ (stacked on #51) |
 | 6f | S6f Page rendering: headed Chromium under Xvfb for platform/JS-only pages (ADR-0013 Amendment 1) ⚠ | S6d part 2 merged | M | [ ] |
 | 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
 | 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; ADR-0015 re-verification with `classifier-v1` as verifier, platform rendering (S6d, S6f) | G.a | | [ ] |
@@ -618,7 +618,7 @@ Independent of 1a. Opens when all hold:
 - [X] Owner decision on [ADR-0015](../adr/0015-menu-url-reverification.md): accepted
   2026-09-29 (option C with Amendment 1), verifier = the ADR-0013 page classifier from
   the first run. Implemented and merged with strict CI: part 1 (S6d, #51) [ ], part 2
-  `classifier-v1` (S6d) [ ], rendering (S6f) [ ].
+  `classifier-v1` (S6d, #52) [ ], rendering (S6f) [ ].
 - [X] A saved menu URL records its verifier version and is re-checked when the verifier
   changes (or its window expires); a URL the current verifier rejects is withdrawn to
   `needs_review`, never reused. (S6d part 1)
@@ -686,10 +686,11 @@ ADR-0013 Amendment 1:
 - [X] Tests: saved URL from an older verifier is re-checked; a rejected URL is withdrawn,
   not reused; registry entries are never withdrawn; platform page without menu content is
   not saved; transient failures keep the URL; window; recovery; chain guard
-- [ ] Part 2 ⚠: `classifier-v1` (ADR-0013 slices 1 without `llama-server`, and 4):
+- [X] Part 2 ⚠: `classifier-v1` (ADR-0013 slices 1 without `llama-server`, and 4):
   segmentation + price-token features, checked-in weights trained on the spike labels,
   `menu` extra (`fastembed`/`onnxruntime`), model manifest + checksum-refusing download,
-  worker image target, `resolve_urls` uses it; a recorded evaluation (ADR-0013 §8)
+  worker image target, `resolve_urls` uses it; a recorded evaluation (ADR-0013 §8):
+  [classifier-v1 evaluation](./2026-09-29-classifier-v1-evaluation.md)
 
 ### S6f — Page rendering ⚠ · size M · needs S6d part 2 merged
 Branch: `feat/page-render` · ADR-0013 Amendment 1 (render part of slice 6, for discovery).
@@ -702,6 +703,11 @@ Branch: `feat/page-render` · ADR-0013 Amendment 1 (render part of slice 6, for 
 - [ ] Measure (ADR-0013 §4): render success and classifier quality on rendered platform
   pages (label the probe's pages in `var/spikes/menu-model/render-probe-2026-09-29/`),
   Pi time and peak RAM per render; enable for Pi runs only after it is recorded
+- [ ] `classifier-v1` rejects every rendered Toast order page (0.004–0.28, threshold 0.508;
+  Square/Clover/Grubhub pass): label rendered platform pages, train and evaluate a
+  successor version (`classifier-v2`; the verifier bump re-checks saved URLs)
+- [ ] One Toast link redirected to `toast.app` (not in `ORDERING_PLATFORM_HOSTS`): decide
+  whether platform host lists grow (a generic list change, not a per-platform parser)
 
 ### S7 — Gold refresh fix · size M · needs D5
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`
@@ -1037,6 +1043,7 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
 | 2026-09-28 | S16 | docs/drift-sweep | #49 | Merged (`576c137`) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
 | 2026-09-28 | S6c | feat/location-overrides | #50 | Merged (`e61486c`) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
+| 2026-09-29 | S6d part 2 | feat/page-classifier | #52 | Draft ⚠ (new `menu` extra, worker image target; stacked on #51) | — (see "2026-09-29 S6d menu-URL re-verification" below; merge #51 first, then retarget #52 to `main`) |
 | 2026-09-29 | S6d part 1 | feat/menu-url-reverification | #51 | Open (ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
 
 
@@ -1205,3 +1212,11 @@ Branch `feat/menu-url-reverification` from `main@e61486c` (#50 merged). No Pi ac
   rule-withdrawn records; new report counters. No migration (`alembic check` clean).
 - **Not built (flagged):** phone matching (Overture ingestion lacks `phones`); address
   overrides are not consulted by the chain guard.
+- **Part 2 (#52, ⚠ draft, stacked on #51):** `packages/helios_parsing` (segmentation, v3
+  price tokens, classifier features), `apps/menu_pipeline` (pinned model files, plain-Python
+  scorer, training/evaluation script with an ephemeral scikit-learn), `menu` extra
+  (`fastembed` 0.8.1), `worker` Docker target + Compose `worker` (profile `menu`);
+  `resolve_urls` uses `classifier-v1`. [Evaluation](./2026-09-29-classifier-v1-evaluation.md):
+  nested CV 0.976 / 0.833, held-out 9/9 menus, 21/21 accepted pages are menu content. It
+  rejects every rendered Toast order page, so S6f trains a successor. Strict `make ci`: 1107
+  passed, 0 skipped, 91% coverage; `alembic check` clean; both images built and smoke-tested.

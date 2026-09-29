@@ -20,6 +20,11 @@ dependencies = [
     "uvicorn[standard]>=0.51.0",
 ]
 
+[project.optional-dependencies]
+menu = [
+    "fastembed==0.8.1",
+]
+
 [tool.pytest.ini_options]
 # Put the repo root on sys.path so tests can import the `packages.*` namespace
 # (mirrors alembic.ini's prepend_sys_path = .).

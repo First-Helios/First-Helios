@@ -385,3 +385,16 @@ Owner decisions in session S6d (ADR-0015 acceptance):
    owner accepted that risk for robots-allowed pages. The §4 measurement (render
    success, quality bars on rendered pages, Pi time and RAM) still gates enabling
    it on Pi runs.
+3. **Built in S6d part 2 (2026-09-29).** `packages/helios_parsing/` (segmentation,
+   the validator's v3 price tokens, the classifier's page text and layout features),
+   `apps/menu_pipeline/` (`models.py`: manifest `config/models.yaml`, checksum-refusing
+   download and verification; `classifier.py`: plain-Python scoring of the checked-in
+   weights `config/page_classifier_v1.json`; `train_page_classifier.py`: training and
+   the §8 evaluation, run with an ephemeral scikit-learn, never installed), the `menu`
+   extra (`fastembed` 0.8.1), the `worker` Dockerfile target and a Compose `worker`
+   service behind the `menu` profile (no `llama-server` yet). `resolve_urls` uses
+   `classifier-v1`. Evaluation:
+   [2026-09-29-classifier-v1-evaluation.md](../reviews/2026-09-29-classifier-v1-evaluation.md)
+   (nested CV precision 0.976 / recall 0.833; held-out 9/9 menus, 21/21 accepted pages).
+   It rejects every rendered Toast order page, so S6f trains a successor on rendered
+   platform pages.

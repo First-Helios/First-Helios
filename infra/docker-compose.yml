@@ -74,5 +74,26 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # Discovery and menu-pipeline CLIs with the `menu` extra (page classifier,
+  # ADR-0013). Behind the `menu` profile, so `make dev` and CI are unchanged:
+  #   docker compose --profile menu run --rm worker python -m apps.menu_pipeline.models download
+  #   docker compose --profile menu run --rm worker python -m apps.discovery.resolve_urls
+  worker:
+    profiles: ["menu"]
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: worker
+    environment:
+      DATABASE_URL: ${HELIOS_COMPOSE_DATABASE_URL:-postgresql+psycopg://helios:helios@postgres:5432/helios}
+    volumes:
+      - ../var:/app/var  # model files (var/models) and the site cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
 volumes:
   postgres_data:
