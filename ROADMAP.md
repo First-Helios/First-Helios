@@ -492,8 +492,9 @@ provenance to first-party websites and menu URLs.
 - Golden-set matcher fixture with ≥ 95% precision; Nominatim/Overture
   responses replayed from fixtures — no live calls in CI.
 
-Proposed follow-ups: location overrides ([ADR-0014](./docs/adr/0014-location-overrides.md))
-and menu-URL re-verification ([ADR-0015](./docs/adr/0015-menu-url-reverification.md)).
+Follow-ups: location overrides ([ADR-0014](./docs/adr/0014-location-overrides.md),
+accepted and implemented) and menu-URL re-verification
+([ADR-0015](./docs/adr/0015-menu-url-reverification.md), Proposed).
 
 **Port hints (`V1-Graveyard` branch):** `core/venue_identity.py`,
 `core/normalizer.py::make_fingerprint`, `collectors/geocoding.py` (including the

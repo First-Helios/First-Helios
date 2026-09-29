@@ -30,6 +30,7 @@ from apps.discovery.lifecycle import (
     project_observation,
     winning_version,
 )
+from apps.discovery.location_overrides import effective_location, located
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
     assign_source_record,
@@ -51,11 +52,12 @@ from packages.helios_core.provenance.contracts import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Mapping
     from datetime import datetime
 
     from sqlalchemy.orm import Session
 
+    from apps.discovery.location_overrides import OverrideState
     from apps.discovery.overture import OverturePoi
     from packages.helios_core.geo import NominatimClient
 
@@ -77,7 +79,11 @@ class DiscoveryReport:
     needs_review: int = 0
     skipped: int = 0
     geocoded: int = 0
+    overrides_applied: int = 0
+    override_stale: int = 0
+    override_unmatched: int = 0
     minted_subject_ids: list[int] = field(default_factory=list)
+    stale_override_ids: list[str] = field(default_factory=list)
 
 
 def _sha(value: str) -> str:
@@ -207,19 +213,33 @@ def run_discovery(
     dedupe_radius_m: float = DEFAULT_DEDUPE_RADIUS_M,
     batch_size: int = 100,
     on_batch: Callable[[], None] | None = None,
+    overrides: Mapping[str, OverrideState] | None = None,
 ) -> DiscoveryReport:
     """Admit POIs to Bronze and resolve/mint/dedupe them. Flushes; caller commits.
 
     ``on_batch`` (the CLI passes ``session.commit``) runs after every
     ``batch_size`` POIs, bounding what one crash (e.g. a Nominatim error) can lose.
+    ``overrides`` (from ``persist_overrides``) moves a record to its effective
+    location before minting, dedupe and lifecycle projection (ADR-0014); Bronze
+    keeps the Overture payload as observed.
     """
     report = DiscoveryReport()
+    overrides = overrides or {}
+    seen: set[str] = set()
     lock_lifecycle(session)
-    for poi in pois:
+    for observed in pois:
         if on_batch is not None and report.fetched and report.fetched % batch_size == 0:
             on_batch()
             lock_lifecycle(session)
         report.fetched += 1
+        seen.add(observed.gers_id)
+        override = overrides.get(observed.gers_id)
+        location = effective_location(observed, override)
+        report.overrides_applied += int(location.applied)
+        if location.stale:
+            report.override_stale += 1
+            report.stale_override_ids.append(observed.gers_id)
+        poi = located(observed, location)
         # A name with no letters or digits has no match key; skip it rather than
         # fall back to the raw string, which would bypass normalization (R18).
         fingerprint = name_fingerprint(poi.name)
@@ -267,6 +287,8 @@ def run_discovery(
                     evidence_id=result.evidence_id,
                     decided_at=decided_at,
                     report=report.lifecycle,
+                    override=override,
+                    override_applied=location.applied,
                 )
             report.reused += 1
             continue
@@ -323,4 +345,7 @@ def run_discovery(
         )
         report.minted += 1
         report.minted_subject_ids.append(establishment_id)
+    report.override_unmatched = sum(
+        1 for gers, state in overrides.items() if state.entry is not None and gers not in seen
+    )
     return report

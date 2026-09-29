@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -67,6 +68,35 @@ _USER_AGENT = "helios-v2-audit/0.1 (+https://github.com/First-Helios/First-Helio
 _SUITE = re.compile(r"\b(?:ste|suite|unit|bldg|building|apt|fl|floor|rm|#)\b\s*\S*")
 _ZIP = re.compile(r"\b\d{5}(?:-?\d{4})?\b")
 _NON_ADDR = re.compile(r"[^0-9a-z ]+")
+_HOUSE_NUMBER = re.compile(r"\s*\d+[a-z]?\b")
+# Spelling variants seen in the precision review ("Hoppe Trail"/"Hoppe Trl",
+# "W MLK Jr Blvd"/"W Martin Luther King Jr Blvd"), folded to one token.
+_STREET_WORDS = {
+    "street": "st", "avenue": "ave", "boulevard": "blvd", "road": "rd", "drive": "dr",
+    "lane": "ln", "trail": "trl", "parkway": "pkwy", "highway": "hwy", "court": "ct",
+    "circle": "cir", "place": "pl", "north": "n", "south": "s", "east": "e", "west": "w",
+}  # fmt: skip
+_MLK = re.compile(r"\bmartin luther king\b")
+
+# Corpus-wide twin search (README gate 1a label criteria). Unlike
+# find_dup_candidates it does not need co-location, so it sees twins separated
+# by a bad coordinate and chain location-label records.
+TWIN_NAME_RATIO = 0.6
+TWIN_NAME_RADIUS_M = 300.0
+TWIN_FINGERPRINT_RADIUS_M = 1000.0
+TWIN_LABEL_RADIUS_M = 50.0
+MISPLACED_M = 150.0  # same address but farther apart than the geocode tolerance
+_STREET_SUFFIX = (
+    r"(?:st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|trl|trail|pkwy|"
+    r"parkway|hwy|highway|fm\s*\d+|rr\s*\d+|sh\s*\d+|loop\s*\d+|i-?\s*\d+|us\s*\d+|mopac)"
+)
+# A store-locator label, not a brand: "Main St & I-35", "MLK (24 Hours)",
+# "Congress (Downtown)", "Research Blvd".
+_INTERSECTION = re.compile(
+    rf"\b{_STREET_SUFFIX}\b.*(?:&|\band\b|@|/)|(?:&|@|/).*\b{_STREET_SUFFIX}\b"
+)
+_QUALIFIER = re.compile(r"\([^)]*\)\s*$")
+_STREET_ONLY = re.compile(rf"^(?:[nsew]\.?\s+)?[a-z0-9 .'-]{{1,30}}\s{_STREET_SUFFIX}\.?$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,13 +149,25 @@ def load_venues(path: Path) -> list[VenueRow]:
 
 
 def street_key(address: str | None) -> str:
-    """Coarse physical-location key: the street line, minus suite clause and ZIP."""
+    """Coarse physical-location key: the street line, minus suite clause and ZIP.
+
+    The leading house number is kept even when it has five digits
+    ("13785 Research Blvd"); only a later token can be a ZIP.
+    """
     if not address:
         return ""
-    street_line = address.split(",")[0].lower()
+    street_line = _MLK.sub("mlk", address.split(",")[0].lower())
     without_suite = _SUITE.sub(" ", street_line)
-    without_zip = _ZIP.sub(" ", without_suite)
-    return " ".join(_NON_ADDR.sub(" ", without_zip).split())
+    house = _HOUSE_NUMBER.match(without_suite)
+    head, rest = (house.group(), without_suite[house.end() :]) if house else ("", without_suite)
+    without_zip = head + _ZIP.sub(" ", rest)
+    return " ".join(_STREET_WORDS.get(t, t) for t in _NON_ADDR.sub(" ", without_zip).split())
+
+
+def is_location_label(name: str) -> bool:
+    """A name that reads like a store-locator label rather than a business name."""
+    text = " ".join(name.lower().split())
+    return bool(_INTERSECTION.search(text) or _QUALIFIER.search(text) or _STREET_ONLY.match(text))
 
 
 def name_similarity(a: str, b: str) -> float:
@@ -219,6 +261,101 @@ def find_dup_candidates(
                     )
     candidates.sort(key=lambda c: (c.suggested != "duplicate", -c.name_ratio, c.distance_m))
     return candidates
+
+
+@dataclass(frozen=True, slots=True)
+class TwinCandidate:
+    """A pair the corpus-wide twin search surfaces; a human labels every one."""
+
+    a: VenueRow
+    b: VenueRow
+    distance_m: float | None  # None when either row lacks a coordinate
+    name_ratio: float
+    reasons: tuple[str, ...]
+
+
+def _twin_reasons(a: VenueRow, b: VenueRow, distance: float | None, ratio: float) -> list[str]:
+    reasons: list[str] = []
+    key = street_key(a.address)
+    same_address = bool(key and key[0].isdigit() and key == street_key(b.address))
+    far = math.inf if distance is None else distance  # unknown distance: "any distance"
+    if same_address and (ratio >= TWIN_NAME_RATIO or far > MISPLACED_M):
+        reasons.append("same_address")
+    if same_address and distance is not None and distance > MISPLACED_M:
+        reasons.append("misplaced")  # one of the two points is probably wrong
+    if far <= TWIN_NAME_RADIUS_M and ratio >= TWIN_NAME_RATIO:
+        reasons.append("similar_name")
+    if far <= TWIN_FINGERPRINT_RADIUS_M and a.fingerprint == b.fingerprint:
+        reasons.append("same_fingerprint")
+    if far <= TWIN_LABEL_RADIUS_M and is_location_label(a.name) != is_location_label(b.name):
+        reasons.append("location_label")
+    return reasons
+
+
+def find_twins(venues: Sequence[VenueRow]) -> list[TwinCandidate]:
+    """Every pair meeting a twin-search criterion, across the whole corpus.
+
+    Criteria (README gate 1a): same house-number street line at any distance
+    (``misplaced`` when > 150 m apart), name similarity >= 0.6 within 300 m,
+    same fingerprint within 1 km, and a location-label record within 50 m of
+    a branded one. Different-named tenants of one building within 150 m are
+    left to :func:`find_dup_candidates`, so a food hall does not flood the list.
+    """
+    pairs: set[tuple[int, int]] = set()
+    by_address: dict[str, list[VenueRow]] = {}
+    by_fingerprint: dict[str, list[VenueRow]] = {}
+    grid: dict[tuple[float, float], list[VenueRow]] = {}
+    for venue in venues:
+        key = street_key(venue.address)
+        if key and key[0].isdigit():
+            by_address.setdefault(key, []).append(venue)
+        by_fingerprint.setdefault(venue.fingerprint, []).append(venue)
+        if venue.latitude is not None and venue.longitude is not None:
+            grid.setdefault(_grid_cell(venue.latitude, venue.longitude), []).append(venue)
+    for group in (*by_address.values(), *by_fingerprint.values()):
+        pairs.update(
+            (min(x.subject_id, y.subject_id), max(x.subject_id, y.subject_id))
+            for i, x in enumerate(group)
+            for y in group[i + 1 :]
+        )
+    step = 10 ** (-_GRID_PRECISION)
+    for (cell_lat, cell_lon), members in grid.items():
+        for d_lat in (-1, 0, 1):
+            for d_lon in (-1, 0, 1):
+                neighbor = (
+                    round(cell_lat + d_lat * step, _GRID_PRECISION),
+                    round(cell_lon + d_lon * step, _GRID_PRECISION),
+                )
+                for x in members:
+                    for y in grid.get(neighbor, ()):
+                        if x.subject_id < y.subject_id:
+                            pairs.add((x.subject_id, y.subject_id))
+    rows = {venue.subject_id: venue for venue in venues}
+    twins: list[TwinCandidate] = []
+    for a_id, b_id in sorted(pairs):
+        a, b = rows[a_id], rows[b_id]
+        distance = (
+            haversine_m(a.latitude, a.longitude, b.latitude, b.longitude)
+            if a.latitude is not None
+            and a.longitude is not None
+            and b.latitude is not None
+            and b.longitude is not None
+            else None
+        )
+        ratio = name_similarity(a.fingerprint, b.fingerprint)
+        reasons = _twin_reasons(a, b, distance, ratio)
+        if reasons:
+            twins.append(
+                TwinCandidate(
+                    a=a,
+                    b=b,
+                    distance_m=None if distance is None else round(distance, 1),
+                    name_ratio=round(ratio, 3),
+                    reasons=tuple(reasons),
+                )
+            )
+    twins.sort(key=lambda t: (-len(t.reasons), -(t.distance_m or 0.0)))
+    return twins
 
 
 def structural_geocode_flags(
@@ -319,11 +456,25 @@ def _candidate_dict(candidate: DupCandidate) -> dict[str, Any]:
     }
 
 
+def _twin_dict(twin: TwinCandidate) -> dict[str, Any]:
+    return {
+        "distance_m": twin.distance_m,
+        "name_ratio": twin.name_ratio,
+        "reasons": list(twin.reasons),
+        "label": None,  # a reviewer sets "duplicate", "distinct" or "unresolved"
+        "a": {"id": twin.a.subject_id, "name": twin.a.name, "address": twin.a.address},
+        "b": {"id": twin.b.subject_id, "name": twin.b.name, "address": twin.b.address},
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m apps.discovery.audit", description=__doc__)
     parser.add_argument("--export", type=Path, required=True, help="venue export JSON (psql dump)")
     parser.add_argument("--worksheet", type=Path, default=Path("var/audit_worksheet.json"))
     parser.add_argument("--sample-size", type=int, default=DEFAULT_SAMPLE_SIZE)
+    parser.add_argument(
+        "--seed", default="phase4-audit", help="sample seed; a re-audit needs a new one"
+    )
     parser.add_argument(
         "--geocode-check",
         action="store_true",
@@ -337,8 +488,9 @@ def main() -> None:
     args = _parse_args()
     venues = load_venues(args.export)
     candidates = find_dup_candidates(venues)
+    twins = find_twins(venues)
     structural = structural_geocode_flags(venues)
-    sample = sample_venues(venues, size=args.sample_size)
+    sample = sample_venues(venues, size=args.sample_size, seed=args.seed)
 
     geo_checks: list[GeoCrossCheck] = []
     if args.geocode_check:
@@ -348,8 +500,10 @@ def main() -> None:
     worksheet: dict[str, Any] = {
         "total_venues": len(venues),
         "sample_size": len(sample),
+        "seed": args.seed,
         "structural_flags": [v.subject_id for v in structural],
         "dup_candidates": [_candidate_dict(c) for c in candidates],
+        "twin_candidates": [_twin_dict(t) for t in twins],
         "geocode_flags": [_geocode_flag_dict(check) for check in geo_checks if check.flagged],
     }
     args.worksheet.parent.mkdir(parents=True, exist_ok=True)
@@ -359,7 +513,8 @@ def main() -> None:
     print(  # noqa: T201 - CLI output
         "phase4 audit: "
         f"total={len(venues)} dup_candidates={len(candidates)} "
-        f"suggested_duplicates={suggested_dups} "
+        f"suggested_duplicates={suggested_dups} twin_candidates={len(twins)} "
+        f"misplaced_twins={sum(1 for t in twins if 'misplaced' in t.reasons)} "
         f"structural_geocode_flags={len(structural)} "
         f"geocode_crosscheck_flags={sum(1 for c in geo_checks if c.flagged)} "
         f"(<=2% dup bound: {duplicate_rate(len(candidates), len(venues)):.3%}) "

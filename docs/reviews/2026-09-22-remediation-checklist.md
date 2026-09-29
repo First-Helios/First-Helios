@@ -36,7 +36,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 merged; ADR-0011 accepted 2026-09-27 |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; precision review found errors; gate closed |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
-| 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [ ] |
+| 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 draft (ADR-0014 accepted 2026-09-28) |
+| 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [ ] |
 | 6d | S6d Menu-URL re-verification (implements ADR-0015) | ADR-0015 accepted | S | [ ] |
 | 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
 | 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; menu-URL precision (ADR-0015 re-verification and/or ADR-0013 classifier) | G.a | | [ ] |
@@ -592,17 +593,18 @@ conflict in code:
 
 **1a — Phase 4 location quality. Closed.** Gates Phase 4 "done" and anything that relies
 on venue location or dedupe; does not gate `resolve_urls`. Opens when all hold:
-- [ ] Correction plan committed: every confirmed defect classified (source coordinate
+- [X] Correction plan committed: every confirmed defect classified (source coordinate
   error, address error, duplicate incl. misplaced twins and chain location-label records,
   lifecycle/closed or renamed, non-venue), each mapped to its fix: an existing evented
   command with Evidence (merge, remap, retire) or a location override; a corpus-wide twin
   search, not only the co-location detector (and fix `audit.street_key` dropping 5-digit
-  house numbers).
-- [ ] [ADR-0014](../adr/0014-location-overrides.md) (location overrides) accepted and
+  house numbers). S6c: [location correction plan](./2026-09-28-location-correction-plan.md).
+- [X] [ADR-0014](../adr/0014-location-overrides.md) (location overrides) accepted and
   implemented, with tests for minting, dedupe, lifecycle projection (no false relocation)
   and rebuild. Without it the lifecycle pass turns a hand fix into a "relocation" at the bad
   point (`lifecycle.py` 287-298).
-- [ ] Corrections applied on the Pi in an owner-authorized run (no raw SQL).
+- [ ] Corrections applied on the Pi in an owner-authorized run (no raw SQL). Overrides
+  apply via a discovery re-run; merges and retirements need S6e.
 - [ ] Fresh-sample re-audit: new seed, 100 rows, every row hand-labeled under the
   precision review's criteria (geocode check + twin search), plus a regression check of
   the corrected cohort. Pass = 0 confirmed wrong geocodes (1/100 is not < 1%), at most 1
@@ -629,12 +631,30 @@ S6b is not Pi-gating.
 Branch: `feat/location-overrides` · Opens nothing by itself: Pi gate 1a also needs the
 owner-authorized Pi corrections and the fresh-sample re-audit.
 
-- [ ] Implement accepted ADR-0014 (Bronze `location-override` namespace, one
+Owner decisions at session start (2026-09-28): ADR-0014 **accepted, option A**; open
+question 1 = **in-place correction** on first application (no relocation, stable ids);
+open question 2 = **ship address overrides now**.
+
+- [X] Implement accepted ADR-0014 (Bronze `location-override` namespace, one
   effective-location function for minting, dedupe and lifecycle; stale overrides disabled)
-- [ ] Correction plan committed (the gate 1a list above), with a corpus-wide twin search
+- [X] Correction plan committed (the gate 1a list above), with a corpus-wide twin search
   that finds misplaced twins and chain location-label records; fix `audit.street_key`
   dropping 5-digit house numbers
-- [ ] Pi correction and re-audit steps written as a runbook for the owner (not run)
+- [X] Pi correction and re-audit steps written as a runbook for the owner (not run)
+
+### S6e — Corrections applier ⚠ · size S · needs S6c merged
+Branch: `feat/identity-corrections` · Proposed by S6c: merges and retirements have
+evented commands but no CLI, and gate 1a forbids raw SQL.
+
+- [ ] A reviewed `config/identity_corrections.yaml` (merge clusters with a survivor,
+  retirements; rationale + evidence URL each), keyed by GERS id so it survives a rebuild
+- [ ] `python -m apps.discovery.corrections` applies it idempotently via
+  `create_adjudication`, `remap_source_record`, `record_subject_change`; decide which
+  merged-away parents (Organization, Place) retire
+- [ ] Entries for the plan's §2 merges (6 sampled + 23 detector pairs) and, if the owner
+  wants, §5 retirements
+- [ ] Tests: merge, retire, re-run is a no-op, rebuild re-applies, a lifecycle pass leaves
+  merged venues alone
 
 ### S6d — Menu-URL re-verification · size S · needs ADR-0015 accepted
 Branch: `feat/menu-url-reverification`
@@ -978,7 +998,8 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S6b | fix/platform-menu-urls | #46 | Merged (`8cbce26`; main CI green) |
 | 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Merged (`b2bba73`; ADR-0014/0015 still Proposed) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
-| 2026-09-28 | S16 | docs/drift-sweep | #49 | Draft (CLAUDE.md, `gold/models.py` docstring: owner review) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
+| 2026-09-28 | S16 | docs/drift-sweep | #49 | Merged (`576c137`) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
+| 2026-09-28 | S6c | feat/location-overrides | #50 | Draft ⚠ (ADR-0014 accepted at session start; new override file entry and correction plan for owner review) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -1100,3 +1121,25 @@ read-only reviewer. Docs, docstrings, comments and templates only; no Pi access,
   stop-and-ask glob `packages/**/db/models/**` matches nothing and `apps/discovery/models.py`
   (bronze ORM models) is on no stop list or CODEOWNERS entry; the audit CLI's `--help`
   text changed with its docstring.
+
+### 2026-09-28 S6c location overrides
+
+Branch `feat/location-overrides` from `main@576c137` (#49 merged). No Pi access,
+`resolve_urls` not run, S6d code untouched; ADR-0013/0015 stay Proposed.
+
+- **Owner decisions at start:** ADR-0014 accepted (option A); a first application is an
+  in-place correction, not a relocation; address overrides ship now. Recorded in the ADR.
+- **Code:** `apps/discovery/location_overrides.py` + `config/location_overrides.yaml`;
+  `run_discovery` applies the effective location before minting, dedupe and lifecycle
+  projection; `project_observation` re-opens its checkpoint for an unprojected override
+  Version and never relocates on an override change. No migration: the override
+  namespace is created on demand and projection reuses `discovery_lifecycle_state`.
+- **Audit:** `street_key` keeps five-digit house numbers and folds Trail/Trl and
+  MLK spellings; new `find_twins` (`twin_candidates` in the worksheet) and a `--seed`
+  flag for the re-audit.
+- **Correction plan + runbook:**
+  [2026-09-28-location-correction-plan.md](./2026-09-28-location-correction-plan.md).
+  One override entry committed (Lali Son, official pin); P. Terry's MLK, El Sol y La Luna
+  and La Parrilla need a qualifying basis (the cached Nominatim points are on the Pi,
+  not in the repo). Merges and retirements have no CLI, so a new session **S6e
+  (corrections applier)** is proposed and added to the progress table.

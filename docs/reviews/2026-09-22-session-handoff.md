@@ -45,6 +45,9 @@ picker. Mode: auto (or accept-edits) for all sessions.
 | S4 Menu-URL quality | Sonnet 5 | high | Heuristics in two files; well specified |
 | S5 Evidence ADR | Opus 5.5 | xhigh | Design decision on the provenance contract |
 | S6 Evidence implementation | Opus 5.5 | high | Contract change, possible migration |
+| S6c Location overrides | Opus 5.5 | high | Implements ADR-0014; lifecycle projection rules |
+| S6d Menu-URL re-verification | Opus 5.5 | high | Implements ADR-0015 once accepted |
+| S6e Corrections applier | Opus 5.5 | high | Evented Identity merges/retirements from a reviewed file |
 | S7 Gold refresh fix | Opus 5.5 | xhigh | Subtle transaction and selection semantics |
 | S8 Identity lock order | Opus 5.5 | xhigh | Concurrency and deadlock ordering |
 | S9 API polish | Sonnet 5 | high | Many small, well-specified fixes |

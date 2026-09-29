@@ -1,0 +1,41 @@
+# Reviewed location overrides (ADR-0014).
+#
+# One entry per Overture record whose published point is wrong. Discovery
+# persists each entry as a Bronze Version (namespace "location-override") and
+# uses its point, and address if given, for minting, dedupe and lifecycle
+# projection while the record's Overture point still equals `corrects`. When
+# Overture's point changes, the entry is ignored and reported as stale
+# (`override_stale`, `stale_override_ids`): re-confirm it or remove it. Removing
+# an entry appends a withdrawal Version; history is never lost.
+#
+# Each entry:
+#   gers_id:      (required) the Overture record's GERS id
+#   latitude:     (required) replacement point, WGS84, inside the metro bbox
+#   longitude:    (required)
+#   address:      (optional) replacement address text; omit to keep Overture's
+#   corrects:     (required) {latitude, longitude}: the Overture point being
+#                 replaced, to 6 decimals as stored on the Place
+#   evidence_url: (required) HTTP(S) page supporting the replacement
+#   basis:        (required) official_pin | parcel | two_geocoders
+#                 two_geocoders = two independent geocoders within 50 m of each
+#                 other; one interpolating geocoder alone is not enough
+#   reason:       (required) why the Overture point is wrong
+#
+# Review standard for adding an entry: README "Gates", gate 1a label criteria
+# (address corroborated, no evidence of a move, point > 1,000 m off). The
+# correction plan lists pending candidates:
+# docs/reviews/2026-09-28-location-correction-plan.md
+
+overrides:
+  # Lali Son Fast Food (Subject 15606 on the 2026-09-28 Pi rebuild).
+  - gers_id: 663fbd55-4131-4da8-8e13-0228a1b6b0d0
+    latitude: 30.555901
+    longitude: -97.858398
+    address: 1500 S Bagdad Rd, Leander, TX, 78641
+    corrects: {latitude: 30.575928, longitude: -97.872322}
+    evidence_url: https://lalisonfastfoods.com/
+    basis: official_pin
+    reason: >-
+      Official ordering site pin (GeoCoordinates, retrieved 2026-09-28) and full
+      address 1500 S Bagdad Rd are 2,595.5 m from the Overture point; the
+      Overture address "1500 S" matches the official house number

@@ -44,10 +44,15 @@ This section is the single current-status page. Other docs link here.
   each discovery run (ADR-0012). Limits: closure needs a completed baseline plus
   two linked completed releases (none recorded yet; completion is never
   back-filled); completion trusts iterator exhaustion, not upstream
-  completeness; a > 50 m coordinate change counts as a relocation even when the
-  upstream point was wrong (ADR-0014, Proposed); not yet run on the Pi.
+  completeness; not yet run on the Pi.
+- **Location overrides**: `apps/discovery/location_overrides.py`,
+  `config/location_overrides.yaml` (ADR-0014). Reviewed coordinate/address
+  corrections keyed by GERS id, persisted to Bronze, applied in place by minting,
+  dedupe and lifecycle projection while the Overture point is unchanged; stale
+  entries are ignored and reported. One entry (Lali Son); not yet run on the Pi.
 - **Precision audit**: `apps/discovery/audit.py`. DB-free duplicate and geocode
-  audit over a venue export, with a hand-labeled worksheet.
+  audit over a venue export, with a hand-labeled worksheet, plus a corpus-wide
+  twin search (misplaced twins, location-label records).
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
@@ -55,9 +60,10 @@ This section is the single current-status page. Other docs link here.
 
 - Phase 5 menu extraction (page classifier, LLM extraction, validator). Waits on
   [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is Proposed.
-- Location overrides ([ADR-0014](./docs/adr/0014-location-overrides.md),
-  Proposed) and menu-URL re-verification
+- Menu-URL re-verification
   ([ADR-0015](./docs/adr/0015-menu-url-reverification.md), Proposed).
+- A corrections applier for merges and retirements (proposed session S6e; see
+  the [location correction plan](./docs/reviews/2026-09-28-location-correction-plan.md)).
 - The Gold price index: target shape accepted in
   [ADR-0007](./docs/adr/0007-gold-price-index-projection.md); no model,
   migration or code.
@@ -76,14 +82,15 @@ This section is the single current-status page. Other docs link here.
   of the 100-row precision sample found 4 wrong geocodes and 6 sampled venues
   with a confirmed duplicate, so both ROADMAP Phase 4 bars fail (< 1% wrong
   geocodes, < 2% duplicates). Does not gate `resolve_urls`. Opens when all hold:
-  - a correction plan is committed (every confirmed defect classified and mapped
-    to an evented command with Evidence or a location override; corpus-wide
-    twin search, because the co-location detector misses twins separated by a
-    bad coordinate and chain location-label records; fix `audit.street_key`,
-    which strips 5-digit house numbers as ZIP codes);
-  - ADR-0014 is accepted and implemented (session S6c);
-  - corrections are applied on the Pi in an owner-authorized run (no raw SQL);
-  - a fresh-sample re-audit passes: new seed, 100 hand-labeled rows plus a
+  - [x] a correction plan is committed:
+    [location correction plan](./docs/reviews/2026-09-28-location-correction-plan.md)
+    (S6c), with the corpus-wide twin search and the `audit.street_key` fix;
+  - [x] ADR-0014 is accepted and implemented (S6c; 3 override entries still need
+    a qualifying basis);
+  - [ ] corrections are applied on the Pi in an owner-authorized run (no raw
+    SQL; overrides via a discovery re-run, merges need the S6e applier; steps in
+    the plan's runbook);
+  - [ ] a fresh-sample re-audit passes: new seed, 100 hand-labeled rows plus a
     regression check of the corrected cohort; 0 confirmed wrong geocodes, at most
     1 sampled venue with a confirmed duplicate, at most 5 unresolved rows per
     measure, worst case reported, denominator never changed.
@@ -283,7 +290,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) | Provenance endpoints vs identity match keys | Accepted |
 | [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
 | [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Proposed |
-| [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Proposed |
+| [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Proposed |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first

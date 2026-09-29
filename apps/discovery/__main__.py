@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from apps.discovery.lifecycle import record_completion, run_lifecycle
+from apps.discovery.location_overrides import DEFAULT_PATH, load_overrides, persist_overrides
 from apps.discovery.overture import DEFAULT_RELEASE, MetroBbox, OvertureConfig, read_overture_pois
 from apps.discovery.pipeline import DEFAULT_DEDUPE_RADIUS_M, run_discovery
 from packages.helios_core.db.session import get_sessionmaker
@@ -54,6 +55,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-geocode", action="store_true", help="skip Nominatim gap-fill for missing coordinates"
     )
+    parser.add_argument(
+        "--location-overrides",
+        type=Path,
+        default=DEFAULT_PATH,
+        help="reviewed coordinate corrections (ADR-0014); must exist inside the repo",
+    )
     return parser.parse_args()
 
 
@@ -70,6 +77,7 @@ def main() -> None:
     )
     observed_at = _observed_at(args.release)
     decided_at = datetime.now(UTC)
+    overrides = load_overrides(args.location_overrides)
 
     geocoder = (
         None
@@ -78,6 +86,8 @@ def main() -> None:
     )
     try:
         with get_sessionmaker()() as session:
+            states = persist_overrides(session, overrides, observed_at=decided_at)
+            session.commit()
             report = run_discovery(
                 session,
                 read_overture_pois(config),
@@ -87,6 +97,7 @@ def main() -> None:
                 geocoder=geocoder,
                 dedupe_radius_m=args.dedupe_radius_m,
                 on_batch=session.commit,  # commit every 100 POIs (D3.3)
+                overrides=states,
             )
             session.commit()
             record_completion(
@@ -110,7 +121,10 @@ def main() -> None:
         "discovery complete: "
         f"fetched={report.fetched} minted={report.minted} deduped={report.deduped} "
         f"reused={report.reused} ambiguous={report.ambiguous} "
-        f"needs_review={report.needs_review} geocoded={report.geocoded} skipped={report.skipped}"
+        f"needs_review={report.needs_review} geocoded={report.geocoded} skipped={report.skipped} "
+        f"overrides_applied={report.overrides_applied} override_stale={report.override_stale} "
+        f"override_unmatched={report.override_unmatched} "
+        f"stale_override_ids={report.stale_override_ids}"
     )
 
 

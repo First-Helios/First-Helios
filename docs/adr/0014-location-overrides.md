@@ -1,6 +1,6 @@
 # ADR-0014: Location overrides — durable, evidence-backed coordinate corrections
 
-**Status:** Proposed (draft for owner review; not implemented)
+**Status:** Accepted 2026-09-28 by the owner (session S6c, option A); implemented in S6c
 **Date:** 2026-09-28
 **Phase:** 4 (remediation of the 2026-09-22 review; Pi gate 1a)
 **Decides for:** the "coordinate-override mechanism" criterion of Pi gate 1a
@@ -131,15 +131,39 @@ still worth doing in parallel as a courtesy, not as the fix.
 - Rebuilding the Pi from the same release after this lands produces corrected
   points without hand edits.
 
-## Open questions for the owner
+## Owner decisions (2026-09-28)
 
-1. First application of a > 50 m override to an existing venue: **relocation**
-   (close + new ids; consistent with ADR-0012, id churn for four venues) or an
-   **in-place correction** (stable ids; needs an explicit exception in the
-   lifecycle rules)? Recommendation: in-place correction, because the venue never
-   moved; only our data did.
-2. Should address-text overrides ship now (only Lali Son's partial address needs
-   one) or wait for a second case?
+1. First application of a > 50 m override to an existing venue: **in-place
+   correction** (stable ids), not relocation, because the venue never moved; only
+   our data did. This is the explicit exception to the ADR-0012 §2 relocation
+   rule; §5 above is superseded on this point.
+2. Address-text overrides **ship now** (optional `address`; Lali Son needs one).
+
+## Implementation notes (S6c, 2026-09-28)
+
+- Code: `apps/discovery/location_overrides.py` (load, validate, persist,
+  `effective_location`); `run_discovery` moves each POI to its effective location
+  before minting, dedupe and `project_observation`, while Bronze keeps the Overture
+  payload. CLI flag `--location-overrides` (default `config/location_overrides.yaml`).
+- In-place rule: `project_observation` never relocates when the point came from an
+  applied override, or when an override Version not yet projected (new entry, edit,
+  or withdrawal) meets the Overture Version the venue already reflects (projected, or
+  minted from it). A new Overture point with a stale override follows ADR-0012
+  unchanged: within 50 m it is an update, beyond it a relocation.
+- An override Version not yet projected re-opens the per-record projection
+  checkpoint, so re-running discovery on the loaded release applies a new entry.
+  Projection is journalled as a `discovery_lifecycle_state` row
+  (`action = 'projected'`) on the override's own record and Version. No migration.
+- Bronze Versions are appended only when an entry's payload changes (observed at
+  the run's decision time), plus one withdrawal Version when an entry leaves the file.
+- Counters: `overrides_applied`, `override_stale` (with `stale_override_ids`) and
+  `override_unmatched` (an active entry whose GERS id was not in the run).
+  `override_invalid` is not a counter: like the URL registry, a malformed file
+  fails closed before the run, and CI validates the committed file. A missing file
+  also fails; it would otherwise withdraw every override.
+- Staleness compares coordinates only; an address override applies whenever the
+  point override does. An Overture record without a point cannot be overridden
+  (it reports stale).
 
 ## References
 
