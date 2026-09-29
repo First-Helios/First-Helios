@@ -1,7 +1,7 @@
 # Location correction plan and Pi runbook (Pi gate 1a)
 
-**Date:** 2026-09-28 (session S6c) · **Status:** plan committed; nothing applied on the
-Pi · **Inputs:** the adjudicated precision review,
+**Date:** 2026-09-28 (session S6c; corrections applier added 2026-09-29, S6e) ·
+**Status:** plan committed; nothing applied on the Pi · **Inputs:** the adjudicated precision review,
 [`reviewed.json` at b2bba73](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/data/2026-09-28-precision-review/reviewed.json)
 (Subject ids are from the 2026-09-28 Pi rebuild), and
 [ADR-0014](../adr/0014-location-overrides.md) (accepted 2026-09-28).
@@ -19,9 +19,10 @@ Fix types:
   across releases and rebuilds; applied by the next discovery run.
 - **Merge:** `create_adjudication` + `remap_source_record` +
   `record_subject_change(operation="merge")`, one evented Identity change per cluster
-  (ADR-0004 §5). Nothing applies these on the Pi yet without raw SQL; see
-  [the tooling gap](#tooling-gap).
-- **Retire:** `record_subject_change(operation="retire")` with an adjudication.
+  (ADR-0004 §5), applied from `config/identity_corrections.yaml` by the
+  [corrections applier](#corrections-applier-s6e).
+- **Retire:** `unassign_source_record` + `record_subject_change(operation="retire")`
+  with an adjudication, from the same file.
 - **None / watch:** no data change; recorded so the re-audit does not re-count it.
 
 ### 1. Source coordinate errors (4, all in the 100-row sample)
@@ -111,22 +112,60 @@ Quesoff III 10986 (event), Torchy's HQ 19398, Cool Cafe school cafeteria 26472, 
 LLC 23064 (franchisee entity), Short Stop 19449 (convenience store). Fix: **retire**,
 optional before Phase 5, because they would otherwise get menu work.
 
-## Tooling gap
+## Corrections applier (S6e)
 
-Merges and retirements have evented commands but no CLI, and gate 1a forbids raw SQL.
-Proposed follow-up (**S6e, corrections applier**, size S): a reviewed
-`config/identity_corrections.yaml` (merge clusters with survivor, retirements, each with
-rationale and evidence URL) applied by `python -m apps.discovery.corrections` through
-`create_adjudication`, `remap_source_record` and `record_subject_change`, keyed by GERS
-id rather than Subject id so the file survives a rebuild. Until it exists, only the
-override half of this plan can be applied. Two design points for that session: which
-merged-away parents (Organization, Place) to retire, and whether a re-run after a
-rebuild should re-apply the file (recommended: yes, idempotently).
+`python -m apps.discovery.corrections --actor <reviewer>` applies
+`config/identity_corrections.yaml` (merge clusters with a survivor, retirements; each
+with a rationale and evidence URL, keyed by GERS id so the file survives a rebuild)
+through `assign_source_record`, `remap_source_record`, `unassign_source_record` and
+`record_subject_change`, one human Adjudication per entry plus the records' Overture
+Version Evidence. It is idempotent: an entry already in effect writes nothing, so a
+re-run after a rebuild re-applies exactly what is missing. `--dry-run` reports and
+rolls back; `--show-gers <subject id>...` prints Subjects' GERS ids and applies nothing.
+
+Design decisions (owner, 2026-09-29):
+
+- **Merged-away parents:** the duplicate's Organization and Place merge into the
+  survivor's (their records, e.g. website and menu URLs, remapped first) when no current
+  Establishment still uses them; otherwise they stay and are reported (`parents_kept`).
+- **Retirements** keep the Place and Organization (the address and the operator still
+  exist); the records go to `needs_review`, so discovery never re-mints them.
+- **Survivor rule** (the agent's, in the file header): the record whose address and
+  point match the official location page; on a tie, the trading name as that page shows
+  it; then the lower Subject id.
+
+A merged venue owns several Overture records, so the lifecycle leaves it alone
+(ADR-0012's shared-source rule): the merged-away record's point never relocates the
+survivor, and the venue closes only when every record is absent.
+
+**In the file:** the 23 detector-pair merges (§2), GERS ids and notes from
+`reviewed.json` at b2bba73, each checked against the pair's records.
+
+**Pending entries.** The review data holds no GERS id for these Subjects (only the Pi
+database does), so they are not in the file yet. Fill them with
+`python -m apps.discovery.corrections --show-gers <ids>` on the Pi (read-only), add the
+entries, review the diff and merge:
+
+| Entry | Kind | Survivor (Subject) | Merge / retire (Subject) | Note |
+|---|---|---|---|---|
+| S9336 | merge | 14829 P. Terry's | 9336 (GERS `63274178-3ab7-4bee-a1f8-26c3d27389ea`), 14832 "MLK (24 Hours)" | plus the §1 override for 9336 |
+| S2109 | merge | 7497 El Sol Y La Luna Restaurant | 2109 (GERS `45273d1d-cb18-4e67-9ce4-cbe451bc93ae`) | on-street point survives; operating status is a separate lifecycle question (§4) |
+| S27480 | merge | 27480 Pinthouse Pizza (15.5 m from Nominatim at 2800 Hoppe Trail) | 27456 (739.5 m off, < 1,000 m: merge only, no override) | |
+| S3585 | merge | 3588 Whataburger | 3585 "Main St & I-35" | location label |
+| S4965 | merge | 4965 Whataburger | 4968 "Spirit of Texas Dr & Presidential Blvd" | location label |
+| S21183 | merge | 21183 Jefes | 21189 Taqueria Jefes | official site lists one outlet |
+| N10986 | retire | | 10986 Quesoff III | an event |
+| N19398 | retire | | 19398 Torchy's HQ | an office |
+| N26472 | retire | | 26472 Cool Cafe | a school cafeteria |
+| N23064 | retire | | 23064 Rrh Den LLC | a franchisee entity |
+| N19449 | retire | | 19449 Short Stop | a convenience store |
+
+Evidence URLs for these rows are in `reviewed.json` (`duplicate_evidence_urls` or
+`evidence_urls` of each sampled row).
 
 ## Part 2: runbook for the owner (not run)
 
-Prerequisites: this PR merged; the corrections applier (S6e) merged for steps 4-5; the
-Pi at the merged commit. Every step below is a command, never SQL.
+Prerequisites: the corrections applier (S6e) merged; the Pi at the merged commit. Every step below is a command, never SQL.
 
 1. **Back up** the Pi database, as in the 2026-09-28 rebuild (see the Staging section of
    the README).
@@ -145,7 +184,17 @@ Pi at the merged commit. Every step below is a command, never SQL.
    `override_stale=0`, `override_unmatched=0`, and the lifecycle report shows
    `relocated: 0` (overrides are in-place corrections). A stale id means the entry's
    `corrects` does not match the loaded release: fix the entry, do not force it.
-4. **Merges and retirements** (needs S6e): apply §2 and, optionally, §5.
+4. **Merges and retirements:** fill the pending entries (above) with
+   `--show-gers`, merge that diff, pull it on the Pi, then
+
+   ```bash
+   python -m apps.discovery.corrections --actor <your name> --dry-run
+   python -m apps.discovery.corrections --actor <your name>
+   ```
+
+   Check the output: `merged` + `retired` + `satisfied` equals the number of entries,
+   `unmatched=[]`, `skipped=[]`; read every `parents_kept` line. A re-run must report
+   every entry `satisfied`. After any future rebuild, run it again after discovery.
 5. **Verify:** `GET /v1/venues/<id>` for 15606 shows the override point and address;
    merged-away ids are no longer current.
 6. **Re-audit on a fresh sample:** export current venues as for the 2026-09-28 audit,

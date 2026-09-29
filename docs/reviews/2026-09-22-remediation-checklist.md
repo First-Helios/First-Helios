@@ -37,8 +37,8 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; precision review found errors; gate closed |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
 | 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 merged (`e61486c`) |
-| 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [ ] |
-| 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [ ] part 1 #51 (ADR-0015 accepted 2026-09-29); part 2 #52 draft ⚠ (stacked on #51) |
+| 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [X] #PRNUM draft (23 merges in the file; 6 sampled merges + 5 retirements await GERS ids from the Pi) |
+| 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [X] part 1 #51 (`4b8608c`), part 2 #52 (`e048740`) merged |
 | 6f | S6f Page rendering: headed Chromium under Xvfb for platform/JS-only pages (ADR-0013 Amendment 1) ⚠ | S6d part 2 merged | M | [ ] |
 | 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
 | 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; ADR-0015 re-verification with `classifier-v1` as verifier, platform rendering (S6d, S6f) | G.a | | [ ] |
@@ -605,7 +605,8 @@ on venue location or dedupe; does not gate `resolve_urls`. Opens when all hold:
   and rebuild. Without it the lifecycle pass turns a hand fix into a "relocation" at the bad
   point (`lifecycle.py` 287-298).
 - [ ] Corrections applied on the Pi in an owner-authorized run (no raw SQL). Overrides
-  apply via a discovery re-run; merges and retirements need S6e.
+  apply via a discovery re-run; merges and retirements via the S6e corrections applier
+  (`python -m apps.discovery.corrections`; runbook step 4).
 - [ ] Fresh-sample re-audit: new seed, 100 rows, every row hand-labeled under the
   precision review's criteria (geocode check + twin search), plus a regression check of
   the corrected cohort. Pass = 0 confirmed wrong geocodes (1/100 is not < 1%), at most 1
@@ -617,8 +618,8 @@ on venue location or dedupe; does not gate `resolve_urls`. Opens when all hold:
 Independent of 1a. Opens when all hold:
 - [X] Owner decision on [ADR-0015](../adr/0015-menu-url-reverification.md): accepted
   2026-09-29 (option C with Amendment 1), verifier = the ADR-0013 page classifier from
-  the first run. Implemented and merged with strict CI: part 1 (S6d, #51) [ ], part 2
-  `classifier-v1` (S6d, #52) [ ], rendering (S6f) [ ].
+  the first run. Implemented and merged with strict CI: part 1 (S6d, #51) [X], part 2
+  `classifier-v1` (S6d, #52) [X], rendering (S6f) [ ].
 - [X] A saved menu URL records its verifier version and is re-checked when the verifier
   changes (or its window expires); a URL the current verifier rejects is withdrawn to
   `needs_review`, never reused. (S6d part 1)
@@ -651,14 +652,20 @@ open question 2 = **ship address overrides now**.
 Branch: `feat/identity-corrections` · Proposed by S6c: merges and retirements have
 evented commands but no CLI, and gate 1a forbids raw SQL.
 
-- [ ] A reviewed `config/identity_corrections.yaml` (merge clusters with a survivor,
+Owner decisions at session start (2026-09-29): a merged-away **Organization and Place
+merge into the survivor's when no other current venue uses them** (otherwise kept and
+reported); **include the §5 retirements** (retirements keep Place and Organization).
+
+- [X] A reviewed `config/identity_corrections.yaml` (merge clusters with a survivor,
   retirements; rationale + evidence URL each), keyed by GERS id so it survives a rebuild
-- [ ] `python -m apps.discovery.corrections` applies it idempotently via
+- [X] `python -m apps.discovery.corrections` applies it idempotently via
   `create_adjudication`, `remap_source_record`, `record_subject_change`; decide which
   merged-away parents (Organization, Place) retire
 - [ ] Entries for the plan's §2 merges (6 sampled + 23 detector pairs) and, if the owner
-  wants, §5 retirements
-- [ ] Tests: merge, retire, re-run is a no-op, rebuild re-applies, a lifecycle pass leaves
+  wants, §5 retirements: the 23 detector pairs are in the file; the 6 sampled merges
+  and 5 retirements need GERS ids that only the Pi database has (the plan's "Pending
+  entries" table; `--show-gers`)
+- [X] Tests: merge, retire, re-run is a no-op, rebuild re-applies, a lifecycle pass leaves
   merged venues alone
 
 ### S6d — Menu-URL re-verification · size M · needs ADR-0015 accepted
@@ -1043,8 +1050,9 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
 | 2026-09-28 | S16 | docs/drift-sweep | #49 | Merged (`576c137`) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
 | 2026-09-28 | S6c | feat/location-overrides | #50 | Merged (`e61486c`) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
-| 2026-09-29 | S6d part 2 | feat/page-classifier | #52 | Draft ⚠ (new `menu` extra, worker image target; stacked on #51) | — (see "2026-09-29 S6d menu-URL re-verification" below; merge #51 first, then retarget #52 to `main`) |
-| 2026-09-29 | S6d part 1 | feat/menu-url-reverification | #51 | Open (ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
+| 2026-09-29 | S6d part 2 | feat/page-classifier | #52 | Merged (`e048740`) | — (see "2026-09-29 S6d menu-URL re-verification" below; merge #51 first, then retarget #52 to `main`) |
+| 2026-09-29 | S6d part 1 | feat/menu-url-reverification | #51 | Merged (`4b8608c`; ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
+| 2026-09-29 | S6e | feat/identity-corrections | #PRNUM | Draft ⚠ (new `config/identity_corrections.yaml`, no migration) | — (see "2026-09-29 S6e corrections applier" below; 11 pending entries need GERS ids from the Pi) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -1220,3 +1228,31 @@ Branch `feat/menu-url-reverification` from `main@e61486c` (#50 merged). No Pi ac
   nested CV 0.976 / 0.833, held-out 9/9 menus, 21/21 accepted pages are menu content. It
   rejects every rendered Toast order page, so S6f trains a successor. Strict `make ci`: 1107
   passed, 0 skipped, 91% coverage; `alembic check` clean; both images built and smoke-tested.
+
+### 2026-09-29 S6e corrections applier
+
+Branch `feat/identity-corrections` from `main@e048740` (#51 and #52 found merged at
+start). No Pi writes, `resolve_urls` not run, url_pipeline/web_client/menu_pipeline code
+untouched; gate 1b stays closed.
+
+- **Owner decisions:** see the S6e block (parents merge when unused; include the §5
+  retirements).
+- **Code:** `apps/discovery/corrections.py` (parse/validate, `apply_corrections`, CLI with
+  `--actor`, `--dry-run`, read-only `--show-gers`) and `config/identity_corrections.yaml`.
+  One human Adjudication per changed entry plus the records' winning Overture Version
+  Evidence; state-based idempotency (no bookkeeping table, no migration; `alembic check`
+  clean). A merged venue owns several Overture records, so ADR-0012's shared-source rule
+  keeps the lifecycle from relocating, rebranding or closing it on one record.
+- **Entries:** 23 detector-pair merges, each checked against the pair's records in
+  `reviewed.json` at b2bba73; survivor rule in the file header. The 6 sampled merges and 5
+  retirements are listed in the correction plan's "Pending entries" table: the review
+  data has no GERS ids for those Subjects. A read-only Pi lookup was attempted with the
+  owner's go-ahead but blocked by the session's permission classifier, so the owner (or
+  the next session with Pi read access) runs `--show-gers` and adds them.
+- **Not built (flagged):** a merged venue's non-chosen GERS key gets no new website or
+  menu-URL records from `resolve_urls` (it resolves one GERS per venue), and its existing
+  URL records are remapped but not re-verified until that key is chosen again; the Pi has
+  no URL records yet, so nothing is affected today. Merging parents is evaluated only in
+  the run that merges the venues.
+- **Verification:** strict `make ci` 1136 passed, 0 skipped (before the skip-path test was
+  added; that file then 30/30); `alembic check` clean; corrections module 96% covered.

@@ -58,6 +58,13 @@ This section is the single current-status page. Other docs link here.
   corrections keyed by GERS id, persisted to Bronze, applied in place by minting,
   dedupe and lifecycle projection while the Overture point is unchanged; stale
   entries are ignored and reported. One entry (Lali Son); not yet run on the Pi.
+- **Identity corrections**: `apps/discovery/corrections.py`,
+  `config/identity_corrections.yaml` (S6e). Reviewed duplicate merges and
+  non-venue retirements keyed by GERS id, applied idempotently through the
+  evented Identity commands with a human Adjudication per entry (`python -m
+  apps.discovery.corrections --actor <reviewer>`). 23 detector-pair merges
+  committed; the sampled merges and retirements need GERS ids from the Pi. Not
+  yet run on the Pi.
 - **Precision audit**: `apps/discovery/audit.py`. DB-free duplicate and geocode
   audit over a venue export, with a hand-labeled worksheet, plus a corpus-wide
   twin search (misplaced twins, location-label records).
@@ -72,8 +79,6 @@ This section is the single current-status page. Other docs link here.
   verifier `classifier-v1`).
 - Page rendering for JavaScript-only and platform menu pages (ADR-0013
   Amendment 1: headed Chromium under Xvfb; session S6f).
-- A corrections applier for merges and retirements (proposed session S6e; see
-  the [location correction plan](./docs/reviews/2026-09-28-location-correction-plan.md)).
 - The Gold price index: target shape accepted in
   [ADR-0007](./docs/adr/0007-gold-price-index-projection.md); no model,
   migration or code.
@@ -98,8 +103,8 @@ This section is the single current-status page. Other docs link here.
   - [x] ADR-0014 is accepted and implemented (S6c; 3 override entries still need
     a qualifying basis);
   - [ ] corrections are applied on the Pi in an owner-authorized run (no raw
-    SQL; overrides via a discovery re-run, merges need the S6e applier; steps in
-    the plan's runbook);
+    SQL; overrides via a discovery re-run, merges and retirements via the S6e
+    corrections applier; steps in the plan's runbook);
   - [ ] a fresh-sample re-audit passes: new seed, 100 hand-labeled rows plus a
     regression check of the corrected cohort; 0 confirmed wrong geocodes, at most
     1 sampled venue with a confirmed duplicate, at most 5 unresolved rows per

@@ -1,0 +1,212 @@
+# Reviewed Identity corrections (S6e; gate 1a location correction plan).
+#
+# Applied by `python -m apps.discovery.corrections --actor <reviewer>` after a
+# discovery run, and again after any rebuild: applying is idempotent, an entry
+# already in effect writes nothing. Keys are Overture GERS ids, never Subject
+# ids, so the file survives a rebuild. Every decision is a human Adjudication
+# that cites this file, the entry id, its rationale and evidence URL.
+#
+# merges: records of ONE outlet. `merge` records join the survivor's venue;
+#   the merged-away venues retire into it through lineage, and their
+#   Organization/Place merge into the survivor's when no other current venue
+#   uses them.
+#   id:           (required) stable entry id, e.g. the review pair id
+#   survivor:     (required) GERS id of the record whose venue survives
+#   merge:        (required) nonempty list of GERS ids of the same outlet
+#   rationale:    (required) why these are one outlet and why this survivor
+#   evidence_url: (required) HTTP(S) page supporting the decision
+#
+# retirements: records that are not a venue (an event, an office, a legal
+#   entity). The venue retires and its records go to needs_review, so discovery
+#   never re-mints them.
+#   id, gers_id, rationale, evidence_url: as above
+#
+# Survivor rule: the record whose address and point match the official
+# location page; on a tie, the trading name as the official page shows it; then
+# the lower Subject id. Subject ids in comments are from the 2026-09-28 Pi
+# rebuild; pair ids and notes are from the adjudicated precision review
+# (docs/reviews/data/2026-09-28-precision-review/reviewed.json at b2bba73).
+# Each GERS id appears at most once in this file.
+#
+# Plan: docs/reviews/2026-09-28-location-correction-plan.md
+
+merges:
+  # Detector pairs labeled duplicate (plan §2).
+  - id: D01  # Taco Bell: 16548 into 16554
+    survivor: ebe8e758-06cf-4c3d-a18c-e317297fb5d9
+    merge: [cc4c3ef7-f088-4ea8-a653-968c61050722]
+    rationale: >-
+      Same Taco Bell; the official locator lists 9900 Parmer Lane Building C,
+      which the survivor's "Ste C" address matches. 61 m apart, above the
+      dedupe radius.
+    evidence_url: https://locations.tacobell.com/tx/austin/9900-parmer-lane.html
+  - id: D02  # Tacos Y Tortas El Chilango: 22926 into 22923
+    survivor: c8549124-7583-49f9-a63b-9b206597743f
+    merge: [882005b2-e06f-4b88-848e-da96827b37b0]
+    rationale: >-
+      Same name, street address and business website in both payloads;
+      independent listings show one restaurant. Survivor keeps the restaurant
+      category and the unquoted trading name.
+    evidence_url: https://maps.roadtrippers.com/us/austin-tx/food-drink/tacos-y-tortas-el-chilango
+  - id: D03  # SLAB BBQ & Beer: 1113 into 1104
+    survivor: f6cf0a3a-d475-4903-abf5-5a934c183a08
+    merge: [6539b601-83d9-454b-b268-3389e9c81880]
+    rationale: >-
+      Same name, address and website; the official ordering page lists one
+      Brodie Ln location. 76 m apart. Records otherwise identical: lower id
+      survives.
+    evidence_url: https://dopebbq.com/order/slab-bbq-brodie/item-water-bottle_9da92b42-d77d-40d8-8565-858a485f2e5c
+  - id: D04  # Baskin-Robbins: 16194 into 16218
+    survivor: e4001f49-05b7-4471-bca2-5f8155eee037
+    merge: [d972ae22-e3e1-48c7-ba42-808971251762]
+    rationale: >-
+      Case/hyphen variants at one address, confirmed by the official store
+      locator. Survivor carries the official brand spelling and locator URL.
+    evidence_url: https://locations.baskinrobbins.com/tx/cedar-park/1335-e-whitestone-blvd-346037-br
+  - id: D05  # Baguette House & Cafe: 23187 into 23184
+    survivor: 245bcb3d-e43c-4468-8c70-22a2a36f0bdc
+    merge: [a26b5174-71a0-42cc-8a70-03eb5dbe9158]
+    rationale: >-
+      Same name and address; the merchant ordering page and an independent
+      listing place it in suite C312, which the survivor's address carries.
+    evidence_url: https://pos.chowbus.com/online-ordering/store/Baguette-House-and-Cafe/15018
+  - id: D06  # Austin's Pizza: 25815 into 25812
+    survivor: 5821fbb0-26fe-422a-ae14-7bb21738e58b
+    merge: [29fb033f-036e-480e-84f7-91f57ff24e7a]
+    rationale: >-
+      Name variants at one address, 6.8 m apart; the official location page
+      for 3750 Gattis School Rd is in the merged record. Survivor's name
+      (Austins Pizza) is closer to the brand. Operating status not established.
+    evidence_url: https://locations.austinspizza.com/tx/austin/3750-gattis-school-rd-.html
+  - id: D07  # IHOP: 3447 into 3444
+    survivor: 40967941-85d6-424c-b738-6308be02b33a
+    merge: [6f1cf03b-771a-49e1-9de7-4f194c5b52f3]
+    rationale: >-
+      The official locator lists one IHOP at 8801 South Interstate Hwy 35, the
+      survivor's address; the other is a frontage-road spelling of it.
+    evidence_url: https://restaurants.ihop.com/en-us/tx/austin/breakfast-8801-south-interstate-hwy-35-3000
+  - id: D09  # The League Kitchen & Tavern: 12018 into 12015
+    survivor: da5fdb0b-0cab-4949-8e0b-9787687f31e9
+    merge: [7bdf39f4-0463-41e5-b28a-f1e377bd7e0f]
+    rationale: >-
+      Same Lakeway restaurant and website; the official contact page lists
+      1310 RR 620 S. Survivor has the Lakeway city and suite C1.
+    evidence_url: https://www.leaguekitchen.com/contact
+  - id: D12  # Gatti's Pizza: 17211 into 17190
+    survivor: 8e313212-f3e1-4721-a7df-55199cf137ce
+    merge: [59a5d94b-116d-48ac-bf0a-71ddb8e1f0d4]
+    rationale: >-
+      Same name and house number; Ranch Road 620 N and N FM 620 are aliases,
+      and a directory lists Gatti's at 12206 North FM 620. No official page
+      breaks the tie: lower id survives. Operating status not established.
+    evidence_url: https://www.yellowpages.com/hutto-tx/gattis-pizza
+  - id: D14  # Austin Tea Xchange: 11673 into 11523
+    survivor: 55e844fe-a66c-481e-bede-7c8d5a1222d1
+    merge: [45b6f1d8-916e-44d3-8341-c050bd5e24ae]
+    rationale: >-
+      Same website and address; the official contact page lists Suite 600,
+      which the survivor's address carries. Exchange/Xchange and LLC are
+      listing variants.
+    evidence_url: https://www.austinteaxchange.com/contact/
+  - id: D15  # The Salt Lick: 27579 into 27609
+    survivor: a21993d4-a674-4fe2-8694-dafcd618ad5e
+    merge: [f229bde4-d644-4f0f-bde6-9dd8670a4536]
+    rationale: >-
+      Same Round Rock restaurant and address, confirmed by the official
+      location page. Survivor has the official name and site; the cellars URL
+      in the other payload is not a separate restaurant.
+    evidence_url: https://www.saltlickbbq.com/round-rock/
+  - id: D17  # Lefty's Pizza Kitchen: 11775 into 11772
+    survivor: c781ad00-d2df-4c8d-bc33-1cab0305ff5d
+    merge: [7bab37e9-224a-4421-b573-7dee3bc08752]
+    rationale: >-
+      Same brand, address and website with a trivial name difference; a
+      delivery directory lists the 18101 Highway 71 location. Survivor's name
+      has no city suffix.
+    evidence_url: https://www.doordash.com/city/austin-tx/b/lefty%E2%80%99s-pizza-kitchen-14087855/
+  - id: D20  # House Park Bar-B-Que: 14760 into 14763
+    survivor: ec1abccf-3398-45bb-acc3-3840f6a3186a
+    merge: [f8f7bc35-bfe4-4db3-9ff0-8490ec76d5ad]
+    rationale: >-
+      Same website and street address; the official site confirms House Park
+      Bar-B-Que at 900 W 12th, the survivor's name.
+    evidence_url: https://www.houseparkbbq.net/
+  - id: D21  # Stiles Switch BBQ: 21246 into 21243
+    survivor: a7b63700-f2c0-4d35-a1e9-ec5cfbe125e8
+    merge: [c413b849-be47-4713-8dbd-704c068188af]
+    rationale: >-
+      Same website and address; the official page identifies the original
+      restaurant at 6610 N Lamar. Survivor has the trading name, not the LLC.
+    evidence_url: https://austin.stilesswitchbbq.com/austin-brentwood-stiles-switch-bbq-about
+  - id: D27  # Pluckers Wing Bar: 14406 into 14424
+    survivor: 74f18dd3-3117-4587-9807-82fcfec93dcc
+    merge: [eef44146-263c-47f6-9528-cb66c2459fe4]
+    rationale: >-
+      The official locator lists the Rio Grande outlet at this address; legal
+      name and trading name of one venue. Survivor has the trading name and
+      the location URL.
+    evidence_url: https://www.pluckers.com/location/rio-grande
+  - id: D28  # Papa Johns Pizza: 29625 into 29628
+    survivor: c4230545-862b-4539-ba7a-ec8e643a93a7
+    merge: [132cf9c8-b7b4-4331-b462-a172ccb5f0c0]
+    rationale: >-
+      Both payloads link the same official location page for 601 N Austin
+      Ave. Survivor has the official brand name.
+    evidence_url: https://locations.papajohns.com/united-states/tx/78626/georgetown/601-n-austin-ave
+  - id: D29  # North By Northwest: 19188 into 19185
+    survivor: 0a7c8fcb-4a32-4951-b214-a2194c70c9f7
+    merge: [766f3a81-94e7-4d49-9644-4b6dd451932a]
+    rationale: >-
+      NXNW is the abbreviation of North by Northwest at this exact address;
+      both are listings of one venue, reported permanently closed in April
+      2020 (a lifecycle question, not this merge). Survivor has the full name.
+    evidence_url: https://austin.eater.com/2020/4/17/21225052/north-by-northwest-closed-austin-brewery-restaurant-coronavirus
+  - id: D30  # Yucatan Tacos and More: 23424 into 23445
+    survivor: 817d0d34-1bea-4b31-8f7c-60683cf9c7f8
+    merge: [712a1aaa-d9ef-4d1f-9ce3-92a247b9b093]
+    rationale: >-
+      Accent, ampersand and location-suffix variants of one outlet; the
+      merchant marketplace lists Yucatan Tacos and More at 2307 Kramer Ln, the
+      survivor's name.
+    evidence_url: https://www.ubereats.com/store/yucatan-tacos-and-more-2307-kramer-ln/-gYoP0uQUyeIWyZ88PurBg
+  - id: D31  # Tiny's Milk and Cookies: 13437 into 13440
+    survivor: f01765d5-179c-4f61-94f2-704545c03769
+    merge: [01255d10-1b5f-428a-bebe-c387caeaeedf]
+    rationale: >-
+      Same domain and street with punctuation variants; the official site
+      lists 1515 W 35th Building C, matching the survivor's address and name.
+    evidence_url: https://tinysmilkandcookies.com/
+  - id: D33  # Qdoba: 14325 into 14322
+    survivor: 05a919f1-1cf0-4bb1-a5d8-fc5376e7e33c
+    merge: [b5f735fb-eead-4c07-bf41-684f5184848c]
+    rationale: >-
+      Both records link the same Qdoba location page at one coordinate; the
+      franchise disclosure lists store 2660 here, closed 2020-09-27 (a
+      lifecycle question, not this merge). Identical point: lower id survives.
+    evidence_url: https://keycommercialcapital.com/wp-content/uploads/2022/05/Qdoba-FDD.pdf
+  - id: D35  # El Marisquero Seafood: 2193 into 2190
+    survivor: 1d91e577-a23c-4b81-9629-83080da95cd8
+    merge: [465c2ade-1410-4239-bbe4-0a1c71e3b38b]
+    rationale: >-
+      Same restaurant and address; the other name is its social handle. The
+      official ordering site confirms the W Stassney location.
+    evidence_url: https://elmarisqueroseafoodtx.com/
+  - id: D38  # Better Half Coffee & Cocktails: 10632 into 10617
+    survivor: 2e5f53e4-3f14-479a-b3c7-a6dafd85fc64
+    merge: [115512c4-fd67-4595-bde0-41ff976670cd]
+    rationale: >-
+      Same website and address; the official site lists Better Half at 406
+      Walsh. Survivor has the trading name, not the LLC.
+    evidence_url: https://www.betterhalfbar.com/location
+  - id: D40  # Hunan Ranch: 16521 into 16509
+    survivor: e9795254-48a0-42eb-919d-327decdd60fa
+    merge: [f1efe191-15b9-4a65-9605-b48c68c0392b]
+    rationale: >-
+      Both names identify Hunan Ranch at one address; the official ordering
+      page lists Suite C300, which the survivor's address carries.
+    evidence_url: https://hunanranchtx.com/
+
+# Sampled-row merges (plan §2: P. Terry's, El Sol y La Luna, Pinthouse,
+# two Whataburger labels, Jefes) and the §5 non-venue retirements are pending:
+# their GERS ids are only on the Pi. See the plan's "Pending entries" table.
+retirements: []
