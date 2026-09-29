@@ -5,7 +5,7 @@
 **Date:** 2026-09-23
 **Phase:** 4 (remediation of the 2026-09-22 review, session S5)
 **Decides for:** R06, R17, R58, R101; sets the contract S6 implements (plus R52, R55)
-**Owner decisions:** D4.1–D4.5 ([remediation checklist](../reviews/2026-09-22-remediation-checklist.md)),
+**Owner decisions:** D4.1–D4.5 ([remediation checklist](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md)),
 D3.5 carry-over (platform menu URLs)
 
 ## Context
@@ -481,7 +481,7 @@ the real pipeline on fixtures and gets back the expected endpoint, kind,
 ## References
 
 - [2026-09-22 review](../reviews/2026-09-22-full-codebase-review.md) R06, R17,
-  R52, R55, R58, R101, FU-3; [remediation checklist](../reviews/2026-09-22-remediation-checklist.md) D4, S5, S6
+  R52, R55, R58, R101, FU-3; [remediation checklist](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md) D4, S5, S6
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) §4 provenance, §5 Evidence chain
 - [ADR-0009](./0009-venue-discovery-source-dedupe-and-schedule.md) §1 and "A concrete hazard"
 - [ADR-0010](./0010-website-and-menu-url-resolution.md) §2 and Amendments 2–3

@@ -831,6 +831,20 @@ Phase 5's open questions are in [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.
    `price_observation` or get its own observation table? Decide then, with a
    concrete second vertical in hand.
 
+6. **Deferred code-review findings.** The owner deferred these from the
+   [2026-09-22 review](./docs/reviews/2026-09-22-full-codebase-review.md)
+   (details in its §5 table). Pick each up when its trigger happens:
+
+   | Finding | Trigger |
+   |---|---|
+   | R56 (rest) Direct SQL into `NUMERIC(6,5)` confidence rounds silently; the Python contracts reject first | Anything other than the Python contracts writes confidence (direct SQL, a bulk loader), or the next migration touching those columns |
+   | R66 Menu replay keys vs revision key mismatch | Duplicate Bronze versions ever appear |
+   | R71 Gold grain unique index could exceed the btree size limit | Phase 5 produces deep or non-ASCII menu paths |
+   | R108 Observation-time rank can't decide; `Unsectioned` items unselectable | Phase 5 extraction design |
+   | R110 Overture category list and pinned release | Next Overture release run |
+   | R111 No review queue for ambiguous venues | A review UI is planned (see item 4) |
+   | R116 No image healthcheck; CI builds amd64 while the Pi builds arm64 | Phase 8 deploy work |
+
 ---
 
 ## Appendix A — V1 Reference Map

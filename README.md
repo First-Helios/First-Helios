@@ -106,7 +106,10 @@ This section is the single current-status page. Other docs link here.
     a qualifying basis);
   - [ ] corrections are applied on the Pi in an owner-authorized run (no raw
     SQL; overrides via a discovery re-run, merges and retirements via the S6e
-    corrections applier; steps in the plan's runbook);
+    corrections applier; steps in the plan's runbook). Before it,
+    `config/identity_corrections.yaml` needs its 11 pending entries (6 sampled
+    merges, 5 retirements) filled with GERS ids that only the Pi database has
+    (the plan's "Pending entries" table; `--show-gers`);
   - [ ] a fresh-sample re-audit passes: new seed, 100 hand-labeled rows plus a
     regression check of the corrected cohort; 0 confirmed wrong geocodes, at most
     1 sampled venue with a confirmed duplicate, at most 5 unresolved rows per
@@ -131,20 +134,25 @@ This section is the single current-status page. Other docs link here.
     [removed precision-review data](https://github.com/First-Helios/First-Helios/tree/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/data/2026-09-28-precision-review)
     ([docs/HISTORY.md](./docs/HISTORY.md)).
 - **Pi gate 1b, URL-resolution readiness: closed.** Gates the first Pi
-  `resolve_urls` run; independent of 1a. Opens when all hold:
-  - ADR-0015 accepted 2026-09-29 with the ADR-0013 page classifier as its
+  `resolve_urls` run; independent of 1a (URL records are keyed by GERS id and
+  the URL path reads no coordinate, so location errors can't corrupt them).
+  Opens when all hold:
+  - [x] ADR-0015 accepted 2026-09-29 with the ADR-0013 page classifier as its
     verifier; re-verification, withdrawal, the platform content check and the
-    chain guard implemented (S6d part 1); `classifier-v1` implemented and merged
-    with strict CI (S6d part 2); platform-page rendering implemented (S6f;
-    `classifier-v2` accepts rendered platform menus) and its Pi time and memory
-    recorded (the owner runs the
+    chain guard implemented (S6d part 1, #51); `classifier-v1` implemented and
+    merged with strict CI (S6d part 2, #52); platform-page rendering implemented
+    (S6f, #54; `classifier-v2` accepts rendered platform menus);
+  - [ ] the render's Pi time and memory recorded (the owner runs the
     [Pi measurement](./docs/reviews/2026-09-29-s6f-render-measurement.md#pi-measurement-owner-run);
-    a laptop run is recorded there);
-  - the owner authorizes the run.
-- **Code review remediation R01–R117: in progress.** Active trackers: the
-  [remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md)
-  (full gate criteria in its S6b block) and the
-  [session hand-off](./docs/reviews/2026-09-22-session-handoff.md).
+    a laptop run is recorded there). Until then Pi runs leave `--render` off;
+  - [ ] the owner authorizes the run. After it: record website/menu-URL
+    coverage (the last Phase 4 "done when" item) and a hand-checked precision
+    sample of saved menu URLs.
+- **Code review remediation R01–R117: complete 2026-09-29 (S17).** Every
+  finding was fixed or accepted/deferred by the owner; deferrals and their
+  triggers are in [ROADMAP §7](./ROADMAP.md#7-open-questions). Close-out note at
+  the top of the [review](./docs/reviews/2026-09-22-full-codebase-review.md); the
+  retired trackers are listed in [docs/HISTORY.md](./docs/HISTORY.md).
 
 ## Quick start / How to run
 
@@ -336,9 +344,8 @@ scope) and the
 - [docs/HISTORY.md](./docs/HISTORY.md): index of removed historical docs.
 - [docs/spikes/menu-model/README.md](./docs/spikes/menu-model/README.md): the
   menu-model spike (ADR-0013 evidence).
-- Review trackers: [full codebase review](./docs/reviews/2026-09-22-full-codebase-review.md),
-  [remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md),
-  [session hand-off](./docs/reviews/2026-09-22-session-handoff.md).
+- [Full codebase review](./docs/reviews/2026-09-22-full-codebase-review.md):
+  the 2026-09-22 findings R01–R117 (remediation complete).
 
 The V1 code lives on the
 [`V1-Graveyard`](https://github.com/First-Helios/First-Helios/tree/V1-Graveyard)

@@ -1,7 +1,7 @@
 # Removed historical docs
 
-Session S16 (2026-09-28) deleted these finished records once their lasting decisions
-lived in an ADR, [README.md](../README.md), [ROADMAP.md](../ROADMAP.md) or the code.
+Sessions S16 (2026-09-28) and S17 (2026-09-29) deleted these finished records once
+their lasting decisions lived in an ADR, [README.md](../README.md), [ROADMAP.md](../ROADMAP.md) or the code.
 Git keeps them: open one at its last commit with the link, or run
 `git show <sha>:<path>`.
 
@@ -29,3 +29,5 @@ Git keeps them: open one at its last commit with the link, or run
 | [docs/reviews/2026-09-28-precision-review.md](https://github.com/First-Helios/First-Helios/blob/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/2026-09-28-precision-review.md) | Adjudicated precision review of the rebuilt Pi's 100-row sample (Pi gate 1a result and label criteria) | `b2bba73` |
 | [docs/reviews/data/2026-09-28-precision-review/](https://github.com/First-Helios/First-Helios/tree/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/data/2026-09-28-precision-review) | That review's data: `sample.json`, `reviewed.json` (labels), `rows.md`, census CSVs, `SHA256SUMS`; input for the S6c correction plan | `b2bba73` |
 | [docs/reviews/2026-09-28-s13-venue-lifecycle.md](https://github.com/First-Helios/First-Helios/blob/ddb5579dbd439005468581fde99f254a64a2d824/docs/reviews/2026-09-28-s13-venue-lifecycle.md) | S13 venue-lifecycle implementation review (schema contract, acceptance matrix, validation) | `ddb5579` |
+| [docs/reviews/2026-09-22-remediation-checklist.md](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md) | Remediation tracker for the 2026-09-22 review: owner decisions D1–D9 and G, sessions S1–S16 with their R-IDs and PRs, Pi gate 1a/1b criteria (now in README) and the session log; closed by S17 (close-out record in the review) | `b11cf3d` |
+| [docs/reviews/2026-09-22-session-handoff.md](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-session-handoff.md) | Hand-off protocol for the remediation sessions: per-session model and effort, start/end-of-session steps, next-session prompt block | `b11cf3d` |

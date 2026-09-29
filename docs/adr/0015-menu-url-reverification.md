@@ -6,7 +6,7 @@ verifier is ADR-0013's page classifier (`classifier-v1`) from the first Pi run
 **Date:** 2026-09-28
 **Phase:** 4/5 boundary (Pi gate 1b)
 **Decides for:** the "page classifier or saved-menu re-verification path"
-criterion of Pi gate 1b ([remediation checklist](../reviews/2026-09-22-remediation-checklist.md),
+criterion of Pi gate 1b ([remediation checklist](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md),
 owner decision G.a)
 **Numbering:** ADR-0013 is reserved for the Phase 5 menu-pipeline ADR (owner
 decision G.b); ADR-0014 is the location-override draft.
