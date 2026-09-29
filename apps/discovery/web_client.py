@@ -45,6 +45,15 @@ menu URL (ADR-0015): own-site candidates and platform pages both pass through
 it, and a newer verifier makes the pipeline re-check every URL an older one
 saved. A homepage linking several venue pages on one platform (a chain) keeps
 only the one page that shows the venue's own street address, else nothing.
+
+Rendering (ADR-0013 §4, Amendments 1–2, session S6f): with a
+:class:`PageRenderer`, a page the static fetch can't verify is rendered once
+and checked again, so only the rendered verdict can reject it. A platform page
+is rendered when its static fetch answers ``403`` or fails the page check; an
+own-site page only when it looks JavaScript-only (:func:`looks_js_only`), at
+most :data:`MAX_RENDER_CANDIDATES` per site. Static robots.txt must allow the
+page first; the renderer applies its own (browser-read) robots.txt, the same
+per-host pacing (:meth:`SiteFetcher.pace`) and skips a bot challenge.
 """
 
 from __future__ import annotations
@@ -86,6 +95,7 @@ from apps.discovery.menu_url import (
     same_site,
     sitemap_index_children,
 )
+from packages.helios_parsing.segment import segment
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -93,6 +103,11 @@ if TYPE_CHECKING:
 MAX_REDIRECTS = 5
 MAX_BODY_BYTES = 3 * 1024 * 1024  # owner decision D2.4
 MAX_CRAWL_DELAY_S = 60.0
+# Own-site candidates rendered per site when none verifies statically (S6f).
+MAX_RENDER_CANDIDATES = 2
+# Below this much segmented text a page with scripts is treated as
+# JavaScript-only: every spike page labelled `js_only` (32) had < 300 characters.
+JS_ONLY_TEXT_CHARS = 300
 # Owner decision D2.5: robots.txt and failures expire after 7 days; good pages
 # are kept for the run. A Pi run takes a day or two, so one TTL covers all three.
 CACHE_TTL_S = 7 * 24 * 60 * 60
@@ -110,6 +125,7 @@ class FetchResult:
     content_type: str
     fetched_at: float
     content_hash: str
+    render: str | None = None  # the renderer's name when a browser produced ``text``
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +140,7 @@ class MenuUrlDiscovery:
     fetched_at: datetime
     content_hash: str
     found_via: str | None = None
+    render: str | None = None  # set when the verified page was rendered (ADR-0013 §4)
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +165,30 @@ class PageVerifier(Protocol):
     def name(self) -> str: ...
 
     def is_menu(self, html: str, url: str, *, trust_path: bool) -> bool: ...
+
+
+class PageRenderer(Protocol):
+    """Renders one page in a browser under the crawler's etiquette (ADR-0013 §4).
+
+    ``pace(host, crawl_delay)`` waits out the host's rate limit and records the
+    request; the renderer calls it for every navigation and robots.txt read.
+    The result's ``url`` is the final URL; a refused, blocked or failed render
+    is a :class:`CaptureFailure`.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    def render(
+        self, url: str, *, pace: Callable[[str, float], None]
+    ) -> FetchResult | CaptureFailure: ...
+
+
+def looks_js_only(html: str) -> bool:
+    """A page with scripts and almost no text: its content needs JavaScript."""
+    if "<script" not in html.lower():
+        return False
+    return sum(len(block.text) for block in segment(html)) < JS_ONLY_TEXT_CHARS
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +242,7 @@ class SiteFetcher:
         sleep: Callable[[float], None] = time.sleep,
         random_token: Callable[[], str] = _random_token,
         page_check: PageVerifier | None = None,
+        renderer: PageRenderer | None = None,
     ) -> None:
         if not user_agent.strip():
             raise ValueError("SiteFetcher requires a non-empty User-Agent")
@@ -219,6 +261,8 @@ class SiteFetcher:
         self._sleep = sleep
         self._random_token = random_token
         self._page_check: PageVerifier = page_check or HeuristicVerifier()
+        self._renderer = renderer
+        self._render_failure: CaptureFailure | None = None
         self._last_request_at: dict[str, float] = {}
         self._crawl_delay: dict[str, float] = {}
         # origin -> rules; None means the site is skipped this run.
@@ -380,6 +424,17 @@ class SiteFetcher:
         if wait > 0:
             self._sleep(wait)
 
+    def pace(self, host: str, crawl_delay: float = 0.0) -> None:
+        """Wait out ``host``'s rate limit, then record a request (the renderer's hook).
+
+        ``crawl_delay`` is a Crawl-delay the caller read from robots.txt; the
+        larger of it and any known one applies from now on.
+        """
+        if crawl_delay:
+            self._crawl_delay[host] = max(self._crawl_delay.get(host, 0.0), crawl_delay)
+        self._throttle(host)
+        self._last_request_at[host] = self._monotonic()
+
     def _request(self, url: str) -> FetchResult | _Redirect | None:
         """One throttled GET: a final response, a redirect to follow, or ``None``."""
         host = urlsplit(url).hostname or ""
@@ -506,18 +561,18 @@ class SiteFetcher:
                     "failed", "network_error", datetime.fromtimestamp(self._clock(), UTC)
                 )
             result = self.fetch(menu_url)
-            valid = result is not None and result.status == 200 and _is_html(result)
-            if valid and result is not None:
-                if platform:
-                    valid = is_platform_venue_page(result.url, ordering_only=True)
-                else:
-                    valid = homepage is not None and (
-                        not same_resource(result.url, website)
-                        and _body_hash(result.text) != _body_hash(homepage.text)
+            if not self._verifies(result, website, homepage, platform=bool(platform)) and (
+                self._should_render(result, platform=bool(platform))
+            ):
+                # Render before reject (ADR-0013 §7): only the rendered verdict counts.
+                result = self._render(menu_url)
+                if result is None:
+                    return self._render_failure or CaptureFailure(
+                        "failed", "network_error", datetime.fromtimestamp(self._clock(), UTC)
                     )
-                valid &= self._page_check.is_menu(result.text, result.url, trust_path=False)
+            if result is not None and result.status == 200 and _is_html(result):  # noqa: PLR2004
                 now = datetime.fromtimestamp(self._clock(), UTC)
-                if not valid:
+                if not self._verifies(result, website, homepage, platform=bool(platform)):
                     return CaptureFailure("failed", "no_menu_found", now)
                 if result.fetched_at < self._not_before:
                     return CaptureFailure("failed", "network_error", now)  # no fresh bytes
@@ -528,6 +583,50 @@ class SiteFetcher:
             )
         finally:
             self._not_before = previous
+
+    def _verifies(
+        self,
+        result: FetchResult | None,
+        website: str,
+        homepage: FetchResult | None,
+        *,
+        platform: bool,
+    ) -> bool:
+        """A saved menu URL's page still verifies (re-verification's page check)."""
+        if result is None or result.status != 200 or not _is_html(result):  # noqa: PLR2004
+            return False
+        if platform:
+            valid = is_platform_venue_page(result.url, ordering_only=True)
+        else:
+            valid = homepage is not None and (
+                not same_resource(result.url, website)
+                and _body_hash(result.text) != _body_hash(homepage.text)
+            )
+        return valid and self._page_check.is_menu(result.text, result.url, trust_path=False)
+
+    def _should_render(self, result: FetchResult | None, *, platform: bool) -> bool:
+        """Whether a page the static fetch couldn't verify gets one browser render.
+
+        Never when static robots.txt refused it, the fetch failed or left the site
+        (``None``). A platform page renders on ``403`` or a readable page that
+        failed the check; an own-site page only when it looks JavaScript-only.
+        """
+        if self._renderer is None or result is None:
+            return False
+        readable = result.status == 200 and _is_html(result)  # noqa: PLR2004
+        if platform:
+            return readable or result.status == 403  # noqa: PLR2004
+        return readable and looks_js_only(result.text)
+
+    def _render(self, url: str) -> FetchResult | None:
+        """One browser render of ``url``; ``None`` records why in ``_render_failure``."""
+        assert self._renderer is not None  # noqa: S101 - callers check _should_render
+        self._render_failure = None
+        outcome = self._renderer.render(url, pace=self.pace)
+        if isinstance(outcome, CaptureFailure):
+            self._render_failure = outcome
+            return None
+        return outcome
 
     def _note_failure(self, result: FetchResult | None) -> None:
         reason = (
@@ -557,20 +656,32 @@ class SiteFetcher:
             datetime.fromtimestamp(result.fetched_at, UTC),
             result.content_hash,
             found_via,
+            result.render,
         )
 
     def _platform_page(self, url: str) -> FetchResult | None:
-        """The fetched platform venue page when it passes the page check (ADR-0015 item 4)."""
+        """The platform venue page when it passes the page check (ADR-0015 item 4).
+
+        Rendered once when the static page is refused (``403``) or fails the check.
+        """
+        self._render_failure = None
         result = self.fetch(url)
-        if (
+        if self._is_platform_menu(result):
+            return result
+        if self._should_render(result, platform=True):
+            rendered = self._render(url)
+            if self._is_platform_menu(rendered):
+                return rendered
+        return None
+
+    def _is_platform_menu(self, result: FetchResult | None) -> bool:
+        return (
             result is not None
             and result.status == 200  # noqa: PLR2004
             and _is_html(result)
             and is_platform_venue_page(result.url, ordering_only=True)
             and self._page_check.is_menu(result.text, result.url, trust_path=False)
-        ):
-            return result
-        return None
+        )
 
     def discover_menu_url(
         self, website: str, *, address: str | None = None
@@ -612,6 +723,9 @@ class SiteFetcher:
             page = self._platform_page(website)
             if page is not None:
                 return (self._discovered(page, "platform"),)
+            if self._render_failure is not None:  # the render's reason, e.g. bot_challenge
+                self._site_failure = self._render_failure
+                return ()
             result = self.fetch(website)  # cached: the failure's reason
             if result is not None and result.status == 200:  # noqa: PLR2004
                 self._site_failure = CaptureFailure(
@@ -640,6 +754,7 @@ class SiteFetcher:
         is_catch_all: bool | None = None  # probed lazily: only a 200 well-known path needs it
 
         found: list[MenuUrlDiscovery | PlatformAmbiguous] = []
+        js_only: list[str] = []  # static pages that need a browser, in rank order
         for candidate in candidates:
             result = self.fetch(candidate)
             if result is None or result.status != 200 or not _is_html(result):  # noqa: PLR2004
@@ -651,6 +766,8 @@ class SiteFetcher:
                 is_catch_all = self._is_catch_all_site(base)
             trust_path = not (is_well_known and bool(is_catch_all))
             if not self._page_check.is_menu(result.text, result.url, trust_path=trust_path):
+                if self._should_render(result, platform=False):
+                    js_only.append(candidate)
                 continue
             if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
                 continue  # identical body to the homepage: a catch-all/soft-404 answer
@@ -662,6 +779,8 @@ class SiteFetcher:
                 )
             )
             break
+        if not found:
+            found.extend(self._render_own_site(js_only, base, well_known, is_catch_all))
 
         if homepage_html is not None:
             # One page per platform host, and a redirect can't leave that host,
@@ -686,6 +805,31 @@ class SiteFetcher:
                     else PlatformAmbiguous(platform)
                 )
         return tuple(found)
+
+    def _render_own_site(
+        self, candidates: list[str], base: str, well_known: set[str], is_catch_all: bool | None
+    ) -> list[MenuUrlDiscovery]:
+        """Render up to :data:`MAX_RENDER_CANDIDATES` JavaScript-only candidates; first menu wins.
+
+        The renderer keeps a navigation on the site, so a rendered page is judged
+        like a static one, minus the homepage-body comparison: a JavaScript app
+        serves every route the same static shell.
+        """
+        for candidate in candidates[:MAX_RENDER_CANDIDATES]:
+            rendered = self._render(candidate)
+            if rendered is None or rendered.status != 200 or same_resource(rendered.url, base):  # noqa: PLR2004
+                continue
+            is_well_known = candidate.rstrip("/") in well_known
+            trust_path = not (is_well_known and bool(is_catch_all))
+            if self._page_check.is_menu(rendered.text, rendered.url, trust_path=trust_path):
+                return [
+                    self._discovered(
+                        rendered,
+                        "well_known" if is_well_known else "crawled",
+                        None if is_well_known else self._found_via.get(candidate, base),
+                    )
+                ]
+        return []
 
     def _is_catch_all_site(self, base_url: str) -> bool:
         """True when a random, almost-certainly-nonexistent path 200s as HTML.

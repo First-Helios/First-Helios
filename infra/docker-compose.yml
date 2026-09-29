@@ -78,6 +78,9 @@ services:
   # ADR-0013). Behind the `menu` profile, so `make dev` and CI are unchanged:
   #   docker compose --profile menu run --rm worker python -m apps.menu_pipeline.models download
   #   docker compose --profile menu run --rm worker python -m apps.discovery.resolve_urls
+  # With page rendering (headed Chromium needs a display; ADR-0013 §4):
+  #   docker compose --profile menu run --rm worker \
+  #     xvfb-run -a python -m apps.discovery.resolve_urls --render
   worker:
     profiles: ["menu"]
     build:

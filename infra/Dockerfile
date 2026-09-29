@@ -2,8 +2,8 @@
 #
 # Two targets. The default (last) stage `runtime` is the API image; discovery
 # CLIs that need no extras can run in it too. `worker` adds the `menu` extra
-# (the page classifier runtime, ADR-0013) for the discovery and menu-pipeline
-# CLIs. Build context is the repo root:
+# (the page classifier runtime and Playwright, ADR-0013) plus Chromium and Xvfb
+# for the discovery and menu-pipeline CLIs. Build context is the repo root:
 #   docker build -f infra/Dockerfile -t helios-api .
 #   docker build -f infra/Dockerfile --target worker -t helios-worker .
 
@@ -53,8 +53,16 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 # Model files are never baked in: they live in var/models/ (a volume) and are
 # checked against config/models.yaml before use (ADR-0013 §3).
+# Page rendering (ADR-0013 §4, Amendment 1): Playwright's Chromium build and
+# its system libraries, plus Xvfb, because the renderer runs Chromium headed:
+#   docker compose --profile menu run --rm worker \
+#     xvfb-run -a python -m apps.discovery.resolve_urls --render
 FROM base AS worker
 COPY --from=builder-menu --chown=helios:helios /app /app
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN playwright install --with-deps chromium \
+    && apt-get install -y --no-install-recommends xvfb xauth \
+    && rm -rf /var/lib/apt/lists/*
 USER helios
 CMD ["python", "-m", "apps.menu_pipeline.models", "verify"]
 

@@ -700,7 +700,20 @@ ADR-0013 Amendment 1:
   [classifier-v1 evaluation](./2026-09-29-classifier-v1-evaluation.md)
 
 ### S6f — Page rendering ⚠ · size M · needs S6d part 2 merged
-Branch: `feat/page-render` · ADR-0013 Amendment 1 (render part of slice 6, for discovery).
+Branch: `feat/page-rendering` · ADR-0013 Amendment 1 (render part of slice 6, for discovery).
+
+Owner decisions at session start (2026-09-29), recorded in ADR-0013 Amendment 2:
+
+- **Open question 3 (robots for rendered sub-requests): check every sub-request.** Each
+  request the rendered page makes is checked against its own host's robots.txt for the
+  Helios token; disallowed or unavailable → aborted (Googlebot's renderer does the same).
+- **Which robots.txt the renderer obeys: read it through the browser.** A static
+  `order.toasttab.com/robots.txt` fetch gets a Cloudflare `403` challenge (RFC 9309:
+  allow all) while a browser gets the real rules (redirect to `www.toasttab.com`). The
+  renderer loads each host's robots.txt in the browser, following up to 5 redirects;
+  2xx → rules, 4xx → allow all, 5xx / unreachable / still challenged → host skipped.
+- **`toast.app`: add as a Toast alias** in the generic platform host list (same
+  `<gers>|toasttab.com` key); any other cross-host render redirect is refused.
 
 - [ ] Render platform pages (static `403` or failing the classifier) and JS-only own-site
   candidates with headed Chromium under Xvfb in the worker image: Helios UA token,

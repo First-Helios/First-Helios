@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 menu = [
     "fastembed==0.8.1",
+    "playwright==1.63.0",
 ]
 
 [tool.pytest.ini_options]
