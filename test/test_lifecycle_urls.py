@@ -66,11 +66,15 @@ URLS = [
 
 
 class Resolver:
+    verifier = "s4-v1"
+
     def __init__(self, *, failure: bool = False, stale: bool = False) -> None:
         self.failure, self.stale = failure, stale
         self.verified: list[str] = []
 
-    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+    def discover_menu_attempt(
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
         return (MenuUrlDiscovery(URLS[0], "crawled", NOW, "sha256:menu"),)
 
     def verify_menu_attempt(
@@ -335,7 +339,7 @@ def test_changed_website_rediscovers_and_verifies_new_own_site_menu(session: Ses
 
     class ChangedSite(Resolver):
         def discover_menu_attempt(
-            self, website: str
+            self, website: str, *, address: str | None = None
         ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
             return (MenuUrlDiscovery(website + "menu", "crawled", NOW, "sha256:old-candidate"),)
 
@@ -376,7 +380,7 @@ def test_rebrand_verifies_each_newly_discovered_platform_menu_fresh(
 
     class NewPlatform(Resolver):
         def discover_menu_attempt(
-            self, website: str
+            self, website: str, *, address: str | None = None
         ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
             return (
                 MenuUrlDiscovery(website + "menu", "crawled", NOW, "sha256:old-candidate"),

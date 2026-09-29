@@ -1,6 +1,8 @@
 # ADR-0015: Menu-URL precision before the first Pi run — re-verify saved menu URLs
 
-**Status:** Proposed (draft for owner review; not implemented)
+**Status:** Accepted 2026-09-29 (owner, session S6d): option C, B first, as
+amended by [Amendment 1](#amendment-1-2026-09-29-acceptance-decisions); the
+verifier is ADR-0013's page classifier (`classifier-v1`) from the first Pi run
 **Date:** 2026-09-28
 **Phase:** 4/5 boundary (Pi gate 1b)
 **Decides for:** the "page classifier or saved-menu re-verification path"
@@ -103,15 +105,17 @@ automatically rather than frozen.
 - **Harder:** each run re-fetches saved menu pages on the window, so monthly runs
   touch more hosts (bounded by the window and the existing per-host rate limit).
 - `needs_review` becomes a routine outcome for menu URLs, so its count needs
-  watching; a human clears it through the registry.
+  watching. A record re-verification withdrew is retried automatically and
+  re-assigned by a verified URL or a registry entry (Amendment 1); one a human
+  disputed stays until a human acts.
 - Phase 5 (not built) would read only `resolved` menu records, all of which
   passed the current verifier within the window.
 
 ## Open questions for the owner
 
-1. `REVERIFY_WINDOW`: 90 days, or tie it to the monthly discovery schedule?
-2. Is the chain-homepage guard (item 5) acceptable given it drops some
-   single-venue sites until a registry entry is added?
+Answered at acceptance (Amendment 1): 1. `REVERIFY_WINDOW` = **90 days**.
+2. The chain-homepage guard resolves itself **automatically** (address match), with
+no manual registry step.
 
 ## References
 
@@ -127,3 +131,61 @@ automatically rather than frozen.
   `verify_menu_attempt`), `apps/discovery/menu_url.py` (`page_menu_signal`,
   `platform_links_from_html`), `packages/helios_core/identity/commands.py`
   (`unassign_source_record`)
+
+## Amendment 1 (2026-09-29): acceptance decisions
+
+Owner decisions at the start of session S6d, with the code facts that shaped them:
+
+1. **A passing re-check appends a Version.** Bronze has no command that records a
+   successful fetch without a Version (ADR-0011 §4: `succeeded` always has one;
+   `record_capture_attempt` takes only `failed`/`skipped`). The pass is persisted
+   as a Version with the same payload (plus the current `verifier`); its Capture's
+   `fetched_at` is the "last successful verification" the window is measured from.
+   Cost: one row per saved URL per window.
+2. **Only a verdict on the page withdraws a URL.** `WITHDRAW_REASONS` =
+   `no_menu_found` (the page answered and failed the page check, or no longer sits
+   on the site), `not_html`, `http_404`, `http_410`, `platform_root`,
+   `social_link`. Any other failure (network error, 5xx, 403/429, robots, crawl
+   delay, redirect refused, or a homepage that can't be read to compare against)
+   records a failed/skipped Capture, keeps the URL, and is retried next run
+   (counter `menu_urls_reverify_deferred`).
+3. **Withdrawal Evidence** is a `rejected` observation of the record (new rejection
+   reason `menu_not_verified`; the payload adds `verification_failure`), and the
+   `unassign_source_record` decision uses method `menu-url-reverify`. Adding a
+   reason code needs no migration (ADR-0011 §4).
+4. **Rule-withdrawn records recover.** A record whose latest Identity decision is a
+   `menu-url-reverify` unassignment is retried when the verifier changes or its
+   last attempt is older than the window, whatever the 20-day site cooldown, and
+   re-assigned when discovery verifies a URL for it or the registry names a menu.
+   A record a human put in `needs_review` is still never retried. A failed re-check
+   also re-discovers regardless of the cooldown; a re-discovered URL (new or the
+   same one) is appended as a Version.
+5. **`REVERIFY_WINDOW` = 90 days.** Registry menu URLs carry no `verifier` and are
+   never re-verified (D3.2).
+6. **Chain homepages resolve automatically.** When a homepage links several venue
+   pages on one platform host, up to `MAX_CHAIN_CANDIDATES` (3) of them are
+   fetched, the ones whose URL path names the venue's house number or street first,
+   and the page is kept only if exactly one passes the page check **and** shows the
+   venue's house number followed by its street name (`address_on_page`; the
+   address is the Overture record's first `freeform` street line). Otherwise
+   nothing is saved for that platform and `platform_ambiguous` counts it. Phone
+   matching was also approved but is not built: Overture ingestion does not select
+   `phones`, and adding it changes every POI's Bronze payload (a new Version per POI
+   on the next release). It needs its own decision. An address override
+   (ADR-0014) is not consulted yet; a wrong Overture address only causes a skip.
+7. **Platform content check = the verifier.** Platform pages (a homepage link, or a
+   website that is itself a platform page) pass the same `PageVerifier` as own-site
+   candidates. The owner chose to pull ADR-0013's page classifier into S6d rather
+   than ship an interim word check: `classifier-v1` is the verifier for the first
+   Pi run (a separate ⚠ PR; ADR-0013 Amendment 1 accepts its classifier parts).
+   The heuristic `s4-v1` remains the default in code and tests.
+8. **Platform pages need a real browser.** A probe of the spike sample's 37
+   platform links (2026-09-29, honest UA, robots obeyed;
+   `var/spikes/menu-model/render-probe-2026-09-29/`) found no readable menu without
+   JavaScript: Toast/DoorDash answer `403` to the fetcher, and every `200` was a
+   JavaScript shell. Rendered, 19 of 37 were priced menus: Square, Clover and
+   Grubhub render headless; Toast needs headed Chromium (4 gift-card links were
+   robots-disallowed; 3 DoorDash pages stayed `403`; the rest were jobs,
+   marketing-signup and gift-card pages, which the content check now rejects).
+   Rendering is new session S6f (ADR-0013 Amendment 1). Until it lands, platform
+   pages in practice fail the page check and are not saved.

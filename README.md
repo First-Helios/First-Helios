@@ -38,7 +38,12 @@ This section is the single current-status page. Other docs link here.
 - **Website and menu-URL resolution**: `apps/discovery/resolve_urls.py`,
   `url_pipeline.py`, `menu_url.py`, `web_client.py`, `registry.py`
   (+ `config/sources.yaml`). Bronze-first, robots-aware, rate-limited
-  (ADR-0010, ADR-0011).
+  (ADR-0010, ADR-0011). Saved menu URLs record their page verifier and are
+  re-verified when it changes or after 90 days; one that fails is re-discovered
+  or withdrawn to `needs_review`. Platform pages pass the same page check, and a
+  chain homepage's platform links are kept only for the location whose address
+  the page shows (ADR-0015). The verifier is still the S4 heuristic (`s4-v1`);
+  `classifier-v1` and page rendering are pending (S6d part 2, S6f).
 - **Venue lifecycle**: `apps/discovery/lifecycle.py`, `apps/discovery/models.py`.
   Release completion evidence and completion-gated closure, run at the end of
   each discovery run (ADR-0012). Limits: closure needs a completed baseline plus
@@ -58,10 +63,12 @@ This section is the single current-status page. Other docs link here.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5 menu extraction (page classifier, LLM extraction, validator). Waits on
-  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is Proposed.
-- Menu-URL re-verification
-  ([ADR-0015](./docs/adr/0015-menu-url-reverification.md), Proposed).
+- Phase 5 menu extraction (LLM extraction, validator). Waits on
+  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is Proposed except
+  its page classifier (accepted 2026-09-29, being built as the ADR-0015
+  verifier `classifier-v1`).
+- Page rendering for JavaScript-only and platform menu pages (ADR-0013
+  Amendment 1: headed Chromium under Xvfb; session S6f).
 - A corrections applier for merges and retirements (proposed session S6e; see
   the [location correction plan](./docs/reviews/2026-09-28-location-correction-plan.md)).
 - The Gold price index: target shape accepted in
@@ -115,14 +122,11 @@ This section is the single current-status page. Other docs link here.
     ([docs/HISTORY.md](./docs/HISTORY.md)).
 - **Pi gate 1b, URL-resolution readiness: closed.** Gates the first Pi
   `resolve_urls` run; independent of 1a. Opens when all hold:
-  - the owner decides on ADR-0015 (Proposed) and/or waits for the ADR-0013 page
-    classifier, and the chosen path is accepted, implemented and merged with
-    strict CI;
-  - a saved menu URL records its verifier version and is re-checked when the
-    verifier changes; a URL the current verifier rejects goes to
-    `needs_review`;
-  - platform menu pages pass a content check;
-  - PR #46's multi-location chain question is decided;
+  - ADR-0015 accepted 2026-09-29 with the ADR-0013 page classifier as its
+    verifier; re-verification, withdrawal, the platform content check and the
+    chain guard implemented (S6d part 1); `classifier-v1` implemented and merged
+    with strict CI (S6d part 2); platform-page rendering implemented and measured
+    (S6f);
   - the owner authorizes the run.
 - **Code review remediation R01–R117: in progress.** Active trackers: the
   [remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md)
@@ -289,9 +293,9 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
 | [0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) | Provenance endpoints vs identity match keys | Accepted |
 | [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
-| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Proposed |
+| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Proposed (page classifier accepted 2026-09-29) |
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
-| [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Proposed |
+| [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the

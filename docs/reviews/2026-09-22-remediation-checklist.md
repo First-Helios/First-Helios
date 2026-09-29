@@ -36,11 +36,12 @@ Legend: ⭐ recommended answer · ⚠ needs your review before merge ·
 | 5 | S5 Evidence ADR (draft, then stop) ⚠ | D4 | S | [X] #27 merged; ADR-0011 accepted 2026-09-27 |
 | 6 | S6 Evidence implementation ⚠ | D4 + S5 accepted | M | [X] #42 merged; Pi rebuilt 2026-09-28; precision review found errors; gate closed |
 | 6b | S6b Platform menu URLs alongside site menus | S6 merged | S | [X] #46 |
-| 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 draft (ADR-0014 accepted 2026-09-28) |
+| 6c | S6c Location overrides + correction plan (implements ADR-0014) ⚠ | ADR-0014 accepted | M | [X] #50 merged (`e61486c`) |
 | 6e | S6e Corrections applier (merges/retirements from a reviewed file; proposed by S6c) ⚠ | S6c merged | S | [ ] |
-| 6d | S6d Menu-URL re-verification (implements ADR-0015) | ADR-0015 accepted | S | [ ] |
+| 6d | S6d Menu-URL re-verification (implements ADR-0015; part 2 = `classifier-v1` ⚠) | ADR-0015 accepted | M | [ ] part 1 #51 (ADR-0015 accepted 2026-09-29); part 2 pending |
+| 6f | S6f Page rendering: headed Chromium under Xvfb for platform/JS-only pages (ADR-0013 Amendment 1) ⚠ | S6d part 2 merged | M | [ ] |
 | 🚦 | **Pi gate 1a — Phase 4 location quality:** correction plan + location overrides (ADR-0014) + passing fresh-sample re-audit. Does **not** gate `resolve_urls` | G.a | | [ ] 2026-09-28 adjudication: fails both bars (4 wrong geocodes, 6 duplicate venues / 100) |
-| 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; menu-URL precision (ADR-0015 re-verification and/or ADR-0013 classifier) | G.a | | [ ] |
+| 🚦 | **Pi gate 1b — URL-resolution readiness:** gates the first Pi `resolve_urls` run; ADR-0015 re-verification with `classifier-v1` as verifier, platform rendering (S6d, S6f) | G.a | | [ ] |
 | 7 | S7 Gold refresh fix | D5 | M | [X] #28 |
 | 8 | S8 Identity lock order + guard tests | D6 | M | [X] #30 |
 | 9 | S9 API polish | D7 | M | [X] #32 |
@@ -614,14 +615,18 @@ on venue location or dedupe; does not gate `resolve_urls`. Opens when all hold:
 
 **1b — URL-resolution readiness. Closed.** Gates the first Pi `resolve_urls` run.
 Independent of 1a. Opens when all hold:
-- [ ] Owner decision on [ADR-0015](../adr/0015-menu-url-reverification.md) (re-verify
-  saved menu URLs; recommended) and/or waiting for the ADR-0013 page classifier; the
-  chosen path accepted, implemented and merged with strict CI.
-- [ ] A saved menu URL records its verifier version and is re-checked when the verifier
+- [X] Owner decision on [ADR-0015](../adr/0015-menu-url-reverification.md): accepted
+  2026-09-29 (option C with Amendment 1), verifier = the ADR-0013 page classifier from
+  the first run. Implemented and merged with strict CI: part 1 (S6d, #51) [ ], part 2
+  `classifier-v1` (S6d) [ ], rendering (S6f) [ ].
+- [X] A saved menu URL records its verifier version and is re-checked when the verifier
   changes (or its window expires); a URL the current verifier rejects is withdrawn to
-  `needs_review`, never reused.
-- [ ] Platform pages pass a content check (not 200 + HTML + path alone).
-- [ ] PR #46's multi-location chain question decided (guard, or accepted with a reason).
+  `needs_review`, never reused. (S6d part 1)
+- [X] Platform pages pass a content check (not 200 + HTML + path alone). (S6d part 1;
+  without rendering, platform pages in practice fail it, see S6f)
+- [X] PR #46's multi-location chain question decided: automated address-match guard
+  (S6d part 1; phone matching deferred, ADR-0015 Amendment 1 item 6).
+- [ ] `classifier-v1` is the verifier (S6d part 2) and platform pages are rendered (S6f).
 - [ ] Owner authorizes the run. After it: record website/menu-URL coverage (the last
   Phase 4 "done when" item) and a hand-checked precision sample of saved menu URLs.
 
@@ -656,15 +661,47 @@ evented commands but no CLI, and gate 1a forbids raw SQL.
 - [ ] Tests: merge, retire, re-run is a no-op, rebuild re-applies, a lifecycle pass leaves
   merged venues alone
 
-### S6d — Menu-URL re-verification · size S · needs ADR-0015 accepted
-Branch: `feat/menu-url-reverification`
+### S6d — Menu-URL re-verification · size M · needs ADR-0015 accepted
+Branch: `feat/menu-url-reverification` (part 1), `feat/page-classifier` (part 2 ⚠)
 
-- [ ] Implement accepted ADR-0015: verifier version in the payload, re-verify instead of
-  reuse, withdraw to `needs_review` via `unassign_source_record`, platform content check,
-  chain-homepage decision from PR #46
-- [ ] Tests: saved URL from an older verifier is re-checked; a rejected URL is withdrawn,
+Owner decisions at session start (2026-09-29), recorded in ADR-0015 Amendment 1 and
+ADR-0013 Amendment 1:
+
+- ADR-0015 **accepted**, option C, amended: a passing re-check appends a same-payload
+  Version; only a verdict on the page withdraws (network/5xx/robots keep the URL);
+  withdrawal Evidence is a `rejected/menu_not_verified` observation.
+- `REVERIFY_WINDOW` = **90 days**. Rule-withdrawn records **recover** automatically;
+  human-disputed ones don't.
+- Chain homepages: **automated** match of the venue's phone or address on the platform
+  page (address built; phone needs Overture `phones`, deferred), no manual entries.
+- Platform content check: **pull the ADR-0013 page classifier into S6d** as
+  `classifier-v1` (ADR-0013 classifier parts accepted; the rest stays Proposed).
+- Rendering: platform pages need a browser (probe: 0/37 readable static, 19/37 priced
+  rendered; Toast needs headed Chromium). Owner: **headed Chromium under Xvfb, honest
+  UA, robots obeyed**, as new session **S6f**. Split: 3 PRs (part 1, part 2, S6f).
+
+- [X] Part 1: verifier version in the payload (`PageVerifier`, `s4-v1`), re-verify
+  instead of reuse, withdraw to `needs_review` via `unassign_source_record`, rule-withdrawn
+  recovery, platform content check, automated chain-homepage guard (`platform_ambiguous`)
+- [X] Tests: saved URL from an older verifier is re-checked; a rejected URL is withdrawn,
   not reused; registry entries are never withdrawn; platform page without menu content is
-  not saved
+  not saved; transient failures keep the URL; window; recovery; chain guard
+- [ ] Part 2 ⚠: `classifier-v1` (ADR-0013 slices 1 without `llama-server`, and 4):
+  segmentation + price-token features, checked-in weights trained on the spike labels,
+  `menu` extra (`fastembed`/`onnxruntime`), model manifest + checksum-refusing download,
+  worker image target, `resolve_urls` uses it; a recorded evaluation (ADR-0013 §8)
+
+### S6f — Page rendering ⚠ · size M · needs S6d part 2 merged
+Branch: `feat/page-render` · ADR-0013 Amendment 1 (render part of slice 6, for discovery).
+
+- [ ] Render platform pages (static `403` or failing the classifier) and JS-only own-site
+  candidates with headed Chromium under Xvfb in the worker image: Helios UA token,
+  robots.txt, per-host rate limit, no stealth or challenge solving; still-`403`/challenge
+  = skipped Capture
+- [ ] Decide ADR-0013 open question 3 (robots for rendered sub-requests) with the owner
+- [ ] Measure (ADR-0013 §4): render success and classifier quality on rendered platform
+  pages (label the probe's pages in `var/spikes/menu-model/render-probe-2026-09-29/`),
+  Pi time and peak RAM per render; enable for Pi runs only after it is recorded
 
 ### S7 — Gold refresh fix · size M · needs D5
 Hand-off prompt: `Do session S7 from docs/reviews/2026-09-22-remediation-checklist.md.`
@@ -999,7 +1036,8 @@ Agents add one row per session (or per resume).
 | 2026-09-28 | Gates (G.a, G.b) | docs/gate-adjudication | #47 | Merged (`b2bba73`; ADR-0014/0015 still Proposed) | — (see "2026-09-28 gate resolution" below; Phase 5 gate ticked; Pi gate split 1a/1b, both closed) | — (see "2026-09-28 S6b platform menus" below; open question on multi-location chain platform links) |
 | 2026-09-28 | S13b | docs/adr-0013-menu-pipeline | #48 | Draft ⚠ (ADR-0013 Proposed; stop for review) | — (see "2026-09-28 S13b Phase 5 pipeline ADR" below) |
 | 2026-09-28 | S16 | docs/drift-sweep | #49 | Merged (`576c137`) | — (see "2026-09-28 S16 documentation consolidation" below; #48 found merged at start, ADR-0013 still Proposed) |
-| 2026-09-28 | S6c | feat/location-overrides | #50 | Draft ⚠ (ADR-0014 accepted at session start; new override file entry and correction plan for owner review) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
+| 2026-09-28 | S6c | feat/location-overrides | #50 | Merged (`e61486c`) | — (see "2026-09-28 S6c location overrides" below; next: S6e corrections applier) |
+| 2026-09-29 | S6d part 1 | feat/menu-url-reverification | #51 | Open (ADR-0015 accepted at session start; ADR-0013 classifier parts accepted) | — (see "2026-09-29 S6d menu-URL re-verification" below; next: S6d part 2 `classifier-v1`, then S6f) |
 
 
 ### 2026-09-27 delegated follow-up
@@ -1143,3 +1181,27 @@ Branch `feat/location-overrides` from `main@576c137` (#49 merged). No Pi access,
   and La Parrilla need a qualifying basis (the cached Nominatim points are on the Pi,
   not in the repo). Merges and retirements have no CLI, so a new session **S6e
   (corrections applier)** is proposed and added to the progress table.
+
+### 2026-09-29 S6d menu-URL re-verification
+
+Branch `feat/menu-url-reverification` from `main@e61486c` (#50 merged). No Pi access,
+`resolve_urls` not run, S6c/S6e code untouched; gate 1b stays closed.
+
+- **Owner decisions:** see the S6d block. ADR-0015 accepted with Amendment 1; ADR-0013
+  Amendment 1 accepts its page-classifier parts and records the rendering decision.
+- **Render probe** (local, honest UA, robots obeyed): 60 spike-sample URLs; outputs in
+  `var/spikes/menu-model/render-probe-2026-09-29/` (gitignored). Platform links: 0/37
+  readable without JavaScript; rendered, 19/37 priced menus (Square/Clover/Grubhub
+  headless; Toast headed only); 3 DoorDash stayed `403`; 4 gift-card links
+  robots-disallowed. JS-only own-site pages: 1/23 priced after render (most are carts,
+  locators or empty sites). Most rendered Toast pages print the venue's street line, which
+  the chain guard matches.
+- **Part 1 code:** `PageVerifier`/`HeuristicVerifier` (`s4-v1`) injected into
+  `SiteFetcher`; `verify_menu_attempt` separates page verdicts from an unreadable homepage;
+  platform pages pass the page check; `platform_links_by_host` + `address_on_page` +
+  `rank_by_address` for chain homepages (`PlatformAmbiguous`); `url_pipeline` records
+  `verifier`, re-verifies on verifier change or `REVERIFY_WINDOW` (90 days), withdraws
+  with a `rejected/menu_not_verified` observation (`menu-url-reverify`), and retries
+  rule-withdrawn records; new report counters. No migration (`alembic check` clean).
+- **Not built (flagged):** phone matching (Overture ingestion lacks `phones`); address
+  overrides are not consulted by the chain guard.

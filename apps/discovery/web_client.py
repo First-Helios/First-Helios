@@ -39,6 +39,12 @@ page itself is the candidate (signal ``"platform"``). An own-site venue's
 homepage links into ordering platforms are verified too, whether or not an
 own-site menu verifies (review session S6b, ADR-0011 §7): one result per
 platform host, each persisted as its own ``<gers>|<host>`` record.
+
+The page check is a :class:`PageVerifier` whose ``name`` is saved with every
+menu URL (ADR-0015): own-site candidates and platform pages both pass through
+it, and a newer verifier makes the pipeline re-check every URL an older one
+saved. A homepage linking several venue pages on one platform (a chain) keeps
+only the one page that shows the venue's own street address, else nothing.
 """
 
 from __future__ import annotations
@@ -56,23 +62,26 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Protocol
 from urllib.parse import urljoin, urlsplit
 
 import httpx
 from protego import Protego
 
 from apps.discovery.menu_url import (
+    MAX_CHAIN_CANDIDATES,
     MAX_PLATFORM_CANDIDATES,
     MAX_SITEMAP_CHILDREN,
+    address_on_page,
     is_platform_venue_page,
     menu_links_from_sitemap,
     ordered_menu_candidates,
     ordering_platform_host,
     page_menu_signal,
     path_candidates,
-    platform_links_from_html,
+    platform_links_by_host,
     platform_signal,
+    rank_by_address,
     same_resource,
     same_site,
     sitemap_index_children,
@@ -124,6 +133,33 @@ class CaptureFailure:
     fetched_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class PlatformAmbiguous:
+    """A homepage linked several venue pages on one platform and none, or more
+    than one, showed the venue's address (ADR-0015 item 5): nothing is saved."""
+
+    platform: str
+
+
+class PageVerifier(Protocol):
+    """Decides whether a fetched page is a menu; its ``name`` is saved per URL."""
+
+    @property
+    def name(self) -> str: ...
+
+    def is_menu(self, html: str, url: str, *, trust_path: bool) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class HeuristicVerifier:
+    """The S4 check (ADR-0010 Amendment 3): a menu word in path, title or first heading."""
+
+    name: str = "s4-v1"
+
+    def is_menu(self, html: str, url: str, *, trust_path: bool) -> bool:
+        return page_menu_signal(html, url, trust_path=trust_path)
+
+
 def _is_html(result: FetchResult) -> bool:
     ctype = result.content_type.lower()
     return "html" in ctype or ctype == ""
@@ -164,6 +200,7 @@ class SiteFetcher:
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         random_token: Callable[[], str] = _random_token,
+        page_check: PageVerifier | None = None,
     ) -> None:
         if not user_agent.strip():
             raise ValueError("SiteFetcher requires a non-empty User-Agent")
@@ -181,6 +218,7 @@ class SiteFetcher:
         self._monotonic = monotonic
         self._sleep = sleep
         self._random_token = random_token
+        self._page_check: PageVerifier = page_check or HeuristicVerifier()
         self._last_request_at: dict[str, float] = {}
         self._crawl_delay: dict[str, float] = {}
         # origin -> rules; None means the site is skipped this run.
@@ -190,6 +228,11 @@ class SiteFetcher:
         self._site_failure: CaptureFailure | None = None
         self._found_via: dict[str, str] = {}
         self._not_before: float = 0.0
+
+    @property
+    def verifier(self) -> str:
+        """The page check's name, saved with every menu URL it accepts (ADR-0015)."""
+        return self._page_check.name
 
     def close(self) -> None:
         if self._owns_client:
@@ -414,11 +457,17 @@ class SiteFetcher:
 
     # -- discovery ------------------------------------------------------------
 
-    def discover_menu_attempt(self, website: str) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
-        """Verified acquisitions (own-site first) or one site-level failure, incl. policy skips."""
+    def discover_menu_attempt(
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous, ...] | CaptureFailure:
+        """Verified acquisitions (own-site first) or one site-level failure, incl. policy skips.
+
+        ``address`` is the venue's street line, used only to pick its page among
+        a chain homepage's several links on one platform.
+        """
         self._site_failure = None
         self._found_via = {}
-        found = self.discover_menu_url(website)
+        found = self.discover_menu_url(website, address=address)
         return (
             found
             or self._site_failure
@@ -428,7 +477,12 @@ class SiteFetcher:
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
     ) -> MenuUrlDiscovery | CaptureFailure:
-        """Fresh per-record verification for a rebrand; never reuse pre-transition bytes."""
+        """Fresh per-record verification; never reuse bytes fetched before ``not_before``.
+
+        Used on a rebrand (ADR-0012) and to re-verify a saved menu URL (ADR-0015).
+        A page that answers but fails the page check is ``failed/no_menu_found``;
+        a homepage that can't be read returns the homepage's own failure.
+        """
         previous = self._not_before
         self._not_before = not_before.timestamp()
         self._site_failure = None
@@ -446,22 +500,28 @@ class SiteFetcher:
                     "failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC)
                 )
             homepage = None if platform else self.fetch(website)
+            if not platform and (homepage is None or homepage.status != 200):  # noqa: PLR2004
+                self._note_failure(homepage)  # can't compare against the homepage: no verdict
+                return self._site_failure or CaptureFailure(
+                    "failed", "network_error", datetime.fromtimestamp(self._clock(), UTC)
+                )
             result = self.fetch(menu_url)
             valid = result is not None and result.status == 200 and _is_html(result)
             if valid and result is not None:
-                valid = result.fetched_at >= self._not_before
                 if platform:
-                    valid &= is_platform_venue_page(result.url, ordering_only=True)
+                    valid = is_platform_venue_page(result.url, ordering_only=True)
                 else:
-                    valid &= (
+                    valid = homepage is not None and (
                         not same_resource(result.url, website)
-                        and page_menu_signal(result.text, result.url, trust_path=False)
-                        and homepage is not None
-                        and homepage.status == 200
                         and _body_hash(result.text) != _body_hash(homepage.text)
                     )
-                if valid:
-                    return self._discovered(result, "platform" if platform else "crawled", website)
+                valid &= self._page_check.is_menu(result.text, result.url, trust_path=False)
+                now = datetime.fromtimestamp(self._clock(), UTC)
+                if not valid:
+                    return CaptureFailure("failed", "no_menu_found", now)
+                if result.fetched_at < self._not_before:
+                    return CaptureFailure("failed", "network_error", now)  # no fresh bytes
+                return self._discovered(result, "platform" if platform else "crawled", website)
             self._note_failure(result)
             return self._site_failure or CaptureFailure(
                 "failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC)
@@ -499,7 +559,22 @@ class SiteFetcher:
             found_via,
         )
 
-    def discover_menu_url(self, website: str) -> tuple[MenuUrlDiscovery, ...]:
+    def _platform_page(self, url: str) -> FetchResult | None:
+        """The fetched platform venue page when it passes the page check (ADR-0015 item 4)."""
+        result = self.fetch(url)
+        if (
+            result is not None
+            and result.status == 200  # noqa: PLR2004
+            and _is_html(result)
+            and is_platform_venue_page(result.url, ordering_only=True)
+            and self._page_check.is_menu(result.text, result.url, trust_path=False)
+        ):
+            return result
+        return None
+
+    def discover_menu_url(
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous, ...]:
         """Verify menu URLs for a resolved website, honouring robots + rate limit.
 
         A website already on a shared platform host (Toast, Square, Facebook,
@@ -511,11 +586,16 @@ class SiteFetcher:
         GET each ranked candidate in order and accept the first that is
         robots-allowed, resolves to a 200 HTML page distinct from the
         homepage, and whose own content carries a menu word
-        (:func:`apps.discovery.menu_url.page_menu_signal`). Then, whether or
-        not an own-site menu verified, verify the homepage's links into
-        ordering platforms (D3.5b, S6b): at most one per platform host and
-        :data:`MAX_PLATFORM_CANDIDATES` in all. Candidates are built from the
-        homepage's final (post-redirect) URL.
+        (the :class:`PageVerifier`). Then, whether or not an own-site menu
+        verified, verify the homepage's links into ordering platforms (D3.5b,
+        S6b): one page per platform host, :data:`MAX_PLATFORM_CANDIDATES` hosts
+        in all, each passing the same page check. When the homepage links
+        several venue pages on one platform (a chain), up to
+        :data:`MAX_CHAIN_CANDIDATES` of them are fetched, best address match
+        first, and the page is kept only if exactly one of them passes and
+        shows ``address``; otherwise that platform yields
+        :class:`PlatformAmbiguous`. Candidates are built from the homepage's
+        final (post-redirect) URL.
 
         Returns the own-site result first (when one verified), then platform
         results in homepage order; empty when nothing verified.
@@ -529,15 +609,16 @@ class SiteFetcher:
                 self._failure_reason = "platform_root"
                 self._note_failure(None)
                 return ()  # a platform's root belongs to the platform (R33)
-            result = self.fetch(website)
-            if (
-                result is not None
-                and result.status == 200
-                and _is_html(result)
-                and is_platform_venue_page(result.url, ordering_only=True)
-            ):  # noqa: PLR2004
-                return (self._discovered(result, "platform"),)
-            self._note_failure(result)
+            page = self._platform_page(website)
+            if page is not None:
+                return (self._discovered(page, "platform"),)
+            result = self.fetch(website)  # cached: the failure's reason
+            if result is not None and result.status == 200:  # noqa: PLR2004
+                self._site_failure = CaptureFailure(
+                    "failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC)
+                )
+            else:
+                self._note_failure(result)
             return ()
 
         homepage = self.fetch(website)
@@ -558,7 +639,7 @@ class SiteFetcher:
         well_known = {url.rstrip("/") for url in path_candidates(base)}
         is_catch_all: bool | None = None  # probed lazily: only a 200 well-known path needs it
 
-        found: list[MenuUrlDiscovery] = []
+        found: list[MenuUrlDiscovery | PlatformAmbiguous] = []
         for candidate in candidates:
             result = self.fetch(candidate)
             if result is None or result.status != 200 or not _is_html(result):  # noqa: PLR2004
@@ -569,7 +650,7 @@ class SiteFetcher:
             if is_well_known and is_catch_all is None:
                 is_catch_all = self._is_catch_all_site(base)
             trust_path = not (is_well_known and bool(is_catch_all))
-            if not page_menu_signal(result.text, result.url, trust_path=trust_path):
+            if not self._page_check.is_menu(result.text, result.url, trust_path=trust_path):
                 continue
             if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
                 continue  # identical body to the homepage: a catch-all/soft-404 answer
@@ -583,19 +664,27 @@ class SiteFetcher:
             break
 
         if homepage_html is not None:
-            # One link per platform host, and a redirect can't leave that host,
+            # One page per platform host, and a redirect can't leave that host,
             # so each platform result lands on its own <gers>|<host> key.
-            for platform_url in platform_links_from_html(homepage_html, base)[
-                :MAX_PLATFORM_CANDIDATES
-            ]:
-                result = self.fetch(platform_url)
-                if (
-                    result is not None
-                    and result.status == 200
-                    and _is_html(result)
-                    and is_platform_venue_page(result.url, ordering_only=True)
-                ):  # noqa: PLR2004
-                    found.append(self._discovered(result, "platform", base))
+            by_host = platform_links_by_host(homepage_html, base)
+            for platform, links in list(by_host.items())[:MAX_PLATFORM_CANDIDATES]:
+                if len(links) == 1:
+                    page = self._platform_page(links[0])
+                    if page is not None:
+                        found.append(self._discovered(page, "platform", base))
+                    continue
+                # A chain homepage: keep only the one page showing this venue's address.
+                matches = [
+                    page
+                    for url in rank_by_address(links, address)[:MAX_CHAIN_CANDIDATES]
+                    if (page := self._platform_page(url)) is not None
+                    and address_on_page(page.text, address)
+                ]
+                found.append(
+                    self._discovered(matches[0], "platform", base)
+                    if len(matches) == 1
+                    else PlatformAmbiguous(platform)
+                )
         return tuple(found)
 
     def _is_catch_all_site(self, base_url: str) -> bool:

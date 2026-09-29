@@ -14,12 +14,21 @@ recently observed Overture record):
    ordering-platform page linked from the homepage gets its own
    ``<gers>|<platform host>`` record, even when an own-site menu verifies
    (ADR-0011 §7, S6b). A saved menu-URL is reused until the registry or the
-   website changes; a failed re-discovery keeps the saved one.
+   website changes, or until it is due for re-verification (ADR-0015): saved
+   by an older page verifier, or last verified more than
+   :data:`REVERIFY_WINDOW` ago. A re-check that passes appends a Version; one
+   that the page itself fails (see :data:`WITHDRAW_REASONS`) triggers
+   re-discovery, and if nothing verifies the record is withdrawn to
+   ``needs_review`` with a rejected observation as Evidence. Such a
+   rule-withdrawn record is retried on the same schedule and re-assigned when a
+   URL verifies again; a failure that says nothing about the page (network,
+   5xx, robots) keeps the URL and retries next run.
 
 Records are per venue (keyed by GERS id), not per chain (ADR-0010 Amendment 2).
 An unchanged website/menu-URL is not re-persisted, a record a human put in
 ``needs_review`` is never re-assigned, and a venue whose Organization is no
-longer current is counted and skipped.
+longer current is counted and skipped. A chain homepage's platform links count
+as ``platform_ambiguous`` unless exactly one shows the venue's address.
 
 Every write reuses the published Identity/Bronze commands (ADR-0011).
 The menu-URL resolver is injected as a Protocol, so tests supply a fake and CI
@@ -41,12 +50,13 @@ from sqlalchemy.orm import aliased
 
 from apps.discovery.menu_url import ordering_platform_host, platform_signal
 from apps.discovery.models import DiscoveryLifecycleState
-from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery
+from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery, PlatformAmbiguous
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
     assign_source_record,
     remap_source_record,
     resolve_source_record_observation,
+    unassign_source_record,
 )
 from packages.helios_core.identity.models import (
     CurrentResolution,
@@ -58,6 +68,7 @@ from packages.helios_core.provenance.contracts import (
     BronzeObservation,
     canonicalize_http_url,
     latest_capture_at,
+    persist_source_record_observation,
     record_capture_attempt,
 )
 from packages.helios_core.provenance.models import (
@@ -79,6 +90,14 @@ if TYPE_CHECKING:
 WEBSITE_NAMESPACE = "website-resolution"
 MENU_URL_NAMESPACE = "menu-url-discovery"
 RECRAWL_WINDOW = timedelta(days=20)
+# A saved menu URL is re-verified once its last passing check is this old (ADR-0015).
+REVERIFY_WINDOW = timedelta(days=90)
+# Re-verification failures that are a verdict on the page itself: it answered
+# and isn't a menu (or is gone). Any other failure keeps the URL and retries.
+WITHDRAW_REASONS = frozenset(
+    {"no_menu_found", "not_html", "http_404", "http_410", "platform_root", "social_link"}
+)
+WITHDRAW_METHOD = "menu-url-reverify"
 
 _Outcome = Literal["assigned", "updated", "unchanged", "needs_review"]
 
@@ -86,9 +105,12 @@ _Outcome = Literal["assigned", "updated", "unchanged", "needs_review"]
 class MenuUrlResolver(Protocol):
     """The one capability the pipeline needs from the site fetcher."""
 
+    @property
+    def verifier(self) -> str: ...
+
     def discover_menu_attempt(
-        self, website: str
-    ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure: ...
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous, ...] | CaptureFailure: ...
 
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
@@ -106,6 +128,7 @@ class VenueToResolve:
     overture_websites: tuple[str, ...]
     source_url: str
     content_hash: str
+    address: str | None = None
 
 
 @dataclass(slots=True)
@@ -125,6 +148,10 @@ class UrlDiscoveryReport:
     menu_urls_updated: int = 0
     menu_urls_reused: int = 0
     menu_urls_absent: int = 0
+    menu_urls_reverified: int = 0
+    menu_urls_reverify_deferred: int = 0
+    menu_urls_withdrawn: int = 0
+    platform_ambiguous: int = 0
     needs_review: int = 0
     org_not_current: int = 0
     cooldown_skipped: int = 0
@@ -254,6 +281,9 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
                 if isinstance(raw, list)
                 else ()
             )
+            addresses = payload.get("addresses") if isinstance(payload, dict) else None
+            first = addresses[0] if isinstance(addresses, list) and addresses else None
+            freeform = first.get("freeform") if isinstance(first, dict) else None
             yield VenueToResolve(
                 establishment_subject_id=subject_id,
                 organization_subject_id=org_subject_id,
@@ -262,6 +292,7 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
                 overture_websites=websites,
                 source_url=source_url,
                 content_hash=content_hash,
+                address=freeform if isinstance(freeform, str) else None,
             )
         if len(rows) < page_size:
             return
@@ -336,15 +367,20 @@ def _persist_and_assign(
     method: str,
     decided_at: datetime,
     allow_remap: bool = False,
+    refresh: bool = False,
+    reassign: bool = False,
 ) -> _Outcome:
     """Persist a URL observation unless unchanged; assign it only if unresolved.
 
-    The caller skips a record already in ``needs_review``; this can still
-    return ``needs_review`` when the resolver unassigns a record whose Subject
-    was retired without a successor.
+    ``refresh`` appends the observation even when its payload is unchanged (a
+    passing re-verification). ``reassign`` assigns a record re-verification
+    withdrew to ``needs_review``; any other ``needs_review`` record is skipped
+    by the caller, and this can still return ``needs_review`` when the resolver
+    unassigns a record whose Subject was retired without a successor.
     """
     if (
-        saved is not None
+        not refresh
+        and saved is not None
         and saved.state == "resolved"
         and saved.subject_id == to_subject_id
         and saved.payload == dict(observation.source_payload)
@@ -378,7 +414,7 @@ def _persist_and_assign(
 
             refresh_readiness(session, report=LifecycleReport(), organization_id=result.subject_id)
         return "updated"  # a new version of an already-assigned record
-    if result.state == "needs_review":
+    if result.state == "needs_review" and not reassign:
         return "needs_review"
     assign_source_record(
         session,
@@ -388,6 +424,198 @@ def _persist_and_assign(
         evidence_ids=[result.evidence_id],
     )
     return "assigned"
+
+
+def _menu_key(gers_id: str, menu_url: str) -> str:
+    platform = ordering_platform_host(menu_url)
+    return f"{gers_id}|{platform}" if platform else gers_id
+
+
+def _menu_keys(session: Session, gers_id: str) -> list[str]:
+    """Every menu-URL record key of one venue: ``<gers>`` and each ``<gers>|<host>``."""
+    return sorted(
+        session.scalars(
+            select(SourceRecord.external_key)
+            .join(Source)
+            .where(
+                Source.namespace == MENU_URL_NAMESPACE,
+                or_(
+                    SourceRecord.external_key == gers_id,
+                    SourceRecord.external_key.startswith(gers_id + "|"),
+                ),
+            )
+        ).all()
+    )
+
+
+def _last_capture_at(session: Session, key: str, *, succeeded_only: bool) -> datetime | None:
+    statement = (
+        select(func.max(Capture.fetched_at))
+        .select_from(SourceRecordVersion)
+        .join(Capture, Capture.id == SourceRecordVersion.capture_id)
+        .join(SourceRecord, SourceRecord.id == SourceRecordVersion.source_record_id)
+        .join(Source, Source.id == SourceRecord.source_id)
+        .where(Source.namespace == MENU_URL_NAMESPACE, SourceRecord.external_key == key)
+    )
+    if succeeded_only:
+        statement = statement.where(Capture.outcome == "succeeded")
+    return session.scalar(statement)
+
+
+def _rule_withdrawn(session: Session, key: str) -> bool:
+    """True when the record's latest Identity decision is a re-verification withdrawal."""
+    method = session.scalar(
+        select(ResolutionEvent.method)
+        .join(SourceRecord, SourceRecord.id == ResolutionEvent.source_record_id)
+        .join(Source, Source.id == SourceRecord.source_id)
+        .where(Source.namespace == MENU_URL_NAMESPACE, SourceRecord.external_key == key)
+        .order_by(ResolutionEvent.id.desc())
+        .limit(1)
+    )
+    return method == WITHDRAW_METHOD
+
+
+def _reverify_due(
+    session: Session, key: str, saved: _SavedRecord, *, verifier: str, observed_at: datetime
+) -> bool:
+    """A newer verifier, or a last check (a pass; for a withdrawn record, any) past the window.
+
+    Registry menu URLs are never re-verified: the registry wins (D3.2).
+    """
+    if saved.payload.get("signal") == "registry":
+        return False
+    if saved.payload.get("verifier") != verifier:
+        return True
+    last = _last_capture_at(session, key, succeeded_only=saved.state == "resolved")
+    return last is None or observed_at - last >= REVERIFY_WINDOW
+
+
+def _reverify_menus(
+    session: Session,
+    venue: VenueToResolve,
+    *,
+    website: str,
+    resolver: MenuUrlResolver,
+    observed_at: datetime,
+    decided_at: datetime,
+    report: UrlDiscoveryReport,
+) -> tuple[bool, dict[str, CaptureFailure]]:
+    """Re-check each of the venue's due menu URLs; return (fetched?, failed key → verdict).
+
+    A pass appends a Version with the current verifier (resetting the window).
+    A failure in :data:`WITHDRAW_REASONS` is returned for re-discovery; any
+    other failure is recorded as a Capture and the URL is kept.
+    """
+    worked = False
+    failed: dict[str, CaptureFailure] = {}
+    for key in _menu_keys(session, venue.gers_id):
+        saved = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
+        url = saved.payload.get("menu_url") if saved else None
+        if (
+            saved is None
+            or saved.state != "resolved"
+            or saved.subject_id != venue.organization_subject_id
+            or saved.payload.get("website") != website
+            or not isinstance(url, str)
+            or not _reverify_due(
+                session, key, saved, verifier=resolver.verifier, observed_at=observed_at
+            )
+        ):
+            continue
+        result = resolver.verify_menu_attempt(website, url, not_before=observed_at)
+        worked = True
+        if isinstance(result, CaptureFailure):
+            if result.reason_code in WITHDRAW_REASONS:
+                failed[key] = result
+                continue
+            record_capture_attempt(
+                session,
+                source_namespace=MENU_URL_NAMESPACE,
+                source_kind="menu_url",
+                source_url=url,
+                fetched_at=result.fetched_at,
+                outcome=result.outcome,
+                reason_code=result.reason_code,
+            )
+            report.menu_urls_reverify_deferred += 1
+            continue
+        if _menu_key(venue.gers_id, result.menu_url) != key:
+            failed[key] = CaptureFailure("failed", "no_menu_found", result.fetched_at)
+            continue
+        payload = dict(saved.payload, menu_url=result.menu_url, verifier=resolver.verifier)
+        _persist_and_assign(
+            session,
+            saved=saved,
+            observation=_observation(
+                namespace=MENU_URL_NAMESPACE,
+                kind="menu_url",
+                external_key=key,
+                payload=payload,
+                locator="$.menu_url",
+                source_url=result.menu_url,
+                capture_hash=result.content_hash,
+                fetched_at=result.fetched_at,
+                observed_at=observed_at,
+            ),
+            to_subject_id=venue.organization_subject_id,
+            method=f"menu-url-{payload.get('signal')}",
+            decided_at=decided_at,
+            refresh=True,
+        )
+        report.menu_urls_reverified += 1
+    return worked, failed
+
+
+def _withdraw_menu(
+    session: Session,
+    venue: VenueToResolve,
+    key: str,
+    failure: CaptureFailure,
+    *,
+    verifier: str,
+    observed_at: datetime,
+    decided_at: datetime,
+    report: UrlDiscoveryReport,
+) -> None:
+    """Move a menu URL the current verifier rejects to ``needs_review`` (ADR-0015 item 3).
+
+    The rejected check is persisted as a ``rejected/menu_not_verified``
+    observation, whose Evidence supports the unassignment.
+    """
+    saved = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
+    url = saved.payload.get("menu_url") if saved else None
+    if (
+        saved is None
+        or saved.state != "resolved"
+        or saved.subject_id != venue.organization_subject_id
+        or not isinstance(url, str)
+    ):
+        return
+    payload = dict(saved.payload, verifier=verifier, verification_failure=failure.reason_code)
+    persisted = persist_source_record_observation(
+        session,
+        BronzeObservation(
+            source_namespace=MENU_URL_NAMESPACE,
+            source_kind="menu_url",
+            external_key=key,
+            observed_at=observed_at,
+            content_hash=_sha(json.dumps(payload, sort_keys=True, default=str)),
+            source_payload=payload,
+            evidence_locator="$.menu_url",
+            source_url=url,
+            fetched_at=failure.fetched_at,
+            capture_outcome="rejected",
+            reason_code="menu_not_verified",
+        ),
+    )
+    unassign_source_record(
+        session,
+        source_record_id=persisted.source_record_id,
+        from_subject_id=venue.organization_subject_id,
+        decision=_decision(WITHDRAW_METHOD, decided_at=decided_at, observed_at=observed_at),
+        evidence_ids=[persisted.evidence_id],
+    )
+    report.menu_urls_withdrawn += 1
 
 
 def _first_overture_website(websites: tuple[str, ...]) -> str | None:
@@ -462,19 +690,8 @@ def _transfer_menus(
     not_before: datetime,
     report: UrlDiscoveryReport,
 ) -> bool:
-    keys = session.scalars(
-        select(SourceRecord.external_key)
-        .join(Source)
-        .where(
-            Source.namespace == MENU_URL_NAMESPACE,
-            or_(
-                SourceRecord.external_key == venue.gers_id,
-                SourceRecord.external_key.startswith(venue.gers_id + "|"),
-            ),
-        )
-    ).all()
     worked = False
-    for key in keys:
+    for key in _menu_keys(session, venue.gers_id):
         saved = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
         if saved is None or saved.subject_id == venue.organization_subject_id:
             continue
@@ -505,9 +722,7 @@ def _transfer_menus(
         if result.fetched_at < not_before:
             report.menu_urls_absent += 1
             continue
-        platform = ordering_platform_host(result.menu_url)
-        intended_key = f"{venue.gers_id}|{platform}" if platform else venue.gers_id
-        if key != intended_key:
+        if key != _menu_key(venue.gers_id, result.menu_url):
             report.needs_review += 1
             continue
         payload = dict(
@@ -516,6 +731,7 @@ def _transfer_menus(
             website=website,
             signal=result.signal,
             found_via=result.found_via,
+            verifier=resolver.verifier,
         )
         outcome = _persist_and_assign(
             session,
@@ -679,9 +895,24 @@ def _resolve_venue(
                 menu_key, saved_menu = key, candidate
                 break
     if saved_menu is not None and saved_menu.state == "needs_review":
-        report.needs_review += 1
-        return worked
-    if (
+        # Only a rule-withdrawn record is retried: when the registry now names a
+        # menu, or when the verifier or the window says it's due (ADR-0015).
+        if not (
+            _rule_withdrawn(session, menu_key)
+            and (
+                (entry is not None and entry.menu_url is not None)
+                or _reverify_due(
+                    session,
+                    menu_key,
+                    saved_menu,
+                    verifier=resolver.verifier,
+                    observed_at=observed_at,
+                )
+            )
+        ):
+            report.needs_review += 1
+            return worked
+    elif (
         saved_menu
         and saved_menu.subject_id != venue.organization_subject_id
         and (
@@ -692,6 +923,7 @@ def _resolve_venue(
         # An unchanged site's failed verification was already attempted per-key.
         return worked
     acquired: tuple[MenuUrlDiscovery, ...]
+    failed: dict[str, CaptureFailure] = {}
     if entry is not None and entry.menu_url is not None:
         # The registry always wins, and is never crawled for platform links.
         if not entry.content_hash or entry.source_url is None:
@@ -700,39 +932,65 @@ def _resolve_venue(
             MenuUrlDiscovery(entry.menu_url, "registry", observed_at, entry.content_hash, None),
         )
         registry_source_url: str | None = entry.source_url
-    elif (
-        saved_menu is not None
-        and saved_menu.state == "resolved"
-        and saved_menu.subject_id == venue.organization_subject_id
-        and saved_menu.payload.get("website") == website
-    ):
-        report.menu_urls_reused += 1
-        return worked
     else:
-        latest = latest_capture_at(session, MENU_URL_NAMESPACE, website)
         if (
-            latest
-            and latest.outcome in {"failed", "skipped"}
-            and observed_at - latest.fetched_at < RECRAWL_WINDOW
+            saved_menu is not None
+            and saved_menu.state == "resolved"
+            and saved_menu.subject_id == venue.organization_subject_id
+            and saved_menu.payload.get("website") == website
         ):
-            report.cooldown_skipped += 1
-            return worked
-        discovery = resolver.discover_menu_attempt(website)
+            reverified, failed = _reverify_menus(
+                session,
+                venue,
+                website=website,
+                resolver=resolver,
+                observed_at=observed_at,
+                decided_at=decided_at,
+                report=report,
+            )
+            worked |= reverified
+            if not failed:
+                if not reverified:
+                    report.menu_urls_reused += 1
+                return worked
+            # A saved URL failed its re-check: re-discover now, whatever the cooldown.
+        elif saved_menu is None or saved_menu.state != "needs_review":
+            # (A due rule-withdrawn record is retried whatever the cooldown.)
+            latest = latest_capture_at(session, MENU_URL_NAMESPACE, website)
+            if (
+                latest
+                and latest.outcome in {"failed", "skipped"}
+                and observed_at - latest.fetched_at < RECRAWL_WINDOW
+            ):
+                report.cooldown_skipped += 1
+                return worked
+        discovery = resolver.discover_menu_attempt(website, address=venue.address)
         worked = True
-        if isinstance(discovery, CaptureFailure):
+        # The own-site menu (if any) plus one per ordering platform (S6b).
+        acquired = (
+            ()
+            if isinstance(discovery, CaptureFailure)
+            else tuple(item for item in discovery if isinstance(item, MenuUrlDiscovery))
+        )
+        if not isinstance(discovery, CaptureFailure):
+            report.platform_ambiguous += len(discovery) - len(acquired)
+        if not acquired:
+            failure = (
+                discovery
+                if isinstance(discovery, CaptureFailure)
+                else CaptureFailure("failed", "no_menu_found", observed_at)
+            )
             record_capture_attempt(
                 session,
                 source_namespace=MENU_URL_NAMESPACE,
                 source_kind="menu_url",
                 source_url=website,
-                fetched_at=discovery.fetched_at,
-                outcome=discovery.outcome,
-                reason_code=discovery.reason_code,
+                fetched_at=failure.fetched_at,
+                outcome=failure.outcome,
+                reason_code=failure.reason_code,
             )
             report.menu_urls_absent += 1
-            return worked
-        # The own-site menu (if any) plus one per ordering platform (S6b).
-        acquired, registry_source_url = discovery, None
+        registry_source_url = None
 
     for menu in acquired:
         worked |= _persist_menu(
@@ -746,7 +1004,21 @@ def _resolve_venue(
             observed_at=observed_at,
             decided_at=decided_at,
             report=report,
+            refresh=_menu_key(venue.gers_id, menu.menu_url) in failed,
         )
+    rediscovered = {_menu_key(venue.gers_id, menu.menu_url) for menu in acquired}
+    for key, failure in sorted(failed.items()):
+        if key not in rediscovered:
+            _withdraw_menu(
+                session,
+                venue,
+                key,
+                failure,
+                verifier=resolver.verifier,
+                observed_at=observed_at,
+                decided_at=decided_at,
+                report=report,
+            )
     return worked
 
 
@@ -762,21 +1034,34 @@ def _persist_menu(
     observed_at: datetime,
     decided_at: datetime,
     report: UrlDiscoveryReport,
+    refresh: bool = False,
 ) -> bool:
     """Persist one menu URL under its own key: ``<gers>`` or ``<gers>|<platform host>``.
 
     Each key is checked on its own (ADR-0011 §7): a disputed key, or one held by
     an Organization outside this GERS lifecycle, is counted and kept as history
-    without blocking the venue's other menu records. True if it wrote or crawled.
+    without blocking the venue's other menu records. A key re-verification
+    withdrew is re-assigned. ``refresh`` appends a Version even when unchanged
+    (the key just failed its re-check and discovery verified it again). True if
+    it wrote or crawled.
     """
     worked = False
     platform = ordering_platform_host(menu.menu_url)
-    menu_key = f"{venue.gers_id}|{platform}" if platform else venue.gers_id
+    menu_key = _menu_key(venue.gers_id, menu.menu_url)
     saved_menu = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=menu_key)
-    if saved_menu is not None and saved_menu.state == "needs_review":
+    withdrawn = (
+        saved_menu is not None
+        and saved_menu.state == "needs_review"
+        and _rule_withdrawn(session, menu_key)
+    )
+    if saved_menu is not None and saved_menu.state == "needs_review" and not withdrawn:
         report.needs_review += 1
         return worked
-    remapping = saved_menu is not None and saved_menu.subject_id != venue.organization_subject_id
+    remapping = (
+        saved_menu is not None
+        and not withdrawn
+        and saved_menu.subject_id != venue.organization_subject_id
+    )
     if (
         saved_menu is not None
         and remapping
@@ -817,6 +1102,8 @@ def _persist_menu(
     }
     if platform:
         menu_payload["platform"] = platform
+    if menu.signal != "registry":  # a registry menu is never re-verified (D3.2)
+        menu_payload["verifier"] = resolver.verifier
     menu_outcome = _persist_and_assign(
         session,
         saved=saved_menu,
@@ -835,6 +1122,8 @@ def _persist_menu(
         method=f"menu-url-{menu.signal}",
         allow_remap=remapping,
         decided_at=decided_at,
+        refresh=refresh,
+        reassign=withdrawn,
     )
     if menu_outcome == "needs_review":
         report.needs_review += 1
