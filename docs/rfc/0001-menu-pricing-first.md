@@ -5,11 +5,34 @@
 **Accepted:** 2026-07-31 by the project owner
 **Author(s):** Claude (agent), decisions ratified by project owner
 
-> **Architecture amendment accepted (2026-09-12):**
-> [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md)
-> supersedes Section D2's identity table list, nullable unresolved
-> `menu_page.venue_id`, and free-text observation evidence. The menus-first
-> product, source policy, and milestone remain accepted.
+> **Amendments and supersessions.** The menus-first product, source policy,
+> append-only prices and milestone remain accepted. Later ADRs replace parts of
+> the design below; where they disagree, the ADR wins:
+>
+> - [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md)
+>   (accepted 2026-09-12) replaces the `raw` / `canonical` / `mart` layout with
+>   Bronze, Identity, Menu and Gold schemas, and supersedes D2's identity table
+>   list, nullable unresolved `menu_page.venue_id`, and free-text observation
+>   evidence.
+> - [ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md) defines the
+>   Menu tables that replace D2's menu graph column list.
+>   [ADR-0006](../adr/0006-gold-menu-read-models.md) and
+>   [ADR-0007](../adr/0007-gold-price-index-projection.md) replace D2's
+>   `current_menu` and `price_index_*` shapes.
+> - [ADR-0009](../adr/0009-venue-discovery-source-dedupe-and-schedule.md) drops
+>   H3: venues carry lat/lon only, so every H3 cell below (D1.3, D2, PR 5,
+>   unresolved question 2) is superseded. It also settles unresolved questions 2
+>   (Travis + Williamson bounding box) and 3 (DuckDB).
+> - [ADR-0013](../adr/0013-phase5-menu-pipeline.md) (Proposed, not accepted)
+>   is the LLM-extraction ADR. It would replace the D4 extraction ladder and the
+>   PR 7 scraper-framework spike with one on-device pipeline (page classifier,
+>   LLM extraction, validator), and D5's `content_hash` change signal with a hash
+>   of the segmented text. Because the LLM becomes the main extractor after the
+>   JSON-LD reader, accepting it would also change ratified decision 3 and the
+>   "LLM-primary extraction" alternative below.
+> - ADR numbers written here before ADRs were assigned have been corrected: the
+>   API conventions ADR is ADR-0008, and the LLM-extraction ADR is Proposed
+>   ADR-0013.
 
 ## Summary
 
@@ -56,8 +79,9 @@ These are settled; the worker agent should not re-open them.
 3. **Extraction: rules first, LLM fallback.** JSON-LD and DOM heuristics
    handle the easy majority for free. An LLM extraction pass runs **only**
    on pages that fail rule-based extraction. This adds a runtime dependency
-   and API cost → **requires ADR-0008 with a budget cap before any LLM code
-   is written** (see Unresolved questions).
+   and API cost → **requires an LLM-extraction ADR (Proposed ADR-0013)
+   with a budget cap before any LLM code is written** (see Unresolved
+   questions).
 4. **Freshness/scale target:** ~monthly re-scrape cadence with change
    detection. First milestone: **300+ Austin/Round Rock venues with priced
    menu items.**
@@ -97,7 +121,8 @@ food. Every schema and pipeline decision below follows from them.
 ### D2. Data model (canonical schema)
 
 Three-layer split per ROADMAP §4.3 (`raw` / `canonical` / `mart` — see
-[ADR-0003](../adr/0003-three-layer-schema.md), **Accepted** 2026-08-01).
+[ADR-0003](../adr/0003-three-layer-schema.md), **Accepted** 2026-08-01;
+superseded by ADR-0004).
 
 **`canonical` — venue identity** (Phase 1a; grows the existing `Venue` stub)
 
@@ -216,11 +241,12 @@ the core of rungs 1–2.
    residential-bandwidth crawl affordable.
 4. **PDF menus** — text-layer extraction (e.g. `pdfplumber`) feeding the
    same item-price pairing rules. Image-only PDFs fall through to rung 5.
-5. **LLM fallback** — **gated on ADR-0008** (model choice, prompt contract,
-   per-run budget cap, output schema = the same sidecar shape as rungs
-   1–4, confidence marking `source_kind='llm'`). Runs only on pages where
-   rungs 1–4 produced nothing but menu-lexicon evidence says a menu is
-   present. Not in the first PR train.
+5. **LLM fallback** — **gated on an LLM-extraction ADR (Proposed
+   ADR-0013)** (model choice, prompt contract, per-run budget cap,
+   output schema = the same sidecar shape as rungs 1–4, confidence
+   marking `source_kind='llm'`). Runs only on pages where rungs 1–4
+   produced nothing but menu-lexicon evidence says a menu is present.
+   Not in the first PR train.
 
 All rungs emit the **same normalized sidecar structure** (V1's proven
 bundle shape) → one ingest path → `canonical` tables. Every extraction
@@ -291,15 +317,15 @@ owner's careful read.**
 | 1 | `feat(db): venue identity schema` | `brand`, grown `venue`, `venue_alias`, `venue_source`, `site_identity` + migration + constraint tests | `alembic upgrade head`/`downgrade` clean; every constraint has a failing test |
 | 2 | `feat(db): menu graph schema` | `menu_page`, `menu_section`, `menu_item`, `price_observation`, `menu_modifier` + migration + tests | Same bar |
 | 3 | `feat(db): raw/mart layers` | Schema split (incl. `alembic/env.py` schema-allowlist fix), capture index, `current_menu` + first price-index view | Same bar; mart rebuildable from canonical |
-| 4 | `feat(api): venues read endpoints` | ROADMAP Phase 2 as written (First Light: cursor pagination, ADR-0005, staging deploy) | Phase 2 "Done when" |
+| 4 | `feat(api): venues read endpoints` | ROADMAP Phase 2 as written (First Light: cursor pagination, ADR-0008, staging deploy) | Phase 2 "Done when" |
 | 5 | `feat(discovery): Overture/OSM venue seeding` | Parquet ingest → `venue_source` → identity resolution (ports Phase 4 fingerprinting) → Nominatim geocode → H3 | 1000 Overture rows → <2% dup venues, <1% bad geocodes (hand-labeled 100-sample) |
 | 6 | `feat(discovery): website + menu-URL resolution` | Overture/OSM URL resolver, canonicalization, liveness check, menu-URL frontier | Measured %-coverage reported for the metro |
-| 7 | `feat(scraper): fetch + replay core` | ADR-0006 spike/decision first (ROADMAP Phase 5), then: rate-limited fetcher, replay bundles, capture index writes | Fixture-tested; no live calls in CI |
+| 7 | `feat(scraper): fetch + replay core` | Scraper-framework spike/decision first (ROADMAP Phase 5; replaced by Proposed ADR-0013), then: rate-limited fetcher, replay bundles, capture index writes | Fixture-tested; no live calls in CI |
 | 8 | `feat(extract): JSON-LD + DOM ladder` | Port `menu_sidecar.py` rungs 1–2 into `packages/helios_parsing/` (pure functions) + ingest to canonical | 20+ golden-file fixtures from real Austin sites; idempotent re-ingest proven |
 | 9 | `feat(extract): render policy + PDF` | Port `render_policy.py`; Playwright path; pdfplumber rung | Escalation budget respected in tests |
 | 10 | `feat(sched): monthly cadence + change detection` | Cron scheduling, content-hash skip, `last_seen_at` semantics, staleness metrics | Re-run on unchanged site produces 0 new canonical rows |
 | 11 | `feat(api): price index endpoints` | `current_menu`-backed venue menu + first aggregate endpoint | Milestone measurable via the API itself |
-| — | `docs(adr): 0007 LLM extraction fallback` | Proposed **only after** rungs 1–4 yield measured coverage; includes budget cap | Owner accepts before any implementation |
+| — | `docs(adr): LLM extraction fallback` (Proposed ADR-0013) | Proposed **only after** rungs 1–4 yield measured coverage; includes budget cap | Owner accepts before any implementation |
 
 Milestone exit: **300+ distinct Austin/Round Rock venues with ≥1 priced
 menu item each, ≥80% observed within 45 days, every price traceable to a
@@ -341,7 +367,7 @@ replay bundle** — measured by a query, stated in the retro.
 
 ## Unresolved questions
 
-1. **ADR-0008 (LLM fallback):** model, prompt contract, budget cap —
+1. **LLM-extraction ADR (Proposed ADR-0013):** model, prompt contract, budget cap —
    proposed only after rung 1–4 coverage is measured. Owner accepts.
 2. **Austin-metro polygon definition** (which counties/H3 set) — small,
    but settle in PR 5 config with owner sign-off.

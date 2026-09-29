@@ -1,22 +1,18 @@
 # Plan 0002 Step 5: menu schema proposal
 
-**Status:** Design accepted by owner on 2026-09-17 in
-[ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md).
-Accepted review defaults are retained. No Menu schema or contract is implemented.
-**Branch:** `Plan-0002-Step-5`. **Migration parent:** `91f4c2a7d6e8`.
-**Provider update (2026-09-18):** The CI-image gate passed and provider revision
-`b72e6a90c431` is prepared for [separate review](../reviews/0002-step-5-provider-prerequisite.md).
-The migration parent above is the provider boundary; future Menu follows its
-accepted revision. The specification and historical planning records are retained.
-The original proposal baseline was `d1ff54cdae5d6fc59c385c77a4a89a1e91d8fc2f`
-(Step 4 / PR #15); it is not a claim that today's working tree is clean.
+**Status:** Normative Menu schema specification for accepted
+[ADR-0005](../adr/0005-immutable-menu-snapshots-and-selection.md). Implemented by
+provider revision `b72e6a90c431`, Menu revision `d83f0a21c592` (schema `menu`,
+nine tables) and the `packages/helios_core/domains/menu/` package. Sections 8, 10
+and 11 record the pre-implementation sequence and gates as history. For current
+status see the [README](../../README.md#status).
 
 Authority: [ADR-0004](../adr/0004-modular-monolith-identity-and-lifecycle.md),
-[Plan 0002 Step 5](0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts),
+[Plan 0002 Step 5 (historical)](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts),
 [RFC-0001](../rfc/0001-menu-pricing-first.md), and the
-[accepted defaults](../reviews/0002-step-5-readiness-reassessment.md#accepted-review-defaults-and-remaining-technical-work).
+[accepted defaults (historical)](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-readiness-reassessment.md#accepted-review-defaults-and-remaining-technical-work).
 This document supplies the detailed design; ADR-0005 records its decisions.
-The [reconciliation record](../reviews/0002-step-5-menu-design-reconciliation.md)
+The [reconciliation record (historical)](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-menu-design-reconciliation.md)
 contains examples, verification, remaining gates, and the self-contained handoff.
 Section 11 preserves historical planning text without granting it authority over
 this reconciled specification.
@@ -422,7 +418,7 @@ support; constraints guarantee provenance links and shape, not source truth.
 
 ## 10. Review examples and completion gate
 
-The [concrete example matrix](../reviews/0002-step-5-menu-design-reconciliation.md#input-and-selection-examples)
+The [concrete example matrix](https://github.com/First-Helios/First-Helios/blob/dde2dc31ea18585d3559f6e8741c10af260761fc/docs/reviews/0002-step-5-menu-design-reconciliation.md#input-and-selection-examples)
 is part of this specification: value, scope, observation time, Evidence, temporal
 cutoffs, pin state and expected selected result are all explicit. Convert these
 examples to focused tests only in authorized implementation work.

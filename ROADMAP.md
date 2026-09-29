@@ -4,13 +4,13 @@
 > This document distills what is worth keeping from V1, defines the V2 architecture, and sequences the rebuild into phases.
 > Every phase is a PR train; every PR passes CI; every architectural decision is recorded in an ADR.
 >
+> **Status lives in [README.md → Status](./README.md#status).** This file holds phase definitions and plans only; it does not track what is built.
+>
 > **How it's built.** The implementation is **agent-driven with a human reviewer in the loop** — agents write the code, a human approves the design decisions and the changes that are expensive to reverse. See [CLAUDE.md](./CLAUDE.md) for the working agreement and [CONTRIBUTING.md](./CONTRIBUTING.md) for the review gates.
 >
 > **Companion:** [LEARNING_GUIDE.md](./LEARNING_GUIDE.md) — the skills course, now serving as the **reviewer's curriculum**: read the module before reviewing the phase it maps to, so you can judge the work rather than just merge it.
 >
-> **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
->
-> **Last revised:** 2026-09-18 — Plan 0002 Steps 1–4 are implemented. ADR-0005 is accepted, the strict CI PostGIS image gate passed, and the corrected Step 5 provider implementation and both SQL directions have [owner acceptance and a bounded Menu handoff](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md). Menu awaits separate implementation authorization; Menu and Gold remain unimplemented. See the [gate history](./docs/reviews/0002-step-5-provider-prerequisite-gates.md) and [readiness reassessment](./docs/reviews/0002-step-5-readiness-reassessment.md) for prior results and the product checkpoint. Phase descriptions below are target work unless explicitly marked verified; they are not a deployment inventory.
+> **V1 reference:** the legacy code lives on the [`V1-Graveyard`](https://github.com/First-Helios/First-Helios/tree/V1-Graveyard) branch of this repository. When this doc says *"port from V1"*, that is where to find the source.
 
 ---
 
@@ -19,14 +19,11 @@
 1. [North Star](#1-north-star)
 2. [Scope — V1 of V2](#2-scope--v1-of-v2)
 3. [Part A — Distilled Assets](#3-part-a--distilled-assets)
-   - 3.1 [Sources (Free & Public Only)](#31-sources-free--public-only)
-   - 3.2 [Processes (Reusable Algorithms)](#32-processes-reusable-algorithms)
-   - 3.3 [Skills Inventory](#33-skills-inventory)
 4. [Part B — Target Architecture](#4-part-b--target-architecture)
 5. [Part C — Phased Build Plan](#5-part-c--phased-build-plan)
 6. [Engineering Process](#6-engineering-process)
-7. [Day-1 Kickoff Checklist](#7-day-1-kickoff-checklist)
-8. [Open Questions / Further Considerations](#8-open-questions--further-considerations)
+7. [Open Questions](#7-open-questions)
+8. [Appendix A — V1 Reference Map](#appendix-a--v1-reference-map)
 
 ---
 
@@ -44,8 +41,7 @@
 > food *deals*." The product is the **price index**: menus and item prices
 > across as many Austin/Round Rock venues as possible. Deals are a layer
 > built on top of a populated menu graph, not the foundation. See
-> [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) for the reasoning and
-> the implementation plan.
+> [RFC-0001](./docs/rfc/0001-menu-pricing-first.md).
 
 ---
 
@@ -54,8 +50,8 @@
 **In scope**
 
 - Restaurant **menus and item prices** (sections, items, prices, variants, modifiers) across the Austin / Round Rock metro — schema *and* population.
-- **Venue discovery at metro scale** — Overture / OSM seeding, website resolution, menu-URL discovery. Coverage is the product, so discovery is a first-class subsystem, not a helper script.
-- Venue identity (which restaurant is which) and geocoding (lat/lng + H3).
+- **Venue discovery at metro scale** — Overture seeding, website resolution, menu-URL discovery. Coverage is the product, so discovery is a first-class subsystem, not a helper script.
+- Venue identity (which restaurant is which) and geocoding (lat/lon only; no H3, per [ADR-0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)).
 - A read-only public API, including price-index aggregates.
 - Replay + audit tooling so every price is traceable to a captured page.
 
@@ -67,11 +63,12 @@
 
 - Jobs, labor data, events, sentiment, Revelio, SerpAPI, Google Places — all V1 modules that are not menu/price related.
 - **Aggregator and delivery-platform scraping** (Yelp, Google Maps, DoorDash, UberEats). Their terms prohibit it, and delivery menus carry a 15–30% markup, so their prices answer a different question than the one this project asks. See [RFC-0001 §D1](./docs/rfc/0001-menu-pricing-first.md).
-- Cross-venue item canonicalization (mapping "1/2 lb Angus Burger" ≈ "cheeseburger"). Aggregates are category-level for now; see §8.
+- Cross-venue item canonicalization (mapping "1/2 lb Angus Burger" ≈ "cheeseburger"). Aggregates are category-level for now; see §7.
 - Non-food price verticals (auto repair, plumbing, …). Explicitly a *future* direction — the constraint it imposes today is only that venue identity and the observation pattern stay food-agnostic.
 - Authentication / write API (deferred until a real consumer exists).
 - Multi-city coverage (Austin/Round Rock only until that pipeline is stable).
-- The SpiritPool browser extension (separate project; this repo only handles its ingest endpoint if it is ever revisited).
+- The frontend — a separate repo that consumes this API.
+- The SpiritPool browser extension (separate project; if it is revisited, its ingest endpoint becomes an RFC).
 
 **Success criteria**
 
@@ -81,10 +78,8 @@
 - The service survives a reboot of its host and a wipe of its database (restore from backup + replay).
 - Every architectural decision that cost more than a day to make is written down as an ADR.
 
-> **On timelines.** The original plan budgeted 1–3 weeks per phase against a
-> 12-week horizon, assuming part-time human implementation. Agent-driven
-> implementation compresses coding time sharply but *not* review time, and
-> review is now the bottleneck. Phases are therefore sequenced but
+> **On timelines.** Agent-driven implementation compresses coding time but
+> *not* review time, and review is the bottleneck. Phases are sequenced but
 > deliberately **not** date-estimated — a phase is done when its "Done when"
 > clause is true, not when a week elapses.
 
@@ -92,46 +87,22 @@
 
 ## 3. Part A — Distilled Assets
 
-These are the pieces of V1 worth preserving. Everything else either never shipped, depended on a paid API, or was built before the design was understood.
+These are the pieces of V1 worth preserving. Everything else either never shipped, depended on a paid API, or was built before the design was understood. V1 was deals-first; the notes below say where each asset lands under the menus-first scope.
 
-> **Read this section with the 2026-07-31 re-scope in mind.** It was written
-> deals-first, and the inventory below reflects that. What changed:
->
-> - **§3.1's eight chain sources are now anchor *menu* sources, not deal
->   sources** — useful for validating extraction against sites we understand,
->   but no longer the coverage strategy. Coverage now comes from metro-wide
->   Overture/OSM discovery (R2/R3 below), which moves from "reference data" to
->   the most important row in the table.
-> - **§3.2's processes 1–3** (sub-deal decomposition, temporal parsing,
->   signal-quality scoring) are deal parsers and defer to Phase 10. Processes
->   4–9 (identity, replay, expectations, registry, config routing, the
->   multi-layer model) are unchanged and still land early.
-> - **The most valuable V1 asset for the new scope isn't in either table:**
->   `collectors/meal_deals/menu_sidecar.py` and its companion
->   `menu_persistence_schema.py`. V1 built a full menu graph extractor and
->   never persisted it — sidecar-only, awaiting a schema that never came.
->   V2 gives it that schema in Phase 1 and ports it in Phase 3.
+The most valuable V1 asset for the new scope is `collectors/meal_deals/menu_persistence_schema.py` (with `menu_sidecar.py`): a full menu-graph shape that V1 extracted but never persisted. V2's Menu schema ported that shape ([ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md)).
 
 ### 3.1 Sources (Free & Public Only)
 
-Eight chain websites scraped directly + three geospatial reference datasets. Zero paid APIs.
+Zero paid APIs.
 
-| # | Source | URL Pattern | Strategy | What We Get | Constraints |
-|---|--------|-------------|----------|-------------|-------------|
-| 1 | McDonald's | `mcdonalds.com/us/en-us/deals.html` | `static_html` | Deal names (`h2/h3`), prices inline, app-only deals noted | 1 req/sec; change-rate: weekly |
-| 2 | Taco Bell | `tacobell.com/food/deals-and-combos` | `static_html` | Structured product links, price + calorie pairs | 1 req/sec |
-| 3 | Domino's | `dominos.com/deals` | `static_html` + reCAPTCHA-aware | Deal sections as uppercase `h2` | reCAPTCHA Enterprise but initial HTML loads |
-| 4 | Wendy's | `wendys.com/deals` | `static_html` | Image-heavy; deal names in `alt=` | 1 req/sec |
-| 5 | ThunderCloud Subs | `thundercloud.com/main-menu/` | `menu_only` | WordPress static menu; prices as small/large | Local, friendly |
-| 6 | Pizza Hut | `pizzahut.com/deals` | `playwright_required` | React SPA; deals in JSON bootstrap | Headless Chromium; 1 req/2s |
-| 7 | Subway | `subway.com/en-us/menunutrition/deals` | `playwright_required` | Angular SPA | Headless Chromium; 1 req/2s |
-| 8 | Sonic | `sonicdrivein.com/deals` | `app_only` | Most deals require the app; website has a subset | Accept partial coverage |
+| # | Source | What We Get | Constraints |
+|---|--------|-------------|-------------|
+| R1 | Nominatim (OpenStreetMap) | Free-form address → (lat, lon) | 1 req/sec, user-agent required, viewbox recommended |
+| R2 | Overture Maps POI (Parquet) | Business name, address, category, website URL | Download-once, refresh monthly |
+| R3 | OpenStreetMap / Overpass | Business website URL by name + area | 1 req/sec; deferred as a website fallback ([ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md)) |
+| — | First-party restaurant websites | Menu pages and prices | robots.txt, real User-Agent, per-host rate limit |
 
-| # | Reference Source | Endpoint | What We Get | Constraints |
-|---|------------------|----------|-------------|-------------|
-| R1 | Nominatim (OpenStreetMap) | `nominatim.openstreetmap.org/search` | Free-form address → (lat, lng) | 1 req/sec, user-agent required, viewbox recommended |
-| R2 | Overture Maps POI | Parquet downloads on S3 | Business name, address, category, website URL | Download-once, refresh monthly |
-| R3 | OpenStreetMap / Overpass | `overpass-api.de` | Business website URL by name + area | 1 req/sec; prefer Overture for bulk |
+V1's eight chain deal pages (McDonald's, Taco Bell, Domino's, Wendy's, ThunderCloud Subs, Pizza Hut, Subway, Sonic; config in V1's `config/meal_deal_sources.yaml`) are useful anchor sites for validating menu extraction, not the coverage strategy. Coverage comes from metro-wide Overture discovery ([ADR-0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)) and website / menu-URL resolution with the manual registry in `config/sources.yaml` ([ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md)).
 
 **Dropped from V1** (either paid, out of scope, or broken as built):
 
@@ -142,33 +113,27 @@ Eight chain websites scraped directly + three geospatial reference datasets. Zer
 - BLS / QCEW / LAUS / OEWS — labor ground-truth; out of scope for V1.
 - Ticketmaster / Eventbrite / Meetup / Do512 / Austin City Calendar — events; out of scope.
 
-**Discovery mechanism for independents.** Instead of paid APIs, V2 uses:
-
-1. Overture Maps filtered to Austin `category = food_and_beverage`.
-2. Per-restaurant website resolution via Overture `websites` field → fallback to OSM `contact:website` tag.
-3. A registry file (`config/sources.yaml`) that any human can add a known-good site to.
-
 ### 3.2 Processes (Reusable Algorithms)
 
-Nine algorithms worth porting. Each has a proven V1 implementation and a clear path to a cleaner V2 version. The **V1 source** column points to the file on the `V1-Graveyard` branch.
+The **V1 source** column points to the file on the `V1-Graveyard` branch.
 
-| # | Process | V1 Source | Why Keep | V2 Target |
-|---|---------|-----------|----------|-----------|
-| 1 | Sub-deal decomposition | `collectors/meal_deals/sub_deals.py` | Splits "Mon–Fri 3–6pm. $1 off beer. Half off apps. $5 margs." into 3 offers via an ordered regex chain. Battle-tested. | `packages/helios_parsing/sub_deals.py` — port; add Hypothesis property tests; externalize the pattern list to YAML. |
-| 2 | Temporal parsing | `collectors/meal_deals/temporal.py` | Handles 50+ variants: "Mon-Fri", "Monday through Friday", "3pm–close", em/en dashes, 12-hour AM/PM. | `packages/helios_parsing/temporal.py` — port; return a structured `dataclass` (`weekdays: set`, `start: time`, `end: time \| Literal["close"]`). |
-| 3 | Signal-quality scoring | `collectors/meal_deals/quality.py` | 6-factor composite (price 25%, time 20%, description 15%, name 15%, restaurant-match 10%, not-addon 15%) with clear `reject < 0.20 < review < 0.40 ≤ accept` gates. | `packages/helios_parsing/quality.py` — port; weights + thresholds in config, not constants. |
-| 4 | Venue identity / fingerprinting | `core/venue_identity.py` + `core/normalizer.py::make_fingerprint` | Name canonicalization, address normalization, URL canonicalization, proximity clustering. Core to dedup. | `packages/helios_core/identity.py` — port; split into name/address/url submodules; add a golden-set test fixture. |
-| 5 | Replay-manifest pattern | `scripts/build_website_scrape_replay_manifests.py` + `data/cache/website_scrape_debug/*.json` | Every scrape persists raw HTML + fetch metadata + extracted signals in a deterministic bundle. Diff-able across runs. | `apps/scraper/replay/` — port bundle format; move cache root to `var/replay/` (Twelve-Factor) and index in Postgres so queries don't walk the filesystem. |
-| 6 | Expectation-vs-capture diffing | `scripts/compare_website_scrape_expectations.py` + `config/meal_deal_expectation_registry.json` | Asserts "we should see $X deal at site Y" against real captures; catches regressions. | `apps/scraper/audit/expectations.py` — port; expectations become YAML per source, versioned alongside the scraper. |
-| 7 | Collector registry decorator | `collectors/meal_deals/registry.py` | Self-registration so the scheduler auto-discovers scrapers. | `apps/scraper/registry.py` — port; resolve via `importlib.metadata` entry-points instead of import side-effects. |
-| 8 | Config-driven strategy routing | `config/meal_deal_sources.yaml` | One YAML maps domain → strategy (static / playwright / menu_only / app_only) + selectors + rate limit. | `config/sources.yaml` — port; add JSON-Schema validation in CI so misconfigurations break the build, not runtime. |
-| 9 | Multi-layer data model (pattern) | `core/database.py` — `DealObservation → DealApplicability → DealMaterialization` | Observation is the canonical atom; applicability fans out to many venues; materialization is the pre-computed consumer view. | `packages/helios_core/db/models/` — port schema intent; redesign with SQLAlchemy 2.0 typed `Mapped[...]`, enum types, and **only** this pattern (drop the legacy `MealDeal` denormalized table). |
+| # | Process | V1 Source | Why Keep | V2 home |
+|---|---------|-----------|----------|---------|
+| 1 | Sub-deal decomposition | `collectors/meal_deals/sub_deals.py` | Splits "Mon–Fri 3–6pm. $1 off beer. Half off apps. $5 margs." into 3 offers via an ordered regex chain. | Phase 10, `packages/helios_parsing/`. Pattern list in YAML; property tests. |
+| 2 | Temporal parsing | `collectors/meal_deals/temporal.py` | Handles 50+ variants: "Mon-Fri", "Monday through Friday", "3pm–close", em/en dashes, 12-hour AM/PM. | Phase 10, `packages/helios_parsing/`. Returns a structured dataclass. |
+| 3 | Signal-quality scoring | `collectors/meal_deals/quality.py` | 6-factor composite (price 25%, time 20%, description 15%, name 15%, restaurant-match 10%, not-addon 15%) with `reject < 0.20 < review < 0.40 ≤ accept` gates. | Phase 10. Weights + thresholds in config, not constants. |
+| 4 | Venue identity / fingerprinting | `core/venue_identity.py` + `core/normalizer.py::make_fingerprint` | Name canonicalization, address normalization, URL canonicalization, proximity clustering. | `packages/helios_core/identity/normalize.py` ([ADR-0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) §4); golden set in `test/fixtures/golden_matches.json`. |
+| 5 | Replay-manifest pattern | `scripts/build_website_scrape_replay_manifests.py` | Every scrape persists raw HTML + fetch metadata in a deterministic bundle. Diff-able across runs. | Bronze Capture `bundle_path` ([ADR-0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) §3); menu-page bundles under `var/replay/` ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) §5, Proposed). |
+| 6 | Expectation-vs-capture diffing | `scripts/compare_website_scrape_expectations.py` | Asserts "we should see $X at site Y" against real captures; catches regressions. | Replaced in Phase 5 by held-out evaluation and a monthly spot check ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) §8, Proposed). |
+| 7 | Collector registry decorator | `collectors/meal_deals/registry.py` | Self-registration so the scheduler auto-discovers scrapers. | Not needed: one universal pipeline, no per-site scrapers ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), Proposed). |
+| 8 | Config-driven strategy routing | `config/meal_deal_sources.yaml` | One YAML maps domain → strategy + selectors + rate limit. | Only the manual website / menu-URL registry survives, as `config/sources.yaml` ([ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md) §4); no per-site strategy. |
+| 9 | Multi-layer data model (pattern) | `core/database.py` — `DealObservation → DealApplicability → DealMaterialization` | Observation is the canonical atom; applicability fans out to many venues; materialization is the pre-computed consumer view. | Bronze → Menu → Gold ([ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md), [ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md), [ADR-0006](./docs/adr/0006-gold-menu-read-models.md)); deal tables in Phase 10. |
 
 **What we are deliberately *not* porting**
 
 - The legacy `meal_deals` denormalized table (pre-dates the `DealObservation` pattern). Redundant.
 - The `employer_data`, `labor_data`, `events`, `job_boards`, `sentiment` collectors. Out of scope.
-- `core/baseline.py`, `core/targeting.py`, `core/rate_manager.py`, `core/scheduler.py` — rewrite rather than port. The ideas are sound but the code grew organically; a clean rewrite is faster than a refactor.
+- `core/baseline.py`, `core/targeting.py`, `core/rate_manager.py`, `core/scheduler.py` — rewrite rather than port. The ideas are sound but the code grew organically.
 - Playwright stealth hackery specific to employer sites we will no longer scrape.
 
 ### 3.3 Skills Inventory
@@ -178,14 +143,14 @@ What a dev needs to own this codebase professionally. Each skill is expanded int
 | Area | Skills |
 |------|--------|
 | **Python** | Typing (`Mapped`, `TypedDict`, generics), `dataclasses`, `@dataclass(slots=True)`, `pathlib`, packaging with `pyproject.toml`, dependency management with `uv`, virtual envs. |
-| **Tooling** | `ruff` (lint + format), `mypy --strict`, `pre-commit`, conventional commits, `commitlint`, semantic versioning. |
+| **Tooling** | `ruff` (lint + format), `mypy --strict`, `pre-commit`, Conventional Commits, semantic versioning. |
 | **SQL & data modeling** | Normal forms, primary / foreign keys, unique constraints, partial indexes, JSONB vs columns, transaction isolation, index strategy, migration safety. |
 | **ORM** | SQLAlchemy 2.0 declarative typed models, relationships, eager vs lazy loading, session lifecycle, Alembic autogenerate + manual edits, zero-downtime migration patterns. |
 | **Web fundamentals** | HTTP semantics, status codes, redirects, caching, cookies, `robots.txt`, sitemaps, DNS, TLS, `User-Agent` etiquette, rate-limit negotiation. |
-| **Scraping** | `httpx`, `selectolax`, `BeautifulSoup`, Playwright (sync + async), Scrapy, Crawlee, headless Chromium, JSON-LD extraction, PDF text extraction. |
-| **Data engineering** | Idempotency, at-least-once vs exactly-once, Bronze → Silver → Gold lifecycle, lineage, replay, backfill strategy, watermarks, dead-letter queues. |
-| **Geospatial** | Lat/lng, geocoding, reverse geocoding, H3 hex grids, PostGIS basics (`GEOGRAPHY(POINT)`, `ST_DWithin`), bounding boxes. |
-| **Parsing** | Regex craft, regex debugging, property-based testing with Hypothesis, when rules beat ML (and when they don't). |
+| **Scraping & extraction** | `httpx`, headless Chromium via Playwright, JSON-LD extraction, HTML segmentation, local LLM serving (llama.cpp), grammar-constrained output, held-out evaluation. |
+| **Data engineering** | Idempotency, at-least-once vs exactly-once, Bronze → Silver → Gold lifecycle, lineage, replay, backfill strategy, change detection. |
+| **Geospatial** | Lat/lon, geocoding, reverse geocoding, haversine distance, bounding boxes, grid bucketing. |
+| **Parsing** | Regex craft, regex debugging, property-based testing, when rules beat ML (and when they don't). |
 | **API design** | REST vs RPC, FastAPI, Pydantic v2, OpenAPI, pagination (cursor vs offset), error shapes, idempotency keys, rate limiting. |
 | **Testing** | pytest, fixtures, `parametrize`, factories, property tests, contract tests, golden files, coverage tooling. |
 | **Ops** | Docker, docker-compose, systemd, `.env` hygiene, structured logging (structlog), Prometheus metrics, healthchecks, backups, hosted deploys (Fly.io / Railway / Hetzner / DO). |
@@ -198,63 +163,31 @@ What a dev needs to own this codebase professionally. Each skill is expanded int
 ### 4.1 Repo Layout (monorepo)
 
 ```
-helios-v2/
-├── apps/
-│   ├── api/              # FastAPI application
-│   │   ├── main.py
-│   │   ├── routes/
-│   │   └── tests/
-│   └── scraper/          # Scraping workers + CLI
-│       ├── chains/       # one module per chain (mcdonalds.py, tacobell.py, ...)
-│       ├── replay/       # replay-manifest builder + diff
-│       ├── audit/        # expectation-vs-capture comparator
-│       └── tests/
-├── packages/
-│   ├── helios_core/      # Domain models, DB session, identity
-│   │   ├── db/           # SQLAlchemy 2.0 typed models, session, base
-│   │   │   └── models/
-│   │   ├── identity.py   # from V1 core/venue_identity.py
-│   │   └── tests/
-│   └── helios_parsing/   # Pure-function text parsers, zero I/O
-│       ├── sub_deals.py
-│       ├── temporal.py
-│       ├── quality.py
-│       └── tests/
-├── infra/
-│   ├── docker-compose.yml
-│   ├── Dockerfile
-│   └── systemd/          # staging host (OrangePi) units
-├── alembic/
-│   ├── env.py
-│   └── versions/
-├── config/
-│   ├── sources.yaml      # scrape strategy per chain
-│   └── expectations.yaml # expectation registry
-├── docs/
-│   ├── adr/              # Architecture Decision Records
-│   │   └── 0000-template.md
-│   └── rfc/              # Request for Comments (larger proposals)
-│       └── 0000-template.md
-├── .github/
-│   ├── workflows/ci.yml
-│   ├── pull_request_template.md
-│   ├── ISSUE_TEMPLATE/{bug,feature}.md
-│   └── CODEOWNERS
-├── scripts/              # Dev-only one-offs (NOT production code)
-├── .pre-commit-config.yaml
-├── pyproject.toml
-├── ruff.toml
-├── mypy.ini
-├── alembic.ini
-├── Makefile
-├── ROADMAP.md            # ← this file
-├── LEARNING_GUIDE.md
-└── README.md
+apps/
+  api/                 # FastAPI service; routes/, committed openapi_snapshot.json
+  discovery/           # Overture seeding, website/menu-URL resolution, lifecycle, audit CLIs
+packages/
+  helios_core/
+    db/                # Base, schema names, model registry, session
+    provenance/        # Bronze (schema `bronze`)
+    identity/          # Identity Subjects + pure normalize.py (schema `identity`)
+    domains/menu/      # Menu Silver (schema `menu`)
+    gold/              # Gold read models (schema `gold`)
+    config.py, geo.py  # settings; Nominatim client
+alembic/versions/      # hand-reviewed migrations
+config/sources.yaml    # manual website / menu-URL registry
+infra/                 # Dockerfile, docker-compose.yml
+test/                  # all tests, including architecture-fitness tests
+docs/                  # adr/, rfc/, plans/, spikes/, reviews/, diagrams/
+.github/               # workflows/{ci,pr-title}.yml, PR + issue templates, CODEOWNERS
+makefile, pyproject.toml, uv.lock, ruff.toml, mypy.ini, alembic.ini, .pre-commit-config.yaml
 ```
+
+Planned by [ADR-0013 §2](./docs/adr/0013-phase5-menu-pipeline.md#2-code-layout) (Proposed): `packages/helios_parsing/` (pure pipeline stages, Phase 3) and `apps/menu_pipeline/` (the pipeline's I/O, Phase 5).
 
 ### 4.2 Environments (Dev → Staging → Prod)
 
-This is the industry-standard flow. Your Orange Pi becomes the **staging** environment, not production.
+The Orange Pi is the **staging** environment, not production.
 
 ```
 ┌─────────────┐   push    ┌──────────┐   merge    ┌───────────────────┐   promote   ┌─────────────────┐
@@ -262,182 +195,122 @@ This is the industry-standard flow. Your Orange Pi becomes the **staging** envir
 │  (dev)      │   + PR    │  (CI)    │            │  (staging, ARM64) │             │  (VPS or PaaS)  │
 └─────────────┘           └──────────┘            └───────────────────┘             └─────────────────┘
      │                         │                         │                                  │
-     │ run tests locally       │ ruff/mypy/pytest        │ smoke-test on real hardware      │ only deploy
-     │ `docker compose up`     │ block merge on red      │ run scrapers against live web    │ artifacts that
+     │ run tests locally       │ five required checks    │ smoke-test on real hardware      │ only deploy
+     │ `make dev`              │ block merge on red      │ run batch jobs against live web  │ artifacts that
      │                         │                         │ observe metrics                  │ passed staging
 ```
 
-**Why staging on the Orange Pi is the right move**
+**Why staging on the Orange Pi**
 
-1. **Arch parity.** Your prod target (see Phase 8) will likely be ARM64 (cheap VPS, Hetzner CAX, or RPi-class). The Orange Pi mirrors that.
-2. **Real-world network.** Staging on your LAN means real residential IP, real rate-limit conditions, real DNS — not a sterile CI runner.
-3. **Cheap.** The OPi is already running. Zero marginal cost.
-4. **Safe blast radius.** If a scraper loops, it consumes *your* bandwidth, not a hosted bill.
-
-> **Arch parity is not hypothetical.** The original `postgis/postgis` image
-> is amd64-only and could never have run on the Pi at all — the bug sat
-> unnoticed for five weeks precisely because nothing had been deployed
-> there yet. Running staging on the real target hardware catches this class
-> of problem; a laptop and an x86 CI runner do not. See
-> [ADR-0002](./docs/adr/0002-containerization.md).
+1. **Arch parity.** The prod target (Phase 8) is likely ARM64. The Pi mirrors that. This is not hypothetical: the official `postgis/postgis` image is amd64-only and could never have run on the Pi ([ADR-0002](./docs/adr/0002-containerization.md)).
+2. **Real-world network.** Real residential IP, real rate-limit conditions, real DNS — not a sterile CI runner.
+3. **Cheap.** Zero marginal cost.
+4. **Safe blast radius.** If a batch job loops, it consumes *your* bandwidth, not a hosted bill.
 
 **What the staging host runs**
 
-- Docker + Docker Compose. The repository provides `make dev` for
-  Postgres → migrate → API; staging/prod deployment remains unverified.
-- A systemd unit that starts the stack on boot and restarts on failure,
-  pulls `main`, and runs migrations as an explicit step. *(Phase 2)*
-- Postgres with daily `pg_dump` to a local external drive. *(Phase 8)*
-- Scrapers on a cron schedule, reduced frequency vs. prod. *(Phase 5+)*
-- Prometheus node-exporter for dashboards. *(Phase 8)*
-
-> **Note on Postgres topology.** This section originally assumed Postgres
-> would run on the staging *host* with only the app layer in Docker. It
-> currently runs in Compose alongside the app, which is simpler and fine for
-> staging. Prod topology (containerized vs. host-installed vs. managed) is an
-> open question for ADR-0007 in Phase 8.
+- The Compose stack from `infra/docker-compose.yml` (Postgres → one-shot migrate → API). Postgres runs in Compose alongside the app.
+- A systemd unit that starts the stack on boot and restarts on failure; migrations are an explicit deploy step, never on container start. *(Phase 2)*
+- Monthly discovery ([ADR-0009 §3](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)) and the menu pipeline as a low-priority batch job ([ADR-0013 §3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment), Proposed). *(Phases 5–6)*
+- Daily `pg_dump` to an external drive and Prometheus node-exporter. *(Phase 8)*
 
 **What prod will run (Phase 8)**
 
-- The same Docker image, promoted manually after staging is green for N hours.
-- Hosted options ranked by learning value / cost:
-  1. **Hetzner Cloud CAX11** (~€4/mo, ARM64) — best $ / learning.
-  2. **Fly.io** — free tier, Docker-native, auto-scale, multi-region.
-  3. **Railway** — easiest, Procfile-style.
-  4. **DigitalOcean Droplet** — classic; most tutorials.
-
-ADR-0007 in Phase 8 will make the call with numbers.
+- The same Docker image, promoted manually after staging is green.
+- Hosted options ranked by learning value / cost: Hetzner Cloud CAX11 (ARM64), Fly.io, Railway, DigitalOcean Droplet.
+- Prod hosting and Postgres topology (containerized vs. host-installed vs. managed) are decided in an ADR (next free number), with numbers.
 
 ### 4.3 Data Layer
 
-- **Postgres 16** as the only database. Install with **PostGIS** + the
-  **h3-pg** extension for geospatial.
+- **Postgres 16** as the only database, on the multi-arch PostGIS image
+  ([ADR-0002](./docs/adr/0002-containerization.md)). No geospatial extension
+  is used: coordinates are lat/lon columns ([ADR-0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)),
+  and the price index buckets them into a lat/lon grid
+  ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)).
 - **Lifecycle and bounded-context schemas** in one database per
   [ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md):
   - `bronze` — durable source claims, captures, record versions, and Evidence;
   - `identity` — durable Silver Subjects, typed identity grains, and
     append-only resolution/lineage decisions;
-  - `menu` — typed menu-domain Silver facts, created only with its first real
-    table; and
-  - `gold` — rebuildable consumer read models and aggregates.
+  - `menu` — typed menu-domain Silver facts ([ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md)); and
+  - `gold` — rebuildable consumer read models and aggregates ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md)).
 - Unresolved identity candidates and provisional Subjects have explicit,
   queryable state and cannot silently flow into vertical facts.
 - **Alembic** migrations with autogenerate + hand edits, reviewed in PRs.
-  **No `metadata.create_all()`** in production code, ever.
+  **No `metadata.create_all()`** outside test fixtures.
+- Append-only tables have no application-settable bypass. A data-fix
+  migration that disables an immutability trigger is a separate owner-review
+  gate and must restore every trigger before commit; a
+  `session_replication_role` bypass is never allowed. A temporary migration
+  schema may be allowlisted only in a named transition set, with a test naming
+  the step that removes it.
 - **dbt** is *not* in V1 scope. Revisit only if Gold complexity justifies a
   dedicated ADR.
 
 ### 4.4 API Layer
 
-- **FastAPI** + Pydantic v2.
-- Routes: `GET /deals`, `GET /deals/{id}`, `GET /venues`, `GET /venues/{id}`, `GET /venues/{id}/menu`.
-- **Cursor-based** pagination (not offset — it's O(1) at any page).
-- Uniform error shape (`{detail, code, trace_id}`).
-- OpenAPI published at `/docs`; schema tested in CI for breaking changes.
+- **FastAPI** + Pydantic v2, with conventions fixed by
+  [ADR-0008](./docs/adr/0008-read-api-conventions.md): domain routes under
+  `/v1`, cursor-based pagination, the uniform error shape
+  `{detail, code, trace_id}`, response models separate from ORM models.
+- Resources: venues (`/v1/venues`, `/v1/venues/{venue_id}`) from Phase 2;
+  menus, price history and the price index in Phase 7; deals in Phase 10.
+- OpenAPI at `/openapi.json` and `/docs`; a committed snapshot
+  (`apps/api/openapi_snapshot.json`, checked by `test/test_openapi_contract.py`)
+  makes breaking changes fail CI.
 - No auth in V1. CORS locked to the single frontend origin.
 
-### 4.5 Scraper Layer
+### 4.5 Fetch & Menu Pipeline
 
-- **V1 baseline:** `httpx` + `selectolax` for static HTML, `playwright-sync` for SPAs, pure-Python orchestration, cron for scheduling.
-- **Phase 5 decision (ADR-0006):** evaluate Scrapy vs Crawlee vs keeping custom, on throwaway spikes, *before* writing the real scrapers.
-- **Rate-limit middleware:** one token bucket per host, config-driven.
-- **Replay bundle:** every scrape writes `var/replay/<source>/<yyyy-mm-dd>/<site>.json` with `{url, status, html_path, extracted_signals, fetch_type}`.
-- **Expectation diff:** nightly CI job runs `compare_expectations_to_bundles` and posts failures to an issue.
+- **Fetching:** `SiteFetcher` (`apps/discovery/web_client.py`) — robots.txt on
+  every redirect hop, a required User-Agent, per-host rate limit, disk cache.
+  No crawler framework: the workload is ~1,000+ distinct hosts fetched
+  shallowly once a month, which favours per-host politeness over crawl depth.
+- **Menu reading (Phase 5):** one universal pipeline for every site — page
+  classifier → segmentation → JSON-LD reader / on-device LLM extraction →
+  generic repairs → validator — per
+  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) (Proposed), which
+  replaces the earlier Scrapy-vs-Crawlee framing (owner decision G.b). No
+  per-platform parsers.
+- **Replay:** every fetch or render is a Bronze Capture with a durable bundle,
+  so every stored price cites a byte span a reader can check
+  ([ADR-0013 §5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators)).
 
 ### 4.6 Observability
 
-- **Logging:** `structlog` with JSON output in staging/prod, human-readable in dev.
-- **Metrics:** `prometheus_client`; counters for `scrapes_total{source,outcome}`, `deal_observations_total{source}`, histograms for scrape latency.
-- **Tracing:** not in V1 scope.
+- **Logging:** `structlog` with per-request IDs; JSON in staging/prod,
+  human-readable in dev ([ADR-0008](./docs/adr/0008-read-api-conventions.md)).
 - **Healthcheck:** `GET /healthz` (liveness) + `GET /readyz` (DB ping).
+- **Metrics:** Prometheus, planned for Phase 8; batch runs write a run report
+  (Phase 6).
+- **Tracing:** not in V1 scope.
 
 ---
 
 ## 5. Part C — Phased Build Plan
 
-Each phase ends with a demoable artifact on `main`, merged through a PR with green CI. Each maps to a learning module (see [Learning Guide](./LEARNING_GUIDE.md)) — read it *before reviewing* that phase's PRs.
+Each phase ends with a demoable artifact on `main`, merged through a PR with green CI. Each maps to a learning module (see [Learning Guide](./LEARNING_GUIDE.md)) — read it *before reviewing* that phase's PRs. For what is built today, see [README.md → Status](./README.md#status).
 
-**Status at a glance**
+Phase *numbers* are stable identifiers (other docs cite them); RFC-0001 changed the build order without renumbering. Build order:
 
-Phase *numbers* are stable identifiers (the [Learning Guide](./LEARNING_GUIDE.md)
-modules reference them); the **Order** column is the sequence they are
-actually built in. RFC-0001 changed the order without renumbering, because
-renumbering breaks every existing cross-reference for no benefit.
+| Order | Phase | Name |
+|-------|-------|------|
+| 1 | 0 | Foundations & Tooling |
+| 2 | 1 | Domain Model & Migrations |
+| 3 | 2 | First Light — read API + staging deploy |
+| 4 | 4 | Venue Discovery, Identity & Geocoding |
+| 5 | 3 + 5 | Parsing library + Menu pipeline (one slice train, [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md#implementation-slices-after-acceptance)) |
+| 6 | 6 | Monthly Runs & Freshness |
+| 7 | 7 | API Surface — full, incl. price index |
+| 8 | 8 | Operations — prod |
+| 9 | 9 | Harden |
+| 10 | 10 | Deals layer |
 
-| Order | Phase | Name | Status |
-|-------|-------|------|--------|
-| 1 | 0 | Foundations & Tooling | ✅ **Complete** |
-| 2 | 1 | Domain Model & Migrations | **In progress** |
-| 3 | 2 | First Light — read API + staging deploy | Planned |
-| 4 | 4 | Venue Discovery, Identity & Geocoding | **In progress** |
-| 5 | 5 | Scrapers — decide, then build | Planned |
-| 6 | 3 | Parsing — menu extraction library | Planned |
-| 7 | 6 | Ingest Pipeline & Freshness | Planned |
-| 8 | 7 | API Surface — full, incl. price index | Planned |
-| 9 | 8 | Operations — prod | Partially done early |
-| 10 | 9 | Harden | Planned |
-| 11 | 10 | Deals layer | Future |
-
-**Why Phase 3 now runs after Phases 4–5.** The parsing library was
-originally first among the feature phases because V1's parsers could be
-ported blind — they were *deal-text* parsers, pure functions over strings
-already in hand. RFC-0001's parsers are *menu extractors*, and their
-golden-file fixtures have to come from real captured Austin menu pages. You
-cannot write the fixtures before you can fetch the pages, so discovery and
-the fetch/replay core come first.
-
-**Mapping to the RFC-0001 work plan.** RFC-0001 §"Work plan" is the
-authoritative PR-level sequencing; this table is the phase-level view of the
-same thing:
-
-| RFC-0001 PRs | Phase |
-|--------------|-------|
-| 0 — docs, ADR-0003 | (this revision) |
-| 1–3 — identity foundation/reset, menu graph, Gold schema | 1 |
-| 4 — venues read endpoints | 2 |
-| 5–6 — Overture/OSM seeding, website + menu-URL resolution | 4 |
-| 7 — fetch + replay core (ADR-0006 first) | 5 |
-| 8–9 — JSON-LD/DOM ladder, render policy, PDF | 3 |
-| 10 — monthly cadence + change detection | 6 |
-| 11 — price index endpoints | 7 |
-
-**What changed in the 2026-07-31 revision**
-
-- **Menus became the product, deals became a later layer** — see §1 and §2.
-  The phase *contents* below are rewritten accordingly; the phase numbers
-  are not.
-- **Phase 4 absorbed discovery.** It was "venue identity & geocoding," a
-  supporting concern. Under a coverage-driven product it is the subsystem
-  that determines the ceiling on everything else, so it is now
-  "Venue Discovery, Identity & Geocoding" and carries the Overture/OSM
-  seeding and website-resolution work.
-- **Phase 3 refocused** from deal-text parsing (sub-deals, temporal
-  validity) to menu extraction, and moved after Phases 4–5 for the reason
-  above. The deal parsers are deferred to Phase 10 with the rest of the
-  deals layer.
-- **Phase 6 absorbed freshness** — re-scrape cadence and change detection
-  are ingest concerns, and the freshness SLO is now a success criterion.
-- **Phase 10 is new**: the deals layer, built on a populated menu graph.
-
-**What changed in the 2026-07-29 revision**
-
-- **Phase 2 "First Light" is new.** A thin read API and a real staging
-  deployment land immediately after the schema, instead of waiting for the
-  old Phase 7. This proves the DB → API → deployed path once, early, so that
-  integration and deployment risk isn't all concentrated at the end. Phases
-  2–6 of the original plan each shift down by one.
-- **The old Phases 4 and 5 merged** into a single Phase 5. The original plan
-  had you hand-build a McDonald's scraper, *then* evaluate frameworks, then
-  rewire it — deliberate learning-by-doing. With agents writing the code,
-  building production code twice is waste; the evaluation now happens as
-  throwaway spikes before the real implementation.
-- **Docker moved out of Phase 8** to now (see
-  [ADR-0002](./docs/adr/0002-containerization.md)), so Phase 8 is reduced to
-  prod hosting and operational hardening.
+Phases 3 and 5 run after Phase 4 because their fixtures and evaluation sets come from real captured Austin menu pages, which need discovery first.
 
 ---
 
-### Phase 0 — Foundations & Tooling ✅ COMPLETE
+### Phase 0 — Foundations & Tooling
 
 **Learning modules:** [M1](./LEARNING_GUIDE.md#m1--modern-python-project-hygiene) · [M2](./LEARNING_GUIDE.md#m2--git--team-workflow) · [M3](./LEARNING_GUIDE.md#m3--design-docs-adrs-and-rfcs)
 
@@ -445,49 +318,17 @@ same thing:
 
 **Deliverables**
 
-- `pyproject.toml` (PEP 621) with `uv` for lockfile + install.
-- `ruff.toml`, `mypy.ini` (strict), `.pre-commit-config.yaml`.
-- `.github/workflows/ci.yml` — ruff, mypy, pytest, Python 3.12 matrix.
-- `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/{bug,feature}.md`, `CODEOWNERS`.
-- `docs/adr/0000-template.md`, `docs/rfc/0000-template.md`.
-- **ADR-0001:** "Language, framework, and data stack choices" — ratifies this roadmap.
-- `apps/api/main.py` with a single `GET /healthz` route.
-- One pytest passing: `assert healthz returns 200`.
-- GitHub branch protection on `main`: require PR, require 1 review (self-review OK for solo dev), require CI green, squash-merge only.
-
-**Delivered beyond the original scope** (PRs #3–#5): `CLAUDE.md` (agent
-working agreement), `CONTRIBUTING.md`, `LICENSE` (BUSL 1.1), `/readyz`,
-`pydantic-settings` config with lazy engine creation, and the containerization
-from ADR-0002.
+- `pyproject.toml` (PEP 621) with `uv` for lockfile + install; `ruff.toml`, `mypy.ini` (strict), `.pre-commit-config.yaml`.
+- `.github/workflows/ci.yml`, PR and issue templates, `CODEOWNERS`.
+- `docs/adr/0000-template.md`, `docs/rfc/0000-template.md`, and **ADR-0001** (language, framework, and data stack).
+- `apps/api/main.py` with `GET /healthz` and a passing test.
+- Branch protection on `main`: PR required, the five CI checks required, 0 approvals (see §6.0).
 
 **Done when:** `git push` to a feature branch opens a PR, CI runs automatically, merge advances main. No exceptions.
-✅ **Met.** Five required CI checks gate `main`; squash-only; auto-delete branches.
-
-**Post-Phase-0 correction (2026-07-29).** The original branch protection
-required 1 approving review, following this document's "(self-review OK for
-solo dev)" line. GitHub does not support that — you cannot approve your own
-PR — so every merge had to bypass protection, and a bypass skips the CI
-checks too. Corrected to 0 required approvals with all five CI checks
-required, which is strictly stronger in practice. See §6.0.
 
 ---
 
-### Phase 1 — Domain Model & Migrations — IN PROGRESS
-
-> **Current checkpoint (2026-09-19):** Bronze, Identity, the legacy reset,
-> and deterministic resolution are implemented through Plan 0002 Step 4.
-> Verification hardening passed native and CI-image PostGIS checks. The
-> reconciled Step 5 Menu proposal and ADR-0005 are accepted; the narrow provider
-> implementation and both SQL directions are accepted. The bounded Menu writer
-> (revision `d83f0a21c592`) and both Menu SQL directions were accepted as-is on
-> 2026-09-19, and the [read-side selection/ranking unit](./docs/reviews/0002-step-5-menu-selector-technical-review.md)
-> was accepted by the owner on 2026-09-19 (fresh strict `make ci`: 530 passed,
-> zero skips, no drift). Integrated M01–M14 final acceptance — the accepted
-> writer, both Menu SQL directions, and the selector exercised together across the
-> full ADR-0005 matrix on a fresh CI-image database (strict `make ci`: 530 passed,
-> zero skips, no drift, single head `d83f0a21c592`) — was accepted by the owner on
-> 2026-09-19 ([record](./docs/reviews/0002-step-5-menu-integrated-m01-m14-acceptance.md)).
-> Step 5 Menu engineering is complete. Gold read models are Step 6.
+### Phase 1 — Domain Model & Migrations
 
 **Learning module to review against:** [M5](./LEARNING_GUIDE.md#m5--relational-modeling) · [M6](./LEARNING_GUIDE.md#m6--sqlalchemy-20--alembic)
 
@@ -495,66 +336,43 @@ required, which is strictly stronger in practice. See §6.0.
 remove the superseded scaffold, then add typed Menu Silver and Gold read
 models with constraint-level tests.
 
-**Implemented foundation** ([Plan 0002](./docs/plans/0002-identity-foundation-before-menu.md), Steps 1–4)
+**Deliverables**
 
-- Bronze Source, Endpoint, Capture, Source Record/Version, and Evidence
-  models with immutable source history.
-- Identity Subject, Place, Organization, Establishment, explicit resolution
-  state, append-only decisions, lineage, and Subject-readiness gates.
-- A reviewed clean-reset migration that intentionally removed the former
-  `brand` / `venue` scaffold and obsolete `raw` / `canonical` / `mart`
-  schemas. No legacy application data is backfilled.
-- Architecture fitness tests for schema/FK/import directions, immutability,
-  event transitions, and deferred constraints.
-- Deterministic external-key/URL resolution entrypoints and live typed-feature
-  readiness checks.
-
-**Remaining deliverables**
-
-- Authorize the [bounded Menu persistence/writer unit](./docs/reviews/0002-step-5-provider-acceptance-and-menu-handoff.md#one-next-unit-menu-persistence-admission-and-lifecycle-writer).
-  The corrected provider implementation and both SQL directions are accepted;
-  278 strict CI tests passed with no skips and no drift. Provider acceptance
-  does not verify future Menu behavior. Strict database testing and
-  ordinary/relative import checks remain enforced.
-- The typed Menu graph after every pre-menu gate in Plan 0002 passes.
-- Gold current-menu projection: `gold.current_menu` and its bounded full-rebuild
-  refresh are implemented ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md),
-  [Step 6 review](./docs/reviews/0002-step-6-gold-read-models.md)), pending owner
-  review of the migration/models. Full-catalog refresh and the first price-index
-  projection remain deferred until first consumed.
+- Bronze sources, endpoints, captures, source records/versions and Evidence,
+  with immutable source history ([ADR-0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md)).
+- Identity Subjects (Place, Organization, Establishment), explicit resolution
+  state, append-only decisions and lineage.
+- A reviewed clean-reset migration removing the former `brand` / `venue`
+  scaffold and the `raw` / `canonical` / `mart` schemas; no legacy data backfilled.
+- The typed Menu graph with immutable snapshots and scoped selection
+  ([ADR-0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md);
+  normative detail in [docs/plans/0002-step-5-menu-schema-proposal.md](./docs/plans/0002-step-5-menu-schema-proposal.md)).
+- Gold `current_menu` with a deterministic full-rebuild refresh
+  ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md)). The price-index
+  projection's shape is fixed by [ADR-0007](./docs/adr/0007-gold-price-index-projection.md);
+  its build is deferred to Phases 6–7.
 - Postgres `CHECK` constraints for enums; deterministic natural keys so
   re-ingest is idempotent; money as integer currency minor units, never float.
-- Alembic migrations are autogenerate-assisted, hand-reviewed, and separately
-  authorized before execution.
-
-**Implementation sequence:** Plan 0002 governs the affected Phase 1 work.
-[Plan 0001](./docs/plans/0001-map-and-menu-collection.md) remains authoritative
-only for the unaffected product sequencing listed in Plan 0002 Section 1.
+- Architecture fitness tests for schema/FK/import directions, immutability,
+  and deferred constraints.
 
 **Deal models are not in this phase.** `DealObservation` /
-`DealApplicability` / `DealMaterialization` move to Phase 10 with the rest
-of the deals layer. Building a schema for data we will not collect for
-months is exactly the "for later" scaffolding CLAUDE.md prohibits — and the
-menu graph is likely to change what the right deal schema looks like.
+`DealApplicability` / `DealMaterialization` move to Phase 10. Building a
+schema for data we will not collect for months is the "for later"
+scaffolding CLAUDE.md prohibits — and the menu graph is likely to change what
+the right deal schema looks like.
 
 **Port hints (`V1-Graveyard` branch)**
 
 - `collectors/meal_deals/menu_persistence_schema.py` — V1's target menu-graph
   shape (`MenuPageRow`, `MenuSectionRow`, `MenuItemRow`, `MenuPricePointRow`,
-  `MenuModifierRow`). It was deliberately built sidecar-first and never
-  became tables, so the column names and provenance fields are settled but
-  unproven against a live schema. Port the shape; V2 renames
-  `MenuPricePoint` → `PriceObservation` and stores integer currency minor units.
-- `core/venue_identity.py` for venue + alias patterns.
+  `MenuModifierRow`). V2 renames `MenuPricePoint` → `PriceObservation` and
+  stores integer currency minor units.
 - `core/database.py::DealMaterialization` (~L1395) — the refresh-task
   pattern Gold inherits, not the deal columns themselves.
 
-**Sequencing note.** Keep Bronze, Identity, clean reset, Menu, and Gold in the
-review-sized steps defined by Plan 0002. Do not combine the destructive reset
-with Menu implementation.
-
-**Reviewer's checklist** — what to actually look for, since this is the phase
-where a bad decision is most expensive to undo:
+**Reviewer's checklist** — this is the phase where a bad decision is most
+expensive to undo:
 
 - Does every enum have a `CHECK` constraint, not just a Python-side `Enum`?
 - Is every FK's `ondelete` behavior deliberate, and does a test prove it?
@@ -583,29 +401,25 @@ and immutable Bronze Evidence.
 
 **Goal:** the thinnest possible end-to-end slice, running for real. One
 resource, read-only, served from Identity/Gold, deployed to the Orange
-Pi and reachable. Nothing about deals yet — this phase exists to prove the
-whole path works and to establish the API conventions everything later
-inherits.
+Pi and reachable. This phase proves the whole path works and establishes the
+API conventions everything later inherits.
 
-**Why here and not Phase 7.** The original plan deferred every HTTP concern
-to the end. That concentrates integration and deployment risk into one late
-phase, and it means months of work with nothing observable. Doing it now
-costs little — the container stack already runs — and every later phase gets
-validated against a real deployment instead of a laptop.
+**Why here and not Phase 7.** Deferring every HTTP concern to the end
+concentrates integration and deployment risk into one late phase and means
+months of work with nothing observable. Doing it early costs little, and
+every later phase gets validated against a real deployment instead of a laptop.
 
 **Deliverables**
 
-- `apps/api/routes/venues.py` — `GET /venues` (cursor-paginated) and
-  `GET /venues/{id}`, reading the Phase 1 schema.
+- **[ADR-0008](./docs/adr/0008-read-api-conventions.md): read-API conventions** —
+  pagination, error shape, versioning, 404 vs. empty list.
+- `apps/api/routes/venues.py` — cursor-paginated `GET /v1/venues` and
+  `GET /v1/venues/{venue_id}`, reading Identity.
 - Pydantic response models, separate from ORM models. The wire format is a
   contract; do not leak SQLAlchemy objects into it.
-- A seed/fixture command so the endpoints return something real in dev.
-- Structured logging (`structlog`) with request IDs — cheap now, painful to
-  retrofit once there's traffic.
-- CORS configuration — the frontend is a separate repo and will need it.
-- **ADR-0005:** "API conventions" — cursor vs. offset pagination, error
-  shape, versioning strategy, what a 404 vs. an empty list means. Small ADR,
-  but every later endpoint inherits it, so it's worth settling once.
+- A seed path so the endpoints return something real in dev.
+- Structured logging (`structlog`) with request IDs, and CORS for the separate
+  frontend repo.
 - **Staging deploy on the Orange Pi:**
   - systemd unit wrapping `docker compose up`, with restart-on-failure and
     start-on-boot.
@@ -622,43 +436,35 @@ OpenAPI schema at `/openapi.json` describes it accurately.
 
 ---
 
-### Phase 3 — Parsing: menu extraction library
+### Phase 3 — Parsing Library: pure menu-pipeline stages
 
-> **Runs 6th, after Phases 4–5.** Golden-file fixtures require real captured
-> menu pages. See the sequencing note in the status table.
+> Built inside Phase 5's slice train ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md#implementation-slices-after-acceptance)
+> slice 2). ADR-0013 is **Proposed**; this code waits for its acceptance.
 
-**Learning module to review against:** [M4](./LEARNING_GUIDE.md#m4--testing-pyramid)
+**Learning module to review against:** [M4](./LEARNING_GUIDE.md#m4--testing)
 
-**Goal:** the menu-extraction ladder as a pure-function library with exhaustive tests. **No I/O, no DB, no HTTP** — it takes bytes and returns a normalized menu structure.
+**Goal:** the deterministic, I/O-free half of the menu pipeline as
+`packages/helios_parsing/` — bytes/text in, plain data out. **No DB, no HTTP,
+no model runtime.** The import-boundary test (`test/import_boundaries.py`)
+already forbids it from importing SQLAlchemy or `helios_core`.
 
-**Deliverables** (RFC-0001 work-plan PRs 8–9)
+**Deliverables** ([ADR-0013 §1–§2](./docs/adr/0013-phase5-menu-pipeline.md#1-stages-and-what-is-kept-from-the-spike))
 
-- `packages/helios_parsing/jsonld.py` — schema.org `Menu → MenuSection → MenuItem → Offer` extraction. Rung 1 of the ladder.
-- `packages/helios_parsing/dom_menu.py` — heading + list/table item-price pairing, service-period and course tagging, modifier detection. Rung 2.
-- `packages/helios_parsing/pdf_menu.py` — text-layer extraction feeding the same pairing rules. Rung 4.
-- `packages/helios_parsing/render_policy.py` — the pure decision layer for *when* to escalate to a browser (rung 3). No Playwright import; the decision and the execution stay separate.
-- A single normalized output shape shared by every rung, so ingest has one code path.
-- **Promotional-row filtering** — rows that read as deals ("half off", "BOGO", "$2 off") are excluded from menu prices and parked with a marker for the Phase 10 deals layer. Getting this boundary wrong pollutes the price index with prices nobody pays on a normal Tuesday.
-- Coverage ≥ 90% for the package.
-- Hypothesis property tests — e.g., "extraction is idempotent on its own output", "no price point is ever negative or > $10,000", "every item belongs to exactly one section".
-- 20+ golden-file cases captured from real Austin/Round Rock menu pages, spanning JSON-LD, clean DOM, hostile DOM, and PDF.
+- Segmentation into numbered text blocks, and the normalized text hash used for change detection.
+- The schema.org JSON-LD reader (`Menu → MenuSection → MenuItem → Offer`), a general standard reader, not a per-site parser.
+- Chunking and prompt/grammar construction for the extractor, and parsing of its output.
+- The generic repairs toolbelt and the validator (per-row accept / downgrade to unknown price / reject, plus the `unlabeled_price_runs` page flag).
+- The evaluation harness ported from the spike ([ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5)). CI runs only its unit tests, on synthetic fixtures; real pages and gold labels stay in gitignored `var/`.
 
-**Port hints (`V1-Graveyard` branch)**
+**Port hints:** the spike code on branch `spike/menu-model` (see the [menu-model spike](./docs/spikes/menu-model/README.md)); V1's JSON-LD walk in `collectors/meal_deals/menu_sidecar.py`. V1's per-layout DOM pairing and render policy are superseded by the universal-process decision.
 
-- `collectors/meal_deals/menu_sidecar.py` — the core port. JSON-LD walk, DOM pairing, `_SERVICE_PERIOD_RULES`, `_COURSE_RULES`, modifier regexes, and the bounded caps that keep output small on huge menus.
-- `collectors/meal_deals/render_policy.py` — escalation policy with deterministic URL-hash sampling.
-- `collectors/meal_deals/price_index_routes.py` — `_SIZE_LABEL_RE` (variant detection) and the promotional/meal-period filters, which V1 had to apply at query time because extraction didn't. V2 applies them at extraction time.
+**Deferred to Phase 10** (deals layer): `sub_deals.py`, `temporal.py`, and the 6-factor `quality.py` scorer.
 
-**Deferred to Phase 10** (deals layer): `sub_deals.py`, `temporal.py`, and the 6-factor `quality.py` scorer. Their V1 sources are unchanged and still worth porting — just not yet.
-
-**Done when:** the parsing package can be published to a private index and pulled into the scraper by version number — no cross-package imports — and every golden fixture round-trips.
+**Done when:** every stage is a pure function with focused tests, the import-boundary test passes, and the harness scores synthetic fixtures in CI in the same format the spike used.
 
 ---
 
 ### Phase 4 — Venue Discovery, Identity & Geocoding
-
-> **Runs 4th, immediately after First Light.** This phase sets the ceiling on
-> total coverage, so it runs before anything that consumes venues.
 
 **Learning module to review against:** [M10](./LEARNING_GUIDE.md#m10--geospatial)
 
@@ -666,136 +472,128 @@ OpenAPI schema at `/openapi.json` describes it accurately.
 Austin/Round Rock metro, deduplicated, geocoded, and linked through Bronze
 provenance to first-party websites and menu URLs.
 
-**Deliverables** (RFC-0001 work-plan PRs 5–6)
+**Deliverables** ([ADR-0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md), [ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md), [ADR-0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md), [ADR-0012](./docs/adr/0012-venue-lifecycle.md))
 
-- **Overture seeding** — parquet ingest filtered to `food_and_beverage`
-  within a config-driven metro polygon, landing in Bronze Source Records and
-  explicit Identity resolution state. The polygon is a parameter, not a
-  constant: scaling to another metro is a config change.
-- `packages/helios_core/identity.py` — name fingerprinting, address normalization, URL canonicalization, proximity clustering.
-- `packages/helios_core/geo.py` — Nominatim client with 1-req/sec throttle, manual overrides for ambiguous Austin suburbs, disk-cached responses keyed by normalized query.
-- H3 r6–r9 cell computation on every venue insert.
-- **Website resolution** — Overture `websites` field first, Overpass
-  `website` / `contact:website` fallback, plus the `config/sources.yaml`
-  manual registry. Results retain Source Endpoint provenance and append
-  Identity resolution decisions.
-- **Menu-URL discovery** — common paths (`/menu`, `/menus`, `/food`), sitemap entries matching menu patterns, on-site links whose anchor text hits a menu lexicon. Persisted so re-scrapes skip discovery.
-- Unit tests: golden-set fixture of 100 hand-labeled matches with ≥ 95% precision.
-- Integration test: Nominatim and Overpass responses replayed from disk fixtures — no live calls in CI.
+- **Overture seeding** — parquet ingest of food venues within a config-driven
+  metro boundary, landing in Bronze Source Records and explicit Identity
+  resolution state. Scaling to another metro is a config change.
+- Name fingerprinting, address normalization, URL canonicalization, and
+  lat/lon proximity (`packages/helios_core/identity/normalize.py`).
+- `packages/helios_core/geo.py` — Nominatim gap-fill with a 1-req/sec throttle
+  and disk-cached responses.
+- **Website resolution** — Overture `websites` first, plus the
+  `config/sources.yaml` manual registry, with Source Endpoint provenance.
+- **Menu-URL discovery** — common paths, sitemap entries, and on-site links
+  matching a menu lexicon, persisted so re-runs skip discovery.
+- **Venue lifecycle** — closure and reappearance across monthly runs
+  ([ADR-0012](./docs/adr/0012-venue-lifecycle.md)).
+- Golden-set matcher fixture with ≥ 95% precision; Nominatim/Overture
+  responses replayed from fixtures — no live calls in CI.
 
-**Port hints (`V1-Graveyard` branch)**
+Proposed follow-ups: location overrides ([ADR-0014](./docs/adr/0014-location-overrides.md))
+and menu-URL re-verification ([ADR-0015](./docs/adr/0015-menu-url-reverification.md)).
 
-- `core/venue_identity.py`, `core/normalizer.py::make_fingerprint`.
-- `collectors/geocoding.py` — including the 25-city override dict.
-- `collectors/meal_deals/osm_url_resolver.py` — Overpass query shape, name-fingerprint + proximity matching, URL canonicalization.
-- `scripts/build_facility_index.py` — rate-limit + viewbox patterns.
+**Port hints (`V1-Graveyard` branch):** `core/venue_identity.py`,
+`core/normalizer.py::make_fingerprint`, `collectors/geocoding.py` (including the
+25-city override dict), `collectors/meal_deals/osm_url_resolver.py`,
+`scripts/build_facility_index.py`.
 
-**Expect ~30–40% website coverage from free sources.** That is V1's measured
-number (`osm_url_resolver.py` docstring), and V1 filled the gap with paid
-Google Places — which V2 has ruled out. Plan against the free number: on an
-estimated 3–4k metro food venues it yields ~1,000–1,400 candidate sites,
-which is enough headroom for the 300-venue milestone but not enormous. **Report
-the actual measured figure** — it is the single number that most determines
-whether the coverage target is reachable, and if it comes in far below 30%,
-that is a finding worth stopping on rather than scraping around.
-
-**Done when:** the metro is seeded, < 2% duplicate venues and < 1% wrong geocodes (both measured against a hand-labeled 100-row sample), and website/menu-URL coverage is measured and written down.
-
-**Current remediation status (2026-09-28).** S6 merged and the owner-authorized
-Pi rebuild completed. The [precision review](./docs/reviews/2026-09-28-precision-review.md)
-was adjudicated under owner delegation: on the 100-row sample, 4 wrong geocodes
-and 6 sampled venues with a confirmed duplicate record, so **both bars fail**.
-The Pi gate is split: 1a (location quality: correction plan, proposed ADR-0014
-location overrides, fresh-sample re-audit) and 1b (URL-resolution readiness:
-menu-URL precision, proposed ADR-0015); both closed, criteria in the
-[remediation checklist](./docs/reviews/2026-09-22-remediation-checklist.md).
-S13 merged (#45) and the Phase 5 gate passed; Phase 5 code waits for a proposed
-ADR-0013. The older status below is historical and does not establish present
-acceptance.
-
-**Status (2026-09-21).** Seeding + identity + geocoding are done and the
-precision gate is **met** — see the retro
-([docs/retro/2026-09-21-phase-4.md](./docs/retro/2026-09-21-phase-4.md)):
-9,996 current venues; duplicate rate ≈ 0.2–0.4% (< 2%); wrong geocodes < 1%
-(0 null/out-of-bbox metro-wide); website coverage 82.1% (Overture published
-field); golden-set matcher precision 1.000 (≥ 95%). The audit is reproducible
-via [apps/discovery/audit.py](./apps/discovery/audit.py). **Not yet complete:**
-menu-URL coverage and the RFC-0001 PR 6 work (Overpass website fallback,
-`config/sources.yaml`, menu-URL discovery) remain. Per ADR-0009, **H3 was
-dropped** (lat/lon only), so the "H3 r6–r9" deliverable above is intentionally
-not implemented.
+**Done when:** the metro is seeded, < 2% duplicate venues and < 1% wrong
+geocodes (both measured against a hand-labeled 100-row sample), and
+website/menu-URL coverage is measured and written down. Gate state:
+[README.md → Gates](./README.md#gates).
 
 ---
 
-### Phase 5 — Scrapers: decide, then build
+### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
-**Learning modules to review against:** [M7](./LEARNING_GUIDE.md#m7--http-html--the-real-web) · [M8](./LEARNING_GUIDE.md#m8--scraping-fundamentals)
+> Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), which is
+> **Proposed**; Phase 5 code waits for its acceptance. It replaces this
+> phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
+> plan (owner decision G.b), on the evidence of the
+> [menu-model spike](./docs/spikes/menu-model/README.md).
 
-**Goal:** pick the scraping framework on evidence, then build the fetch +
-replay core on it — rate limiting, capture indexing, and replay bundles —
-proven against two representative menu sites, one static and one SPA.
+**Learning modules to review against:** [M7](./LEARNING_GUIDE.md#m7--http-html--the-real-web) · [M8](./LEARNING_GUIDE.md#m8--scraping--menu-extraction)
 
-> **Merged from the original Phases 4 and 5.** The old plan had you
-> hand-build McDonald's, *then* evaluate frameworks, then rewire the working
-> scraper. That sequence taught by doing, which was right for a human
-> learner. With agents writing the implementation, building production code
-> twice is waste — so the evaluation happens first, as throwaway spikes, and
-> the real implementation is written once.
+**Goal:** turn every verified menu URL into validated Menu page aggregates
+with one universal pipeline, run as an offline batch job on the staging Pi.
 
-**Deliverables** (RFC-0001 work-plan PR 7)
+**Deliverables** (the I/O half, `apps/menu_pipeline/`; ADR-0013 slices 1 and 3–6)
 
-- **Spikes first, and they are throwaway.** Fetch a representative menu site
-  in Scrapy and in Crawlee/Playwright. Benchmark throughput, ergonomics,
-  output fidelity. This code is deleted after the decision — do not let a
-  spike graduate into production by accident.
-- **ADR-0006:** "Scraper framework choice" — explicit tradeoffs, benchmark
-  numbers, decision, consequences. Weigh it for the actual workload: ~1,000+
-  *distinct hosts* fetched shallowly once a month, not a few hosts crawled
-  deeply. That profile favors per-host politeness and breadth over
-  crawl-depth machinery.
-- **Rate-limit middleware** — one token bucket per host, config-driven.
-- `apps/scraper/replay/bundle.py` — writes
-  `var/replay/<source>/<date>/<url-hash>.json`, and the matching Bronze
-  Capture row.
-- `apps/scraper/audit/expectations.py` — compares a YAML expectation file against bundles.
-- `config/sources.yaml` — strategy, selectors, rate limit per source, JSON-Schema validated in CI. Doubles as the manual venue/site registry from Phase 4.
-- `config/expectations.yaml` — 3–5 known-good priced items per anchor source.
-- CLI: `helios scrape <source> --once`.
-- Integration tests: frozen HTML fixtures → assert capture rows + bundle contents. **No live network calls in CI.**
+- ⚠ Worker image target, `menu` Python extra, `llama-server` Compose service
+  behind a profile, and a checksummed model manifest ([§3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)).
+  New runtime dependencies: stop for owner review.
+- `menu-page` Bronze writes — a Capture per fetch or render, durable bundles,
+  Versions keyed on the segmented-text hash, Capture-targeted Evidence
+  locators — and a resumable batch CLI ([§5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators)).
+- Page-classifier runtime, which also becomes discovery's menu-URL verifier
+  ([§7](./docs/adr/0013-phase5-menu-pipeline.md#7-relation-to-adr-0015-the-classifier-becomes-the-menu-url-verifier)).
+- LLM extraction and Menu writes through `persist_menu`, with `llm`/`jsonld`
+  source kinds and trust labels ([§6](./docs/adr/0013-phase5-menu-pipeline.md#6-menu-writes-and-trust-q5-q6)).
+- ⚠ Headless render for JavaScript-only pages, measured on the spike's
+  JS-only pages before it is switched on ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
 
 **Scraping etiquette is a hard requirement, not a nicety.** Honor
-`robots.txt`, identify with a real User-Agent, respect the per-source rate
-limits in `config/sources.yaml`, and never bypass a paywall or login (§2,
-"public data only"). A scraper that gets the project IP-banned costs more
-than the data was worth.
+`robots.txt`, identify with a real User-Agent, respect per-host rate limits,
+and never bypass a paywall, login or bot challenge (§2, "public data only").
+A fetcher that gets the project IP-banned costs more than the data was worth.
 
-**Done when:** both representative sites run under one framework, share middleware for rate limiting + replay bundling, have fixture-based tests, and the expectation diff passes.
+**Promotional rows** ("half off", "BOGO"): the standing intent (§2) is that
+they never enter menu prices and are parked for the Phase 10 deals layer.
+Whether Phase 5 handles them now is
+[ADR-0013 open question 5](./docs/adr/0013-phase5-menu-pipeline.md#open-questions-for-the-owner),
+alongside PDF menus and page scope.
+
+**Done when** (proposed, from [ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5)):
+a pipeline version has one recorded evaluation on a held-out set that meets
+classifier precision ≥ 0.95 (recall ≥ the previous verifier's), exact price
+accuracy on accepted rows ≥ 0.98, item recall ≥ 0.85, validator corruption
+catch ≥ 0.97 and false reject ≤ 0.12, with usable prices, Pi pages/hour and
+peak RAM recorded; and a first pass on the Pi has left every verified menu URL
+with either a Menu page aggregate or a skipped Capture with a reason code.
 
 ---
 
-### Phase 6 — Ingest Pipeline & Freshness
+### Phase 6 — Monthly Runs & Freshness
 
 **Learning module to review against:** [M9](./LEARNING_GUIDE.md#m9--data-engineering-patterns)
 
-**Goal:** scraping → extraction → identity → persistence, all idempotent, all re-runnable — and kept fresh on a schedule without re-doing work that hasn't changed.
+**Goal:** keep the menu graph fresh on a monthly schedule without re-doing
+work that hasn't changed, and keep Gold in step — all idempotent, all
+re-runnable from stored evidence.
 
-**Deliverables** (RFC-0001 work-plan PR 10)
+**Deliverables**
 
-- Idempotent ingest on deterministic natural keys — re-running a scrape produces zero duplicate rows.
-- **Conflict resolution** per [RFC-0001 §D6](./docs/rfc/0001-menu-pricing-first.md): nothing overwritten, `current_menu` resolved by source-trust rank (`jsonld > dom > pdf > llm`), then recency, then confidence. Same-window contradictions flagged to a review queue rather than silently resolved.
-- **Change detection:** re-fetch → compare `content_hash`. Unchanged → touch `last_seen_at`, record a cheap confirmation, skip extraction entirely. Changed → full extraction. Items that vanish get `last_seen_at` frozen; **nothing is deleted**, because disappearance is information.
-- **Scheduling:** ~30-day default cadence, per-source overridable, cron-driven on the staging host. No queue service — adding one is a stop-and-ask dependency (see [CLAUDE.md](./CLAUDE.md)).
-- Materialization refresh: post-ingest task updates Gold current-menu and
-  price-index projections, targeted to the Establishments that actually
-  changed.
-- Backfill CLI: `helios backfill --source <s> --from 2026-01-01` replays bundles from disk into the DB.
-- Metrics: `scrapes_total{source,outcome}`, `price_observations_ingested_total`, `venues_covered`, `menu_staleness_days` (histogram), `materialization_refresh_seconds`.
-- Dead-letter: extractions that fail the confidence gate remain in Bronze
-  with an explicit outcome/reason code.
+- **Scheduling:** a monthly run on the staging Pi after discovery
+  ([ADR-0009 §3](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)
+  cadence), as a low-priority batch job. No queue service — adding one is a
+  stop-and-ask dependency ([CLAUDE.md](./CLAUDE.md)).
+- **Change-only runs:** extraction runs only for a new `menu-page` Version (a
+  changed hash of the segmented text) or a pipeline-version bump; raw-body
+  hashes and ETags are never the change signal. Queue order: new pages, then
+  changed pages, then re-interpretations
+  ([ADR-0013 §5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators), Proposed).
+  Pipeline-version bumps are batched, because each one means a
+  re-interpretation pass of up to the full first-pass time.
+- **Nothing is deleted:** an item that disappears from a page keeps its history;
+  disappearance is information ([RFC-0001 §D5](./docs/rfc/0001-menu-pricing-first.md)).
+- **Gold refresh** after each run: `current_menu`
+  ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md); targeted refresh only
+  once cost justifies it) and the price-index projection
+  ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)) once a
+  populated `course` axis exists.
+- **Replay:** Menu interpretations can be rebuilt from stored bundles without
+  re-fetching.
+- **Run report:** pages fetched / changed / extracted, outcomes by reason code,
+  SoC temperature and throttling ([ADR-0013 §3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)),
+  and venue freshness against the 45-day target (§2).
+- **Monthly spot check** of a small random sample of newly extracted pages
+  ([ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5)).
 
 **Done when:** Menu Silver and Gold can be reconstructed from replay bundles,
 Bronze provenance, and durable Identity decisions without changing those
-decisions; a re-run against an unchanged site produces zero new observations.
+decisions; a re-run against an unchanged site produces zero new observations
+and no extraction; and freshness is measured on every run.
 
 ---
 
@@ -803,22 +601,21 @@ decisions; a re-run against an unchanged site produces zero new observations.
 
 **Learning module to review against:** [M11](./LEARNING_GUIDE.md#m11--api-design)
 
-**Goal:** grow Phase 2's skeleton into the complete read-only public API — the price index made queryable.
+**Goal:** grow Phase 2's skeleton into the complete read-only public API — the price index made queryable. Every endpoint follows [ADR-0008](./docs/adr/0008-read-api-conventions.md).
 
-**Deliverables** (RFC-0001 work-plan PR 11)
+**Deliverables**
 
-- `GET /venues/{id}/menu` — the Establishment's current menu from Gold, every
-  price carrying `observed_at` and a staleness age.
-- `GET /venues?h3=&brand=&has_menu=` — cursor-paginated, filtered.
-- `GET /items/{id}/price-history` — the observation trail behind a single price. This is the endpoint that makes "trustworthy" checkable by a user rather than asserted by us.
-- `GET /price-index?h3=&course=` — the first aggregate: median / p25 / p75 price by area and course, with the sample size, because an aggregate over four venues is not an index and the response should admit that.
+- `GET /v1/venues/{venue_id}/menu` — the current menu from Gold, every
+  price carrying `observed_at`, a staleness age and its source kind.
+- Venue filters (area, organization, has-menu), cursor-paginated.
+- `GET /v1/items/{id}/price-history` — the observation trail behind a single price. This is the endpoint that makes "trustworthy" checkable by a user rather than asserted by us.
+- `GET /v1/price-index` — median / p25 / p75 by lat/lon grid cell and course, with the sample size ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)), because an aggregate over four venues is not an index and the response should admit that. Needs a populated `course` axis first (ADR-0007 Q3).
 - **Freshness in the wire format, not just the docs.** Every priced response carries `as_of`. A stale price served as though it were current is the failure mode this whole design exists to prevent.
-- OpenAPI schema at `/openapi.json`, docs at `/docs` — already live from Phase 2; keep accurate.
-- Contract test: OpenAPI schema committed and diffed in CI; breaking changes fail the build.
+- Keep the committed OpenAPI snapshot accurate.
 - Read-path performance: every filter combination above is index-backed. Add
   a test that fails on a sequential scan of the Gold current-menu table.
 
-**Done when:** `curl https://.../price-index?h3=872a10075ffffff&course=entree` returns a real aggregate with a sample size, and the 300-venue milestone is measurable through the API itself.
+**Done when:** a `curl` of the price-index endpoint for a real area and course returns a real aggregate with a sample size, and the 300-venue milestone is measurable through the API itself.
 
 ---
 
@@ -827,44 +624,32 @@ decisions; a re-run against an unchanged site produces zero new observations.
 **Learning module to review against:** [M12](./LEARNING_GUIDE.md#m12--operations)
 
 **Goal:** promote from the Orange Pi to a hosted prod environment; make the
-whole thing observable and recoverable.
-
-> **Reduced scope.** Containerization landed early
-> ([ADR-0002](./docs/adr/0002-containerization.md)). Staging on the Pi is
-> planned in Phase 2; deployment has not been verified by the current
-> repository assessment. Phase 8 assumes that staging prerequisite is met.
-
-**Containerization status and staging prerequisite**
-
-- ~~Multi-stage `Dockerfile`~~ — done, ADR-0002. Scraper entrypoint still
-  pending; needs Phase 5's scraper to exist.
-- ~~`docker-compose.yml` for local dev~~ — done (Postgres → migrate → API).
-- Orange Pi staging with systemd — planned Phase 2 prerequisite, not verified.
+whole thing observable and recoverable. Containerization landed early
+([ADR-0002](./docs/adr/0002-containerization.md)); Phase 8 assumes Phase 2's
+staging deploy.
 
 **Deliverables**
 
-- **ADR-0007:** "Prod hosting choice" — compare Hetzner CAX / Fly.io /
-  Railway / DO by cost, ergonomics, and ARM64 availability. Decide with
-  numbers. Note the architecture question this settles: today's Dockerfile is
-  arch-agnostic and builds natively wherever it runs; if prod is ARM64 this
-  stays simple, if it's x86 decide multi-arch buildx vs. native-only builds.
-- **Secrets handling** — the one genuinely new production concern. Dev uses
-  `.env` with throwaway credentials; prod needs real secret storage, rotation,
-  and secrets that never reach the image, a log line, or the repo.
+- **Prod hosting ADR (next free number)** — compare Hetzner CAX / Fly.io /
+  Railway / DO by cost, ergonomics, and ARM64 availability, and settle Postgres
+  topology. Decide with numbers. If prod is x86, decide multi-arch buildx vs.
+  native-only builds.
+- **Secrets handling** — dev uses `.env` with throwaway credentials; prod needs
+  real secret storage, rotation, and secrets that never reach the image, a log
+  line, or the repo.
 - **TLS + public domain**, and a decision on whether the API is fully public
-  or gated. Note §2 defers auth — revisit if that still holds under real traffic.
-- **Rate limiting** on the public API. It's read-only, but it will be on the
-  open internet.
-- **Backups:** nightly `pg_dump` → off-box (external drive + object storage).
-  A backup you have never restored is not a backup — a restore drill is part
-  of this phase, not an afterthought.
+  or gated (§7).
+- **Rate limiting** on the public API.
+- **Backups:** nightly `pg_dump` → off-box (external drive + object storage),
+  including the replay bundles. A backup you have never restored is not a
+  backup — a restore drill is part of this phase.
 - **Observability:** Prometheus scrape endpoint, node-exporter, and alerting
   on the handful of things that actually page (service down, disk full,
-  scrape failure rate, replication of the ingest pipeline stalling).
-- **Deploy pipeline:** `.github/workflows/deploy.yml` — tagged releases build
-  and push to a registry; prod pulls. Same image promoted from staging after
-  it's been green for 24h. Migrations remain an explicit step.
-- **Runbook:** what to do when a scraper breaks, Postgres fills the disk,
+  fetch failure rate, a stalled monthly run).
+- **Deploy pipeline:** tagged releases build and push to a registry; prod
+  pulls. Same image promoted from staging after it's been green for 24h.
+  Migrations remain an explicit step.
+- **Runbook:** what to do when fetching breaks, Postgres fills the disk,
   Nominatim bans us, or prod is down while staging is fine.
 
 **Done when:** you can wipe the Orange Pi, restore from backup, and be
@@ -875,12 +660,10 @@ deploy is one command from a tagged release.
 
 ### Phase 9 — Harden
 
-**Goal:** paper cuts, polish, a coverage gate on `main`.
+**Goal:** paper cuts and polish.
 
 **Deliverables**
 
-- Integration test suite spinning up a real Postgres via `testcontainers`.
-- Coverage gate: `main` requires ≥ 85% for `packages/` and ≥ 70% for `apps/`.
 - Load test: k6 or Locust against a local API; document p95 latency targets.
 - Security pass: `pip-audit`, dependency review, secret-scanning, and
   automated dependency updates (Dependabot or equivalent).
@@ -907,25 +690,27 @@ gets a real denominator.
 
 **Deliverables**
 
-- `packages/helios_parsing/sub_deals.py` — port V1's ordered regex chain; pattern list externalized to YAML; Hypothesis property tests.
-- `packages/helios_parsing/temporal.py` — port; return a structured `Validity` dataclass (`weekdays: set`, `start: time`, `end: time | Literal["close"]`).
-- `packages/helios_parsing/quality.py` — port the 6-factor scorer (25/20/15/15/10/15); weights + thresholds in config, not constants.
-- `packages/helios_core/db/models/deal.py` — `DealObservation`, `DealApplicability`, deferred here from Phase 1.
+- `packages/helios_parsing/` ports of V1's sub-deal regex chain (pattern list in YAML, property tests), temporal parsing (a structured `Validity` dataclass: `weekdays`, `start`, `end | "close"`), and the 6-factor quality scorer (weights + thresholds in config).
+- `DealObservation` and `DealApplicability` models, deferred here from Phase 1; placement follows ADR-0004.
 - Applicability fan-out: chain-wide deals create N rows, one per active venue of that brand.
-- Promotional rows parked during Phase 3 extraction become the initial input — the evidence is already captured and replayable.
-- Gold deal materialization + `GET /deals` endpoints.
+- Promotional rows parked during Phase 5 extraction become the initial input — the evidence is already captured and replayable.
+- Gold deal materialization + `/v1/deals` endpoints.
 
 **Port hints (`V1-Graveyard` branch):** `collectors/meal_deals/sub_deals.py`, `temporal.py`, `quality.py`, `semantic_layer.py`, `core/database.py` (~L1283, ~L1356, ~L1395).
 
-**Done when:** a deal can be expressed as a discount against a known menu price, and ≥ 85% of visible deals pass manual spot-check for "this is real and currently valid" — the success criterion the pre-2026-07-31 roadmap set for the whole project.
+**Done when:** a deal can be expressed as a discount against a known menu price, and ≥ 85% of visible deals pass manual spot-check for "this is real and currently valid".
 
 ---
 
 ## 6. Engineering Process
 
+[CLAUDE.md](./CLAUDE.md) is the working agreement (verification commands,
+stop-and-ask triggers, what gates a merge); [CONTRIBUTING.md](./CONTRIBUTING.md)
+covers the PR workflow. This section records only the process shape.
+
 ### 6.0 The agent/human split
 
-The implementation is agent-driven; the judgment is not. Where the line sits:
+The implementation is agent-driven; the judgment is not.
 
 | Agents do | Humans decide |
 |-----------|---------------|
@@ -935,242 +720,126 @@ The implementation is agent-driven; the judgment is not. Where the line sits:
 | Propose ADRs | Accept or reject ADRs |
 | Flag drift between docs and code | What to do about it |
 
-**What is actually mechanized — and what isn't.** Good intentions don't
-scale, so it matters to be precise about which gates are real:
+**What is mechanized.** A PR is required and the five CI checks (§6.7) must
+be green. Branch protection requires **0 approvals**: GitHub does not let a
+solo maintainer approve their own PR, and a required approval could only be
+cleared by an admin bypass that skips CI too. `CODEOWNERS` flags migrations,
+models, and CI/infra files in the UI but cannot block a merge. Writing an ADR
+before implementing an architectural choice is convention, not mechanism.
 
-| Gate | Enforced? |
-|------|-----------|
-| Five required CI checks | ✅ Yes — a red build cannot merge |
-| PR required (no direct push to `main`) | ✅ Yes |
-| Conversation resolution | ✅ Yes |
-| ADR before implementing an architectural decision | ⚠️ Convention — see [CLAUDE.md](./CLAUDE.md) |
-| `CODEOWNERS` review on migrations/models | ❌ **Cannot be, solo** — see below |
-
-**The solo-maintainer constraint.** GitHub does not permit approving your own
-pull request, so a required approval count of 1 is *unsatisfiable* for a
-single maintainer — it can only be cleared by an admin bypass, and a bypass
-skips every rule including CI. Branch protection therefore requires **0
-approvals**, which makes the CI checks a real gate rather than a formality
-waived on every merge. A lower nominal bar that actually holds beats a higher
-one that forces a total bypass.
-
-`CODEOWNERS` is kept as a **signal**: it flags PRs touching
-`alembic/versions/**`, `packages/helios_core/**/models.py`,
-`packages/helios_core/**/models/**`, and legacy `packages/**/db/models/**` in the UI so the
-expensive-to-reverse changes are visible, but it cannot block a merge with
-one human. Copilot's review does not help here either — it leaves
-`COMMENTED`, never `APPROVED`.
-
-**The consequence for Phase 1:** nothing but CI stands between a schema
-mistake and `main`. Since CI cannot tell you a foreign key's cascade
-behavior is wrong, the reviewer's checklist in Phase 1 and small,
-readable PRs are doing the work that a second reviewer would otherwise do.
-
-**An ADR is the checkpoint.** When an agent hits a genuinely new
-architectural choice, the correct move is to write the ADR and stop — not to
-implement and document afterward. See [CLAUDE.md](./CLAUDE.md) for the full
-list of stop-and-ask triggers.
+**The consequence:** nothing but CI stands between a schema mistake and
+`main`. CI cannot tell you a foreign key's cascade behavior is wrong, so the
+Phase 1 reviewer's checklist and small, readable PRs do the work a second
+reviewer would otherwise do.
 
 **Review is the bottleneck, so size PRs for review.** Agents can produce a
 1,000-line PR quickly; nobody can review one carefully. Prefer several small,
-independently-reviewable PRs — this matters most in Phase 1, where the schema
-decisions are hardest to reverse.
+independently-reviewable PRs.
+
+**Drift control.** Return to the owner when a change affects product meaning,
+source policy, recurring cost, deployment commitments or data loss; explain
+the consequence in product terms and recommend one option. Status lives in
+README, decisions in ADRs; don't rewrite old acceptance records to claim
+knowledge they didn't have.
 
 ### 6.1 Branching
 
 - `main` is protected; every change lands via PR.
 - Feature branches: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`.
-- No long-lived branches. Rebase onto `main` before merge. Squash-merge by default (one feature = one commit on main).
+- PRs are squash-merged: the PR title becomes the commit on `main`.
 
 ### 6.2 Commits
 
-- [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `perf:`, `build:`, `ci:`.
-- Scope when useful: `feat(parsing): add sub-deal priority for half-off trailing form`.
-- Imperative mood; ≤ 72 char subject.
-- Commitlint enforced via pre-commit + CI.
+- [Conventional Commits](https://www.conventionalcommits.org/), e.g. `feat(parsing): add JSON-LD reader`.
+- Enforced locally by the pre-commit `commit-msg` hook (installed by `make install`). CI checks the PR title — the squash-merge message — in `.github/workflows/pr-title.yml`.
 
 ### 6.3 Pull Requests
 
-- Template requires: *What changed · Why · How I tested · Risk · Rollback plan*.
+- `.github/pull_request_template.md` asks for: Summary · Related (issue, ADR/RFC) · Changes · Verification (`make ci`, database acceptance when DB code changes, tests, hand-reviewed migrations) · Notes for reviewer.
 - One PR = one concern. Split drive-by refactors.
-- Every PR runs: ruff, mypy, pytest, coverage diff.
-- Self-review before requesting review. Even solo devs benefit from reading their own diff in the PR UI.
+- Read your own diff in the PR UI before merging.
 
 ### 6.4 Architectural Decision Records (ADRs)
 
-- Every "this vs that" decision affecting more than one file lives in `docs/adr/NNNN-title.md`.
-- Statuses: `proposed`, `accepted`, `deprecated`, `superseded-by #NN`.
-- Template: Context → Decision → Consequences → Alternatives considered.
-- Numbered sequentially as written, not reserved in advance.
-
-**ADR ledger**
-
-| # | Title | Status | Phase |
-|---|-------|--------|-------|
-| [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack | Accepted | 0 |
-| [0002](./docs/adr/0002-containerization.md) | Containerization, pulled forward from Phase 8 | Accepted | 0 |
-| [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 | 1 |
-| [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted | 1 |
-| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted | 1 |
-| [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models — shape, materialization, and refresh | Accepted | 1 |
-| Unassigned | API conventions (pagination, errors, versioning) | Planned | 2 |
-| Unassigned | Scraper framework choice | Planned | 5 |
-| Unassigned | Prod hosting choice | Planned | 8 |
-| Unassigned | LLM extraction fallback — model, prompt contract, budget cap | Planned | 3 |
-
-**RFC ledger**
-
-| # | Title | Status | Phase |
-|---|-------|--------|-------|
-| [0001](./docs/rfc/0001-menu-pricing-first.md) | Menu-and-pricing-first data collection | Accepted | 1–7 |
+- Every "this vs that" decision affecting more than one file lives in `docs/adr/NNNN-title.md`, from `docs/adr/0000-template.md` (Context → Decision → Alternatives considered → Consequences → References).
+- Statuses: Proposed, Accepted, Superseded by ADR-NNNN, Deprecated.
+- Numbered sequentially as written, never reserved in advance. A future ADR is "an ADR (next free number)" until it exists.
+- The index with statuses is README's [Decisions](./README.md#decisions) table; the files are in [docs/adr/](./docs/adr/).
 
 ### 6.5 RFCs
 
 - For changes that need discussion before implementation (e.g., "let's add a write API").
 - Longer than an ADR; has a rollout plan.
-- Lives in `docs/rfc/NNNN-title.md`.
+- Lives in [docs/rfc/](./docs/rfc/) as `NNNN-title.md`.
 
 ### 6.5.1 Plans
 
 - An RFC says *what and why*; a plan says *in what order, with which open
-  questions closed*. Written when an accepted RFC is handed to an
-  implementing agent.
-- Lives in `docs/plans/NNNN-title.md`. May supersede an RFC's **ordering**;
-  never its **design**.
+  questions closed*. A plan may supersede an RFC's **ordering**, never its
+  **design**. Lives in `docs/plans/`.
+- `docs/plans/` now holds only
+  [0002-step-5-menu-schema-proposal.md](./docs/plans/0002-step-5-menu-schema-proposal.md),
+  the normative detail behind ADR-0005. Plans 0001 and 0002 are finished and
+  removed; see [docs/HISTORY.md](./docs/HISTORY.md).
 
-**Plan ledger**
+### 6.6 Issues
 
-| # | Title | Status | Implements |
-|---|-------|--------|------------|
-| [0001](./docs/plans/0001-map-and-menu-collection.md) | Map data + menu collection | Partially superseded by Plan 0002 | RFC-0001 PRs 1–3, 5–8 |
-| [0002](./docs/plans/0002-identity-foundation-before-menu.md) | Identity foundation before menu schema | Approved | ADR-0004 |
-
-### 6.6 Issues & Labels
-
-- Issue templates: `bug`, `feature`, `chore`.
-- Labels: `area:api`, `area:scraper`, `area:parsing`, `area:db`, `area:ops`, `good-first-issue`, `tech-debt`, `blocked`.
+- Issue templates: `bug` and `feature` (`.github/ISSUE_TEMPLATE/`), which apply the `bug` and `enhancement` labels.
 
 ### 6.7 CI Gates
 
-**Live today** (all five are required checks on `main`):
+Five required checks on `main` (`.github/workflows/ci.yml`):
 
-- `Lint & format` — `ruff check` + `ruff format --check` via pre-commit
+- `Lint & format` — `pre-commit run --all-files` (ruff check + format and housekeeping hooks)
 - `Type check` — `mypy --strict`
-- `Tests` — `pytest` against the CI PostGIS service, with
-  `HELIOS_STRICT_DB_TESTS=1` requiring database execution
+- `Tests` — `pytest` against a PostGIS service with `HELIOS_STRICT_DB_TESTS=1` and a coverage floor (including the OpenAPI snapshot test), then `alembic upgrade head` + `alembic check`
 - `Lockfile up to date` — `uv lock --check`
 - `Docker image` — builds the image and smoke-tests `/healthz`
 
-**Planned**
-
-- Coverage threshold (Phase 9)
-- `alembic check` — autogenerate diff is empty; schema matches models (Phase 1,
-  once there's a schema worth guarding)
-- OpenAPI schema diff — breaking changes fail the build (Phase 7)
+`make ci` is the local subset; the local equivalent of the strict database run is in [README.md → Database acceptance](./README.md#database-acceptance).
 
 ---
 
-## 7. Day-1 Kickoff Checklist
+## 7. Open Questions
 
-Files to create on the very first commit of V2 (before any feature code):
+Phase 5's open questions are in [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md#open-questions-for-the-owner).
 
-- [x] `pyproject.toml` — project metadata, deps via `uv`
-- [x] `uv.lock`
-- [x] `ruff.toml`
-- [x] `mypy.ini`
-- [x] `.pre-commit-config.yaml` (ruff, mypy, commitlint, trailing-whitespace)
-- [x] `.gitignore` — already present; extend for `var/` and `.env`
-- [x] `.env.example`
-- [x] `README.md` — already present; expand in Phase 0
-- [x] `ROADMAP.md` — this file
-- [x] `LEARNING_GUIDE.md`
-- [x] `CLAUDE.md` — agent working instructions (not in the original plan; added once the build became agent-driven)
-- [x] `LICENSE` — Business Source License 1.1 (not in the original plan; source-visible, non-commercial until the Change Date — see the [LICENSE](./LICENSE) file itself for the current parameters)
-- [x] `CONTRIBUTING.md` — how to open a PR, write a commit, write an ADR
-- [x] `.github/workflows/ci.yml`
-- [x] `.github/pull_request_template.md`
-- [x] `.github/ISSUE_TEMPLATE/{bug,feature}.md`
-- [x] `.github/CODEOWNERS`
-- [x] `docs/adr/0000-template.md`
-- [x] `docs/adr/0001-stack-choice.md`  ← first real ADR, ratifying this roadmap
-- [x] `docs/rfc/0000-template.md`
-- [x] `Makefile` — has `install`, `lint`, `typecheck`, `test`, `ci`, `clean`; `migrate` and `dev` targets land with Docker (Phase 8 groundwork, pulled earlier — see §4.2)
-- [x] `infra/docker-compose.yml` (Postgres only for now)
-- [x] `alembic.ini` — lives at repo root, not `infra/` as originally sketched (matches `pyproject.toml`'s `pythonpath` setup)
-- [x] `alembic/env.py` — also repo root; no longer empty, the initial `venue` migration landed in PR #2
-- [x] GitHub repo settings:
-  - [x] Branch protection on `main`: require PR, require CI (all 4 jobs as required status checks), require conversation resolution
-  - [x] Default branch = `main`
-  - [x] Auto-delete head branches after merge
-  - [x] Squash-only merges (merge commit and rebase-merge disabled)
-  - [ ] Disable merge commits (squash only)
+1. **Multi-city?** — Out of scope for this roadmap, but the schema must not
+   *prevent* it: nothing hardcodes Austin, venues carry lat/lon, and the
+   metro boundary is config. When Austin is stable, add an ADR for the
+   multi-tenant approach (single DB with `region` column vs schema-per-region
+   vs DB-per-region).
 
----
-
-## 8. Open Questions / Further Considerations
-
-1. **Where does V2 live?** — **Decided: this repo.** `main` is V2. `V1-Graveyard` holds the legacy code. History is a feature; having V1 one `git checkout` away is useful during Phases 1–6.
-
-2. ~~**Menus in V1 of V2?**~~ — **Resolved 2026-07-31, and inverted.** Menus
-   are the product: schema *and* population, Phases 1–7. Deals move to
-   Phase 10. See [RFC-0001](./docs/rfc/0001-menu-pricing-first.md). The
-   previous answer here ("schema yes, population no, menus become Phase 10
-   once deals are solid") is exactly backwards from what we are now building
-   — kept visible rather than deleted, because the reversal is the single
-   biggest scope decision this project has made.
-
-3. **Multi-city?** — Out of scope for this roadmap, but the schema must not
-   *prevent* it: nothing hardcodes Austin, venues carry lat/lng + H3, and the
-   metro boundary is a config polygon (RFC-0001 §D1). When Austin is stable,
-   add an ADR for the multi-tenant approach (single DB with `region` column
-   vs schema-per-region vs DB-per-region).
-
-4. **Write API / contributor endpoint?** — Out of scope. If SpiritPool browser extension is re-integrated, it becomes an RFC.
-
-5. **Frontend?** — This roadmap is backend-only. The frontend is a separate repo and a separate project; it consumes this API. Phase 2 adds CORS so it can.
-
-6. **When to re-evaluate this roadmap?** — After **Phase 4** (identity + geocoding are the risky bit; if they go sideways, the scraper and ingest phases reshuffle). Write a retrospective in `docs/retro/YYYY-MM-DD-phase-4.md`.
-
-7. **Is the API public, and does it need auth or rate limiting?** — §2 defers
+2. **Is the API public, and does it need auth or rate limiting?** — §2 defers
    auth "until a real consumer exists." That holds while it's read-only public
    data, but a public endpoint on a residential connection is a different risk
-   profile than a laptop. Settle it in Phase 8 alongside the hosting decision,
-   not by drifting into it.
+   profile than a laptop. Settle it in Phase 8 alongside the hosting decision.
 
-8. **How much does the agent-driven model change the review burden?** — Open,
-   and worth watching. Coding time compresses; review time doesn't. If review
-   becomes the bottleneck (it likely will in Phase 1), the fix is smaller PRs
-   and tighter ADR gates, not faster reading.
-
-9. **Cross-venue item canonicalization.** "What does a cheeseburger cost in
+3. **Cross-venue item canonicalization.** "What does a cheeseburger cost in
    78704?" needs a mapping from "1/2 lb Angus Burger" to a shared concept.
-   Deferred deliberately: Phase 7 aggregates by course + section heuristics,
-   which V1 proved adequate. Revisit as its own RFC when category-level
-   aggregates demonstrably stop answering the questions people ask — this is
-   a genuinely hard problem (fuzzy matching, taxonomy maintenance, possibly
-   embeddings) and doing it early would be guessing at requirements.
+   Deferred deliberately: Phase 7 aggregates by course, which V1 proved
+   adequate. Revisit as its own RFC when category-level aggregates
+   demonstrably stop answering the questions people ask — this is a genuinely
+   hard problem (fuzzy matching, taxonomy maintenance, possibly embeddings).
 
-10. **Non-food price verticals** (auto repair, plumbing, home services). A
-    plausible future direction, and the reason venue identity and the
-    observation pattern are kept food-agnostic. But **no abstraction is built
-    for it now** — per [CLAUDE.md](./CLAUDE.md), speculative scaffolding is a
-    cost paid today for a benefit that may never arrive. The open question is
-    narrow: when a second vertical becomes real, does it share
-    `price_observation` or get its own observation table? Decide then, with a
-    concrete second vertical in hand.
+4. **Deferred until real correction volume or data size justifies them:**
+   operator merge/split/remap commands and a review UI; legal-entity,
+   franchise and brand-hierarchy modeling; retention or partitioning of Bronze
+   payload versions.
 
-11. **What if free website coverage comes in well under 30%?** — Phase 4
-    measures it. V1's ~30–40% is the planning number, but V1 backfilled the
-    gap with paid Google Places, which is now ruled out. If the measured
-    figure makes 300 venues unreachable, the options are: widen the metro
-    polygon, lean harder on the manual registry, or revisit the source
-    policy. That is an owner decision, not an agent one — stop and ask.
+4. **Non-food price verticals** (auto repair, plumbing, home services). A
+   plausible future direction, and the reason venue identity and the
+   observation pattern are kept food-agnostic. But **no abstraction is built
+   for it now** ([CLAUDE.md](./CLAUDE.md): no speculative scaffolding). The
+   open question is narrow: when a second vertical becomes real, does it share
+   `price_observation` or get its own observation table? Decide then, with a
+   concrete second vertical in hand.
 
 ---
 
 ## Appendix A — V1 Reference Map
 
-Quick index to find the most-cited V1 files on the [`V1-Graveyard`](https://github.com/4Fortune8/First-Helios/tree/V1-Graveyard) branch.
+Quick index to find the most-cited V1 files on the [`V1-Graveyard`](https://github.com/First-Helios/First-Helios/tree/V1-Graveyard) branch.
 
 | V2 concept | V1 file |
 |------------|---------|
@@ -1197,7 +866,3 @@ Quick index to find the most-cited V1 files on the [`V1-Graveyard`](https://gith
 | Expectation diff | `scripts/compare_website_scrape_expectations.py` |
 | Website scraper | `collectors/meal_deals/website_scraper.py` |
 | Chain deals scraper | `collectors/meal_deals/chain_deals.py` |
-
----
-
-*Last updated: 2026-09-17. This is a living document; update via PR when a phase completes or a decision changes.*

@@ -41,7 +41,11 @@ This section is the single current-status page. Other docs link here.
   (ADR-0010, ADR-0011).
 - **Venue lifecycle**: `apps/discovery/lifecycle.py`, `apps/discovery/models.py`.
   Release completion evidence and completion-gated closure, run at the end of
-  each discovery run (ADR-0012).
+  each discovery run (ADR-0012). Limits: closure needs a completed baseline plus
+  two linked completed releases (none recorded yet; completion is never
+  back-filled); completion trusts iterator exhaustion, not upstream
+  completeness; a > 50 m coordinate change counts as a relocation even when the
+  upstream point was wrong (ADR-0014, Proposed); not yet run on the Pi.
 - **Precision audit**: `apps/discovery/audit.py`. DB-free duplicate and geocode
   audit over a venue export, with a hand-labeled worksheet.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
@@ -74,13 +78,34 @@ This section is the single current-status page. Other docs link here.
   geocodes, < 2% duplicates). Does not gate `resolve_urls`. Opens when all hold:
   - a correction plan is committed (every confirmed defect classified and mapped
     to an evented command with Evidence or a location override; corpus-wide
-    twin search);
+    twin search, because the co-location detector misses twins separated by a
+    bad coordinate and chain location-label records; fix `audit.street_key`,
+    which strips 5-digit house numbers as ZIP codes);
   - ADR-0014 is accepted and implemented (session S6c);
   - corrections are applied on the Pi in an owner-authorized run (no raw SQL);
   - a fresh-sample re-audit passes: new seed, 100 hand-labeled rows plus a
     regression check of the corrected cohort; 0 confirmed wrong geocodes, at most
     1 sampled venue with a confirmed duplicate, at most 5 unresolved rows per
     measure, worst case reported, denominator never changed.
+
+  Label criteria for the re-audit (from the 2026-09-28 adjudication; unresolved
+  never counts as correct):
+  - *Geocode ok:* address corroborated (business, municipal or marketplace
+    evidence) and an official pin or independent geocoder match within 150 m.
+  - *Geocode wrong:* address corroborated, no evidence of a move, saved point
+    more than 1,000 m from an official pin or geocoder match.
+  - *Duplicate:* another current record for the same outlet at the same time
+    (legal, trading and location-label names count); proximity alone never
+    decides.
+  - *Twin search, every sampled row:* same house-number street line, or name
+    similarity ≥ 0.6 within 300 m; same fingerprint within 1 km; same address at
+    any distance.
+  - *Unresolved:* 150–1,000 m on interpolating geocoders only, no geocode,
+    uncorroborated venue, address conflict, rename-vs-succession pairs (a
+    succession is a new business, ADR-0012), virtual-brand granularity.
+  - Corrected-cohort input: `reviewed.json` in the
+    [removed precision-review data](https://github.com/First-Helios/First-Helios/tree/b2bba735d6de6259b675620fe652cb495b5d43d3/docs/reviews/data/2026-09-28-precision-review)
+    ([docs/HISTORY.md](./docs/HISTORY.md)).
 - **Pi gate 1b, URL-resolution readiness: closed.** Gates the first Pi
   `resolve_urls` run; independent of 1a. Opens when all hold:
   - the owner decides on ADR-0015 (Proposed) and/or waits for the ADR-0013 page
@@ -162,7 +187,41 @@ uv run python -m apps.discovery.resolve_urls --config config/sources.yaml [--lim
 uv run python -m apps.discovery.audit --export <venue-export.json> [--geocode-check]
 ```
 
-Each takes `--help` for the full flag list.
+Each takes `--help` for the full flag list. The audit's venue export:
+
+```bash
+psql -At -f - <<'SQL' > venues.json
+SELECT json_agg(row_to_json(t)) FROM (
+  SELECT e.subject_id, o.canonical_name AS name, o.name_fingerprint AS fingerprint,
+         p.latitude::float8 AS lat, p.longitude::float8 AS lon, p.address
+  FROM identity.establishment e
+  JOIN identity.subject_currentness sc ON sc.subject_id = e.subject_id AND sc.is_current
+  JOIN identity.organization o ON o.subject_id = e.organization_subject_id
+  JOIN identity.place p ON p.subject_id = e.place_subject_id
+) t;
+SQL
+```
+
+### Staging (Pi)
+
+- An Orange Pi 5 Plus (ARM64) on the owner's LAN runs the `helios` Compose
+  stack from `infra/docker-compose.yml` (`postgres`, one-shot `migrate`, `api`),
+  bound to 127.0.0.1. Discovery CLIs run inside the API container:
+  `docker compose -f infra/docker-compose.yml --env-file .env exec api python -m apps.discovery ...`.
+- The deploy directory is a source snapshot of one merged commit (`git archive`),
+  with a `DEPLOYED_COMMIT` file recording its SHA; `var/` is a host bind mount
+  (caches, audit packets under `var/audits/`).
+- Database volume `helios_postgres_data`. The pre-ADR-0011 volume
+  `infra_postgres_data` is kept offline: never attach it to the current image.
+  Backups are custom-format `pg_dump` files under `~/helios-backups/<run>/`; no
+  restore has been rehearsed.
+- Rebuild outline: stop runs and back up; deploy the commit; `down`; remove
+  `helios_postgres_data` only after confirming it belongs to this stack;
+  `up -d --build` (`migrate` exits 0 at head); check `alembic check`, `/healthz`,
+  `/readyz`; run discovery (`--expected-predecessor` once a completed release
+  exists); re-export and re-audit.
+- Last rebuild: 2026-09-28 at `3faae15` (migration `c91a6f02de73`), before the
+  S13 lifecycle migration; no completed discovery baseline yet.
 
 ### Database acceptance
 

@@ -1,6 +1,6 @@
 # RFC-NNNN: Title
 
-**Status:** Draft | Under Review | Accepted | Rejected | Withdrawn
+**Status:** Draft | Under Review | Accepted | Rejected | Withdrawn | Superseded by RFC-NNNN
 **Date:** YYYY-MM-DD
 **Author(s):**
 
