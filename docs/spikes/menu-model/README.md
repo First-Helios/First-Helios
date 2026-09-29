@@ -290,6 +290,13 @@ unseen layouts can still fool the repairs (finding 9).
    **toolbelt** of such generic fixes that catches most problems, chosen per page by a decision
    matrix or classifier (e.g. the label-free coverage signal, a layout detector), which also
    lowers the overfitting risk seen on held-out-3.
+**Owner answers to 2–9 (2026-09-28, session S13b), recorded in
+[ADR-0013](../../adr/0013-phase5-menu-pipeline.md):** 2 Pi batch job; 3 hash of the
+segmented text plus the pipeline version; 4 headless browser in ADR-0013 now (measured
+before it is switched on); 5 catch ≥ 0.97, false reject ≤ 0.12, price accuracy ≥ 0.98;
+6 show accepted `llm` prices, labelled; 7 plan an rknpu ≥ 0.9.7 upgrade separately;
+8 cooling recommended, not required; 9 cuisine in a separate, later ADR.
+
 2. **Throughput budget:** is a ~12-day first pass and change-only monthly runs acceptable on the
    staging Pi, alongside Helios? Or should extraction run on other hardware?
 3. **Change detection:** what counts as "changed" (content hash of the menu region, fetched
@@ -342,7 +349,8 @@ Spike code and data: branch `spike/menu-model` (`spikes/menu_model/`, never merg
 main checkout's `var/spikes/menu-model/` and `~/menu-model-spike/` on the Pi. Reproduce the final
 numbers with `MENU_SPIKE_PROCESS=v2 MENU_SPIKE_PROMPT=v23 MENU_SPIKE_STITCH=3
 MENU_SPIKE_VALIDATOR=v3` (`stress/compare.py`, `stress/loss.py`, `stress/coverage.py`). The owner
-answers the open questions; the Phase 5 ADR comes next.
+answered the open questions (2026-09-28); the Phase 5 ADR is
+[ADR-0013](../../adr/0013-phase5-menu-pipeline.md) (Proposed).
 
 ## Hand-off prompt
 
