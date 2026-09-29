@@ -379,16 +379,40 @@ class _Response:
         return self._body
 
 
-class _Route:
-    def __init__(self, request: _Request) -> None:
-        self.request = request
-        self.verdict: str | None = None
+class _Cdp:
+    """A DevTools session: pauses each request for the renderer's Fetch handler."""
 
-    def continue_(self) -> None:
-        self.verdict = "continue"
+    def __init__(self) -> None:
+        self._handler: Callable[[dict[str, Any]], None] | None = None
+        self.enabled = False
+        self.verdicts: dict[str, str] = {}
 
-    def abort(self, _code: str = "") -> None:
-        self.verdict = "abort"
+    def on(self, event: str, handler: Callable[[dict[str, Any]], None]) -> None:
+        assert event == "Fetch.requestPaused"
+        self._handler = handler
+
+    def send(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if method == "Page.getFrameTree":
+            return {"frameTree": {"frame": {"id": "main"}}}
+        if method == "Fetch.enable":
+            self.enabled = True
+        elif method in {"Fetch.continueRequest", "Fetch.failRequest"}:
+            assert params is not None
+            self.verdicts[params["requestId"]] = method
+        return {}
+
+    def through(self, request_id: str, url: str, kind: str, frame: str) -> bool:
+        if not self.enabled or self._handler is None:
+            return True
+        self._handler(
+            {
+                "requestId": request_id,
+                "request": {"url": url},
+                "resourceType": kind,
+                "frameId": frame,
+            }
+        )
+        return self.verdicts[request_id] == "Fetch.continueRequest"
 
 
 class _Web:
@@ -406,20 +430,19 @@ class _Page:
         self._web = web
         self.main_frame = object()
         self.url = "about:blank"
-        self._route: Callable[[Any], None] = lambda route: route.continue_()
+        self.cdp = _Cdp()
         self._listeners: list[Callable[[Any], None]] = []
         self._html = ""
-
-    def route(self, _pattern: str, handler: Callable[[Any], None]) -> None:
-        self._route = handler
+        self._ids = 0
 
     def on(self, _event: str, listener: Callable[[Any], None]) -> None:
         self._listeners.append(listener)
 
     def _through(self, request: _Request) -> bool:
-        route = _Route(request)
-        self._route(route)
-        if route.verdict == "continue":
+        self._ids += 1
+        kind = request.resource_type.capitalize() if request.resource_type != "xhr" else "XHR"
+        frame = "main" if request.frame is self.main_frame else "child"
+        if self.cdp.through(f"r{self._ids}", request.url, kind, frame):
             self._web.fetched.append(request.url)
             return True
         self._web.aborted.append(request.url)
@@ -463,6 +486,9 @@ class _Context:
 
     def new_page(self) -> _Page:
         return _Page(self._web)
+
+    def new_cdp_session(self, page: _Page) -> _Cdp:
+        return page.cdp
 
     def close(self) -> None:
         return None
@@ -584,6 +610,7 @@ def test_every_sub_request_is_checked_against_its_own_robots() -> None:
                     ("https://cdn.example/app.js", "script"),
                     ("https://cdn.example/logo.png", "image"),
                     ("https://lan.example/x.js", "script"),
+                    ("https://cdn.example/favicon.ico", "other"),
                 ),
             ),
         },
@@ -596,6 +623,7 @@ def test_every_sub_request_is_checked_against_its_own_robots() -> None:
         "https://api.example/private/x",
         "https://cdn.example/logo.png",
         "https://lan.example/x.js",
+        "https://cdn.example/favicon.ico",
     } <= set(web.aborted)
     stats = renderer.stats
     assert (stats.subrequests, stats.subrequests_blocked) == (4, 2), "images are not counted"
@@ -712,3 +740,19 @@ def test_stays_on() -> None:
     assert stays_on("https://www.toasttab.com/a", "https://toast.app/r/b")
     assert not stays_on("https://x.com/a", "https://y.com/a")
     assert not stays_on("https://www.toasttab.com/a", "https://www.doordash.com/a")
+
+
+def test_a_redirect_hop_is_checked_against_robots() -> None:
+    """Regression (live check): Playwright routes skip redirect hops; CDP Fetch doesn't."""
+    start, hop = "https://p.example/a", "https://p.example/private/b"
+    renderer, web, paced = _renderer(
+        {
+            "https://p.example/robots.txt": _Resp(200, "User-agent: *\nDisallow: /private\n"),
+            start: _Resp(302, location=hop),
+            hop: _Resp(200, _MENU),
+        }
+    )
+    result = _render(renderer, paced, start)
+    assert isinstance(result, CaptureFailure)
+    assert (result.outcome, result.reason_code) == ("skipped", "robots_disallowed")
+    assert hop in web.aborted and hop not in web.fetched

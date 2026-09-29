@@ -177,7 +177,7 @@ class RobotsCache:
 
 
 class RequestPolicy:
-    """Allow or abort each request of one render (the route handler's decisions)."""
+    """Allow or abort each request of one render (the interception handler's decisions)."""
 
     def __init__(
         self,
@@ -315,7 +315,7 @@ class BrowserRenderer:
         return self._session
 
     def _new_context(self) -> Any:  # noqa: ANN401 - playwright BrowserContext
-        # Service workers are blocked so every request passes the route handler.
+        # Service workers are blocked so every request passes the interception handler.
         return self._started().browser.new_context(
             user_agent=self.user_agent, service_workers="block", accept_downloads=False
         )
@@ -338,13 +338,13 @@ class BrowserRenderer:
         page = self._robots_context.new_page()
         documents: list[Any] = []
         page.on("response", _main_documents(page, documents))
-        page.route(
-            "**/*",
-            lambda route: (
-                route.continue_()
-                if route.request.resource_type not in BLOCKED_RESOURCE_TYPES
-                and self._is_public(_host(route.request.url))
-                else route.abort("blockedbyclient")
+        _intercept(
+            self._robots_context,
+            page,
+            lambda url, kind, _main: (
+                None
+                if kind not in BLOCKED_RESOURCE_TYPES and self._is_public(_host(url))
+                else "blocked"
             ),
         )
         self._pace(_host(origin), 0.0)
@@ -410,20 +410,13 @@ class BrowserRenderer:
             page.on("response", _main_documents(page, documents))
             first = [True]
 
-            def handle(route: Any) -> None:  # noqa: ANN401 - playwright Route
-                request = route.request
-                main = request.is_navigation_request() and request.frame == page.main_frame
+            def decide(request_url: str, kind: str, main: bool) -> str | None:  # noqa: FBT001
                 if main and first[0]:
                     first[0] = False  # our own navigation: decided (and paced) above
-                    route.continue_()
-                    return
-                reason = policy.decide(request.url, request.resource_type, main_navigation=main)
-                if reason is None:
-                    route.continue_()
-                else:
-                    route.abort("blockedbyclient")
+                    return None
+                return policy.decide(request_url, kind, main_navigation=main)
 
-            page.route("**/*", handle)
+            _intercept(context, page, decide)
             try:
                 page.goto(url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
             except session.timeout_error:
@@ -469,6 +462,40 @@ class BrowserRenderer:
             content_hash="sha256:" + hashlib.sha256(body).hexdigest(),
             render=self.name,
         )
+
+
+def _intercept(
+    context: Any,  # noqa: ANN401 - playwright BrowserContext
+    page: Any,  # noqa: ANN401 - playwright Page
+    decide: Callable[[str, str, bool], str | None],
+) -> None:
+    """Pause every request of ``page`` (redirect hops included) for ``decide``.
+
+    Chrome DevTools Protocol ``Fetch`` interception, not ``page.route``:
+    Playwright's routes are not called for redirect hops, so a redirect could
+    otherwise leave the site or reach a robots-disallowed URL unchecked.
+    ``decide(url, resource type, main-frame document?)`` returns ``None`` to
+    continue or a reason to fail the request.
+    """
+    cdp = context.new_cdp_session(page)
+    main_frame = cdp.send("Page.getFrameTree")["frameTree"]["frame"]["id"]
+
+    def paused(event: dict[str, Any]) -> None:
+        kind = str(event.get("resourceType", "")).lower()
+        url = str(event["request"]["url"])
+        if urlsplit(url).path == "/favicon.ico":
+            kind = "image"  # the browser's own favicon fetch: never needed
+        main = kind == "document" and event.get("frameId") == main_frame
+        request_id = event["requestId"]
+        if decide(url, kind, main) is None:
+            cdp.send("Fetch.continueRequest", {"requestId": request_id})
+        else:
+            cdp.send(
+                "Fetch.failRequest", {"requestId": request_id, "errorReason": "BlockedByClient"}
+            )
+
+    cdp.on("Fetch.requestPaused", paused)
+    cdp.send("Fetch.enable", {"patterns": [{"urlPattern": "*", "requestStage": "Request"}]})
 
 
 def _is_ip(host: str) -> bool:
