@@ -9,7 +9,7 @@ question 3 decided ([Amendment 2](#amendment-2-2026-09-29-rendering-built-open-q
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
 pipeline … replacing ROADMAP's Scrapy-vs-Crawlee framing",
-[remediation checklist](../reviews/2026-09-22-remediation-checklist.md) §G); the
+[remediation checklist](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md) §G); the
 Capture-targeted Evidence locators that
 [ADR-0011 §5](./0011-provenance-endpoints-vs-identity-match-keys.md) left to "the
 Phase 5 extraction ADR"; the verifier that

@@ -4,7 +4,7 @@
 **Date:** 2026-09-28
 **Phase:** 4 (remediation of the 2026-09-22 review; Pi gate 1a)
 **Decides for:** the "coordinate-override mechanism" criterion of Pi gate 1a
-([remediation checklist](../reviews/2026-09-22-remediation-checklist.md), owner
+([remediation checklist](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md), owner
 decision G.a)
 **Numbering:** ADR-0013 is reserved for the Phase 5 menu-pipeline ADR (owner
 decision G.b), so this draft takes the next number after it.

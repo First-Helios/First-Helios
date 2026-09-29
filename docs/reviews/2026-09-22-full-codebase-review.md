@@ -5,6 +5,19 @@ ten read-only slice reviewers. **Branch:** `docs/full-codebase-review`.
 **Reviewed commit:** `557fa3ca02126e6c703155617c77668a25e4160c` (`main` after PR #21).
 **Migration head:** `5f3a9c1e7b24`.
 
+> **Remediation complete (2026-09-29, session S17).** Every finding R01–R117 is
+> closed: fixed in remediation sessions S1–S16 (PRs #23–#54), or accepted or deferred
+> by the owner. *Accepted, no change:* R97 (its misleading test comment fixed in S16),
+> R100, R102, R103, R104, R107, R109, R117. *Deferred, with triggers in*
+> [ROADMAP §7](../../ROADMAP.md#7-open-questions): R66, R71, R108, R110, R111, R116,
+> and the rest of R56 (#35 made Python reject naive times and out-of-scale confidence;
+> direct SQL into `NUMERIC(6,5)` still rounds). The remediation checklist and session
+> hand-off are retired ([docs/HISTORY.md](../HISTORY.md)); the open Pi gates 1a/1b
+> are tracked in the [README](../../README.md#gates). Final strict CI on a fresh
+> database: `HELIOS_STRICT_DB_TESTS=1 make ci` 1197 passed, 0 skipped, 90% coverage;
+> `alembic check` clean. "Nothing was fixed" below describes this document as written
+> on 2026-09-22.
+
 This is a findings document for owner triage. **Nothing was fixed.** Each fix
 becomes its own scoped unit (see [§8](#8-recommended-fix-units)); fixes that touch
 models, migrations, dependencies, `infra/`, CI, or auth/secrets still stop for owner

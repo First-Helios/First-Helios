@@ -8,7 +8,7 @@
 what S13 implements
 **Owner decisions:** D6.3 (draft an ADR, then stop), D6.4 (auto-promote an
 Establishment when its Place and Organization are eligible)
-([remediation checklist](../reviews/2026-09-22-remediation-checklist.md))
+([remediation checklist](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md))
 
 ## Context
 
@@ -329,7 +329,7 @@ to them: relocation, rebrand, reopen, a refused partial run, and demotion.
 ## References
 
 - [2026-09-22 review](../reviews/2026-09-22-full-codebase-review.md) R36, R61,
-  R98, R105, R106; [remediation checklist](../reviews/2026-09-22-remediation-checklist.md) D6.3, D6.4, S12, S13
+  R98, R105, R106; [remediation checklist](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md) D6.3, D6.4, S12, S13
 - [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md) §2 (closure vs
   retirement), §5 (merge/split/retire semantics)
 - [ADR-0009](./0009-venue-discovery-source-dedupe-and-schedule.md) §2 (dedupe
