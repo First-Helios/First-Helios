@@ -1,12 +1,14 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–3.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–4.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
 ([Amendment 2](#amendment-2-2026-09-29-rendering-built-open-question-3-decided)).
 Open questions 1, 2, 4 and 5 were answered at acceptance
 ([Amendment 3](#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
+Unchanged re-fetches were settled in session P5-2
+([Amendment 4](#amendment-4-2026-09-29-unchanged-re-fetches)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -333,6 +335,7 @@ State as of 2026-09-29 (Amendment 3):
 3. `menu-page` Bronze writes (Captures, bundles, Versions, locators) and the batch
    CLI, without extraction. Platform pages are assigned to the Establishment, and
    PDF menu links are counted in discovery and the run report (Amendment 3).
+   *Built in P5-2 (Amendment 4).*
 4. Classifier runtime; ADR-0015 verifier bump to `classifier-v1` (after S6d).
    *Built:* S6d part 1 (#51, re-verification) and part 2 (#52, `classifier-v1`);
    S6f (#54) bumped the verifier to `classifier-v2`.
@@ -586,3 +589,36 @@ questions were put:
 6. **Implementation slices updated** to what is built: slice 4 (#51, #52, #54),
    slice 1 except `llama-server` (#52), part of slice 2 (#52, #54) and slice 6 except
    the Pi measurement and the rendered-page quality bars (#54).
+
+## Amendment 4 (2026-09-29): unchanged re-fetches
+
+Owner decisions in session P5-2 (slice 3), before any code:
+
+1. **Unchanged re-fetches.** A `menu-page` fetch or render whose Version payload (URL,
+   render, segmenter, text_hash) equals the record's latest Version is a `succeeded`
+   Capture with its `content_hash` and bundle, but no Version and no Evidence
+   (provenance command `record_unchanged_capture`). This narrows ADR-0011 §4
+   ("succeeded → Version") for the `menu-page` namespace only; ADR-0015 Amendment 1
+   (menu-URL re-checks append a Version) is unchanged. Evidence locators keep citing
+   the Capture that created the Version.
+2. **Slice-3 choices** the ADRs left open, all taken as recommended:
+   - *Not-a-menu pages* are counted (`skipped/not_menu`); withdrawing the menu URL
+     stays with discovery's ADR-0015 re-verification until the Phase 6 monthly run
+     wires §7's "one fetch serves both".
+   - *Queue and resuming.* The unit of work is one menu URL, with every record that
+     saved it written in one transaction. A URL is not fetched again within 20 days
+     of its last `menu-page` Capture (`REFETCH_WINDOW`, like `RECRAWL_WINDOW`), unless
+     a record saved it after that fetch and has no Version for it. Never-fetched URLs
+     go first, then the oldest fetch, ties by record key.
+   - *PDF-only venues.* Discovery records `failed/menu_pdf_only` instead of
+     `no_menu_found` when no menu page verified but a fetched page links a
+     menu-named PDF (a `.pdf` link whose text or path carries a menu-lexicon word),
+     and counts it; the menu-page run report counts pages that link one.
+   - *Scope changes* between runs (a platform URL becomes shared, or stops being
+     shared) remap the `menu-page` record.
+   - *Bundles.* Every Capture that read an HTML body has one (succeeded, unchanged,
+     `not_menu`, `js_only`; not `pdf` or failed fetches), content-addressed, with no
+     pruning before Phase 8 backup. Spike pages average ~39 KB gzipped (p95 134 KB):
+     roughly 90 MB a month for ~2,300 pages.
+   - Not built: ETag / `If-None-Match` (§5 allows it; the fetcher has no conditional
+     GET and a `304` has no body to hash).

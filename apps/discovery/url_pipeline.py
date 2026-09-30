@@ -28,7 +28,9 @@ Records are per venue (keyed by GERS id), not per chain (ADR-0010 Amendment 2).
 An unchanged website/menu-URL is not re-persisted, a record a human put in
 ``needs_review`` is never re-assigned, and a venue whose Organization is no
 longer current is counted and skipped. A chain homepage's platform links count
-as ``platform_ambiguous`` unless exactly one shows the venue's address.
+as ``platform_ambiguous`` unless exactly one shows the venue's address. A site
+where no menu page verifies but a fetched page links a menu-named PDF is recorded
+as ``failed/menu_pdf_only`` (ADR-0013 Amendments 3-4).
 
 Every write reuses the published Identity/Bronze commands (ADR-0011).
 The menu-URL resolver is injected as a Protocol, so tests supply a fake and CI
@@ -50,7 +52,12 @@ from sqlalchemy.orm import aliased
 
 from apps.discovery.menu_url import ordering_platform_host, platform_signal
 from apps.discovery.models import DiscoveryLifecycleState
-from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery, PlatformAmbiguous
+from apps.discovery.web_client import (
+    CaptureFailure,
+    MenuPdfLinked,
+    MenuUrlDiscovery,
+    PlatformAmbiguous,
+)
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
     assign_source_record,
@@ -110,7 +117,7 @@ class MenuUrlResolver(Protocol):
 
     def discover_menu_attempt(
         self, website: str, *, address: str | None = None
-    ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous, ...] | CaptureFailure: ...
+    ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous | MenuPdfLinked, ...] | CaptureFailure: ...
 
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
@@ -152,6 +159,7 @@ class UrlDiscoveryReport:
     menu_urls_reverify_deferred: int = 0
     menu_urls_withdrawn: int = 0
     platform_ambiguous: int = 0
+    menu_pdf_only: int = 0
     needs_review: int = 0
     org_not_current: int = 0
     cooldown_skipped: int = 0
@@ -986,13 +994,19 @@ def _resolve_venue(
             else tuple(item for item in discovery if isinstance(item, MenuUrlDiscovery))
         )
         if not isinstance(discovery, CaptureFailure):
-            report.platform_ambiguous += len(discovery) - len(acquired)
-        if not acquired:
-            failure = (
-                discovery
-                if isinstance(discovery, CaptureFailure)
-                else CaptureFailure("failed", "no_menu_found", observed_at)
+            report.platform_ambiguous += sum(
+                isinstance(item, PlatformAmbiguous) for item in discovery
             )
+        if not acquired:
+            if isinstance(discovery, CaptureFailure):
+                failure = discovery
+            elif any(isinstance(item, MenuPdfLinked) for item in discovery):
+                # Counted where it is seen: the venue's menu is likely PDF-only,
+                # which v1 does not read (ADR-0013 Amendment 3).
+                failure = CaptureFailure("failed", "menu_pdf_only", observed_at)
+                report.menu_pdf_only += 1
+            else:
+                failure = CaptureFailure("failed", "no_menu_found", observed_at)
             record_capture_attempt(
                 session,
                 source_namespace=MENU_URL_NAMESPACE,

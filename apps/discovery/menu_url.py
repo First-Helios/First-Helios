@@ -304,6 +304,28 @@ def menu_links_from_html(html: str, base_url: str) -> list[str]:
     return out
 
 
+def menu_pdf_links(html: str, base_url: str) -> list[str]:
+    """Absolute URLs of the page's menu-named PDF links, in order (ADR-0013 Amendment 3).
+
+    A link counts when its path ends in ``.pdf`` and its text or path carries a
+    menu word (:func:`looks_like_menu`, blocklist included). Any host counts:
+    menu PDFs are often on a site builder's file CDN. Only counted, never fetched.
+    """
+    parser = _AnchorCollector()
+    parser.feed(html)
+    parser.close()
+    link_base = _resolve_link_base(base_url, parser)
+    out: list[str] = []
+    for href, text in parser.anchors:
+        absolute = urljoin(link_base, href)
+        split = urlsplit(absolute)
+        if split.scheme not in {"http", "https"} or not split.path.lower().endswith(".pdf"):
+            continue
+        if looks_like_menu(text, absolute) and absolute not in out:
+            out.append(absolute)
+    return out
+
+
 def platform_links_by_host(html: str, base_url: str) -> dict[str, list[str]]:
     """Homepage-anchor URLs to venue pages on each ordering platform, in order.
 
