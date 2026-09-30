@@ -37,6 +37,9 @@ if TYPE_CHECKING:
 
     from packages.helios_parsing.segment import Block
 
+# ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
+REPAIRS_VERSION = "repairs-v3"
+
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
 _ITEM = re.compile(r'\{\s*"b"\s*:[^{}]*\}')
 _AMOUNT_ONLY = re.compile(r"^\$?\s?\d{1,4}(?:[.,]\d{1,2})?$")

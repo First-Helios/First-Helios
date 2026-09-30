@@ -48,6 +48,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
+VALIDATOR_VERSION = "validator-v3"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})
@@ -114,6 +115,18 @@ def evidence(block: Block, start: int, end: int) -> Evidence:
         locator=f"blocks:{SEGMENTER_VERSION}:{block.id}[{start}:{end}]",
         excerpt_hash="sha256:" + hashlib.sha256(excerpt.encode("utf-8")).hexdigest(),
     )
+
+
+def name_evidence(block: Block, name: str) -> Evidence:
+    """The span of ``name``'s words in ``block``, as the validator cites a grounded name.
+
+    Falls back to the whole block when normalization moved the offsets past the
+    block's text (a ligature that NFKC expands), so a locator always fits its block.
+    """
+    start, end = _name_span(block, norm_tokens(name))
+    if not 0 <= start < end <= len(block.text):
+        start, end = 0, len(block.text)
+    return evidence(block, start, end)
 
 
 def norm_tokens(text: str) -> list[str]:

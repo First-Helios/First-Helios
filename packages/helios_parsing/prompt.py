@@ -62,6 +62,9 @@ chr     ::= [^"\\\x00-\x1f] | "\\" ["\\/nt]
 vchr    ::= [^"\\\x00-\x1f]
 """
 
+# The prompt, grammar, token cap and sparse retry together; part of the pipeline version.
+PROMPT_VERSION = "prompt-v2.3"
+
 MAX_TOKENS = 3072
 TOKENS_PER_LINE = 40  # keyed rows need headroom over the ~30 of the first process
 TOKENS_BASE = 64

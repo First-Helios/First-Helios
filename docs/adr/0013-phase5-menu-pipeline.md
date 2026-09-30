@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–6.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–7.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -11,7 +11,9 @@ Unchanged re-fetches were settled in session P5-2
 ([Amendment 4](#amendment-4-2026-09-29-unchanged-re-fetches)). Promo labels got their
 own grain and the `llama-server` deployment was settled in session P5-3
 ([Amendment 5](#amendment-5-2026-09-29-promo-label-grain),
-[Amendment 6](#amendment-6-2026-09-29-llama-server-deployment)).
+[Amendment 6](#amendment-6-2026-09-29-llama-server-deployment)). Extraction and Menu
+writes were settled in session P5-4
+([Amendment 7](#amendment-7-2026-09-29-extraction-and-menu-writes)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -344,6 +346,10 @@ State as of 2026-09-29 (Amendment 3):
    *Built:* S6d part 1 (#51, re-verification) and part 2 (#52, `classifier-v1`);
    S6f (#54) bumped the verifier to `classifier-v2`.
 5. Extraction and Menu writes; first held-out evaluation recorded.
+   *Built in P5-4 (Amendment 7):* the `llama-server` client, extraction over
+   `menu-page` Versions and Menu writes (`python -m apps.menu_pipeline.extract`).
+   Remaining: the first held-out evaluation (Amendment 7 item 8), which Pi
+   extraction runs wait for.
 6. ⚠ Headless render, its measurement on the 32 JS-only pages, then enablement.
    *Built in S6f (#54):* headed Chromium under Xvfb (Amendments 1–2), measured on a
    laptop over 75 URLs, 23 of them the spike's JS-only own-site pages. Remaining: the
@@ -690,3 +696,90 @@ settle the rest.
    spike's original RAM bar). `restart: unless-stopped`, so a crash mid-run restarts
    it; the owner stops it after a run. A restart by the restart policy does not re-run
    `llama-model-check`; the model directory is read-only in the container.
+
+## Amendment 7 (2026-09-29): extraction and Menu writes
+
+Owner decisions in session P5-4 (slice 5), before any code; all as recommended.
+Code: `apps/menu_pipeline/llama_client.py`, `extraction.py`, `menu_writes.py`,
+`extract.py`, `packages/helios_parsing/menu_shape.py`.
+
+1. **Readiness (X1, carried from Amendment 6 item 5): client-side wait.** The CLI
+   polls `/health` for up to 300 s, then checks `/props`: the served file must be
+   the manifest's GGUF and the server must have 2 slots, else it refuses to run.
+   It doesn't re-hash the file (`llama-model-check` does at `up`). No `infra/`
+   change and no dedicated extraction service.
+2. **Pipeline version (X2).** Each component has a version constant (`prompt-v2.3`
+   for the prompt, grammar, token cap and sparse retry; `chunk-v2.1`;
+   `repairs-v3` for the output repairs and stitch v3; `validator-v3`;
+   `segment-v2`; `jsonld-v1`), and `method_version` is their composite string with
+   the model (`<manifest name>@<sha256 prefix>`) and the page classifier's name,
+   which gives page confidence. This includes the classifier, as §8 lists it,
+   where §6's list did not. `llm`:
+   `<model>;prompt-v2.3;chunk-v2.1;segment-v2;repairs-v3;validator-v3;<classifier>`;
+   `jsonld`: `jsonld-v1;validator-v3;segment-v2;<classifier>`. A page is up to date
+   when its `llm` head is on the record's latest Version with exactly this string.
+   **Raw answers are kept** content-addressed by the extractor's inputs (model,
+   prompt, chunking, segmenter) and the page's text hash
+   (`var/replay/menu-extract/`, in the harness's record format): a repairs,
+   validator or classifier bump re-validates saved answers without the model; a
+   model, prompt, chunking or segmenter bump runs it again.
+3. **Unit of work (X3).** A sibling CLI, `python -m apps.menu_pipeline.extract
+   --limit N` (`--limit` counts pages taken), reads each due Version's blocks from
+   its Capture's bundle (no refetch; a bundle whose text hash differs from the
+   Version's is a failure, `bundle_mismatch`). Due: the latest Version of every
+   resolved `menu-page` record without an `llm` page at the current version;
+   order new, changed, re-interpretation, then key (§5). Two requests in flight
+   over a look-ahead of pages (the spike's measured setup); one page per
+   transaction. A request that times out (1800 s), fails in transport or answers
+   5xx is sent once more; a chunk that still fails fails its page, which writes
+   nothing and stays due; after 3 failed pages in a row the run stops and exits 1.
+   Output cut off by the token cap keeps its recovered rows (counted). A page with
+   nothing kept writes an empty `llm` page, so it is done at this version.
+4. **Menu writes (X4).** `llm` and `jsonld` are separate streams of the record
+   (root key `page`); the JSON-LD reader runs on every page and its rows pass the
+   same validator. A `jsonld` page is written when the page has JSON-LD items or
+   the stream's head still has items (an empty successor, so JSON-LD that
+   disappeared stops outranking the LLM). The first page of a stream is
+   `initial`, a page on a newer Version an `observation`, a re-interpretation of
+   the same Version a `correction`. Downgraded rows are items without a price row;
+   rejected rows are counted by reason. Price confidence 0.98 (measured accuracy
+   on accepted rows), 0.90 on pages flagged `unlabeled_price_runs`; page
+   confidence is the classifier probability recomputed from the bundle. A scope
+   that isn't eligible yet is counted `scope_not_eligible` and retried
+   (Amendment 3).
+5. **Native keys (N1; not settled before).** Gold enumerates only nodes whose path
+   carries `source_native_key`s, and the Menu proposal (plans/0002, "Keys") admits
+   only genuine source IDs or version-local fallbacks, never name continuity. LLM
+   and JSON-LD rows have no source IDs, so nodes carry **version-local** keys
+   `v<version id>:<block>:<normalized text>`. Accepted prices reach Gold without
+   claiming a dish is the same one across Versions or streams. Consequences: a
+   dish's Gold target changes with each new Version; a dish on a JSON-LD page is
+   two Gold targets (one per stream). A node needs a stable ancestor path for a
+   native key (`ck_menu_graph`), so items under the structural `Unsectioned`
+   grouping carry none and are stored but not projected to Gold (counted
+   `unsectioned_items`).
+6. **Shape (N2).** A section the extractor named is kept when its name is printed
+   at or before its first item (a non-chrome block with exactly its words, or a
+   heading containing them), with that span as Evidence; otherwise its items go to
+   `Unsectioned`. One item per (section, name block, normalized name); a labelled
+   price prices a variant of that label, unlabeled extra prices stay separate
+   price rows on the item. No descriptions or dietary tags are read
+   (`dietary_tags` is the empty list a replacement item requires). The run report
+   records SoC temperature and the CPU frequency cap where `/sys` shows them;
+   `promo_rows_stored` comes from the evaluation harness (labels only).
+7. **Found while building: Evidence is committed first.** Menu admission accepts
+   only committed Evidence (ADR-0005 §7), so each page commits its
+   Capture-targeted Evidence, then writes its Menu pages in a second transaction.
+   Evidence is immutable and reused per locator, so a page whose Menu write then
+   fails (e.g. `scope_not_eligible`) leaves nothing to undo. Also, JSON-LD lives
+   in scripts, which the text hash excludes (§5), so a JSON-LD-only change makes
+   no new Version and isn't re-read until the visible text changes.
+8. **First held-out evaluation (X5): follows this slice.** Every scorable gold page
+   (33) has been scored, so none is held out for this version. The evaluation uses
+   a fresh sample of 10 menu pages from venues the spike never saw (seed
+   recorded), labelled blind by an agent in a separate session before any
+   extraction, with the owner confirming disagreements (Amendment 3 item 4's
+   procedure), scored on a laptop against the pinned `llama-server` image with the
+   manifest's GGUF (`python -m apps.menu_pipeline.evaluate extract`, then
+   `compare`, `loss`, `corrupt`). Pi pages/hour and peak RAM are recorded with the
+   owner's Pi check. Pi extraction runs wait for this evaluation (§8).

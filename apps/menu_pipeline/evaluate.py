@@ -11,6 +11,13 @@ chunk under ``"chunks"``, in chunk order: the spike's record) and gold labels
         [--splits var/menu-eval/splits.json --split ho3] TAG [TAG ...]
     uv run python -m apps.menu_pipeline.evaluate loss --data … --labels … TAG [--pages]
     uv run python -m apps.menu_pipeline.evaluate corrupt --data … --labels … [--seed 7]
+    uv run python -m apps.menu_pipeline.evaluate extract --data … --labels … \\
+        [--server http://localhost:8080] TAG
+
+``extract`` runs the pipeline's own extractor (``llama_client``: prompt, grammar,
+chunking, sparse retry; 2 requests in flight) over the gold pages and saves each
+page's answers as ``<data>/extract/<TAG>/<page_id>.json``, skipping pages already
+saved; ``compare`` / ``loss`` then score them. Scoring alone needs no server.
 
 ``--splits`` names a JSON file mapping split names to page ids (e.g. the tuning
 pages and each held-out set); without it every scorable gold page is scored.
@@ -25,9 +32,12 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from apps.menu_pipeline.llama_client import SLOTS, LlamaClient, http_client
+from packages.helios_parsing.chunking import chunks
 from packages.helios_parsing.evaluation import (
     GoldPage,
     corruption_eval,
@@ -133,9 +143,25 @@ def cmd_corrupt(data: Path, gold: dict[str, GoldPage], seed: int) -> None:
     print(f"catch rate={_fmt(m['catch'])}")
 
 
+def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaClient) -> None:
+    out = data / "extract" / tag
+    out.mkdir(parents=True, exist_ok=True)
+    client.wait_ready()
+    with ThreadPoolExecutor(max_workers=SLOTS) as pool:
+        for pid in gold:
+            target = out / f"{pid}.json"
+            if target.exists():
+                continue
+            texts = chunks(blocks_of(data, pid))
+            results = list(pool.map(client.extract_chunk, texts))
+            record = {"page_id": pid, "chunks": [result.record() for result in results]}
+            target.write_text(json.dumps(record, indent=1), encoding="utf-8")
+            print(f"{pid} chunks={len(results)}", flush=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=["compare", "loss", "corrupt"])
+    parser.add_argument("command", choices=["compare", "loss", "corrupt", "extract"])
     parser.add_argument("tags", nargs="*")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--labels", type=Path, required=True)
@@ -143,6 +169,7 @@ def main() -> None:
     parser.add_argument("--split")
     parser.add_argument("--pages", action="store_true", help="loss: one line per page")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--server", default="http://localhost:8080", help="extract: llama-server")
     args = parser.parse_args()
     gold = load_gold(args.labels, args.splits, args.split)
     if args.command == "compare":
@@ -150,6 +177,10 @@ def main() -> None:
     elif args.command == "loss":
         for tag in args.tags:
             cmd_loss(args.data, gold, tag, per_page=args.pages)
+    elif args.command == "extract":
+        (tag,) = args.tags
+        with http_client() as http:
+            cmd_extract(args.data, gold, tag, LlamaClient(http, base_url=args.server))
     else:
         cmd_corrupt(args.data, gold, args.seed)
 

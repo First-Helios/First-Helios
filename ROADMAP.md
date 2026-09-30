@@ -517,7 +517,7 @@ website/menu-URL coverage is measured and written down. Gate state:
 ### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
 > Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), accepted
-> 2026-09-29 (Amendments 1–6). It replaces this
+> 2026-09-29 (Amendments 1–7). It replaces this
 > phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
 > plan (owner decision G.b), on the evidence of the
 > [menu-model spike](./docs/spikes/menu-model/README.md).
@@ -545,8 +545,14 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   locators — and a resumable batch CLI (`python -m apps.menu_pipeline.run`).
   Platform pages (`<gers>|<platform host>`) take the venue's Establishment scope, own-site pages the Organization's; PDF
   menus are skipped and counted ([§5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators)).
-- LLM extraction and Menu writes through `persist_menu`, with `llm`/`jsonld`
-  source kinds and trust labels ([§6](./docs/adr/0013-phase5-menu-pipeline.md#6-menu-writes-and-trust-q5-q6)).
+- *Built (P5-4):* LLM extraction and Menu writes through `persist_menu`, with
+  `llm`/`jsonld` source kinds and trust labels
+  ([§6](./docs/adr/0013-phase5-menu-pipeline.md#6-menu-writes-and-trust-q5-q6),
+  [Amendment 7](./docs/adr/0013-phase5-menu-pipeline.md#amendment-7-2026-09-29-extraction-and-menu-writes)):
+  the `llama-server` client, a resumable `python -m apps.menu_pipeline.extract`
+  over `menu-page` Versions, kept raw answers, and a composite pipeline version.
+  Next: the first held-out evaluation (a fresh 10-page set), then the first Pi
+  extraction run.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
