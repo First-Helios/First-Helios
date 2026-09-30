@@ -22,7 +22,8 @@ This section is the single current-status page. Other docs link here.
   deterministic external-key/URL resolution and readiness (`identity` schema).
 - **Menu**: `packages/helios_core/domains/menu/`. Immutable Menu snapshots and
   their writer, plus the pure current/history price selector
-  (`menu` schema, ADR-0005). Nothing writes menus in production yet.
+  (`menu` schema, ADR-0005). The menu pipeline's extraction writes them
+  (below); not yet run on the Pi.
 - **Gold read model**: `packages/helios_core/gold/`. `gold.current_menu`, a
   rebuildable projection of the Menu selector, with bounded per-scope and
   full-catalog refresh (ADR-0006).
@@ -102,21 +103,32 @@ This section is the single current-status page. Other docs link here.
   serves Qwen3-4B-Instruct-2507 Q4_0 from `var/models/` (read-only), pinned in
   `config/models.yaml`; the one-shot `llama-model-check` service verifies the file
   first, and a mismatch keeps the server from starting.
-  `infra/docker-compose.pi.yml` pins it to the Pi's A76 cores. Nothing calls it
-  yet (the client is slice 5); the owner-run
+  `infra/docker-compose.pi.yml` pins it to the Pi's A76 cores. The owner-run
   [Pi check](./docs/reviews/2026-09-29-llama-server-pi-check.md) against the
   spike's binary is pending.
+- **LLM extraction and Menu writes** (ADR-0013 slice 5,
+  [Amendment 7](./docs/adr/0013-phase5-menu-pipeline.md#amendment-7-2026-09-29-extraction-and-menu-writes)):
+  `apps/menu_pipeline/llama_client.py`, `extraction.py`, `menu_writes.py`,
+  `extract.py`, `packages/helios_parsing/menu_shape.py`. A resumable batch CLI
+  reads each due `menu-page` Version from its bundle, sends its chunks to
+  `llama-server` (2 in flight, one retry per request, sparse-chunk retry), keeps
+  the raw answers under `var/replay/menu-extract/`, repairs and validates the
+  rows (and the page's JSON-LD), and writes `llm` (and `jsonld`) Menu page
+  aggregates through `persist_menu`, with Capture-targeted Evidence per field,
+  version-local native keys and trust labels (price confidence 0.98, 0.90 on
+  pages flagged `unlabeled_price_runs`; page confidence = classifier
+  probability). `method_version` names every pipeline component; a bump
+  re-interprets current Versions, from the saved answers unless the model,
+  prompt, chunking or segmenter changed. Not yet run on the Pi; no held-out
+  evaluation recorded yet (§8), so Pi extraction runs wait for it.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5 menu extraction: the `llama-server` client, and Menu writes.
-  [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) was accepted 2026-09-29;
-  its open questions are answered in
-  [Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided) (platform pages take
-  Establishment scope, PDF menus skipped and counted, a 10-page monthly spot
-  check, promotional rows deferred to a promo classifier).
+- Phase 5's first held-out evaluation (ADR-0013 §8; a fresh 10-page set,
+  labelled blind, scored on the laptop, Amendment 7 item 8), the first Pi
+  extraction run, and the rendered-page quality bars (slice 6).
 - The Gold price index: target shape accepted in
   [ADR-0007](./docs/adr/0007-gold-price-index-projection.md); no model,
   migration or code.
@@ -266,8 +278,11 @@ uv run python -m apps.menu_pipeline.models download Qwen3-4B-Instruct-2507-Q4_0
 # Resolve website + menu URL (Pi gate 1b must be open before a Pi run)
 uv run --extra menu python -m apps.discovery.resolve_urls --config config/sources.yaml [--limit N]
 
-# Fetch saved menu URLs into menu-page Bronze (no extraction yet; --render off on the Pi)
+# Fetch saved menu URLs into menu-page Bronze (--render off on the Pi)
 uv run --extra menu python -m apps.menu_pipeline.run [--limit N] [--render]
+
+# Extract due menu-page Versions into Menu pages (needs llama-server; see below)
+uv run --extra menu python -m apps.menu_pipeline.extract [--limit N] [--server URL]
 
 # Precision audit over a venue export (no database)
 uv run python -m apps.discovery.audit --export <venue-export.json> [--geocode-check]
@@ -290,16 +305,24 @@ SQL
 
 ### Extraction model server
 
-`llama-server` (ADR-0013 Amendment 6) runs only when started; nothing calls it
-yet. The model file must be in `var/models/` first (download above);
-`llama-model-check` refuses a missing or changed file, and then `llama-server`
-doesn't start:
+`llama-server` (ADR-0013 Amendment 6) runs only when started. The model file
+must be in `var/models/` first (download above); `llama-model-check` refuses a
+missing or changed file, and then `llama-server` doesn't start. Extraction runs
+in the worker on the same Compose network (`http://llama-server:8080`, the
+default `--server`); it waits up to `--ready-timeout` seconds for `/health` and
+refuses a server whose `/props` names another model file or slot count:
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile menu up -d --wait llama-server
-docker compose -f infra/docker-compose.yml --profile menu exec llama-server curl -s localhost:8080/health
+docker compose -f infra/docker-compose.yml --profile menu run --rm worker \
+    python -m apps.menu_pipeline.extract --limit 20
 docker compose -f infra/docker-compose.yml --profile menu stop llama-server   # after a run
 ```
+
+A run commits each page, so it can be stopped and restarted; it prints a JSON
+report (pages due/extracted/failed/empty/flagged, rows by decision and reason,
+chunks, retries, truncations, pages/hour, SoC temperature when readable) and
+exits 1 if it stopped after 3 failed pages in a row.
 
 On the Pi, add `-f infra/docker-compose.pi.yml` after the base file, so the
 server gets the A76 cores (4-7) and Postgres and the API the A55s.
@@ -347,7 +370,8 @@ alembic/                migrations (hand-reviewed)
 apps/
   api/                  FastAPI read API and OpenAPI snapshot
   discovery/            Overture discovery, URL resolution, lifecycle, audit
-  menu_pipeline/        page classifier, menu-page Bronze writes and batch CLI, model files, evaluation
+  menu_pipeline/        page classifier, menu-page Bronze, llama-server client, extraction
+                        and Menu writes, batch CLIs, model files, evaluation
 config/sources.yaml     manual website / menu-URL registry
 config/models.yaml      pinned model files (sha256, size, licence)
 config/page_classifier_v1.json  page classifier weights
@@ -368,7 +392,8 @@ packages/helios_core/
   geo.py                Nominatim client
 packages/helios_parsing/  pure page parsing: segmentation + text hash, price tokens,
                           classifier features, JSON-LD reader, chunking, prompt and
-                          grammar, output parsing, repairs, validator, evaluation
+                          grammar, output parsing, repairs, validator, menu shape,
+                          evaluation
 test/                   pytest suite
 ```
 

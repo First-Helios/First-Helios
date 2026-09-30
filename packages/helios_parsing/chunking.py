@@ -23,6 +23,8 @@ CHUNK_SOFT = CHUNK_CHARS * 4 // 5  # past this, cut before the next heading bloc
 BLOCK_CHARS = 300  # a block's text is cut to this many characters in its line
 CONTEXT_CHARS = 80  # heading and recent-line text carried in a context line
 CONTEXT_LINES = 3
+# Names what ``chunks`` returns for the same blocks; part of the pipeline version.
+CHUNKER_VERSION = "chunk-v2.1"
 
 
 def chunks(blocks: Sequence[Block]) -> list[str]:

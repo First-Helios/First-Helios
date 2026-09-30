@@ -28,6 +28,7 @@ _LD_SCRIPT = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _MAX_AMOUNT = Decimal(1000)
+JSONLD_VERSION = "jsonld-v1"  # part of the JSON-LD interpretation's method version
 
 
 @dataclass(frozen=True, slots=True)
