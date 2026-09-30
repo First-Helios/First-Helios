@@ -17,7 +17,7 @@ menu page that links a menu-named PDF is recorded as ``failed/menu_pdf_only`` an
 counted (``menu_pdf_only``, ADR-0013 Amendments 3-4). The page verifier
 is the ADR-0013 page classifier (``classifier-v2``): it needs the ``menu`` extra
 (the worker image) and model files matching ``config/models.yaml`` under
-``--model-root`` (``python -m apps.menu_pipeline.models download``). Crawls
+``--model-root`` (``python -m apps.menu_pipeline.models download potion-base-8M``). Crawls
 live restaurant sites (robots + rate limited), so it makes network calls and is
 not exercised in CI.
 

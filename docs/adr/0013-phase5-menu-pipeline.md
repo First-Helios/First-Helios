@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–4.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–6.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -8,7 +8,10 @@ Rendering for discovery was built in session S6f and open question 3 decided
 Open questions 1, 2, 4 and 5 were answered at acceptance
 ([Amendment 3](#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 Unchanged re-fetches were settled in session P5-2
-([Amendment 4](#amendment-4-2026-09-29-unchanged-re-fetches)).
+([Amendment 4](#amendment-4-2026-09-29-unchanged-re-fetches)). Promo labels got their
+own grain and the `llama-server` deployment was settled in session P5-3
+([Amendment 5](#amendment-5-2026-09-29-promo-label-grain),
+[Amendment 6](#amendment-6-2026-09-29-llama-server-deployment)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -325,9 +328,10 @@ Each slice is a PR; ⚠ slices touch deps or `infra/` and stop for owner review.
 State as of 2026-09-29 (Amendment 3):
 
 1. ⚠ Worker image target, `menu` extra, `llama-server` service and model manifest.
-   *Built except `llama-server`:* the `worker` target, `menu` extra and checksummed
-   manifest came with slice 4 (S6d part 2, #52). Remaining: the `llama-server`
-   Compose service and the Qwen3-4B manifest entry.
+   *Built:* the `worker` target, `menu` extra and checksummed manifest came with
+   slice 4 (S6d part 2, #52); the `llama-server` Compose service and the Qwen3-4B
+   manifest entry in P5-3 (Amendment 6). Remaining: the owner-run Pi check that the
+   upstream image matches the spike's speed.
 2. `packages/helios_parsing`: segmentation, text hash, JSON-LD reader, chunking,
    repairs, validator, with the ported harness and synthetic tests. *Segmentation
    and the v3 price tokens exist (#52; dialog skip #54).* The harness's gold-label
@@ -622,3 +626,67 @@ Owner decisions in session P5-2 (slice 3), before any code:
      roughly 90 MB a month for ~2,300 pages.
    - Not built: ETag / `If-None-Match` (§5 allows it; the fetcher has no conditional
      GET and a `304` has no body to hash).
+
+## Amendment 5 (2026-09-29): promo label grain
+
+Owner decision in session P5-3 (carried over from P5-2's D1; the text was proposed
+in PR #59). It refines Amendment 3 item 5, which put a `promo` mark on each gold row:
+
+- *Promo labels get their own grain.* A promotion is labelled as its own entry, not
+  only as a flag on a menu row: its scope (items, sections, or the whole menu), its
+  terms (e.g. "half off", "BOGO", a fixed deal price) and its conditions (days,
+  hours, channel, minimum spend), each with a Capture-targeted locator. Rows that
+  print a promo price keep the item-level `promo` mark so `promo_rows_stored` still
+  works. The promo classifier (Phase 10) trains on these entries; whether Menu
+  storage gains a matching grain is decided with it (a schema change, stop-and-ask).
+- Nothing is built by this amendment. The item-level `promo` flag in the gold-label
+  format (#58) stays as the interim mark; the promo-entry label format is added when
+  the first set is labelled with it.
+
+## Amendment 6 (2026-09-29): `llama-server` deployment
+
+Owner decisions in session P5-3 (slice 1 remainder), before any code. §3 settled
+the threads, slots, host prompt cache, profile, network and model placement; these
+settle the rest.
+
+1. **Image: upstream, pinned by digest.** The spike ran llama.cpp `84e76d8`
+   (= build `b11173`, a native GCC 11.4 build with
+   `-mcpu=cortex-a76.cortex-a55+dotprod`). Upstream publishes server images daily,
+   not per build, so none exists at `b11173`. The service uses
+   `ghcr.io/ggml-org/llama.cpp:server-b11176` (amd64 + arm64), pinned by its index
+   digest: three commits after the spike's (two Hexagon changes, one multi-GPU
+   tensor-split fix), none on the CPU path. It is built with GCC 14,
+   `GGML_NATIVE=OFF` and `GGML_CPU_ALL_VARIANTS=ON` (the CPU variant is chosen at
+   runtime), runs as root, and is ~1.2 GB. §3's condition ("if its arm64 build
+   matches the spike's measured Pi speed") is checked by an owner-run Pi bench
+   ([runbook](../reviews/2026-09-29-llama-server-pi-check.md)): pass when upstream's
+   prompt and generation tokens/s are each ≥ 95% of the spike binary's, same flags,
+   same cores, same request. On a fail, a follow-up PR adds `infra/llama/Dockerfile`,
+   a pinned source build of `84e76d8`. Greedy output identity between the two builds
+   is recorded, not gated.
+2. **Model file.** Manifest entry `Qwen3-4B-Instruct-2507-Q4_0`: publisher
+   `unsloth/Qwen3-4B-Instruct-2507-GGUF` at revision `a06e946b…`, file
+   `Qwen3-4B-Instruct-2507-Q4_0.gguf`, 2,375,773,280 bytes, sha256 `e0ba675d…13be2`,
+   Apache-2.0. The size and sha256 match both the publisher's listing and the spike's
+   own copy (the spike did not record the publisher; another publisher's Q4_0 has a
+   different hash). Downloaded with the existing checksum-refusing downloader into
+   `var/models/<name>/`, mounted read-only.
+3. **Checksum refusal: an init step.** A one-shot `llama-model-check` service (API
+   image, no database) runs `models verify` for the GGUF; `llama-server` starts only
+   after it exits 0. §3's "the worker refuses to start" is met for the server this
+   way; the slice 5 client may also check the model path `/props` reports. The worker
+   image's default command now verifies only the classifier's files.
+4. **Pi cores: an override file.** `infra/docker-compose.pi.yml` pins `llama-server`
+   to CPUs 4-7 (the A76 cores) and Postgres and the API to 0-3. Other hosts don't
+   use it. On the Pi it is passed as a second `-f` (a `COMPOSE_FILE` in `.env` is
+   ignored when `-f` is given).
+5. **Health.** A Compose healthcheck on `/health` (503 while loading, 200 when ready;
+   start period 120 s). The worker does not depend on `llama-server` (every
+   `resolve_urls` run would otherwise start a ~5 GB server); slice 5 chooses between a
+   client-side wait and a dedicated extraction service.
+6. **Flags, limits, restart.** The spike's measured set: `--threads 4 --parallel 2
+   --ctx-size 8192` (4,096 tokens per slot) `--flash-attn on --cache-type-k q8_0
+   --cache-type-v q8_0 --cache-ram 0`. `mem_limit: 8g` (spike peak RSS 5.2 GB; the
+   spike's original RAM bar). `restart: unless-stopped`, so a crash mid-run restarts
+   it; the owner stops it after a run. A restart by the restart policy does not re-run
+   `llama-model-check`; the model directory is read-only in the container.

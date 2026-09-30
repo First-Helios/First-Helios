@@ -14,6 +14,7 @@ import pytest
 from apps.menu_pipeline.classifier import (
     ClassifierWeights,
     PageClassifier,
+    load_embedding,
     page_vector_inputs,
 )
 from apps.menu_pipeline.models import (
@@ -158,8 +159,57 @@ def test_download_keeps_only_files_matching_the_manifest(tmp_path: Path) -> None
 
 
 def test_shipped_manifest_pins_every_file() -> None:
-    (spec,) = load_manifest().values()
-    assert spec.licence == "MIT"
-    assert {file.name for file in spec.files} >= {"model.onnx", "tokenizer.json"}
-    assert all(len(file.sha256) == 64 and file.size > 0 for file in spec.files)  # noqa: PLR2004
-    assert spec.url(spec.files[0]).startswith(f"{spec.source}/resolve/{spec.revision}/")
+    manifest = load_manifest()
+    assert set(manifest) == {"potion-base-8M", "Qwen3-4B-Instruct-2507-Q4_0"}
+    for spec in manifest.values():
+        assert spec.licence in {"MIT", "Apache-2.0"}
+        assert len(spec.revision) == 40  # a commit, never a branch  # noqa: PLR2004
+        assert all(len(file.sha256) == 64 and file.size > 0 for file in spec.files)  # noqa: PLR2004
+        assert spec.url(spec.files[0]).startswith(f"{spec.source}/resolve/{spec.revision}/")
+    classifier = manifest["potion-base-8M"]
+    assert classifier.embedding_model == "minishlab/potion-base-8M"
+    assert {file.name for file in classifier.files} >= {"model.onnx", "tokenizer.json"}
+
+
+def test_shipped_manifest_pins_the_spike_extraction_model() -> None:
+    """ADR-0013 §1: the spike's Q4_0 GGUF, byte for byte, and not an embedding model."""
+    spec = load_manifest()["Qwen3-4B-Instruct-2507-Q4_0"]
+    assert spec.embedding_model is None
+    assert spec.files == (
+        ModelFile(
+            "Qwen3-4B-Instruct-2507-Q4_0.gguf",
+            "e0ba675d86ab277c61701c6793659b2ae801d95e3be791464c321e6fbf613be2",
+            2_375_773_280,
+        ),
+    )
+    assert spec.url(spec.files[0]) == (
+        "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/"
+        "a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_0.gguf"
+    )
+    with pytest.raises(ValueError, match="not an embedding model"):
+        load_embedding("Qwen3-4B-Instruct-2507-Q4_0")
+
+
+def test_manifest_entry_without_embedding_model(tmp_path: Path) -> None:
+    body = b"GGUF weights"
+    manifest = tmp_path / "models.yaml"
+    manifest.write_text(
+        "tiny-llm:\n"
+        "  licence: Apache-2.0\n"
+        "  source: https://models.example/org/tiny-llm/\n"
+        "  revision: abc123\n"
+        "  files:\n"
+        "    tiny.gguf:\n"
+        f"      sha256: {hashlib.sha256(body).hexdigest()}\n"
+        f"      size: {len(body)}\n",
+        encoding="utf-8",
+    )
+    (spec,) = load_manifest(manifest).values()
+    assert (spec.name, spec.embedding_model, spec.licence) == ("tiny-llm", None, "Apache-2.0")
+    assert spec.url(spec.files[0]) == "https://models.example/org/tiny-llm/resolve/abc123/tiny.gguf"
+    (tmp_path / "tiny-llm").mkdir()
+    (tmp_path / "tiny-llm" / "tiny.gguf").write_bytes(b"GGUF weightz")
+    with pytest.raises(ModelFileError, match="does not match"):
+        verified_model_dir(spec, tmp_path)
+    (tmp_path / "tiny-llm" / "tiny.gguf").write_bytes(body)
+    assert verified_model_dir(spec, tmp_path) == tmp_path / "tiny-llm"

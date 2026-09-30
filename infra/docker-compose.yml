@@ -76,7 +76,7 @@ services:
 
   # Discovery and menu-pipeline CLIs with the `menu` extra (page classifier,
   # ADR-0013). Behind the `menu` profile, so `make dev` and CI are unchanged:
-  #   docker compose --profile menu run --rm worker python -m apps.menu_pipeline.models download
+  #   docker compose --profile menu run --rm worker python -m apps.menu_pipeline.models download potion-base-8M
   #   docker compose --profile menu run --rm worker python -m apps.discovery.resolve_urls
   # With page rendering (headed Chromium needs a display; ADR-0013 §4):
   #   docker compose --profile menu run --rm worker \
@@ -101,6 +101,66 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: "no"
+
+  # One-shot: checks the extraction model's GGUF against config/models.yaml, so
+  # llama-server never serves a file the manifest doesn't pin (ADR-0013 §3). Runs
+  # in the API image (models.py needs no extras) and needs no database.
+  llama-model-check:
+    profiles: ["menu"]
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    command: ["python", "-m", "apps.menu_pipeline.models", "verify", "Qwen3-4B-Instruct-2507-Q4_0"]
+    volumes:
+      - ../var/models:/app/var/models:ro
+    restart: "no"
+
+  # The extraction model's server (ADR-0013 §1, §3; slice 1, Amendment 6). No host
+  # port: only services on the Compose network reach it, at http://llama-server:8080.
+  # Upstream's CPU server image; Pi-only core pinning is in docker-compose.pi.yml.
+  #   docker compose --profile menu up -d llama-server
+  # Flags are the spike's measured set: 2 slots of 4096 tokens, flash attention,
+  # q8_0 KV cache, and no host prompt cache (13.8 GB peak RSS with it, 5.2 GB without).
+  llama-server:
+    profiles: ["menu"]
+    # Pinned by digest (R90); the spike ran llama.cpp 84e76d8 = b11173, which has
+    # no upstream image. b11176 adds three commits, none on the CPU path.
+    image: ghcr.io/ggml-org/llama.cpp@sha256:6257697a7f5d034b8fb499ddb07af3e250506352f94102054252a23f3b85e0af  # server-b11176
+    command:
+      - --model
+      - /models/Qwen3-4B-Instruct-2507-Q4_0.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --threads
+      - "4"
+      - --parallel
+      - "2"
+      - --ctx-size
+      - "8192"
+      - --flash-attn
+      - "on"
+      - --cache-type-k
+      - q8_0
+      - --cache-type-v
+      - q8_0
+      - --cache-ram
+      - "0"
+    volumes:
+      - ../var/models/Qwen3-4B-Instruct-2507-Q4_0:/models:ro
+    mem_limit: 8g  # spike peak RSS 5.2 GB; the spike's original RAM bar
+    depends_on:
+      llama-model-check:
+        condition: service_completed_successfully
+    healthcheck:
+      # /health answers 503 while the model loads, 200 once it can serve.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
 
 volumes:
   postgres_data:

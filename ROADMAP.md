@@ -517,7 +517,7 @@ website/menu-URL coverage is measured and written down. Gate state:
 ### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
 > Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), accepted
-> 2026-09-29 (Amendments 1–3). It replaces this
+> 2026-09-29 (Amendments 1–6). It replaces this
 > phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
 > plan (owner decision G.b), on the evidence of the
 > [menu-model spike](./docs/spikes/menu-model/README.md).
@@ -533,9 +533,12 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   model manifest; the page-classifier runtime, now discovery's menu-URL verifier
   `classifier-v2` ([§7](./docs/adr/0013-phase5-menu-pipeline.md#7-relation-to-adr-0015-the-classifier-becomes-the-menu-url-verifier));
   headed-Chromium rendering for discovery (`resolve_urls --render`).
-- ⚠ `llama-server` Compose service behind the `menu` profile and the extraction
-  model's manifest entry ([§3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)).
-  New runtime dependencies: stop for owner review.
+- *Built (P5-3):* the ⚠ `llama-server` Compose service behind the `menu`
+  profile (upstream image pinned by digest, the spike's flags, a checksum
+  init step, Pi core pinning in `infra/docker-compose.pi.yml`) and the
+  extraction model's manifest entry ([§3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment),
+  [Amendment 6](./docs/adr/0013-phase5-menu-pipeline.md#amendment-6-2026-09-29-llama-server-deployment)).
+  Pending: the owner-run Pi check of the image against the spike's build.
 - *Built (P5-2):* `menu-page` Bronze writes — a Capture per fetch or render,
   durable bundles, Versions keyed on the segmented-text hash (an unchanged
   re-read writes no Version, Amendment 4), Capture-targeted Evidence

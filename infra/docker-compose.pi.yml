@@ -1,0 +1,13 @@
+# Orange Pi 5 Plus (RK3588) only: CPUs 4-7 are the Cortex-A76 cores, 0-3 the A55s.
+# llama-server gets the A76s (the spike ran `taskset -c 4-7 ... -t 4`); Postgres
+# and the API keep the A55s (ADR-0013 §3). Other hosts don't use this file. On the
+# Pi, pass it after the base file in every compose command (a COMPOSE_FILE in .env
+# is ignored whenever -f is given):
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.pi.yml --env-file .env ...
+services:
+  postgres:
+    cpuset: "0-3"
+  api:
+    cpuset: "0-3"
+  llama-server:
+    cpuset: "4-7"
