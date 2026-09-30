@@ -235,7 +235,10 @@ def test_two_completed_missing_releases_close_and_new_presence_reopens(session: 
     assert sweep(session, 1).closed == 0
     complete(session, 2, predecessor=1)
     report = sweep(session, 2)
-    assert report.closed == 1 and report.closed_venues == [(est.subject_id, TIMES[0].isoformat())]
+    assert report.closed == 1
+    ((closed_id, last_seen),) = report.closed_venues
+    # Compare instants: the offset in the string follows the session's timezone.
+    assert closed_id == est.subject_id and datetime.fromisoformat(last_seen) == TIMES[0]
     assert est.operating_status == "closed" and est.valid_to == TIMES[1]
     assert sweep(session, 2).closed == 0
     assert ingest(session, [first], 0).lifecycle.reopened == 0
