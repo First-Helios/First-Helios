@@ -455,7 +455,7 @@ class BrowserRenderer:
         # page never opens one.
         refused = policy.decide(url, "document", main_navigation=True)
         if refused is not None:
-            return self._failure("skipped", refused)
+            return self._failure("skipped", _navigation_reason(refused))
         session = self._started()
         context = self._new_context()
         try:
@@ -478,7 +478,7 @@ class BrowserRenderer:
             except session.error:
                 refusal = policy.navigation_refused
                 if refusal is not None:
-                    return self._failure("skipped", refusal)
+                    return self._failure("skipped", _navigation_reason(refusal))
                 final = _final_document(documents)
                 if final is None:
                     return self._failure("failed", "network_error")
@@ -523,6 +523,12 @@ class BrowserRenderer:
             content_hash="sha256:" + hashlib.sha256(body).hexdigest(),
             render=self.name,
         )
+
+
+def _navigation_reason(reason: str) -> str:
+    """A Capture reason code for a refused navigation: a hop to a non-HTTP(S)
+    scheme can only be a redirect, so it is recorded as ``redirect_refused``."""
+    return "redirect_refused" if reason == "scheme" else reason
 
 
 def _intercept(

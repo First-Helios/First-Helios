@@ -29,6 +29,7 @@ from packages.helios_core.provenance.validation import (
     canonicalize_source_url as canonicalize_source_url,
 )
 from packages.helios_core.provenance.validation import (
+    capture_excerpt_hash,
     excerpt_hash,
     validate_outcome,
 )
@@ -511,18 +512,84 @@ def record_capture_attempt(
     outcome: Literal["failed", "skipped"],
     reason_code: str,
     content_hash: str | None = None,
+    bundle_path: str | None = None,
 ) -> CaptureReference:
-    """Record one unsuccessful site attempt; no record, Version or Identity state."""
-    url = canonicalize_source_url(source_url)
+    """Record one unsuccessful site attempt; no record, Version or Identity state.
+
+    ``bundle_path`` names the durable bundle of a body that was read but not
+    used (e.g. a ``skipped/not_menu`` menu page, ADR-0013 §5).
+    """
     validate_outcome(outcome, reason_code)
     if outcome not in {"failed", "skipped"}:
         raise ValueError("attempts must be failed or skipped")
+    return _record_capture(
+        session,
+        source_namespace=source_namespace,
+        source_kind=source_kind,
+        source_url=source_url,
+        fetched_at=fetched_at,
+        outcome=outcome,
+        reason_code=reason_code,
+        content_hash=content_hash,
+        bundle_path=bundle_path,
+    )
+
+
+def record_unchanged_capture(
+    session: Session,
+    *,
+    source_namespace: str,
+    source_kind: str,
+    source_url: str,
+    fetched_at: datetime,
+    content_hash: str,
+    bundle_path: str,
+) -> CaptureReference:
+    """Record a successful re-read whose observation equals the record's latest Version.
+
+    A ``succeeded`` Capture with no Version and no Evidence (ADR-0013
+    Amendment 4, ``menu-page`` only): the page was read again and nothing the
+    record asserts changed. An exact retry (same endpoint, fetch time, hash and
+    bundle) returns the existing Capture.
+    """
+    _require_trimmed(content_hash, "content hash")
+    _require_trimmed(bundle_path, "bundle path")
+    return _record_capture(
+        session,
+        source_namespace=source_namespace,
+        source_kind=source_kind,
+        source_url=source_url,
+        fetched_at=fetched_at,
+        outcome="succeeded",
+        reason_code=None,
+        content_hash=content_hash,
+        bundle_path=bundle_path,
+        reuse_exact=True,
+    )
+
+
+def _record_capture(  # noqa: PLR0913 - one Capture row's fields
+    session: Session,
+    *,
+    source_namespace: str,
+    source_kind: str,
+    source_url: str,
+    fetched_at: datetime,
+    outcome: str,
+    reason_code: str | None,
+    content_hash: str | None,
+    bundle_path: str | None,
+    reuse_exact: bool = False,
+) -> CaptureReference:
+    url = canonicalize_source_url(source_url)
     for value, label in ((source_namespace, "namespace"), (source_kind, "kind")):
         _require_trimmed(value, label)
     if fetched_at.utcoffset() is None:
         raise ValueError("fetched at requires an aware timestamp")
     if content_hash is not None:
         _require_trimmed(content_hash, "content hash")
+    if bundle_path is not None:
+        _require_trimmed(bundle_path, "bundle path")
     with session.begin_nested():
         session.execute(
             insert(Source)
@@ -533,6 +600,25 @@ def record_capture_attempt(
         if source.kind != source_kind:
             raise ValueError("Source kind mismatch")
         endpoint = _endpoint(session, source.id, url)
+        if reuse_exact:
+            existing = session.scalars(
+                select(Capture)
+                .where(
+                    Capture.source_id == source.id,
+                    Capture.source_endpoint_id == endpoint.id,
+                    Capture.fetched_at == fetched_at,
+                    Capture.content_hash == content_hash,
+                    Capture.bundle_path == bundle_path,
+                    Capture.outcome == outcome,
+                    ~select(SourceRecordVersion.id)
+                    .where(SourceRecordVersion.capture_id == Capture.id)
+                    .exists(),
+                )
+                .order_by(Capture.id)
+                .limit(1)
+            ).one_or_none()
+            if existing is not None:
+                return _capture_reference(existing, endpoint)
         capture = Capture(
             source_id=source.id,
             source_endpoint_id=endpoint.id,
@@ -540,7 +626,43 @@ def record_capture_attempt(
             outcome=outcome,
             reason_code=reason_code,
             content_hash=content_hash,
+            bundle_path=bundle_path,
         )
         session.add(capture)
         session.flush()
         return _capture_reference(capture, endpoint)
+
+
+def record_capture_evidence(
+    session: Session, *, capture_id: int, locator: str, block_text: str
+) -> int:
+    """Persist a Capture-targeted Evidence locator and return its ID (ADR-0013 §5).
+
+    ``locator`` is ``blocks:<segmenter>:<block>[<start>:<end>]`` into the
+    Capture's bundle and ``block_text`` that block's text, from which the
+    contract computes ``excerpt_hash``. Only a succeeded Capture with a bundle
+    can be cited. An identical locator on the same Capture is reused.
+    """
+    evidence_hash = capture_excerpt_hash(block_text, locator)
+    with session.begin_nested():
+        capture = session.get(Capture, capture_id)
+        if capture is None:
+            raise ValueError(f"unknown Capture {capture_id}")
+        if capture.outcome != "succeeded" or capture.bundle_path is None:
+            raise ValueError("Capture-targeted Evidence needs a succeeded Capture with a bundle")
+        existing = session.scalar(
+            select(Evidence.id)
+            .where(
+                Evidence.capture_id == capture_id,
+                Evidence.locator == locator,
+                Evidence.excerpt_hash == evidence_hash,
+            )
+            .order_by(Evidence.id)
+            .limit(1)
+        )
+        if existing is not None:
+            return existing
+        evidence = Evidence(capture_id=capture_id, locator=locator, excerpt_hash=evidence_hash)
+        session.add(evidence)
+        session.flush()
+        return evidence.id

@@ -85,13 +85,23 @@ This section is the single current-status page. Other docs link here.
   loss buckets, corruption injection), with `apps/menu_pipeline/evaluate.py`
   reading the gitignored labels and outputs. Chunks, rows, decisions and harness
   numbers match the spike's on its saved Pi output and gold rows.
+- **`menu-page` Bronze** (ADR-0013 slice 3, Amendment 4):
+  `apps/menu_pipeline/page_bronze.py`, `bundle.py`, `run.py`. A resumable batch
+  CLI fetches every saved menu URL of a current venue, segments and classifies it,
+  and writes a Capture with a durable bundle (`var/replay/menu-page/`), plus a
+  Version when the segmented text, URL or render changed; an unchanged re-read is a
+  Capture without a Version. Non-menu, JavaScript-only, PDF and failed pages are
+  Captures with a reason code. Platform pages take the venue's Establishment scope
+  (Organization when several venues share the URL), own-site pages the
+  Organization's. Discovery records `menu_pdf_only` for venues whose only menu
+  looks like a PDF. No extraction yet; not yet run on the Pi.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5 menu extraction: the `llama-server` service and its client,
-  `menu-page` Bronze writes and Menu writes.
+- Phase 5 menu extraction: the `llama-server` service and its client, and Menu
+  writes.
   [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) was accepted 2026-09-29;
   its open questions are answered in
   [Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided) (platform pages take
@@ -238,6 +248,9 @@ uv run --extra menu python -m apps.menu_pipeline.models download
 # Resolve website + menu URL (Pi gate 1b must be open before a Pi run)
 uv run --extra menu python -m apps.discovery.resolve_urls --config config/sources.yaml [--limit N]
 
+# Fetch saved menu URLs into menu-page Bronze (no extraction yet; --render off on the Pi)
+uv run --extra menu python -m apps.menu_pipeline.run [--limit N] [--render]
+
 # Precision audit over a venue export (no database)
 uv run python -m apps.discovery.audit --export <venue-export.json> [--geocode-check]
 ```
@@ -300,7 +313,7 @@ alembic/                migrations (hand-reviewed)
 apps/
   api/                  FastAPI read API and OpenAPI snapshot
   discovery/            Overture discovery, URL resolution, lifecycle, audit
-  menu_pipeline/        page classifier runtime, model files, training and evaluation scripts
+  menu_pipeline/        page classifier, menu-page Bronze writes and batch CLI, model files, evaluation
 config/sources.yaml     manual website / menu-URL registry
 config/models.yaml      pinned model files (sha256, size, licence)
 config/page_classifier_v1.json  page classifier weights

@@ -536,10 +536,11 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
 - ⚠ `llama-server` Compose service behind the `menu` profile and the extraction
   model's manifest entry ([§3](./docs/adr/0013-phase5-menu-pipeline.md#3-runtime-dependencies-and-dockerpi-deployment)).
   New runtime dependencies: stop for owner review.
-- `menu-page` Bronze writes — a Capture per fetch or render, durable bundles,
-  Versions keyed on the segmented-text hash, Capture-targeted Evidence
-  locators — and a resumable batch CLI. Platform pages (`<gers>|<platform host>`)
-  take the venue's Establishment scope, own-site pages the Organization's; PDF
+- *Built (P5-2):* `menu-page` Bronze writes — a Capture per fetch or render,
+  durable bundles, Versions keyed on the segmented-text hash (an unchanged
+  re-read writes no Version, Amendment 4), Capture-targeted Evidence
+  locators — and a resumable batch CLI (`python -m apps.menu_pipeline.run`).
+  Platform pages (`<gers>|<platform host>`) take the venue's Establishment scope, own-site pages the Organization's; PDF
   menus are skipped and counted ([§5](./docs/adr/0013-phase5-menu-pipeline.md#5-bronze-change-detection-bundles-and-evidence-locators)).
 - LLM extraction and Menu writes through `persist_menu`, with `llm`/`jsonld`
   source kinds and trust labels ([§6](./docs/adr/0013-phase5-menu-pipeline.md#6-menu-writes-and-trust-q5-q6)).

@@ -114,6 +114,30 @@ def excerpt_hash(payload: object, locator: str) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode()).hexdigest()
 
 
+# blocks:<segmenter version>:<block id>[<start>:<end>], a character span in one
+# segmented block of the Capture's bundle (ADR-0013 §5).
+_CAPTURE_LOCATOR = re.compile(r"blocks:([a-z0-9][a-z0-9.-]*):(b[0-9]{4,})\[([0-9]+):([0-9]+)\]")
+
+
+def parse_capture_locator(locator: str) -> tuple[str, str, int, int]:
+    """``(segmenter version, block id, start, end)`` of a Capture-targeted locator."""
+    match = _CAPTURE_LOCATOR.fullmatch(locator)
+    if match is None:
+        raise ValueError("Capture-targeted locator must be blocks:<segmenter>:<block>[<s>:<e>]")
+    segmenter, block, start, end = match.groups()
+    if int(start) >= int(end):
+        raise ValueError("Capture-targeted locator must select a nonempty span")
+    return segmenter, block, int(start), int(end)
+
+
+def capture_excerpt_hash(block_text: str, locator: str) -> str:
+    """``sha256:`` of ``block_text[start:end]``, the span a Capture-targeted locator names."""
+    _segmenter, _block, start, end = parse_capture_locator(locator)
+    if end > len(block_text):
+        raise ValueError("Capture-targeted locator runs past its block")
+    return "sha256:" + hashlib.sha256(block_text[start:end].encode("utf-8")).hexdigest()
+
+
 REJECTION_REASONS = frozenset(
     {"blank_name", "name_without_letters_or_digits", "name_too_long", "menu_not_verified"}
 )
@@ -126,9 +150,23 @@ SKIP_REASONS = frozenset(
         "redirect_refused",
         "platform_root",
         "social_link",
+        # ADR-0013 §4-§5, Amendments 1-3: read, but not a page the pipeline extracts.
+        "bot_challenge",
+        "js_only",
+        "not_menu",
+        "pdf",
     }
 )
-FAILURE_REASONS = frozenset({"network_error", "too_large", "not_html", "no_menu_found"})
+FAILURE_REASONS = frozenset(
+    {
+        "network_error",
+        "too_large",
+        "not_html",
+        "no_menu_found",
+        "render_timeout",
+        "menu_pdf_only",  # no menu URL verified, but a fetched page links a menu PDF
+    }
+)
 
 
 def validate_outcome(outcome: str, reason: str | None) -> None:

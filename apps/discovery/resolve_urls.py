@@ -12,7 +12,9 @@ need work. Records a human put in ``needs_review`` are never re-assigned. A
 saved menu URL is re-verified when the page verifier changes or 90 days after
 its last pass, and withdrawn to ``needs_review`` if it no longer verifies
 (ADR-0015); the report counts ``menu_urls_reverified``, ``menu_urls_withdrawn``,
-``menu_urls_reverify_deferred`` and ``platform_ambiguous``. The page verifier
+``menu_urls_reverify_deferred`` and ``platform_ambiguous``. A site with no verified
+menu page that links a menu-named PDF is recorded as ``failed/menu_pdf_only`` and
+counted (``menu_pdf_only``, ADR-0013 Amendments 3-4). The page verifier
 is the ADR-0013 page classifier (``classifier-v2``): it needs the ``menu`` extra
 (the worker image) and model files matching ``config/models.yaml`` under
 ``--model-root`` (``python -m apps.menu_pipeline.models download``). Crawls

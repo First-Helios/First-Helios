@@ -58,6 +58,8 @@ per-host pacing (:meth:`SiteFetcher.pace`) and skips a bot challenge.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import gzip
 import hashlib
 import io
@@ -84,6 +86,7 @@ from apps.discovery.menu_url import (
     address_on_page,
     is_platform_venue_page,
     menu_links_from_sitemap,
+    menu_pdf_links,
     ordered_menu_candidates,
     ordering_platform_host,
     page_menu_signal,
@@ -126,6 +129,10 @@ class FetchResult:
     fetched_at: float
     content_hash: str
     render: str | None = None  # the renderer's name when a browser produced ``text``
+    # The response body after HTTP content decoding (what ``content_hash`` hashes)
+    # and the charset ``text`` was decoded with; a render has no body.
+    body: bytes | None = None
+    encoding: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +155,14 @@ class CaptureFailure:
     outcome: Literal["failed", "skipped"]
     reason_code: str
     fetched_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class MenuPdfLinked:
+    """No menu page verified, but a fetched page links a menu-named PDF: the venue's
+    menu is likely PDF-only, which v1 does not read (ADR-0013 Amendment 3)."""
+
+    pdf_url: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +286,7 @@ class SiteFetcher:
         self._failure_reason = "network_error"
         self._site_failure: CaptureFailure | None = None
         self._found_via: dict[str, str] = {}
+        self._menu_pdf: str | None = None  # a menu-named PDF link seen by discovery
         self._not_before: float = 0.0
 
     @property
@@ -308,15 +324,19 @@ class SiteFetcher:
             if result is None:
                 self._failure_reason = str(payload["reason_code"])
                 return None
+            body = base64.b64decode(result["body_b64"], validate=True)
+            encoding = result["encoding"]
             return FetchResult(
                 url=str(result["url"]),
                 status=int(result["status"]),
-                text=str(result["text"]),
+                text=_decode(body, encoding),
                 content_type=str(result["content_type"]),
                 fetched_at=fetched_at,
                 content_hash=str(result["content_hash"]),
+                body=body,
+                encoding=encoding,
             )
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, binascii.Error):
             return _MISS
 
     def _write_cache(self, url: str, result: FetchResult | None) -> None:
@@ -328,7 +348,8 @@ class SiteFetcher:
             else {
                 "url": result.url,
                 "status": result.status,
-                "text": result.text,
+                "body_b64": base64.b64encode(result.body or b"").decode("ascii"),
+                "encoding": result.encoding,
                 "content_type": result.content_type,
                 "content_hash": result.content_hash,
             }
@@ -358,6 +379,19 @@ class SiteFetcher:
         leaves the site, or the request fails.
         """
         return self._get(url, obey_robots=True)
+
+    def fetch_page(self, url: str) -> FetchResult | CaptureFailure:
+        """One page for the menu pipeline: its ``200`` response (any content type), or why not.
+
+        The same robots, redirect, public-address, rate-limit and size rules as
+        :meth:`fetch`; the failure carries the attempt's reason code.
+        """
+        result = self.fetch(url)
+        if result is not None and result.status == 200:  # noqa: PLR2004
+            return result
+        self._note_failure(result)
+        assert self._site_failure is not None  # noqa: S101 - set by _note_failure
+        return self._site_failure
 
     def _get(self, url: str, *, obey_robots: bool) -> FetchResult | None:
         cached = self._read_cache(url)
@@ -465,6 +499,8 @@ class SiteFetcher:
                     content_type=response.headers.get("content-type", ""),
                     fetched_at=self._clock(),
                     content_hash=content_hash,
+                    body=body,
+                    encoding=response.encoding,
                 )
         except (httpx.HTTPError, httpx.InvalidURL):
             self._failure_reason = "network_error"
@@ -514,20 +550,32 @@ class SiteFetcher:
 
     def discover_menu_attempt(
         self, website: str, *, address: str | None = None
-    ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous, ...] | CaptureFailure:
+    ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous | MenuPdfLinked, ...] | CaptureFailure:
         """Verified acquisitions (own-site first) or one site-level failure, incl. policy skips.
 
         ``address`` is the venue's street line, used only to pick its page among
-        a chain homepage's several links on one platform.
+        a chain homepage's several links on one platform. When no menu page
+        verified but the homepage or a fetched candidate links a menu-named PDF,
+        the result ends with :class:`MenuPdfLinked`.
         """
         self._site_failure = None
         self._found_via = {}
-        found = self.discover_menu_url(website, address=address)
+        found: tuple[MenuUrlDiscovery | PlatformAmbiguous | MenuPdfLinked, ...] = (
+            self.discover_menu_url(website, address=address)
+        )
+        if self._menu_pdf is not None and not any(
+            isinstance(item, MenuUrlDiscovery) for item in found
+        ):
+            found = (*found, MenuPdfLinked(self._menu_pdf))
         return (
             found
             or self._site_failure
             or CaptureFailure("failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC))
         )
+
+    def _note_menu_pdf(self, html: str, url: str) -> None:
+        if self._menu_pdf is None:
+            self._menu_pdf = next(iter(menu_pdf_links(html, url)), None)
 
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
@@ -711,6 +759,7 @@ class SiteFetcher:
         Returns the own-site result first (when one verified), then platform
         results in homepage order; empty when nothing verified.
         """
+        self._menu_pdf = None
         if platform_signal(website):
             if ordering_platform_host(website) is None:
                 self._failure_reason = "social_link"
@@ -745,6 +794,7 @@ class SiteFetcher:
             base = homepage.url
             homepage_html = homepage.text
             homepage_hash = _body_hash(homepage.text)
+            self._note_menu_pdf(homepage.text, homepage.url)
 
         sitemap_matches = self._sitemap_menu_matches(base)
         candidates = ordered_menu_candidates(
@@ -761,6 +811,7 @@ class SiteFetcher:
                 continue
             if same_resource(result.url, base):
                 continue  # the candidate just redirected back to the homepage (R08)
+            self._note_menu_pdf(result.text, result.url)
             is_well_known = candidate.rstrip("/") in well_known
             if is_well_known and is_catch_all is None:
                 is_catch_all = self._is_catch_all_site(base)
