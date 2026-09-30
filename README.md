@@ -95,13 +95,23 @@ This section is the single current-status page. Other docs link here.
   (Organization when several venues share the URL), own-site pages the
   Organization's. Discovery records `menu_pdf_only` for venues whose only menu
   looks like a PDF. No extraction yet; not yet run on the Pi.
+- **`llama-server`** (ADR-0013 slice 1, Amendment 6): the extraction model's
+  server, a Compose service behind the `menu` profile with no host port
+  (`http://llama-server:8080` on the Compose network). Upstream llama.cpp image
+  `server-b11176` pinned by digest, the spike's flags, an 8 GB memory limit. It
+  serves Qwen3-4B-Instruct-2507 Q4_0 from `var/models/` (read-only), pinned in
+  `config/models.yaml`; the one-shot `llama-model-check` service verifies the file
+  first, and a mismatch keeps the server from starting.
+  `infra/docker-compose.pi.yml` pins it to the Pi's A76 cores. Nothing calls it
+  yet (the client is slice 5); the owner-run
+  [Pi check](./docs/reviews/2026-09-29-llama-server-pi-check.md) against the
+  spike's binary is pending.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5 menu extraction: the `llama-server` service and its client, and Menu
-  writes.
+- Phase 5 menu extraction: the `llama-server` client, and Menu writes.
   [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) was accepted 2026-09-29;
   its open questions are answered in
   [Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided) (platform pages take
@@ -175,6 +185,12 @@ This section is the single current-status page. Other docs link here.
   - [ ] the owner authorizes the run. After it: record website/menu-URL
     coverage (the last Phase 4 "done when" item) and a hand-checked precision
     sample of saved menu URLs.
+- **Pi check, `llama-server` image: pending.** Before the first Pi extraction
+  run, the owner runs the
+  [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream
+  image's prompt and generation tokens/s must each be ≥ 95% of the spike's own
+  build on the A76 cores (ADR-0013 §3, Amendment 6). A fail means a source build
+  of the spike's commit replaces it.
 - **Code review remediation R01–R117: complete 2026-09-29 (S17).** Every
   finding was fixed or accepted/deferred by the owner; deferrals and their
   triggers are in [ROADMAP §7](./ROADMAP.md#7-open-questions). Close-out note at
@@ -243,7 +259,9 @@ uv run python -m apps.discovery [--release <overture-parquet-glob>] \
     [--expected-predecessor <prior-release-path>] [--no-geocode]
 
 # Page-classifier model files into var/models/, checked against config/models.yaml
-uv run --extra menu python -m apps.menu_pipeline.models download
+uv run python -m apps.menu_pipeline.models download potion-base-8M
+# The extraction model (2.4 GB GGUF) for llama-server; `download` with no name fetches both
+uv run python -m apps.menu_pipeline.models download Qwen3-4B-Instruct-2507-Q4_0
 
 # Resolve website + menu URL (Pi gate 1b must be open before a Pi run)
 uv run --extra menu python -m apps.discovery.resolve_urls --config config/sources.yaml [--limit N]
@@ -269,6 +287,22 @@ SELECT json_agg(row_to_json(t)) FROM (
 ) t;
 SQL
 ```
+
+### Extraction model server
+
+`llama-server` (ADR-0013 Amendment 6) runs only when started; nothing calls it
+yet. The model file must be in `var/models/` first (download above);
+`llama-model-check` refuses a missing or changed file, and then `llama-server`
+doesn't start:
+
+```bash
+docker compose -f infra/docker-compose.yml --profile menu up -d --wait llama-server
+docker compose -f infra/docker-compose.yml --profile menu exec llama-server curl -s localhost:8080/health
+docker compose -f infra/docker-compose.yml --profile menu stop llama-server   # after a run
+```
+
+On the Pi, add `-f infra/docker-compose.pi.yml` after the base file, so the
+server gets the A76 cores (4-7) and Postgres and the API the A55s.
 
 ### Staging (Pi)
 

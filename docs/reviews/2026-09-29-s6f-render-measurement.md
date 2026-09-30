@@ -130,7 +130,7 @@ scp var/spikes/menu-model/render-probe-2026-09-29/s6f/all-urls.json \
 # on the Pi
 docker compose -f infra/docker-compose.yml --profile menu build worker
 docker compose -f infra/docker-compose.yml --profile menu run --rm --no-deps worker \
-    python -m apps.menu_pipeline.models download        # once, if var/models is empty
+    python -m apps.menu_pipeline.models download potion-base-8M  # once, if var/models is empty
 docker compose -f infra/docker-compose.yml --profile menu run --rm --no-deps worker \
     xvfb-run -a python -m apps.menu_pipeline.measure_render \
     --urls var/render-measure/all-urls.json --out var/render-measure/pi --classify
