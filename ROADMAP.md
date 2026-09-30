@@ -183,7 +183,7 @@ docs/                  # adr/, rfc/, plans/, spikes/, reviews/, diagrams/
 makefile, pyproject.toml, uv.lock, ruff.toml, mypy.ini, alembic.ini, .pre-commit-config.yaml
 ```
 
-Per [ADR-0013 §2](./docs/adr/0013-phase5-menu-pipeline.md#2-code-layout): `packages/helios_parsing/` (pure pipeline stages, Phase 3) and `apps/menu_pipeline/` (the pipeline's I/O, Phase 5). Both exist; so far they hold segmentation and the text hash, price tokens, the JSON-LD reader, the validator, the page classifier and the renderer.
+Per [ADR-0013 §2](./docs/adr/0013-phase5-menu-pipeline.md#2-code-layout): `packages/helios_parsing/` (pure pipeline stages, Phase 3) and `apps/menu_pipeline/` (the pipeline's I/O, Phase 5). Both exist; so far they hold segmentation and the text hash, price tokens, the JSON-LD reader, chunking, the prompt and grammar, output parsing, repairs, the validator, the evaluation harness, the page classifier and the renderer.
 
 ### 4.2 Environments (Dev → Staging → Prod)
 
@@ -442,8 +442,10 @@ OpenAPI schema at `/openapi.json` describes it accurately.
 > Built inside Phase 5's slice train ([ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md#implementation-slices-after-acceptance)
 > slice 2). ADR-0013 was accepted 2026-09-29. Segmentation and the price tokens
 > already exist (built with the page classifier, S6d/S6f); the text hash, JSON-LD
-> reader and validator came with slice 2's first half (P5-1a). Remaining: chunking,
-> prompt/grammar, output parsing, repairs and the evaluation harness (P5-1b).
+> reader and validator came with slice 2's first half (P5-1a); chunking,
+> prompt/grammar, output parsing, repairs and the evaluation harness with the
+> second half (P5-1b). Every deliverable below exists; nothing calls the stages in
+> production until slice 5.
 
 **Learning module to review against:** [M4](./LEARNING_GUIDE.md#m4--testing)
 
