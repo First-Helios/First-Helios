@@ -64,7 +64,9 @@ RUN playwright install --with-deps --no-shell chromium \
     && apt-get install -y --no-install-recommends xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 USER helios
-CMD ["python", "-m", "apps.menu_pipeline.models", "verify"]
+# The page classifier's files only: the extraction GGUF is llama-server's, checked
+# by Compose's llama-model-check.
+CMD ["python", "-m", "apps.menu_pipeline.models", "verify", "potion-base-8M"]
 
 
 FROM base AS runtime

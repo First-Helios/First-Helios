@@ -3,9 +3,11 @@
 The manifest (``config/models.yaml``) lists each model's source, revision,
 licence and every file's sha256 and size. Files live in ``var/models/<name>/``,
 never in an image. :func:`verified_model_dir` refuses a directory whose files
-differ from the manifest, so a worker never runs a model it can't identify::
+differ from the manifest, so a worker never runs a model it can't identify, and
+Compose starts ``llama-server`` only after ``verify`` passes for its GGUF::
 
     python -m apps.menu_pipeline.models download [--root var/models] [NAME ...]
+    python -m apps.menu_pipeline.models verify [--root var/models] [NAME ...]
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ class ModelFile:
 @dataclass(frozen=True, slots=True)
 class ModelSpec:
     name: str
-    embedding_model: str
+    embedding_model: str | None  # fastembed's name; None for a model that isn't one
     source: str
     revision: str
     licence: str
@@ -61,7 +63,7 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, ModelSpec]:
         )
         specs[str(name)] = ModelSpec(
             name=str(name),
-            embedding_model=str(entry["embedding_model"]),
+            embedding_model=str(entry["embedding_model"]) if "embedding_model" in entry else None,
             source=str(entry["source"]).rstrip("/"),
             revision=str(entry["revision"]),
             licence=str(entry["licence"]),
@@ -85,7 +87,7 @@ def verified_model_dir(spec: ModelSpec, root: Path = DEFAULT_ROOT) -> Path:
         path = directory / file.name
         if not path.is_file():
             raise ModelFileError(
-                f"{path} is missing; run `python -m apps.menu_pipeline.models download`"
+                f"{path} is missing; run `python -m apps.menu_pipeline.models download {spec.name}`"
             )
         if path.stat().st_size != file.size or _sha256(path) != file.sha256:
             raise ModelFileError(f"{path} does not match config/models.yaml")

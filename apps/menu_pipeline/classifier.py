@@ -119,9 +119,11 @@ def load_embedding(
     model: str, model_root: Path = DEFAULT_ROOT
 ) -> Callable[[Sequence[str]], list[list[float]]]:
     """Embed texts with a manifest model on checksum-verified files (the ``menu`` extra)."""
+    spec = load_manifest()[model]
+    if spec.embedding_model is None:
+        raise ValueError(f"{model} is not an embedding model in config/models.yaml")
     from fastembed import TextEmbedding  # noqa: PLC0415 - optional extra, loaded on demand
 
-    spec = load_manifest()[model]
     directory = verified_model_dir(spec, model_root)
     embedding = TextEmbedding(spec.embedding_model, specific_model_path=str(directory))
 
