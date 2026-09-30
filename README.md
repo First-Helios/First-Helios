@@ -72,21 +72,26 @@ This section is the single current-status page. Other docs link here.
 - **Precision audit**: `apps/discovery/audit.py`. DB-free duplicate and geocode
   audit over a venue export, with a hand-labeled worksheet, plus a corpus-wide
   twin search (misplaced twins, location-label records).
-- **Menu parsing stages** (ADR-0013 slice 2, first half): `packages/helios_parsing/`.
+- **Menu parsing stages** (ADR-0013 slice 2): `packages/helios_parsing/`.
   Pure functions, nothing calls them in production yet: the segmented-text hash
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
   JSON-LD menu reader (`jsonld.py`), and validator v3 (`validator.py`: per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
-  hashes, the `unlabeled_price_runs` page flag). Validator decisions match the
-  spike's on its saved Pi output and gold rows.
+  hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
+  chunking (`chunking.py`), prompt v2.3 with its GBNF grammar, token cap and
+  sparse-chunk retry (`prompt.py`), output parsing with truncated-output recovery
+  and the row repairs (`output.py`), and stitch v3 (`stitch.py`). The evaluation
+  harness is `evaluation.py` (gold-label format with the `promo` mark, scores,
+  loss buckets, corruption injection), with `apps/menu_pipeline/evaluate.py`
+  reading the gitignored labels and outputs. Chunks, rows, decisions and harness
+  numbers match the spike's on its saved Pi output and gold rows.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5 menu extraction: the rest of `packages/helios_parsing` (chunking,
-  prompt and grammar, output parsing, repairs, evaluation harness), the
-  `llama-server` service, `menu-page` Bronze writes and Menu writes.
+- Phase 5 menu extraction: the `llama-server` service and its client,
+  `menu-page` Bronze writes and Menu writes.
   [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md) was accepted 2026-09-29;
   its open questions are answered in
   [Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided) (platform pages take
@@ -295,7 +300,7 @@ alembic/                migrations (hand-reviewed)
 apps/
   api/                  FastAPI read API and OpenAPI snapshot
   discovery/            Overture discovery, URL resolution, lifecycle, audit
-  menu_pipeline/        page classifier runtime, model files, training script
+  menu_pipeline/        page classifier runtime, model files, training and evaluation scripts
 config/sources.yaml     manual website / menu-URL registry
 config/models.yaml      pinned model files (sha256, size, licence)
 config/page_classifier_v1.json  page classifier weights
@@ -315,7 +320,8 @@ packages/helios_core/
   gold/                 Gold read models
   geo.py                Nominatim client
 packages/helios_parsing/  pure page parsing: segmentation + text hash, price tokens,
-                          classifier features, JSON-LD reader, validator
+                          classifier features, JSON-LD reader, chunking, prompt and
+                          grammar, output parsing, repairs, validator, evaluation
 test/                   pytest suite
 ```
 
