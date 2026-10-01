@@ -1,9 +1,9 @@
 # ADR-0016: Course labels for the price index
 
-**Status:** Proposed. The owner answered the open questions in session G-2
-(2026-09-30) before this text was written; they are recorded under
-[Owner decisions](#owner-decisions-session-g-2-2026-09-30). Acceptance of this
-text is pending review.
+**Status:** Accepted 2026-09-30 (owner, session G-3), as amended by
+[Amendment 1](#amendment-1-2026-09-30-accepted-slice-1a-decisions). The open
+questions were answered in session G-2 before the text was written
+([Owner decisions](#owner-decisions-session-g-2-2026-09-30)).
 **Date:** 2026-09-30
 **Phase:** 7 (the price index's `course` category)
 **Extends:** [ADR-0006](./0006-gold-menu-read-models.md) (Silver classification
@@ -362,3 +362,92 @@ Not asked; this text chose them, and they are open to change at review:
   `config/models.yaml`; `packages/helios_core/gold/models.py`
   (`CurrentMenu`, `PriceIndex`, `CATEGORY_KINDS`);
   `packages/helios_core/gold/price_index.py`; `infra/Dockerfile`.
+
+## Amendment 1 (2026-09-30): accepted; slice 1a decisions
+
+Owner decisions in session G-3, before any code. All but item 2 were taken as
+recommended.
+
+1. **Accepted.** PR #64 merged with no review comments. The four points the
+   text chose without asking are accepted as written:
+   - the per-course gate: a course that fails or is too thin to read is not
+     indexed, and the passing courses ship;
+   - coverage is counted over passing courses only;
+   - the refresh report's outcome counts (`course_unlabelled`,
+     `course_abstained`, `course_other`, `course_not_indexed`);
+   - the slice order: slices 2–3 wait for slice 1's evaluation.
+2. **One label per item, by precedence (the owner asked; §1 refined).** The
+   owner asked whether an item can belong to more than one course (a kids
+   breakfast plate). It can't.
+   - *Rule.* An item's course is the first that applies: `other` (catering,
+     bulk, extras, merchandise) → `kids` → `breakfast` → the dish course.
+   - *Why.* The 9 labels exist to keep kids and breakfast prices out of the
+     other courses' medians, and a multi-label row would put them back.
+   - *Mixed sections.* Labelling a mixed section with several courses would
+     put each course's prices into the others' medians. v2's item-level labels
+     are the fix there.
+   - *No change to §3 or §6.* The Silver row and the Gold `course` column stay
+     single-valued.
+3. **Mixed sections: strict majority.** A section takes the course of more than
+   half its priced items, else `other` (the ADR's "most of its items"). The
+   labelling guide lists the edge cases: salads, shakes, drinks vs alcohol,
+   service-period headings, "Specials".
+4. **Label file** (gitignored `var/course-labels/<set>/`):
+   - `manifest.json` records the seed, the requested and sampled venue counts,
+     the test share, the exclusion list's sha256 and size, the guide version,
+     the extraction's `method_version`, and the unsectioned priced items per
+     sampled venue.
+   - `sections.jsonl` has one row per Gold-reaching named section: venue (GERS
+     id), Version id, section native key, name and name path, item names,
+     priced-item count (priced Gold item and variant rows, the unit the index
+     aggregates), split, the agent's blind label, the final label, the labeller
+     and an owner-confirmed flag.
+   - The agent's label is kept beside the final one, so the agent/owner tally
+     can be counted.
+5. **Sampling and split.**
+   - *Venue* is the GERS id: the menu-page record key before `|`, the key P5-5's
+     pages share.
+   - *Sample.* A seeded random sample of venues with at least one candidate
+     section. Excluded venues are never drawn.
+   - *Split.* A venue is in the test split when `sha256("<seed>:<venue>")` falls
+     in the lowest 40%. That doesn't depend on sample order or size; it is
+     written into every row, and the loader refuses a row whose split moved.
+   - *Exclusions.* The exclusion list is a text file of GERS ids (the P5-5
+     held-out venues; later versions add venues already labelled). Every
+     command that reads a set needs the exclusion list the set was drawn with,
+     and refuses a set that contains an excluded venue.
+6. **"Too few test items to read" (§5).** A course is readable when an arm
+   predicted it on at least 20 test sections from at least 10 venues. Errors
+   arrive by section, so an item count alone would overstate the evidence. Rare
+   courses (likely `kids`) may wait for a later sample.
+7. **Tie (§5).** Coverage is compared as integer counts of covered priced items
+   on the same test split, and only an exact tie goes to the baseline.
+8. **Owner review.** A *disagreement* is a test section where an arm predicted a
+   course other than the agent's label. An abstention claims nothing, so it
+   isn't one. Scoring refuses while any disagreement is unconfirmed, while any
+   test section is unlabelled or unpredicted, or when the exclusion list
+   differs.
+9. **Harness output.** `score` writes a JSON report to
+   `var/course-eval/<set>/<labeller>.json` and prints its tables as markdown.
+   The report has:
+   - per-course support (sections, venues, items), precision, readable and
+     passes;
+   - coverage over passing courses and section accuracy;
+   - an item- and section-count confusion table;
+   - abstain and `other` rates and the unsectioned share;
+   - the owner-review tally and a digest of the test split.
+
+   `compare` applies the winner rule, and refuses two reports scored on
+   different test splits. The write-up template is
+   `docs/reviews/templates/course-labeller-evaluation.md`.
+10. **Slice 1 is split in two.**
+    - *1a (this session, no data).* The pure harness is
+      `packages/helios_parsing/course_eval.py`. The CLI is
+      `apps/menu_pipeline/course_eval.py` (`sample`, `disagreements`, `score`,
+      `compare`). The guide is `docs/course-labelling-guide.md`, version
+      `course-guide-v1`. Unit tests on synthetic fixtures are in
+      `test/test_course_eval.py`.
+    - *1b (after the first real extraction).* The candidates exporter (current
+      Menu pages → candidates JSONL; its Menu read path is decided then), the
+      lexicon, the training script and weights, the labelling, the evaluation
+      and its `docs/reviews/` write-up.

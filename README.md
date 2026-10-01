@@ -424,7 +424,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted |
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted |
-| [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Proposed |
+| [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the
