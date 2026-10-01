@@ -131,8 +131,11 @@ _HEADING_TAGS: frozenset[str] = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 
 
 def _host(url: str) -> str:
-    """Return a comparable host: lowercased, a leading ``www.`` stripped."""
-    host = (urlsplit(url).hostname or "").lower()
+    """Return a comparable host: lowercased, a leading ``www.`` stripped; "" if unparseable."""
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:  # page markup, e.g. a sitemap <loc> with a stray "["
+        return ""
     return host[4:] if host.startswith("www.") else host
 
 
@@ -184,10 +187,30 @@ def looks_like_menu(text: str, href: str) -> bool:
     lowered = text.strip().lower()
     if any(bad in lowered for bad in _NEGATIVE_SUBSTRINGS):
         return False
-    tokens = _tokens(text) | _tokens(urlsplit(href).path)
+    tokens = _tokens(text) | _tokens(_url_path(href))
     if tokens & _BLOCKLIST_TERMS:
         return False
     return bool(_MENU_TERMS & tokens)
+
+
+def _url_path(url: str) -> str:
+    try:
+        return urlsplit(url).path
+    except ValueError:  # unparseable markup, e.g. a stray "[" ("Invalid IPv6 URL")
+        return ""
+
+
+def _absolute(base: str, href: str) -> str | None:
+    """``href`` resolved against ``base`` if it is a parseable http(s) URL, else ``None``.
+
+    Hrefs are page markup: one that ``urllib`` can't parse is skipped, never fatal.
+    """
+    try:
+        absolute = urljoin(base, href)
+        scheme = urlsplit(absolute).scheme
+    except ValueError:  # e.g. "Invalid IPv6 URL" from a stray "[" in an href
+        return None
+    return absolute if scheme in {"http", "https"} else None
 
 
 def _on_hosts(url: str, domains: frozenset[str]) -> bool:
@@ -269,8 +292,8 @@ class _AnchorCollector(HTMLParser):
 
 def _resolve_link_base(base_url: str, parser: _AnchorCollector) -> str:
     if parser.base_href and parser.base_href.strip():
-        declared = urljoin(base_url, parser.base_href.strip())
-        if urlsplit(declared).scheme in {"http", "https"}:
+        declared = _absolute(base_url, parser.base_href.strip())
+        if declared is not None:
             return declared
     return base_url
 
@@ -295,8 +318,8 @@ def menu_links_from_html(html: str, base_url: str) -> list[str]:
             continue
         if not looks_like_menu(text, href):
             continue
-        absolute = urljoin(link_base, href)
-        if urlsplit(absolute).scheme not in {"http", "https"}:
+        absolute = _absolute(link_base, href)
+        if absolute is None:
             continue
         if not same_site(absolute, base_url) or same_resource(absolute, base_url):
             continue
@@ -317,9 +340,8 @@ def menu_pdf_links(html: str, base_url: str) -> list[str]:
     link_base = _resolve_link_base(base_url, parser)
     out: list[str] = []
     for href, text in parser.anchors:
-        absolute = urljoin(link_base, href)
-        split = urlsplit(absolute)
-        if split.scheme not in {"http", "https"} or not split.path.lower().endswith(".pdf"):
+        absolute = _absolute(link_base, href)
+        if absolute is None or not urlsplit(absolute).path.lower().endswith(".pdf"):
             continue
         if looks_like_menu(text, absolute) and absolute not in out:
             out.append(absolute)
@@ -346,8 +368,8 @@ def platform_links_by_host(html: str, base_url: str) -> dict[str, list[str]]:
     for href, _text in parser.anchors:
         if not href or href.startswith("#"):
             continue
-        absolute = urljoin(link_base, href)
-        if urlsplit(absolute).scheme not in {"http", "https"}:
+        absolute = _absolute(link_base, href)
+        if absolute is None:
             continue
         key = ordering_platform_host(absolute)
         if key is None or not is_platform_venue_page(absolute, ordering_only=True):

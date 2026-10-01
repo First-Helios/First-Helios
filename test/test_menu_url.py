@@ -9,6 +9,7 @@ from apps.discovery.menu_url import (
     looks_like_menu,
     menu_links_from_html,
     menu_links_from_sitemap,
+    menu_pdf_links,
     ordered_menu_candidates,
     page_menu_signal,
     platform_links_by_host,
@@ -25,6 +26,32 @@ def test_same_site_ignores_www_and_case() -> None:
     assert same_site("https://Torchys.com/a", "http://www.torchys.com/b")
     assert not same_site("https://torchys.com", "https://veracruz.com")
     assert not same_site("https://torchys.com", "not-a-url")
+
+
+def test_unparseable_hrefs_and_locs_are_skipped_not_fatal() -> None:
+    # A stray "[" makes urllib raise "Invalid IPv6 URL"; it crashed a whole resolve_urls run.
+    bad = "http://[broken/menu.pdf"
+    html = (
+        '<base href="http://[x/">'
+        f'<a href="{bad}">Menu PDF</a><a href="https://[y/menu">Menu</a>'
+        f'<a href="https://[order.toasttab.com/z">Order</a>'
+        '<a href="/menu.pdf">Our Menu</a><a href="/menu">Menu</a>'
+    )
+    base = "https://cafe.test/"
+    assert menu_pdf_links(html, base) == ["https://cafe.test/menu.pdf"]
+    assert menu_links_from_html(html, base) == [
+        "https://cafe.test/menu.pdf",
+        "https://cafe.test/menu",
+    ]
+    assert platform_links_by_host(html, base) == {}
+    assert not looks_like_menu("Directions", "http://[x/")
+    assert not same_site("http://[x/", base)
+    sitemap = (
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://[cafe.test/menu</loc></url>"
+        "<url><loc>https://cafe.test/menu</loc></url></urlset>"
+    )
+    assert menu_links_from_sitemap(sitemap, base) == ["https://cafe.test/menu"]
 
 
 def test_looks_like_menu_matches_text_or_path_but_not_chrome() -> None:
