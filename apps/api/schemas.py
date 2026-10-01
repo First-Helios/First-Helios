@@ -73,6 +73,93 @@ class VenueList(BaseModel):
     next_cursor: str | None
 
 
+#: Source-asserted price states served on the wire; the selector's derived
+#: no-value reasons stay internal (``gold.menu_read.SERVED_PRICE_STATES``).
+PriceState = Literal["priced", "unknown", "unavailable"]
+#: How the price was read (ADR-0005 §11 interpretation kinds).
+SourceKind = Literal["jsonld", "dom", "pdf", "llm"]
+Channel = Literal["unspecified", "dine_in", "takeaway"]
+MenuScope = Literal["establishment", "organization"]
+
+
+class MenuPriceResponse(BaseModel):
+    """One price of a menu node in one effective context.
+
+    ``amount_minor`` is null unless ``state`` is ``priced``. ``age_seconds`` is
+    the observation's age at request time (``observed_at`` to now, never
+    negative); null when there is no observation time.
+    """
+
+    state: PriceState
+    amount_minor: int | None
+    currency_code: str
+    channel: Channel
+    service_period: str | None
+    valid_from: datetime | None
+    valid_to: datetime | None
+    observed_at: datetime | None
+    age_seconds: int | None
+    source_kind: SourceKind | None
+    confidence: float | None
+
+    @field_serializer("valid_from", "valid_to", "observed_at")
+    def _serialize_times(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
+class MenuOptionResponse(BaseModel):
+    """A variant (e.g. a size) or a modifier (an add-on) and its prices."""
+
+    key: str
+    name: str | None
+    prices: list[MenuPriceResponse]
+
+
+class MenuItemResponse(BaseModel):
+    """A dish. ``name`` is null when Gold holds no row for the item itself
+    (only its variants are priced)."""
+
+    key: str
+    name: str | None
+    description: str | None
+    prices: list[MenuPriceResponse]
+    variants: list[MenuOptionResponse]
+    modifiers: list[MenuOptionResponse]
+
+
+class MenuSectionResponse(BaseModel):
+    """A named section of a menu. ``name`` is null unless the section itself is
+    priced: Gold carries no section names yet."""
+
+    key: str
+    name: str | None
+    prices: list[MenuPriceResponse]
+    items: list[MenuItemResponse]
+    modifiers: list[MenuOptionResponse]
+
+
+class MenuResponse(BaseModel):
+    """One source menu (a source record's page stream) and the scope it was
+    claimed for. ``organization`` prices are the operator's shared claims,
+    never merged into this venue's own (ADR-0005 §11)."""
+
+    scope: MenuScope
+    sections: list[MenuSectionResponse]
+
+
+class VenueMenuResponse(BaseModel):
+    """A venue's current menu from Gold. ``as_of`` is the oldest refresh
+    instant behind the served rows; null when there is no current menu."""
+
+    venue_id: int
+    as_of: datetime | None
+    menus: list[MenuResponse]
+
+    @field_serializer("as_of")
+    def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
 class ErrorResponse(BaseModel):
     """The uniform error body returned by every non-2xx response."""
 

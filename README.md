@@ -39,6 +39,11 @@ This section is the single current-status page. Other docs link here.
   - `GET /readyz`: readiness, checks the database.
   - `GET /v1/venues`: current venues, cursor-paginated (`limit`, `cursor`).
   - `GET /v1/venues/{venue_id}`: one current venue.
+  - `GET /v1/venues/{venue_id}/menu`: the venue's current menu from
+    `gold.current_menu`. Each price carries `observed_at`, its age at request
+    time and its source kind. The menu nests sections → items →
+    variants/modifiers. It also includes the Organization's menu when this
+    venue is the Organization's only current venue.
 - **Overture discovery**: `apps/discovery/` (`__main__.py`, `overture.py`,
   `pipeline.py`). Seeds food venues from Overture Places into Bronze and
   Identity, with conservative dedupe and Nominatim gap-fill
