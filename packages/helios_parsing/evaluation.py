@@ -17,6 +17,21 @@ synthetic fixtures only.
 a happy-hour price); absent means ``false``, as on every set labelled before
 the amendment. Other keys (the spike's block roles, regions, notes) are ignored.
 
+**Promo entries** (Amendment 5; optional, absent on sets labelled before it):
+a page may list each printed promotion once, at its own grain, for the Phase 10
+promo classifier. Rows that print a promo price keep their item-level ``promo``
+mark. Kinds are checked; nothing is scored beyond a count::
+
+    "promos": [{"text": "Happy hour: half off apps",
+                "scope": {"kind": "sections", "targets": ["Appetizers"]},
+                "terms": [{"kind": "percent_off", "value": "50"}],
+                "conditions": [{"kind": "hours", "text": "Mon-Fri 3-6pm"}],
+                "locators": ["blocks:segment-v2:b0042[0:25]"]}]
+
+``scope.kind`` is ``items``, ``sections`` or ``menu`` (no targets); term kinds
+are ``PROMO_TERMS``, condition kinds ``PROMO_CONDITIONS``; each locator is a
+Capture-targeted span (ADR-0013 §5).
+
 **Scoring** (``score_page``, per page; ``metrics`` over summed counts): each
 extracted row is validated against the page and matched to a gold item by
 normalized name tokens.
@@ -47,6 +62,7 @@ corruption equal to a legitimate price of that item is also counted as
 from __future__ import annotations
 
 import random
+import re
 from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal
@@ -62,6 +78,11 @@ if TYPE_CHECKING:
 CORRUPTION_SEED = 7
 CORRUPTIONS_PER_TYPE = 10  # trials per corruption type per page
 SWAP_DISTANCE = 3  # swapped prices come from rows at most this far apart
+
+PROMO_SCOPES = frozenset({"items", "sections", "menu"})
+PROMO_TERMS = frozenset({"percent_off", "amount_off", "fixed_price", "bogo", "free_item", "other"})
+PROMO_CONDITIONS = frozenset({"days", "hours", "channel", "min_spend", "other"})
+_LOCATOR = re.compile(r"blocks:[\w.-]+:b\d{4}\[\d+:\d+\]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,12 +102,37 @@ class GoldItem:
 
 
 @dataclass(frozen=True, slots=True)
+class PromoTerm:
+    kind: str  # one of PROMO_TERMS
+    value: str | None = None  # "50" (percent), "5.00" (amount or fixed price)
+
+
+@dataclass(frozen=True, slots=True)
+class PromoCondition:
+    kind: str  # one of PROMO_CONDITIONS
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class GoldPromo:
+    """One printed promotion (Amendment 5): its scope, terms, conditions and spans."""
+
+    text: str
+    scope: str  # one of PROMO_SCOPES
+    targets: tuple[str, ...]  # item or section names; empty for the whole menu
+    terms: tuple[PromoTerm, ...]
+    conditions: tuple[PromoCondition, ...]
+    locators: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class GoldPage:
     page_id: str
     page_label: str  # "menu" | "not_menu" | "js_only" | "empty"
     format: str | None  # layout family, e.g. "html_list", "html_cards"
     reviewed: bool
     items: tuple[GoldItem, ...]
+    promos: tuple[GoldPromo, ...] = ()
 
     @property
     def scorable(self) -> bool:
@@ -114,6 +160,34 @@ def gold_page(label: Mapping[str, Any]) -> GoldPage:
             )
             for it in label.get("items") or []
         ),
+        promos=tuple(_gold_promo(p) for p in label.get("promos") or []),
+    )
+
+
+def _checked(kind: str, allowed: frozenset[str], what: str) -> str:
+    if kind not in allowed:
+        raise ValueError(f"promo {what} kind {kind!r} is not one of {sorted(allowed)}")
+    return kind
+
+
+def _gold_promo(promo: Mapping[str, Any]) -> GoldPromo:
+    scope = promo["scope"]
+    locators = tuple(promo["locators"])
+    if not locators or not all(_LOCATOR.fullmatch(loc) for loc in locators):
+        raise ValueError(f"promo {promo['text']!r} needs blocks:<segmenter>:bNNNN[s:e] locators")
+    return GoldPromo(
+        text=promo["text"],
+        scope=_checked(scope["kind"], PROMO_SCOPES, "scope"),
+        targets=tuple(scope.get("targets") or ()),
+        terms=tuple(
+            PromoTerm(_checked(t["kind"], PROMO_TERMS, "term"), t.get("value"))
+            for t in promo.get("terms") or []
+        ),
+        conditions=tuple(
+            PromoCondition(_checked(c["kind"], PROMO_CONDITIONS, "condition"), c["text"])
+            for c in promo.get("conditions") or []
+        ),
+        locators=locators,
     )
 
 
@@ -198,6 +272,7 @@ def score_page(page: GoldPage, blocks: list[Block], rows: list[Row]) -> Counter[
     c["gold_items"] += len(items)
     c["gold_prices"] += sum(len(it.prices) for it in items)
     c["gold_promo_items"] += sum(1 for it in items if it.promo)
+    c["gold_promos"] += len(page.promos)
     c["found_raw"] += len(found_raw)
     c["found_kept"] += len(found_kept)
     c["found_price"] += len(found_price)
