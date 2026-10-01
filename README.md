@@ -24,9 +24,16 @@ This section is the single current-status page. Other docs link here.
   their writer, plus the pure current/history price selector
   (`menu` schema, ADR-0005). The menu pipeline's extraction writes them
   (below); not yet run on the Pi.
-- **Gold read model**: `packages/helios_core/gold/`. `gold.current_menu`, a
+- **Gold read models**: `packages/helios_core/gold/`. `gold.current_menu`, a
   rebuildable projection of the Menu selector, with bounded per-scope and
-  full-catalog refresh (ADR-0006).
+  full-catalog refresh (ADR-0006). `gold.price_index` (ADR-0007
+  [Amendment 1](./docs/adr/0007-gold-price-index-projection.md#amendment-1-2026-09-30-first-slice-built-before-the-course-axis)):
+  venue-weighted p25/median/p75 per 0.01° lat/lon cell and currency, rebuilt from
+  `current_menu`, with venue counts and a `low_sample` flag below 5 venues. One
+  category so far, `all`; `course` waits for a course label. Single-location
+  Organizations' own-site prices are placed at their venue; shared menus are left
+  out. `python -m apps.gold.refresh` rebuilds both tables at one instant. Not yet
+  run on real data; no API.
 - **Read API**: `apps/api/`. FastAPI, conventions per ADR-0008:
   - `GET /healthz`: liveness, no database.
   - `GET /readyz`: readiness, checks the database.
@@ -129,9 +136,8 @@ This section is the single current-status page. Other docs link here.
 - Phase 5's first held-out evaluation (ADR-0013 §8; a fresh 10-page set,
   labelled blind, scored on the laptop, Amendment 7 item 8), the first Pi
   extraction run, and the rendered-page quality bars (slice 6).
-- The Gold price index: target shape accepted in
-  [ADR-0007](./docs/adr/0007-gold-price-index-projection.md); no model,
-  migration or code.
+- The price index's `course` category (a course-label ADR comes first) and its
+  API ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md) Amendment 1).
 - Price-index API endpoints, the staging deploy (ADR-0008 Unit B), production,
   and the deals layer.
 
@@ -409,7 +415,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
 | [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted |
 | [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted |
-| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; implementation deferred) |
+| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1) |
 | [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted |
 | [0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) | Venue discovery: source, ingestion, dedupe/minting, and schedule | Accepted |
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
