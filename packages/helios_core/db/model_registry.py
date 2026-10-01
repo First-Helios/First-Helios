@@ -17,7 +17,7 @@ from packages.helios_core.domains.menu.models import (
     MenuVariant,
     PriceObservation,
 )
-from packages.helios_core.gold.models import CurrentMenu
+from packages.helios_core.gold.models import CurrentMenu, PriceIndex
 from packages.helios_core.identity.models import (
     Adjudication,
     AppliedSubjectChange,
@@ -60,6 +60,7 @@ __all__ = [
     "MenuPage",
     "MenuSection",
     "MenuVariant",
+    "PriceIndex",
     "PriceObservation",
     "Evidence",
     "Establishment",

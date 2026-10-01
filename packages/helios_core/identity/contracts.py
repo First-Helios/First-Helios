@@ -16,6 +16,7 @@ from packages.helios_core.identity.models import (
 if TYPE_CHECKING:
     from collections.abc import Collection
     from datetime import datetime
+    from decimal import Decimal
 
     from sqlalchemy.orm import Session
 
@@ -274,3 +275,70 @@ def current_resolved_scopes(
         for row in rows
     }
     return tuple(by_ordinal.get(ordinal) for ordinal in range(1, len(batch) + 1))
+
+
+@dataclass(frozen=True, slots=True)
+class VenueLocation:
+    """The one current operating Establishment a scope Subject stands for, and its point."""
+
+    subject_id: int
+    establishment_subject_id: int
+    latitude: Decimal
+    longitude: Decimal
+
+
+# One row per requested Subject that stands for exactly one current operating
+# Establishment: the Establishment itself, or an Organization's only one. The
+# Establishment, its Organization and its Place must all be current, and the
+# Establishment operating at ``:at`` (the selector's rule: not closed and
+# ``valid_from <= at < valid_to``). A Subject with zero or several such
+# Establishments, or whose one Establishment's Place has no point, gets no row.
+_VENUE_LOCATIONS_SQL = text("""
+    WITH requested AS (
+        SELECT DISTINCT unnest(CAST(:subjects AS bigint[])) AS subject_id
+    ),
+    live AS (
+        SELECT r.subject_id, e.subject_id AS establishment_subject_id,
+               p.latitude, p.longitude
+        FROM requested r
+        JOIN identity.establishment e
+          ON r.subject_id IN (e.subject_id, e.organization_subject_id)
+        JOIN identity.subject_currentness ec
+          ON ec.subject_id = e.subject_id AND ec.is_current
+        JOIN identity.subject_currentness oc
+          ON oc.subject_id = e.organization_subject_id AND oc.is_current
+        JOIN identity.place p ON p.subject_id = e.place_subject_id
+        JOIN identity.subject_currentness pc
+          ON pc.subject_id = p.subject_id AND pc.is_current
+        WHERE e.operating_status <> 'closed'
+          AND e.valid_from <= :at
+          AND (e.valid_to IS NULL OR e.valid_to > :at)
+    )
+    SELECT subject_id, min(establishment_subject_id) AS establishment_subject_id,
+           min(latitude) AS latitude, min(longitude) AS longitude
+    FROM live
+    GROUP BY subject_id
+    HAVING count(*) = 1 AND min(latitude) IS NOT NULL
+    ORDER BY subject_id
+""")
+
+
+def current_venue_locations(
+    session: Session, subject_ids: Collection[int], *, at: datetime
+) -> dict[int, VenueLocation]:
+    """Read-only: each scope Subject that stands for exactly one located venue at ``at``.
+
+    An Establishment Subject maps to itself; an Organization Subject maps to its
+    only current operating Establishment, so a single-location Organization's
+    own-site prices can be placed without fanning a shared price out to several
+    locations (ADR-0007 Amendment 1). Subjects that are not current or not
+    operating, Organizations with several current Establishments, and venues
+    whose Place has no point are absent. Takes no locks.
+    """
+    if not subject_ids:
+        return {}
+    session.flush()
+    rows = session.execute(
+        _VENUE_LOCATIONS_SQL, {"subjects": sorted(set(subject_ids)), "at": at}
+    ).mappings()
+    return {row["subject_id"]: VenueLocation(**row) for row in rows}

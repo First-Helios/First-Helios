@@ -605,8 +605,8 @@ re-runnable from stored evidence.
 - **Gold refresh** after each run: `current_menu`
   ([ADR-0006](./docs/adr/0006-gold-menu-read-models.md); targeted refresh only
   once cost justifies it) and the price-index projection
-  ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)) once a
-  populated `course` axis exists.
+  ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)); both are built
+  as `python -m apps.gold.refresh`, which this phase schedules.
 - **Replay:** Menu interpretations can be rebuilt from stored bundles without
   re-fetching.
 - **Run report:** pages fetched / changed / extracted, outcomes by reason code,
@@ -635,7 +635,9 @@ and no extraction; and freshness is measured on every run.
   price carrying `observed_at`, a staleness age and its source kind.
 - Venue filters (area, organization, has-menu), cursor-paginated.
 - `GET /v1/items/{id}/price-history` — the observation trail behind a single price. This is the endpoint that makes "trustworthy" checkable by a user rather than asserted by us.
-- `GET /v1/price-index` — median / p25 / p75 by lat/lon grid cell and course, with the sample size ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)), because an aggregate over four venues is not an index and the response should admit that. Needs a populated `course` axis first (ADR-0007 Q3).
+- `GET /v1/price-index` — median / p25 / p75 by lat/lon grid cell and course, with the sample size ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)), because an aggregate over four venues is not an index and the response should admit that.
+  - *Built (G-1, [ADR-0007 Amendment 1](./docs/adr/0007-gold-price-index-projection.md#amendment-1-2026-09-30-first-slice-built-before-the-course-axis)):* the `gold.price_index` table it reads — venue-weighted percentiles per 0.01° cell, category and currency, with `venue_count` and a `low_sample` flag below 5 venues — and `python -m apps.gold.refresh`, which rebuilds `current_menu` and the index at one instant. Category `all` only.
+  - *Next:* a course-label ADR (classifier vs section-name baseline on labelled sections), then the `course` category; scoping own-site menu pages to their Establishment upstream (an ADR-0013 amendment); then the endpoint.
 - **Freshness in the wire format, not just the docs.** Every priced response carries `as_of`. A stale price served as though it were current is the failure mode this whole design exists to prevent.
 - Keep the committed OpenAPI snapshot accurate.
 - Read-path performance: every filter combination above is index-backed. Add

@@ -1,7 +1,9 @@
 # ADR-0007: Gold price-index projection — grain, aggregation, and its blocking dependencies
 
-**Status:** Accepted (target shape) — implementation deferred: no model,
-migration, or code until the `course` category axis and real catalog data exist.
+**Status:** Accepted (target shape), as amended by
+[Amendment 1](#amendment-1-2026-09-30-first-slice-built-before-the-course-axis):
+the first slice (table, migration, refresh, CLI) is built with an `all` category
+only; the `course` axis and the API follow.
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune — adopt the shape below
 (lat/lon grid geospatial axis), defer the build.
@@ -299,3 +301,69 @@ exist, implementation lands under this accepted shape as its own reviewed unit.
   `Establishment` (Place/Organization join path).
 - `packages/helios_core/domains/menu/selection.py` — the accepted `select_price`
   contract, reused transitively via `current_menu`, never re-implemented.
+
+## Amendment 1 (2026-09-30): first slice built before the course axis
+
+Owner decisions in session G-1, before any code. Facts checked first:
+`menu.menu_section.course` is never written (ADR-0013 Amendment 7 item 6 reads no
+course or tags); own-site menu pages are Organization-scoped (ADR-0013 Amendment 3);
+discovery mints one Organization per Establishment, so chains are several
+Organizations whose menu-URL records name the same URL; nothing called
+`refresh_full_catalog`. Code: `packages/helios_core/gold/models.py` (`PriceIndex`),
+`gold/price_index.py`, `identity/contracts.py` (`current_venue_locations`),
+`apps/gold/refresh.py`; migration `7c2e4b9d1f3a`.
+
+1. **Build now, `all` category first (amends point 8 and Q3).** The slice is
+   `gold.price_index`, one migration, a full-rebuild refresh and an owner-run CLI;
+   no API. `category_kind` is `all` (every priced item and variant in the cell),
+   keyed so `course` arrives as another `category_kind` without a grain change.
+   The course label is its own follow-up unit: an ADR comparing a classifier (e.g.
+   the page classifier's embedding with a logistic regression over section names)
+   against a section-name baseline on labelled sections, then a course projection.
+   The price-index API (ROADMAP Phase 7) is not authorized by this amendment.
+2. **Venue-weighted statistics (amends point 3).** Per group, each venue's sample
+   is the median of its priced rows; p25/median/p75/min/max are over those venue
+   medians. Both steps use `percentile_disc`, so every value is an observed integer
+   amount (the lower middle for an even count). `venue_count` is the sample size;
+   `priced_count`/`unpriced_count` record the rows behind it. Duplicate rows of one
+   venue (an `llm` and a `jsonld` stream, several platform pages, variants) and
+   menu size no longer skew the index.
+3. **Grain and inputs (confirms point 2).** One row per `(area_kind, area_key,
+   category_kind, category_key, currency_code)`; a current snapshot only, with
+   `effective_instant` as its as-of (`current_menu` rejects history requests, so
+   there is no as-of history). Only `item` and `variant` targets count: modifiers
+   are add-on amounts and section prices are shared.
+4. **Grid and threshold (confirms point 4 and Q4).** `area_kind =
+   'latlon_grid_0p01'`; a point's cell is floored to its south-west corner, stored
+   as `cell_lat`/`cell_lon` and `area_key` `"<lat>,<lon>"` (e.g. `30.26,-97.75`).
+   `min_venues = 5`, stored per row. Groups below it are kept with
+   `low_sample = true`; a group whose rows are all non-priced is kept with
+   `venue_count = 0` and NULL statistics, so coverage gaps stay visible.
+5. **Organization scope (amends point 5 and Q5).** An Organization-scoped family
+   (scope Subject, source record) is placed at its Organization's only current
+   operating Establishment (current Organization and Place, not closed,
+   `valid_from <= E < valid_to`) when that Establishment's Place has a point, unless
+   the menu URL its price Evidence was read from is also read by another placed
+   venue's Organization family. Shared (chain or platform) menus are left out and
+   counted (`shared_menu_url`), never fanned out; an Organization with several
+   current Establishments is left out (`no_single_venue`). This is index-only
+   attribution: `current_menu` and Menu still carry the price as an Organization
+   claim (ADR-0005 §11). The URL check sees only families in the current catalog,
+   so a chain with one extracted location is placed at that location.
+   *Follow-up proposed:* scope own-site pages to the Establishment upstream (the
+   platform-page rule of ADR-0013 Amendment 3 applied to `<gers>` records), as an
+   ADR-0013 amendment once the open P5-5 branch merges; the Gold rule then finds
+   little left to attribute and needs no rework.
+6. **Refresh trigger.** `python -m apps.gold.refresh [--as-of ISO-8601]` rebuilds
+   `current_menu` (full catalog) and then the index at the same instant with one
+   `refreshed_at`, in one transaction. The owner runs it after an extraction run;
+   scheduling stays with ROADMAP Phase 6.
+7. **Version-local keys (ADR-0013 Amendment 7 item 5).** The index aggregates
+   current heads, so a new Version's new targets replace the old ones in the next
+   snapshot; nothing double counts. What is lost is dish identity across Versions:
+   the index has no dish-level history. `Unsectioned` items never reach Gold, so
+   they are not in the index either.
+8. **Point 7 updates.** The migration follows the head of the day, `5a91ef3ff9d8`,
+   not `5f3a9c1e7b24`. Gold reads Identity through the new read-only
+   `current_venue_locations` contract and Bronze through the existing
+   `source_endpoint_for_evidence`; the only FK is to `menu.currency`.
