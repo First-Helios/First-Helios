@@ -87,7 +87,8 @@ def cmd_compare(data: Path, gold: dict[str, GoldPage], tags: list[str]) -> None:
         for pid in gold
         if all((data / "extract" / tag / f"{pid}.json").exists() for tag in tags)
     ]
-    print(f"pages={len(common)} (of {len(gold)} gold)")
+    promos = sum(len(gold[pid].promos) for pid in common)
+    print(f"pages={len(common)} (of {len(gold)} gold) promo_entries={promos}")
     print(f"{'tag':18} items  usable  acc    FR     catch  rows  promo_stored")
     for tag in tags:
         total: Counter[str] = Counter()
