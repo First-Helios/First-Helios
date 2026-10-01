@@ -27,7 +27,13 @@ def test_openapi_matches_committed_snapshot() -> None:
 
 def test_expected_paths_present() -> None:
     paths = set(app.openapi()["paths"])
-    assert {"/healthz", "/readyz", "/v1/venues", "/v1/venues/{venue_id}"} <= paths
+    assert {
+        "/healthz",
+        "/readyz",
+        "/v1/venues",
+        "/v1/venues/{venue_id}",
+        "/v1/venues/{venue_id}/menu",
+    } <= paths
 
 
 def test_error_responses_document_the_real_envelope_not_fastapis_default() -> None:
@@ -54,6 +60,11 @@ def test_error_responses_document_the_real_envelope_not_fastapis_default() -> No
     assert venues_get["422"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "ErrorResponse"
     )
+    menu_get = schema["paths"]["/v1/venues/{venue_id}/menu"]["get"]["responses"]
+    for status in ("404", "422"):
+        assert menu_get[status]["content"]["application/json"]["schema"]["$ref"].endswith(
+            "ErrorResponse"
+        )
     readyz_responses = schema["paths"]["/readyz"]["get"]["responses"]
     assert readyz_responses["503"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "ErrorResponse"

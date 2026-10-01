@@ -33,6 +33,317 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "MenuItemResponse": {
+        "description": "A dish. ``name`` is null when Gold holds no row for the item itself\n(only its variants are priced).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "modifiers": {
+            "items": {
+              "$ref": "#/components/schemas/MenuOptionResponse"
+            },
+            "title": "Modifiers",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/MenuPriceResponse"
+            },
+            "title": "Prices",
+            "type": "array"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/MenuOptionResponse"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "description",
+          "prices",
+          "variants",
+          "modifiers"
+        ],
+        "title": "MenuItemResponse",
+        "type": "object"
+      },
+      "MenuOptionResponse": {
+        "description": "A variant (e.g. a size) or a modifier (an add-on) and its prices.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/MenuPriceResponse"
+            },
+            "title": "Prices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "prices"
+        ],
+        "title": "MenuOptionResponse",
+        "type": "object"
+      },
+      "MenuPriceResponse": {
+        "description": "One price of a menu node in one effective context.\n\n``amount_minor`` is null unless ``state`` is ``priced``. ``age_seconds`` is\nthe observation's age at request time (``observed_at`` to now, never\nnegative); null when there is no observation time.",
+        "properties": {
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
+          "channel": {
+            "enum": [
+              "unspecified",
+              "dine_in",
+              "takeaway"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "currency_code": {
+            "title": "Currency Code",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "service_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Period"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "jsonld",
+                  "dom",
+                  "pdf",
+                  "llm"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Kind"
+          },
+          "state": {
+            "enum": [
+              "priced",
+              "unknown",
+              "unavailable"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "required": [
+          "state",
+          "amount_minor",
+          "currency_code",
+          "channel",
+          "service_period",
+          "valid_from",
+          "valid_to",
+          "observed_at",
+          "age_seconds",
+          "source_kind",
+          "confidence"
+        ],
+        "title": "MenuPriceResponse",
+        "type": "object"
+      },
+      "MenuResponse": {
+        "description": "One source menu (a source record's page stream) and the scope it was\nclaimed for. ``organization`` prices are the operator's shared claims,\nnever merged into this venue's own (ADR-0005 \u00a711).",
+        "properties": {
+          "scope": {
+            "enum": [
+              "establishment",
+              "organization"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/MenuSectionResponse"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scope",
+          "sections"
+        ],
+        "title": "MenuResponse",
+        "type": "object"
+      },
+      "MenuSectionResponse": {
+        "description": "A named section of a menu. ``name`` is null unless the section itself is\npriced: Gold carries no section names yet.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MenuItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "modifiers": {
+            "items": {
+              "$ref": "#/components/schemas/MenuOptionResponse"
+            },
+            "title": "Modifiers",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/MenuPriceResponse"
+            },
+            "title": "Prices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "prices",
+          "items",
+          "modifiers"
+        ],
+        "title": "MenuSectionResponse",
+        "type": "object"
+      },
       "VenueList": {
         "description": "A cursor-paginated page of venues; ``next_cursor`` is null on the last.",
         "properties": {
@@ -60,6 +371,41 @@
           "next_cursor"
         ],
         "title": "VenueList",
+        "type": "object"
+      },
+      "VenueMenuResponse": {
+        "description": "A venue's current menu from Gold. ``as_of`` is the oldest refresh\ninstant behind the served rows; null when there is no current menu.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "menus": {
+            "items": {
+              "$ref": "#/components/schemas/MenuResponse"
+            },
+            "title": "Menus",
+            "type": "array"
+          },
+          "venue_id": {
+            "title": "Venue Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "venue_id",
+          "as_of",
+          "menus"
+        ],
+        "title": "VenueMenuResponse",
         "type": "object"
       },
       "VenueResponse": {
@@ -333,6 +679,61 @@
           }
         },
         "summary": "Get one venue by id",
+        "tags": [
+          "venues"
+        ]
+      }
+    },
+    "/v1/venues/{venue_id}/menu": {
+      "get": {
+        "description": "Return the venue's current menu from Gold, or 404 if no such current venue.\n\nThe venue's own (Establishment) menus come first. Its Organization's menus\nfollow, labelled ``organization``, only when this venue is the\nOrganization's one current venue: a chain's shared menu is never fanned out\nto its locations (ADR-0005 \u00a711). Every price carries ``observed_at``, its\nage at request time and its source kind; ``as_of`` is the oldest Gold\nrefresh instant behind the served rows. A current venue with no menu in\nGold is ``200`` with ``menus: []``.",
+        "operationId": "get_venue_menu_v1_venues__venue_id__menu_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "venue_id",
+            "required": true,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "title": "Venue Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VenueMenuResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No current venue has this id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "venue_id is out of range."
+          }
+        },
+        "summary": "Get a venue's current menu",
         "tags": [
           "venues"
         ]
