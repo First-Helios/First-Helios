@@ -85,6 +85,9 @@ class _Placement:
 
 def grid_cell(latitude: Decimal, longitude: Decimal) -> tuple[str, Decimal, Decimal]:
     """The 0.01° cell containing a point, keyed by its south-west corner."""
+    # + 0 turns a -0 input (a float query parameter) into 0: Postgres numeric has
+    # no negative zero, so the refresh never keys a "-0.00" cell.
+    latitude, longitude = latitude + 0, longitude + 0
     # quantize: a whole-degree input would otherwise print as "2.2E+1", not "22.00"
     cell_lat = ((latitude / GRID_STEP).to_integral_value(ROUND_FLOOR) * GRID_STEP).quantize(
         GRID_STEP

@@ -67,6 +67,7 @@ def test_grid_cell_floors_to_the_south_west_corner() -> None:
     )
     key, cell_lat, cell_lon = grid_cell(Decimal("-0.000001"), Decimal("0.009999"))
     assert (key, cell_lat, cell_lon) == ("-0.01,0.00", Decimal("-0.01"), Decimal("0.00"))
+    assert grid_cell(Decimal("-0.0"), Decimal("-0"))[0] == "0.00,0.00"
 
 
 def test_cli_rejects_an_instant_without_offset() -> None:
