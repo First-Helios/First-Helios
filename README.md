@@ -160,10 +160,14 @@ This section is the single current-status page. Other docs link here.
 - A Phase 5 pipeline version that passes ADR-0013 §8 (the first one failed,
   Amendment 8), the Menu-write commit fix, the first extraction pass (laptop),
   and the rendered-page quality bars (slice 6).
-- The price index's `course` category (a course-label ADR comes first) and its
-  API ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md) Amendment 1).
-- Price-index API endpoints, the staging deploy (ADR-0008 Unit B), production,
-  and the deals layer.
+- The price index's `course` category
+  ([ADR-0016](./docs/adr/0016-course-labels-for-the-price-index.md), Accepted):
+  slice 1a (labelling guide and comparison harness) is built; slice 1b (labels,
+  the course projection, then its rows in `GET /v1/price-index`) waits for the
+  first real extraction.
+- The rest of the Phase 7 API: venue filters (area, organization, has-menu) and
+  `GET /v1/items/{id}/price-history`.
+- The staging deploy (ADR-0008 Unit B), production, and the deals layer.
 
 ## Gates
 
@@ -416,7 +420,8 @@ apps/
                         and Menu writes, batch CLIs, model files, evaluation
 config/sources.yaml     manual website / menu-URL registry
 config/models.yaml      pinned model files (sha256, size, licence)
-config/page_classifier_v1.json  page classifier weights
+config/page_classifier_v2.json  page classifier weights (classifier-v2, the menu-URL verifier)
+config/page_classifier_v1.json  classifier-v1 weights (superseded, kept with its evaluation)
 docs/
   adr/                  architecture decisions (index below)
   rfc/  plans/          proposals and build plans
