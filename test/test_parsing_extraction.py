@@ -188,6 +188,45 @@ def test_rows_of_repairs_slots_and_variants_and_drops_duplicates() -> None:
     assert [(r.section, r.claimed_block) for r in rows][0] == ("Menu", "b0001")
 
 
+def test_rows_of_keeps_a_dish_printed_again_in_another_menu() -> None:
+    # v4: the dedupe key includes the claimed block, so a dish repeated at the same
+    # price in a second inline menu (another block) is another placement
+    blocks = segment("<h2>Lunch</h2><p>Gyoza $8</p><h2>Dinner</h2><p>Gyoza $8</p>")
+    rows = rows_of(
+        _one_chunk(
+            ("b0002", "Gyoza", "8", ""),
+            ("b0002", "Gyoza", "8", ""),  # emitted twice for one placement: a duplicate
+            ("b0004", "Gyoza", "8", ""),
+            section="Zensai",
+        ),
+        blocks,
+    )
+    assert [(r.item, r.claimed_block) for r in rows] == [("Gyoza", "b0002"), ("Gyoza", "b0004")]
+
+
+def test_rows_of_drops_a_variant_that_is_no_printed_price_label() -> None:
+    # v4: a description copied into the variant slot is dropped; a label printed
+    # with a price nearby ("Large", "LB.") is kept
+    blocks = segment(
+        "<p>Edamame</p><p>chilled, hot, or spicy</p><p>$5</p>"
+        "<p>Japchae (Large $30)</p><p>Shrimp $18.00 / LB.</p>"
+    )
+    rows = rows_of(
+        _one_chunk(
+            ("b0001", "Edamame", "5", "chilled, hot, or spicy"),
+            ("b0004", "Japchae", "30", "Large"),
+            ("b0005", "Shrimp", "18.00", "LB."),
+        ),
+        blocks,
+    )
+    assert _rows(rows) == [
+        ("Edamame", "5", None),
+        ("Japchae", "30", "Large"),
+        ("Shrimp", "18.00", "LB."),
+    ]
+    assert [v.decision for v in validate(blocks, rows).verdicts] == ["accept"] * 3
+
+
 STITCH_PAGE = """
 <h2>Drinks</h2>
 <h4>Horchata</h4><p>$2.50/Small</p><p>$3.50/Large</p>

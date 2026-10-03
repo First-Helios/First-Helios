@@ -1,8 +1,9 @@
-"""Stage [5] validator v3: static grounding checks on extracted rows (ADR-0013 §1, §5).
+"""Stage [5] validator v4: static grounding checks on extracted rows (ADR-0013 §1, §5).
 
 Ported from ``spikes/menu_model/validator.py`` as frozen at spike commit
 ``e6e4e1f`` with ``MENU_SPIKE_VALIDATOR=v3``; the per-row decisions are the
-spike's. Every row (one item, at most one price) gets one decision:
+spike's, with the v4 changes tuned on the P5-5 findings (session P5-7) marked
+below. Every row (one item, at most one price) gets one decision:
 
 - ``accept``: the name and the price are grounded on the page, the price is
   bound to this item, and the row passes the sanity checks;
@@ -20,12 +21,17 @@ Checks:
    region: its block after the name, then the nearest run of price blocks after
    it before the next extracted item or a price-less heading; or a price-only
    block just before it (price-first layouts); or the nearest preceding section
-   heading with words (a shared "all tacos $3" price).
+   heading with words (a shared "all tacos $3" price). (v4) A price printed
+   with a leading plus ("+$2") is a modifier's and grounds no item price
+   (``addon_price``); on pages that print each price above the name and again
+   below it, the run ends after the item's own lower copy.
 3. **Binding.** The nearest matching occurrence in document order, one
    occurrence per item unless it sits in a heading. A row's variant ("SM",
-   "Large") must be the label printed with its price.
+   "Large") must be the label printed with its price; (v4) a spaced unit suffix
+   is a label too ("$18.00 / LB.", "$32.00 / 12 pcs").
 4. **Sanity.** USD only; 0.10 <= amount <= 500; no duplicate (item, variant,
-   price, section) rows.
+   price, section, name block) rows: a dish printed again in another inline menu is
+   another placement (v4).
 
 Each grounded field carries a Capture-targeted Evidence locator
 ``blocks:<segmenter version>:<block id>[<start>:<end>]`` and its ``excerpt_hash``
@@ -48,7 +54,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
-VALIDATOR_VERSION = "validator-v3"  # part of the pipeline version
+VALIDATOR_VERSION = "validator-v4"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})
@@ -174,11 +180,11 @@ def _is_price_only(block: Block, toks: list[PriceToken]) -> bool:
 
 
 def price_label(text: str, toks: list[PriceToken], tok: PriceToken) -> str:
-    """The label printed with one price: a ``/Medium`` suffix ("$7.50/Medium"), else
-    the text between the previous price in the block (or the block start) and it
-    ("Half $14.95 | Whole $22.95").
+    """The label printed with one price: a ``/Medium`` suffix ("$7.50/Medium",
+    "$18.00 / LB.", "$32.00 / 12 pcs"), else the text between the previous price in
+    the block (or the block start) and it ("Half $14.95 | Whole $22.95").
     """
-    suffix = re.match(r"/\s*([^|•$/\d\s][^|•$/]*|\d+\s*[^\W\d][^|•$/]*)", text[tok.end :])
+    suffix = re.match(r"\s*/\s*([^|•$/\d\s][^|•$/]*|\d+\s*[^\W\d][^|•$/]*)", text[tok.end :])
     # "Half $20.95/ Whole $41.95": a label followed by a price belongs to that price
     if suffix and not re.match(r"\s*\$?\d", text[tok.end + suffix.end() :]):
         return suffix.group(1).strip()
@@ -226,6 +232,11 @@ def _run_tokens(blocks: list[Block], prices: list[list[PriceToken]], j: int) -> 
     return [t for t in prices[j] if t.kind == "money" or _sole_number(blocks[j])]
 
 
+def _is_addon(block: Block, tok: PriceToken) -> bool:
+    """A price printed with a leading plus ("+$2", "vegan + $1"): a modifier's price."""
+    return block.text[: tok.start].rstrip().endswith("+")
+
+
 def _price_run(
     blocks: list[Block],
     prices: list[list[PriceToken]],
@@ -241,19 +252,32 @@ def _price_run(
     skip non-price blocks (descriptions, allergens, icons; at most ``SCAN`` of them)
     to the first price-bearing block and take the consecutive price blocks from
     there. The scan stops at another extracted item or at a price-less heading.
+
+    (v4) Pages that print every price twice, above the name and again below the
+    description ("$4.00" / name / description / "$4.00" / "$5.00" / next name),
+    put the next item's upper copy right after this item's lower one: when the
+    run's first block repeats the price-only block just above the name, the run
+    is that one block.
     """
     run: list[PriceToken] = []
+    doubled = False  # the run's first block repeats the price printed just above the name
     for j in range(nb + 1, min(nb + 1 + SCAN, len(blocks))):
         if j in item_blocks:
             break
         toks = _run_tokens(blocks, prices, j)
         if inline or run:
+            if doubled:
+                break
             if toks and (not inline or _is_price_only(blocks[j], toks)):
                 run.extend(toks)
                 continue
             break
         if toks:
             run.extend(toks)
+            above = blocks[nb - 1].text.strip() if nb > 0 else None
+            doubled = above == blocks[j].text.strip() and _is_price_only(
+                blocks[nb - 1], prices[nb - 1]
+            )
         elif blocks[j].heading:
             break
     return run
@@ -331,7 +355,7 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
         variants_of.setdefault(" ".join(norm_tokens(row.item)), set()).add(row.variant)
 
     bound: dict[tuple[int, int], int] = {}  # price occurrence -> row index
-    seen_keys: set[tuple[str, str, str, str]] = set()
+    seen_keys: set[tuple[str, str, str, str, str]] = set()
 
     def judge(r_i: int, row: Row, nb: int | None) -> Verdict:
         if nb is None:
@@ -345,8 +369,9 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
 
         amount = parse_amount(row.amount)
         key = (" ".join(norm_tokens(row.item)), (row.variant or "").lower(), str(amount))
-        # the same dish listed in two sections is two placements, not a duplicate
-        dup_key = (*key, (row.section or "").lower())
+        # the same dish listed in two sections, or printed again in another inline
+        # menu (another name block), is two placements, not a duplicate
+        dup_key = (*key, (row.section or "").lower(), str(nb))
         if dup_key in seen_keys:
             return Verdict(row, "reject", ("duplicate_row",), named)
         seen_keys.add(dup_key)
@@ -370,6 +395,9 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
             and _is_price_only(blocks[nb - 1], prices[nb - 1])
         ):
             region.extend(prices[nb - 1])
+        # (v4) a "+$2" price is an add-on or surcharge, never the item's own price
+        addons = [t for t in region if _is_addon(blocks[t.block_index], t)]
+        region = [t for t in region if t not in addons]
         shared: list[PriceToken] = []
         for j in range(nb - 1, -1, -1):  # nearest preceding heading = section scope
             if blocks[j].heading and not _is_price_only(blocks[j], prices[j]):
@@ -394,6 +422,8 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
             match = next((t for t in shared if t.amount == amount), None)
             is_shared = match is not None
         if match is None:
+            if any(t.amount == amount for t in addons):
+                return downgrade("addon_price")
             return downgrade("price_not_grounded")
         occ = (match.block_index, match.start)
         if (  # variants of one item may share one printed price

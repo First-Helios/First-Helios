@@ -832,3 +832,37 @@ unless noted. Record:
    once per inserted row at commit; one large page (`llm` and `jsonld` streams, over 1,000
    rows) took at least 1 h 25 min to commit on the laptop. A fix changes the Menu schema
    (stop-and-ask, its own PR); a full extraction pass waits for it independently of §8.
+
+## Amendment 9 (2026-10-03): pipeline version v4, tuned on the P5-5 pages
+
+Owner decisions in session P5-7, before any tuning. Record (tuning numbers, not a §8
+evaluation): [2026-10-03-p5-pipeline-v4-tuning.md](../reviews/2026-10-03-p5-pipeline-v4-tuning.md).
+
+1. **Harness rules, frozen for every later score.** (a) A row also matches a gold
+   item by naming one of its variants (the variant's tokens, or the name's plus the
+   variant's) when that item is printed at or before the row's claimed block: a
+   dish's options emitted as items are scored against the dish, not a same-named
+   dish elsewhere. (b) The gold-row false-reject metric stays strict: a dish printed
+   in several inline menus is one gold row per placement (Amendment 8 item 4), and the
+   validator, not the metric, handles repeats.
+2. **New version: `repairs-v4`, `validator-v4`** (prompt, chunking, segmenter and
+   model unchanged, so saved answers are re-validated without the model):
+   `…;prompt-v2.3;chunk-v2.1;segment-v2;repairs-v4;validator-v4;classifier-v2`. Every
+   change is layout-generic, with no per-site or per-platform branching: the duplicate
+   key includes where a row is printed (validator: grounded name block; repairs'
+   dedupe: claimed block); a spaced unit suffix ("$18.00 / LB.") is a price label; a
+   variant that is no printed price label near its item is dropped (repairs); on pages
+   that print each price above the name and again below it, an item's price run is its
+   own lower copy; a "+$" price grounds no item price (`addon_price`). Tuning result
+   (P5-5 pages / spike pages): price accuracy 0.990 / 0.994, item recall 0.887 /
+   0.903, gold-row false reject 0.112 / 0.038, catch 0.998 / 0.987.
+3. **Not changed.** No stronger model or GPU serving this session (H3: out of scope;
+   a later proposal needs its own amendment). Price-before-name data prep was dropped:
+   the page behind it is an absolutely positioned site-builder layout whose grouping
+   exists only in CSS coordinates, so a static fix would be per-platform; rendering
+   (§4) is the generic route. Large-page chunking was not changed (no measured
+   target).
+4. **v4 is not cleared for extraction runs** until it passes §8 on a fresh held-out
+   draw from the laptop pass (new seed; the P5-5 exclusions plus the 18 venues
+   labelled in P5-5), with Amendment 8's blind-label and blinded-adjudicator
+   procedure.

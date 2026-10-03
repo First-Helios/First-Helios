@@ -34,7 +34,7 @@ Capture-targeted span (ADR-0013 §5).
 
 **Scoring** (``score_page``, per page; ``metrics`` over summed counts): each
 extracted row is validated against the page and matched to a gold item by
-normalized name tokens.
+normalized name tokens (``match``; a row naming a variant of an item matches it).
 
 - item recall: gold items with a matching row (``found_raw``), and with one the
   validator kept (``found_kept``);
@@ -210,17 +210,37 @@ def _block_no(block_id: str | None) -> int:
     return int(block_id[1:]) if block_id and block_id[1:].isdigit() else 0
 
 
+def _variant_keys(name: str, variant: str | None) -> tuple[frozenset[str], ...]:
+    """The name tokens a row naming this variant carries: the variant's, or name + variant."""
+    if not variant:
+        return ()
+    own = frozenset(norm_tokens(variant))
+    return (own, own | frozenset(norm_tokens(name)))
+
+
 def match(row: Row, items: Sequence[GoldItem]) -> int | None:
     """The gold item (its index) a row names.
 
-    The item with the same name tokens, the one printed nearest the claimed block
-    when a dish is listed twice; else an item in the claimed block whose tokens
-    are a subset or superset of the row's.
+    The item with the same name tokens, or (harness rule H1a, P5-7) an item printed
+    at or before the claimed block with a variant the row names (its tokens are the
+    variant's, or the name's plus the variant's: a dish's options emitted as items,
+    each under its dish); the one printed nearest the claimed block when several
+    qualify. Else an item in the claimed block whose tokens are a subset or
+    superset of the row's.
     """
     key = frozenset(norm_tokens(row.item))
-    same = [i for i, it in enumerate(items) if frozenset(norm_tokens(it.name)) == key]
+    claim = _block_no(row.claimed_block)
+    same = [
+        i
+        for i, it in enumerate(items)
+        if frozenset(norm_tokens(it.name)) == key
+        or (
+            key
+            and _block_no(it.block) <= claim
+            and any(key in _variant_keys(it.name, p.variant) for p in it.prices)
+        )
+    ]
     if same:
-        claim = _block_no(row.claimed_block)
         return min(same, key=lambda i: abs(_block_no(items[i].block) - claim))
     for i, it in enumerate(items):
         gold_key = frozenset(norm_tokens(it.name))

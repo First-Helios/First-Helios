@@ -19,7 +19,11 @@ generic repairs in the spike's order:
    fill, variant completion;
 4. a variant whose words are all in the item name ("(L)" copied from "Orange
    Chicken (L)") is dropped: it was not printed with the price;
-5. exact duplicates (same name tokens, variant, amount, section) collapse to one.
+4b. (v4) a variant that is no price's printed label near the item ("chilled, hot,
+   or spicy": a description put in the variant slot) is dropped
+   (``drop_unprinted_variants``);
+5. exact duplicates (same name tokens, variant, amount, section, claimed block)
+   collapse to one; a dish printed again in another inline menu is kept (v4).
 """
 
 from __future__ import annotations
@@ -29,8 +33,9 @@ import re
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from packages.helios_parsing.stitch import stitch
-from packages.helios_parsing.validator import Row, norm_tokens
+from packages.helios_parsing.prices import price_tokens
+from packages.helios_parsing.stitch import FILL_GAP, stitch
+from packages.helios_parsing.validator import Row, norm_tokens, price_label
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -38,7 +43,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v3"
+REPAIRS_VERSION = "repairs-v4"
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
 _ITEM = re.compile(r'\{\s*"b"\s*:[^{}]*\}')
@@ -171,11 +176,46 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
         else row
         for row in rows
     ]
-    seen: set[tuple[str, str | None, str | None, str | None]] = set()
+    rows = drop_unprinted_variants(rows, blocks)
+    seen: set[tuple[str, str | None, str | None, str | None, str | None]] = set()
     unique: list[Row] = []
     for row in rows:
-        key = (" ".join(norm_tokens(row.item)), row.variant, row.amount, row.section)
+        key = (
+            " ".join(norm_tokens(row.item)),
+            row.variant,
+            row.amount,
+            row.section,
+            row.claimed_block,
+        )
         if key not in seen:
             seen.add(key)
             unique.append(row)
     return unique
+
+
+def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
+    """Rows whose variant isn't the label of any price printed near the item lose it.
+
+    The prompt asks for the size/variant word printed next to the price; a small
+    model sometimes copies the description there instead, and the validator then
+    downgrades a correctly priced row (``variant_not_grounded``). Near = the claimed
+    block from 2 above to ``FILL_GAP`` below. Kept when nothing near prints a price
+    (a shared section price) or the claimed block is unknown.
+    """
+    index = {b.id: i for i, b in enumerate(blocks)}
+    prices = price_tokens(list(blocks))
+    out: list[Row] = []
+    for row in rows:
+        pos = index.get(row.claimed_block or "")
+        if not row.variant or pos is None:
+            out.append(row)
+            continue
+        labels = [
+            set(norm_tokens(price_label(blocks[j].text, prices[j], t)))
+            for j in range(max(0, pos - 2), min(len(blocks), pos + FILL_GAP + 1))
+            for t in prices[j]
+        ]
+        own = set(norm_tokens(row.variant))
+        printed = not labels or any(own <= label for label in labels)
+        out.append(row if printed else replace(row, variant=None))
+    return out

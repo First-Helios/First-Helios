@@ -139,6 +139,11 @@ This section is the single current-status page. Other docs link here.
   ([2026-09-30-p5-held-out-evaluation.md](./docs/reviews/2026-09-30-p5-held-out-evaluation.md),
   Amendment 8) **fails §8** (price accuracy 0.963, item recall 0.837, gold-row
   false reject 0.306; catch 0.988), so no extraction run (laptop or Pi) is cleared.
+  Pipeline version v4 (`repairs-v4`, `validator-v4`; ADR-0013 Amendment 9) is tuned
+  on those pages and the spike's
+  ([record](./docs/reviews/2026-10-03-p5-pipeline-v4-tuning.md); P5-5 pages: price
+  accuracy 0.990, item recall 0.887, gold-row false reject 0.112: tuning numbers,
+  not a §8 evaluation) and waits for a fresh held-out draw.
   Large pages commit slowly: a per-row deferred integrity check re-validates the
   whole page (at least 1 h 25 min for one 1,000-row page; a schema fix is pending).
 - **Laptop first pass** (ADR-0013 Amendment 8): the first full pass runs on the
@@ -227,9 +232,11 @@ This section is the single current-status page. Other docs link here.
   held-out evaluation. The first one (slice-5 version, 2026-10-03,
   [record](./docs/reviews/2026-09-30-p5-held-out-evaluation.md)) fails price
   accuracy, item recall and the gold-row false-reject bar; its 10 pages are now
-  tuning pages. Opens when all hold:
-  - [ ] a new pipeline version passes §8 on a fresh held-out draw from the laptop
-    pass (new seed, the 18 labelled venues excluded);
+  tuning pages. Version v4 is tuned on them
+  ([record](./docs/reviews/2026-10-03-p5-pipeline-v4-tuning.md), Amendment 9).
+  Opens when all hold:
+  - [ ] a new pipeline version (next: v4) passes §8 on a fresh held-out draw from
+    the laptop pass (new seed, the 18 labelled venues excluded);
   - [ ] the Menu-write commit cost is fixed (Amendment 8 item 6; a schema change,
     stop-and-ask).
 - **Pi check, `llama-server` image: pending.** Before the first Pi extraction

@@ -517,7 +517,7 @@ website/menu-URL coverage is measured and written down. Gate state:
 ### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
 > Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), accepted
-> 2026-09-29 (Amendments 1–7). It replaces this
+> 2026-09-29 (Amendments 1–9). It replaces this
 > phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
 > plan (owner decision G.b), on the evidence of the
 > [menu-model spike](./docs/spikes/menu-model/README.md).
@@ -557,9 +557,15 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   evaluation of the slice-5 version **fails §8** (price accuracy 0.963, item
   recall 0.837, gold-row false reject 0.306; catch 0.988;
   [record](./docs/reviews/2026-09-30-p5-held-out-evaluation.md)). It also found
-  that Menu-write commits grow with the square of page size. Next: fix the
-  Menu-write commit cost (schema, stop-and-ask), tune a new pipeline version on
-  these 10 pages, score it on a fresh draw, then the laptop extraction pass.
+  that Menu-write commits grow with the square of page size.
+- *Tuned (P5-7, [Amendment 9](./docs/adr/0013-phase5-menu-pipeline.md#amendment-9-2026-10-03-pipeline-version-v4-tuned-on-the-p5-5-pages)):*
+  pipeline version v4 (`repairs-v4`, `validator-v4`; model and prompt unchanged)
+  on the spike's 33 and P5-5's 10 pages, with the harness rules frozen first:
+  on the P5-5 pages price accuracy 0.990, item recall 0.887, gold-row false
+  reject 0.112, catch 0.998 (tuning numbers, not §8;
+  [record](./docs/reviews/2026-10-03-p5-pipeline-v4-tuning.md)). Next: fix the
+  Menu-write commit cost (schema, stop-and-ask), score v4 on a fresh held-out
+  draw, then the laptop extraction pass.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
