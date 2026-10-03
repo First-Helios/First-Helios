@@ -211,3 +211,64 @@ def test_unlabeled_price_runs_flag() -> None:
     assert not flagged("<p>Taco $3</p><p>Burrito $8</p>"), "labeled by their item names"
     assert not flagged("<p>Latte $3 | $3</p>"), "one amount twice is not a run"
     assert not flagged("<nav><p>$3 $5</p></nav><p>Taco $3</p>"), "chrome is not extracted"
+
+
+def test_v4_a_dish_repeated_in_another_inline_menu_is_not_a_duplicate() -> None:
+    html = "<h2>Lunch</h2><p>Gyoza $8</p><h2>Dinner</h2><p>Gyoza $8</p>"
+    rows = [
+        Row("Gyoza", "8", section="Zensai", claimed_block="b0002"),
+        Row("Gyoza", "8", section="Zensai", claimed_block="b0004"),
+        Row("Gyoza", "8", section="Zensai", claimed_block="b0004"),
+    ]
+    assert [(v.decision, v.reasons) for v in _check(rows, html).verdicts] == [
+        ("accept", ()),
+        ("accept", ()),
+        ("reject", ("duplicate_row",)),
+    ]
+
+
+def test_v4_a_spaced_unit_suffix_is_the_price_label() -> None:
+    html = "<p>BLUE CRAB (60-780 cal)$18.00 / LB.</p><p>RAW OYSTERS $18.00 / 6 pcs</p>"
+    rows = [
+        Row("Blue Crab", "18.00", variant="LB."),
+        Row("Raw Oysters", "18.00", variant="6 pcs"),
+        Row("Raw Oysters", "18.00", variant="12 pcs"),  # not printed with it
+    ]
+    assert [(v.decision, v.reasons) for v in _check(rows, html).verdicts] == [
+        ("accept", ()),
+        ("accept", ()),
+        ("downgrade", ("price_belongs_to_other_variant",)),
+    ]
+
+
+DOUBLED = """
+<p>$3.50</p><p>Plain Bagel</p><p>Choice of bagel</p><p>$3.50</p>
+<p>$4.00</p><p>Everything Bagel</p><p>With seeds</p><p>$4.00</p>
+"""
+
+
+def test_v4_a_price_printed_twice_binds_to_its_own_item() -> None:
+    # every price above the name and again below the description: the next item's
+    # upper copy ($4.00) follows this item's lower one and is not this item's price
+    assert _decide([Row("Plain Bagel", "4.00")], DOUBLED) == ["downgrade"]
+    assert _decide([Row("Plain Bagel", "3.50")], DOUBLED) == ["accept"]
+    assert _decide([Row("Everything Bagel", "4.00")], DOUBLED) == ["accept"]
+    # a size run under each item, the same on every item, is still the item's own
+    sizes = "<p>Cheese</p><p>$9</p><p>$15</p><p>Pepperoni</p><p>$9</p><p>$15</p>"
+    assert _decide([Row("Pepperoni", "9"), Row("Pepperoni", "15")], sizes) == ["accept"] * 2
+
+
+def test_v4_an_add_on_price_grounds_no_item_price() -> None:
+    html = "<p>Bagel with Cream Cheese $3.50 (vegan +$1)</p><p>Avocado +$1.50 | Queso $1.00</p>"
+    rows = [
+        Row("Bagel with Cream Cheese", "3.50"),
+        Row("Bagel with Cream Cheese", "1.00"),
+        Row("Avocado", "1.50"),
+        Row("Queso", "1.00"),
+    ]
+    assert [(v.decision, v.reasons) for v in _check(rows, html).verdicts] == [
+        ("accept", ()),
+        ("downgrade", ("addon_price",)),
+        ("downgrade", ("addon_price",)),
+        ("accept", ()),
+    ]

@@ -134,6 +134,36 @@ def test_match_prefers_same_name_nearest_the_claim_then_a_block_subset() -> None
     assert match(Row("Burrito", "3", claimed_block="b0002"), items) is None
 
 
+def test_match_takes_a_row_naming_a_variant_to_the_dish_above_it() -> None:
+    # harness rule H1a (P5-7): a dish's options emitted as items match the dish
+    plates = {
+        "name": "Taco Plates",
+        "block": "b0010",
+        "section": "Plates",
+        "description": None,
+        "prices": [
+            {"amount": "13.00", "variant": "Pulled Pork"},
+            {"amount": "11.00", "variant": "Black Beans"},
+        ],
+    }
+    items = gold_page(
+        {
+            **LABEL,
+            "items": [
+                _item("Pulled Pork", "b0002", "Sides", "3.00"),
+                plates,
+                {**plates, "name": "Nacho Plates", "block": "b0020"},
+            ],
+        }
+    ).items
+    assert match(Row("Pulled Pork", "13.00", claimed_block="b0011"), items) == 1
+    assert match(Row("Taco Plates Black Beans", "11.00", claimed_block="b0011"), items) == 1
+    assert match(Row("Black Beans", "11.00", claimed_block="b0021"), items) == 2
+    assert match(Row("Pulled Pork", "3.00", claimed_block="b0002"), items) == 0
+    # a variant row matches only a dish printed at or above it
+    assert match(Row("Black Beans", "11.00", claimed_block="b0005"), items) is None
+
+
 def test_score_page_counts_recall_usable_accuracy_validator_and_promo() -> None:
     rows = [
         Row("Carne Asada", "3.50", claimed_block="b0002"),  # correct, accepted
