@@ -160,6 +160,70 @@ class VenueMenuResponse(BaseModel):
         return _utc_iso(value) if value is not None else None
 
 
+#: Request filters on ``GET /v1/price-index``: the values the index holds today.
+#: ``course`` joins ``CategoryKind`` additively (ADR-0016 §6).
+CategoryKind = Literal["all"]
+CurrencyCode = Literal["USD"]
+
+
+class PriceIndexGroupResponse(BaseModel):
+    """Venue-weighted price statistics for one category and currency of a cell.
+
+    Each venue weighs one: its sample is the median of its priced rows, and the
+    statistics are over those venue medians, in integer currency minor units.
+    ``low_sample`` is true when ``venue_count`` is below ``min_venues``; the
+    statistics are null when ``venue_count`` is 0. ``organization_venue_count``
+    venues were placed through their Organization's own menu. ``priced_count``
+    and ``unpriced_count`` count the item/variant rows behind the group.
+    ``age_seconds`` is the oldest observation's age at request time, never
+    negative; null when nothing is priced.
+    """
+
+    category_kind: str
+    category_key: str
+    currency_code: str
+    venue_count: int
+    organization_venue_count: int
+    priced_count: int
+    unpriced_count: int
+    min_venues: int
+    low_sample: bool
+    p25_minor: int | None
+    median_minor: int | None
+    p75_minor: int | None
+    min_minor: int | None
+    max_minor: int | None
+    oldest_observed_at: datetime | None
+    newest_observed_at: datetime | None
+    age_seconds: int | None
+
+    @field_serializer("oldest_observed_at", "newest_observed_at")
+    def _serialize_times(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
+class PriceIndexResponse(BaseModel):
+    """The price index for the lat/lon grid cell containing the requested point.
+
+    The cell is named by its south-west corner (``cell_lat``, ``cell_lon``) and
+    spans ``cell_size_degrees`` north and east. ``as_of`` is the index's
+    refresh instant; null, with ``items: []``, when the index has no row for
+    the cell.
+    """
+
+    area_kind: str
+    area_key: str
+    cell_lat: float
+    cell_lon: float
+    cell_size_degrees: float
+    as_of: datetime | None
+    items: list[PriceIndexGroupResponse]
+
+    @field_serializer("as_of")
+    def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
 class ErrorResponse(BaseModel):
     """The uniform error body returned by every non-2xx response."""
 

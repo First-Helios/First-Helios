@@ -33,7 +33,7 @@ This section is the single current-status page. Other docs link here.
   category so far, `all`; `course` waits for a course label. Single-location
   Organizations' own-site prices are placed at their venue; shared menus are left
   out. `python -m apps.gold.refresh` rebuilds both tables at one instant. Not yet
-  run on real data; no API.
+  run on real data. Served by `GET /v1/price-index` (Amendment 2).
 - **Read API**: `apps/api/`. FastAPI, conventions per ADR-0008:
   - `GET /healthz`: liveness, no database.
   - `GET /readyz`: readiness, checks the database.
@@ -44,6 +44,10 @@ This section is the single current-status page. Other docs link here.
     time and its source kind. The menu nests sections → items →
     variants/modifiers. It also includes the Organization's menu when this
     venue is the Organization's only current venue.
+  - `GET /v1/price-index?lat=&lon=`: the `gold.price_index` rows of the 0.01°
+    cell containing the point, with venue counts, `low_sample`, the observed
+    range and `as_of`. Optional `category_kind` and `currency` filters; a cell
+    with no row is `200` with `items: []`.
 - **Overture discovery**: `apps/discovery/` (`__main__.py`, `overture.py`,
   `pipeline.py`). Seeds food venues from Overture Places into Bronze and
   Identity, with conservative dedupe and Nominatim gap-fill
@@ -440,7 +444,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
 | [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted |
 | [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted |
-| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1) |
+| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2) |
 | [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted |
 | [0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) | Venue discovery: source, ingestion, dedupe/minting, and schedule | Accepted |
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
