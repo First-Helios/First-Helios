@@ -3,7 +3,8 @@
 **Status:** Accepted (target shape), as amended by
 [Amendment 1](#amendment-1-2026-09-30-first-slice-built-before-the-course-axis):
 the first slice (table, migration, refresh, CLI) is built with an `all` category
-only; the `course` axis and the API follow.
+only; the `course` axis follows. The API is authorized by
+[Amendment 2](#amendment-2-2026-10-01-the-price-index-api).
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune — adopt the shape below
 (lat/lon grid geospatial axis), defer the build.
@@ -367,3 +368,42 @@ Organizations whose menu-URL records name the same URL; nothing called
    not `5f3a9c1e7b24`. Gold reads Identity through the new read-only
    `current_venue_locations` contract and Bronze through the existing
    `source_endpoint_for_evidence`; the only FK is to `menu.currency`.
+
+## Amendment 2 (2026-10-01): the price-index API
+
+Owner decisions in session G-5, before any code. Amendment 1 §1 did not
+authorize the API; this does, for `GET /v1/price-index` (ROADMAP Phase 7) over
+the `gold.price_index` table as built. Read path only: no model, migration or
+dependency. Code: `packages/helios_core/gold/price_index_read.py`,
+`apps/api/routes/price_index.py`, `apps/api/schemas.py`.
+
+1. **Area: a point selects its cell.** `lat` and `lon` are required. The API
+   floors them with the refresh's own `grid_cell`, so a point lands in the cell
+   the refresh would place a venue at that point in. The query is equality on
+   `uq_gold_price_index`'s leading `(area_kind, area_key)`, so it is
+   index-backed with no new index. Bounding-box or all-cells listing is a later,
+   additive endpoint.
+2. **One bounded response, 200 when empty.** The body is the cell (`area_kind`,
+   `area_key`, south-west corner `cell_lat`/`cell_lon`, `cell_size_degrees`),
+   `as_of` and `items`, one per category and currency the index holds for the
+   cell. There is no pagination: a cell has one row today, and about nine once
+   courses arrive (ADR-0016 §6). A cell with no row is `200` with `items: []`
+   and `as_of: null`. No coverage is an answer, not a missing resource.
+3. **Every honesty field is served.** Each item carries `venue_count`,
+   `min_venues`, `low_sample`, `organization_venue_count`, `priced_count`,
+   `unpriced_count`, the five statistics in integer minor units, and
+   `oldest_observed_at`/`newest_observed_at`. Low-sample and all-unpriced rows
+   are served with their flags; nothing is hidden. `age_seconds` is the oldest
+   observation's age at request time, never negative.
+4. **`as_of` is the index's `effective_instant`.** The rebuild writes one
+   instant for every row, so this is the cell's as-of.
+5. **Optional filters and validation.** `category_kind` (`all` today) and
+   `currency` (`USD` today) narrow the items. Both are enums that widen as
+   values arrive, starting with `course` (ADR-0016 §6). Response fields stay
+   strings, so the new values don't change the response schema. `lat` outside
+   [-90, 90], `lon` outside [-180, 180], a missing coordinate, NaN or infinity,
+   or an unknown filter value returns `422 validation_error`. The API has no
+   Austin bounding box.
+6. **Negative zero.** `grid_cell` now maps a `-0` input to `0`. A float query
+   parameter can be `-0.0`, and Postgres `numeric` has no negative zero, so the
+   API never looks up a `-0.00` key the refresh cannot write.

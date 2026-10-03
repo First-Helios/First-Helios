@@ -344,6 +344,213 @@
         "title": "MenuSectionResponse",
         "type": "object"
       },
+      "PriceIndexGroupResponse": {
+        "description": "Venue-weighted price statistics for one category and currency of a cell.\n\nEach venue weighs one: its sample is the median of its priced rows, and the\nstatistics are over those venue medians, in integer currency minor units.\n``low_sample`` is true when ``venue_count`` is below ``min_venues``; the\nstatistics are null when ``venue_count`` is 0. ``organization_venue_count``\nvenues were placed through their Organization's own menu. ``priced_count``\nand ``unpriced_count`` count the item/variant rows behind the group.\n``age_seconds`` is the oldest observation's age at request time, never\nnegative; null when nothing is priced.",
+        "properties": {
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "category_key": {
+            "title": "Category Key",
+            "type": "string"
+          },
+          "category_kind": {
+            "title": "Category Kind",
+            "type": "string"
+          },
+          "currency_code": {
+            "title": "Currency Code",
+            "type": "string"
+          },
+          "low_sample": {
+            "title": "Low Sample",
+            "type": "boolean"
+          },
+          "max_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Minor"
+          },
+          "median_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Minor"
+          },
+          "min_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Minor"
+          },
+          "min_venues": {
+            "title": "Min Venues",
+            "type": "integer"
+          },
+          "newest_observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Observed At"
+          },
+          "oldest_observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Observed At"
+          },
+          "organization_venue_count": {
+            "title": "Organization Venue Count",
+            "type": "integer"
+          },
+          "p25_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P25 Minor"
+          },
+          "p75_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P75 Minor"
+          },
+          "priced_count": {
+            "title": "Priced Count",
+            "type": "integer"
+          },
+          "unpriced_count": {
+            "title": "Unpriced Count",
+            "type": "integer"
+          },
+          "venue_count": {
+            "title": "Venue Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category_kind",
+          "category_key",
+          "currency_code",
+          "venue_count",
+          "organization_venue_count",
+          "priced_count",
+          "unpriced_count",
+          "min_venues",
+          "low_sample",
+          "p25_minor",
+          "median_minor",
+          "p75_minor",
+          "min_minor",
+          "max_minor",
+          "oldest_observed_at",
+          "newest_observed_at",
+          "age_seconds"
+        ],
+        "title": "PriceIndexGroupResponse",
+        "type": "object"
+      },
+      "PriceIndexResponse": {
+        "description": "The price index for the lat/lon grid cell containing the requested point.\n\nThe cell is named by its south-west corner (``cell_lat``, ``cell_lon``) and\nspans ``cell_size_degrees`` north and east. ``as_of`` is the index's\nrefresh instant; null, with ``items: []``, when the index has no row for\nthe cell.",
+        "properties": {
+          "area_key": {
+            "title": "Area Key",
+            "type": "string"
+          },
+          "area_kind": {
+            "title": "Area Kind",
+            "type": "string"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "cell_lat": {
+            "title": "Cell Lat",
+            "type": "number"
+          },
+          "cell_lon": {
+            "title": "Cell Lon",
+            "type": "number"
+          },
+          "cell_size_degrees": {
+            "title": "Cell Size Degrees",
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PriceIndexGroupResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "area_kind",
+          "area_key",
+          "cell_lat",
+          "cell_lon",
+          "cell_size_degrees",
+          "as_of",
+          "items"
+        ],
+        "title": "PriceIndexResponse",
+        "type": "object"
+      },
       "VenueList": {
         "description": "A cursor-paginated page of venues; ``next_cursor`` is null on the last.",
         "properties": {
@@ -555,6 +762,100 @@
           }
         },
         "summary": "Readyz"
+      }
+    },
+    "/v1/price-index": {
+      "get": {
+        "description": "Return the venue-weighted price statistics of the 0.01\u00b0 cell containing ``lat``/``lon``.\n\nOne item per category and currency the index holds for the cell, narrowed\nby ``category_kind`` and ``currency`` when given. Groups below ``min_venues``\nvenues are served with ``low_sample: true``. A cell the index has no row for\nis ``200`` with ``items: []`` and ``as_of: null``.",
+        "operationId": "get_price_index_v1_price_index_get",
+        "parameters": [
+          {
+            "description": "Latitude, WGS 84 degrees.",
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "description": "Latitude, WGS 84 degrees.",
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Longitude, WGS 84 degrees.",
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "Longitude, WGS 84 degrees.",
+              "maximum": 180,
+              "minimum": -180,
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "all",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "USD",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Currency"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceIndexResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "lat/lon is missing or out of range, or a filter value is unknown."
+          }
+        },
+        "summary": "Get the price index for the grid cell containing a point",
+        "tags": [
+          "price-index"
+        ]
       }
     },
     "/v1/venues": {

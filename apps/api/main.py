@@ -15,7 +15,7 @@ from sqlalchemy import text
 
 from apps.api.errors import register_exception_handlers, render_error
 from apps.api.observability import REQUEST_ID_HEADER, configure_logging, request_context_middleware
-from apps.api.routes import venues
+from apps.api.routes import price_index, venues
 from apps.api.schemas import ErrorResponse
 from packages.helios_core.config import get_settings
 from packages.helios_core.db.session import get_engine
@@ -38,6 +38,7 @@ app.middleware("http")(request_context_middleware)
 register_exception_handlers(app)
 
 app.include_router(venues.router, prefix="/v1")
+app.include_router(price_index.router, prefix="/v1")
 
 
 @app.get("/healthz")
