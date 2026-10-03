@@ -94,7 +94,7 @@ This section is the single current-status page. Other docs link here.
   chunking (`chunking.py`), prompt v2.3 with its GBNF grammar, token cap and
   sparse-chunk retry (`prompt.py`), output parsing with truncated-output recovery
   and the row repairs (`output.py`), and stitch v3 (`stitch.py`). The evaluation
-  harness is `evaluation.py` (gold-label format with the `promo` mark, scores,
+  harness is `evaluation.py` (gold-label format with the `promo` mark and promo entries, scores,
   loss buckets, corruption injection), with `apps/menu_pipeline/evaluate.py`
   reading the gitignored labels and outputs. Chunks, rows, decisions and harness
   numbers match the spike's on its saved Pi output and gold rows.
@@ -131,16 +131,26 @@ This section is the single current-status page. Other docs link here.
   pages flagged `unlabeled_price_runs`; page confidence = classifier
   probability). `method_version` names every pipeline component; a bump
   re-interprets current Versions, from the saved answers unless the model,
-  prompt, chunking or segmenter changed. Not yet run on the Pi; no held-out
-  evaluation recorded yet (§8), so Pi extraction runs wait for it.
+  prompt, chunking or segmenter changed. The first held-out evaluation
+  ([2026-09-30-p5-held-out-evaluation.md](./docs/reviews/2026-09-30-p5-held-out-evaluation.md),
+  Amendment 8) **fails §8** (price accuracy 0.963, item recall 0.837, gold-row
+  false reject 0.306; catch 0.988), so no extraction run (laptop or Pi) is cleared.
+  Large pages commit slowly: a per-row deferred integrity check re-validates the
+  whole page (at least 1 h 25 min for one 1,000-row page; a schema fix is pending).
+- **Laptop first pass** (ADR-0013 Amendment 8): the first full pass runs on the
+  owner's laptop against a persistent local database; the Pi hosts long-term.
+  Done up to the fetch (2026-10-02): 9,996 venues seeded from Overture
+  `2026-08-19.0`, 8,085 with a website, 1,635 menu-URL records on 894 distinct
+  URLs, 1,632 `menu-page` Versions (static only). Extraction waits for a version
+  that passes §8 and for the Menu-write fix.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- Phase 5's first held-out evaluation (ADR-0013 §8; a fresh 10-page set,
-  labelled blind, scored on the laptop, Amendment 7 item 8), the first Pi
-  extraction run, and the rendered-page quality bars (slice 6).
+- A Phase 5 pipeline version that passes ADR-0013 §8 (the first one failed,
+  Amendment 8), the Menu-write commit fix, the first extraction pass (laptop),
+  and the rendered-page quality bars (slice 6).
 - The price index's `course` category (a course-label ADR comes first) and its
   API ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md) Amendment 1).
 - Price-index API endpoints, the staging deploy (ADR-0008 Unit B), production,
@@ -208,6 +218,16 @@ This section is the single current-status page. Other docs link here.
   - [ ] the owner authorizes the run. After it: record website/menu-URL
     coverage (the last Phase 4 "done when" item) and a hand-checked precision
     sample of saved menu URLs.
+- **Phase 5 extraction gate (ADR-0013 §8): closed.** Extraction runs (the laptop
+  first pass and any Pi run) need a pipeline version with a recorded passing
+  held-out evaluation. The first one (slice-5 version, 2026-10-03,
+  [record](./docs/reviews/2026-09-30-p5-held-out-evaluation.md)) fails price
+  accuracy, item recall and the gold-row false-reject bar; its 10 pages are now
+  tuning pages. Opens when all hold:
+  - [ ] a new pipeline version passes §8 on a fresh held-out draw from the laptop
+    pass (new seed, the 18 labelled venues excluded);
+  - [ ] the Menu-write commit cost is fixed (Amendment 8 item 6; a schema change,
+    stop-and-ask).
 - **Pi check, `llama-server` image: pending.** Before the first Pi extraction
   run, the owner runs the
   [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream
