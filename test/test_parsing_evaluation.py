@@ -1,5 +1,5 @@
 """Evaluation harness (ADR-0013 §8) on synthetic gold labels and pages: the gold-label
-format with the ``promo`` mark (Amendment 3), extraction scores, loss buckets,
+format with the ``promo`` mark (Amendment 3) and promo entries (Amendment 5), extraction scores, loss buckets,
 corruption injection and the ``apps.menu_pipeline.evaluate`` file side."""
 
 from __future__ import annotations
@@ -8,9 +8,13 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 from apps.menu_pipeline import evaluate
 from packages.helios_parsing.evaluation import (
     GoldPage,
+    PromoCondition,
+    PromoTerm,
     corruption_eval,
     corruption_metrics,
     gold_page,
@@ -25,8 +29,6 @@ from packages.helios_parsing.validator import Row
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 PAGE = """
 <h2>Tacos</h2>
@@ -85,6 +87,36 @@ def test_gold_page_reads_the_label_format_and_the_promo_mark() -> None:
     unpriced = gold_page({**LABEL, "items": [_item("Taco", "b0002", "Tacos")]})
     assert not unpriced.scorable
     assert not gold_page({**LABEL, "reviewed": False}).scorable
+
+
+PROMO: dict[str, Any] = {
+    "text": "Happy Hour Margarita $5",
+    "scope": {"kind": "items", "targets": ["Happy Hour Margarita"]},
+    "terms": [{"kind": "fixed_price", "value": "5"}],
+    "conditions": [{"kind": "hours", "text": "Happy Hour"}],
+    "locators": ["blocks:segment-v2:b0008[0:23]"],
+}
+
+
+def test_gold_page_reads_promo_entries_and_refuses_unknown_kinds() -> None:
+    assert _gold().promos == ()
+    (promo,) = gold_page({**LABEL, "promos": [PROMO]}).promos
+    assert (promo.scope, promo.targets) == ("items", ("Happy Hour Margarita",))
+    assert promo.terms == (PromoTerm("fixed_price", "5"),)
+    assert promo.conditions == (PromoCondition("hours", "Happy Hour"),)
+    menu_wide = {**PROMO, "scope": {"kind": "menu"}, "terms": [{"kind": "bogo"}]}
+    assert gold_page({**LABEL, "promos": [menu_wide]}).promos[0].targets == ()
+    for bad in (
+        {**PROMO, "scope": {"kind": "venue"}},
+        {**PROMO, "terms": [{"kind": "half_off"}]},
+        {**PROMO, "conditions": [{"kind": "weather", "text": "rain"}]},
+        {**PROMO, "locators": []},
+        {**PROMO, "locators": ["b0008"]},
+    ):
+        with pytest.raises(ValueError, match="promo"):
+            gold_page({**LABEL, "promos": [bad]})
+    counts = score_page(gold_page({**LABEL, "promos": [PROMO]}), segment(PAGE), [])
+    assert counts["gold_promos"] == 1
 
 
 def test_match_prefers_same_name_nearest_the_claim_then_a_block_subset() -> None:

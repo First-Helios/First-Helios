@@ -551,8 +551,15 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   [Amendment 7](./docs/adr/0013-phase5-menu-pipeline.md#amendment-7-2026-09-29-extraction-and-menu-writes)):
   the `llama-server` client, a resumable `python -m apps.menu_pipeline.extract`
   over `menu-page` Versions, kept raw answers, and a composite pipeline version.
-  Next: the first held-out evaluation (a fresh 10-page set), then the first Pi
-  extraction run.
+- *Evaluated (P5-5, [Amendment 8](./docs/adr/0013-phase5-menu-pipeline.md#amendment-8-2026-10-03-laptop-first-pass-first-held-out-evaluation)):*
+  the first full pass runs on the laptop (done up to the fetch: 9,996 venues,
+  1,635 menu-URL records, 1,632 `menu-page` Versions); the first held-out
+  evaluation of the slice-5 version **fails §8** (price accuracy 0.963, item
+  recall 0.837, gold-row false reject 0.306; catch 0.988;
+  [record](./docs/reviews/2026-09-30-p5-held-out-evaluation.md)). It also found
+  that Menu-write commits grow with the square of page size. Next: fix the
+  Menu-write commit cost (schema, stop-and-ask), tune a new pipeline version on
+  these 10 pages, score it on a fresh draw, then the laptop extraction pass.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).

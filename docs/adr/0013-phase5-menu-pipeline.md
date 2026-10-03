@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–7.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–8.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -13,7 +13,9 @@ own grain and the `llama-server` deployment was settled in session P5-3
 ([Amendment 5](#amendment-5-2026-09-29-promo-label-grain),
 [Amendment 6](#amendment-6-2026-09-29-llama-server-deployment)). Extraction and Menu
 writes were settled in session P5-4
-([Amendment 7](#amendment-7-2026-09-29-extraction-and-menu-writes)).
+([Amendment 7](#amendment-7-2026-09-29-extraction-and-menu-writes)). The first held-out
+evaluation, the laptop first pass and the disagreement review were settled in session
+P5-5 ([Amendment 8](#amendment-8-2026-10-03-laptop-first-pass-first-held-out-evaluation)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -348,8 +350,10 @@ State as of 2026-09-29 (Amendment 3):
 5. Extraction and Menu writes; first held-out evaluation recorded.
    *Built in P5-4 (Amendment 7):* the `llama-server` client, extraction over
    `menu-page` Versions and Menu writes (`python -m apps.menu_pipeline.extract`).
-   Remaining: the first held-out evaluation (Amendment 7 item 8), which Pi
-   extraction runs wait for.
+   *First held-out evaluation recorded 2026-10-03 (P5-5, Amendment 8): **fails §8***
+   (price accuracy 0.963, item recall 0.837, gold-row false reject 0.306; catch 0.988).
+   Remaining: a pipeline version that passes on a fresh held-out set, and a fix for the
+   Menu-write commit cost (Amendment 8 item 6); extraction runs wait for both.
 6. ⚠ Headless render, its measurement on the 32 JS-only pages, then enablement.
    *Built in S6f (#54):* headed Chromium under Xvfb (Amendments 1–2), measured on a
    laptop over 75 URLs, 23 of them the spike's JS-only own-site pages. Remaining: the
@@ -783,3 +787,48 @@ Code: `apps/menu_pipeline/llama_client.py`, `extraction.py`, `menu_writes.py`,
    manifest's GGUF (`python -m apps.menu_pipeline.evaluate extract`, then
    `compare`, `loss`, `corrupt`). Pi pages/hour and peak RAM are recorded with the
    owner's Pi check. Pi extraction runs wait for this evaluation (§8).
+
+## Amendment 8 (2026-10-03): laptop first pass, first held-out evaluation
+
+Owner decisions in session P5-5 (Amendment 7 item 8's evaluation), before any sampling
+unless noted. Record:
+[2026-09-30-p5-held-out-evaluation.md](../reviews/2026-09-30-p5-held-out-evaluation.md).
+
+1. **The first pass runs on the laptop; the Pi hosts long-term.** This changes §3's
+   "Where it runs (Q2)" for the first pass only. The first full pass (Overture seeding,
+   `resolve_urls`, the `menu-page` fetch and, once a pipeline version passes §8,
+   extraction) runs on the owner's laptop against a persistent local database, for speed
+   during development; the staging Pi takes the monthly change-only runs and serving
+   afterwards. The Pi gates (README: 1a, 1b, the `llama-server` Pi check) gate Pi runs,
+   not the laptop pass. How the laptop pass's data (database, `var/replay/` bundles and
+   raw answers) reaches the Pi is not decided here. Done 2026-10-02 up to the fetch:
+   9,996 venues, 1,635 menu-URL records on 894 distinct URLs, 1,632 `menu-page`
+   Versions (static only); the crawl is sequential (~5–9 venues/min), about a day.
+2. **First held-out evaluation: fails.** The slice-5 version
+   (`…;prompt-v2.3;chunk-v2.1;segment-v2;repairs-v3;validator-v3;classifier-v2`) on 10
+   static own-site pages drawn from the laptop pass (seed 20260930; venues and hosts the
+   spike saw excluded; one page per venue and site): price accuracy on accepted rows
+   **0.963**, item recall **0.837**, false reject on gold rows **0.306** (bars 0.98,
+   0.85, 0.12); corruption catch **0.988** passes; usable prices 0.620. Per §8 the version
+   is not cleared for extraction runs; these 10 pages are now tuning pages; the next
+   version is scored on a fresh draw from the same laptop pass (new seed, excluding the
+   18 venues labelled here). Static only (E1b): the rendered-page bars stay with slice 6.
+3. **Disagreement review: a blinded adjudicator, owner confirms label changes.** For
+   this evaluation (and available to later ones), Amendment 3 item 4's owner review is
+   done in two steps: a fresh agent judges every row where the blind label and the
+   pipeline disagree from the page text, without knowing which reading came from which
+   side; the owner confirms every label change it proposes and decides class questions.
+   Labels it upholds stay as blind-labelled. Both label sets are hashed and both scores
+   recorded. Here: 237 rows, 10 label changes confirmed.
+4. **Label conventions confirmed by the owner:** a dish printed in several inline menus
+   is one gold row per printed placement; an add-on list printed under its own heading
+   with one priced row each counts as items.
+5. **Promo-entry format added.** Amendment 5's deferred step: the harness's gold format
+   takes an optional per-page `promos` list (scope, terms, conditions, Capture-targeted
+   locators; kinds checked, counted only). Labels only: no pipeline or storage change,
+   no extraction overhead. First set: 15 entries on 3 of the 10 pages.
+6. **Found: Menu writes cost grows with the square of page size.** Each Menu table's
+   deferred constraint trigger `ct_menu_integrity` runs `menu.check_aggregate(page_id)`
+   once per inserted row at commit; one large page (`llm` and `jsonld` streams, over 1,000
+   rows) took at least 1 h 25 min to commit on the laptop. A fix changes the Menu schema
+   (stop-and-ask, its own PR); a full extraction pass waits for it independently of §8.
