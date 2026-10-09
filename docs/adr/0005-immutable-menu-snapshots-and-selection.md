@@ -165,10 +165,9 @@ provider preservation must be demonstrated before Menu depends on it.
 - The text says provider and Menu work wait on CI-image PostGIS validation; both have merged
   (revisions `b72e6a90c431` provider, `d83f0a21c592` Menu; `packages/helios_core/domains/menu/`).
 
-## Amendment 1 (2026-10-03, proposed): commit-time integrity check cost
+## Amendment 1 (2026-10-03, accepted 2026-10-08): commit-time integrity check cost
 
-**Status:** Proposed. Waits for owner review; no migration is written until it is
-accepted. Evidence:
+**Status:** Accepted 2026-10-08 (owner decisions below). Evidence:
 [2026-10-03-menu-write-commit-cost.md](../reviews/2026-10-03-menu-write-commit-cost.md).
 
 **Problem.** ADR-0013 Amendment 8 item 6 found a 1,000-row page taking at least
@@ -228,19 +227,23 @@ on Menu. That role's grants would then need this considered.
 - A single deferred trigger on `menu_page` only: `SET CONSTRAINTS … IMMEDIATE` would
   let later member inserts go unchecked.
 
-**Owner questions.**
+**Owner decisions (2026-10-08).**
 
-1. Accept both changes as one migration?
-2. Accept the memo trade-off above?
-3. Tests to add with the migration. `SET CONSTRAINTS ALL IMMEDIATE` then a later
+1. **Scope:** both changes, keyed path walk and once-per-aggregate-state check, in one
+   migration.
+2. **Memo trade-off:** accepted and documented above. Revisit it if a role other than
+   the Menu tables' owner is ever granted `INSERT` on Menu.
+3. **Tests shipped with the migration:** `SET CONSTRAINTS ALL IMMEDIATE` then a later
    member insert is still rejected. A violation inserted after a savepoint rollback is
    still rejected. `check_aggregate` runs once per page at commit (counted with
    `pg_stat_user_functions` under `track_functions = 'pl'`). Old and new
    `node_path` give identical rows on the existing fixtures, including base pins and a
    cycle. The migration's upgrade and downgrade SQL is snapshotted under
    `docs/reviews/sql/`.
-4. After merge: owner-run RUN-A-01 re-times the large page on a disposable clone of
-   the laptop database.
+4. **Sequencing:** the migration is built in parallel with the v4 held-out evaluation
+   (ADR-0013 Amendment 9 item 4), which tolerates slow commits. After merge, owner-run
+   RUN-A-01 re-times the large page on a disposable clone of the laptop database before
+   the first full extraction pass.
 
 ## References
 
