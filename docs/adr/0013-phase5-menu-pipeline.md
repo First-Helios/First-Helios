@@ -352,8 +352,9 @@ State as of 2026-09-29 (Amendment 3):
    `menu-page` Versions and Menu writes (`python -m apps.menu_pipeline.extract`).
    *First held-out evaluation recorded 2026-10-03 (P5-5, Amendment 8): **fails §8***
    (price accuracy 0.963, item recall 0.837, gold-row false reject 0.306; catch 0.988).
-   Remaining: a pipeline version that passes on a fresh held-out set, and a fix for the
-   Menu-write commit cost (Amendment 8 item 6); extraction runs wait for both.
+   Remaining: a pipeline version that passes on a fresh held-out set; extraction runs
+   wait for it. The Menu-write commit cost (Amendment 8 item 6) is fixed by ADR-0005
+   Amendment 1 (revision `db40e9424cba`); its laptop re-time (RUN-A-01) is pending.
 6. ⚠ Headless render, its measurement on the 32 JS-only pages, then enablement.
    *Built in S6f (#54):* headed Chromium under Xvfb (Amendments 1–2), measured on a
    laptop over 75 URLs, 23 of them the spike's JS-only own-site pages. Remaining: the
