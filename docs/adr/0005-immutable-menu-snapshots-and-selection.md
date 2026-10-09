@@ -165,6 +165,86 @@ provider preservation must be demonstrated before Menu depends on it.
 - The text says provider and Menu work wait on CI-image PostGIS validation; both have merged
   (revisions `b72e6a90c431` provider, `d83f0a21c592` Menu; `packages/helios_core/domains/menu/`).
 
+## Amendment 1 (2026-10-03, accepted 2026-10-08): commit-time integrity check cost
+
+**Status:** Accepted 2026-10-08 (owner decisions below). Evidence:
+[2026-10-03-menu-write-commit-cost.md](../reviews/2026-10-03-menu-write-commit-cost.md).
+
+**Problem.** ADR-0013 Amendment 8 item 6 found a 1,000-row page taking at least
+1 h 25 min to commit. Two costs multiply. `ct_menu_integrity` runs the whole-page
+`menu.check_aggregate` once per inserted row. Each check walks every node's path with
+`menu.node_path`, which joins every Menu node in the database (`menu.nodes(NULL)`).
+Measured on the current schema, commit time is quadratic in page size (406 rows:
+226 s) and also grows with the stored corpus (a 10-item page: 2.5 s → 6.5 s as
+stored nodes go from 11 to 2,042). A full extraction pass would slow down with every
+page it wrote.
+
+**Proposal.** One Menu migration, with no table or column change and no data
+rewrite:
+
+1. **Keyed path walk.** A new `menu.node(kind, id)` reads one node by primary key.
+   `menu.node_path` keeps its signature and rows but follows parent and base edges
+   through it, instead of joining `menu.nodes(NULL)`. This also speeds the selector's
+   `_path_applicability_ids`.
+2. **Check each page once per aggregate state.** A `BEFORE INSERT` trigger on the eight
+   Menu tables bumps a transaction-local generation counter. `menu.check_integrity`
+   skips a page already checked at the current generation, and records the
+   generation after a successful check.
+
+Measured with both (prototype SQL on disposable databases): commit is linear in page
+size (406 rows: 0.66 s, ~340× faster) and flat in the corpus (0.08 s at 11 and at
+10,122 stored nodes). The existing Menu, Gold and menu-API suites (339 tests) pass
+unchanged against the patched schema. Either change alone falls short: the keyed walk
+alone is still quadratic, and the once-per-state check alone still grows ×10 at 10k
+stored nodes.
+
+**Why the skipped checks are redundant.** Decision 7 is unchanged: the same
+`check_aggregate` still runs at commit over the complete aggregate. A check is only
+skipped when nothing in Menu was inserted since that page's last successful check in
+the same transaction. A page's aggregate can't change any other way:
+
+- every Menu table rejects `UPDATE`, `DELETE` and `TRUNCATE`;
+- members can be inserted only in their page's own transaction (`admit_member`);
+- a base pin must be a committed page (`admit_scope`).
+
+A savepoint rollback restores the earlier counter value, so a rollback can only cause
+an extra check, never skip one. `persist_menu`'s explicit pre-commit check is kept, so
+callers still get the error before commit.
+
+**Trade-off for the owner.** The memo is a custom setting
+(`helios_menu.checked_<page>`), so a session that deliberately sets it can skip that
+page's commit check. That is no new capability for Helios today: the app connects as
+`helios`, the bootstrap superuser and owner of the Menu tables, which can already
+disable the trigger. It would matter if a less-trusted role were ever given `INSERT`
+on Menu. That role's grants would then need this considered.
+
+**Alternatives not proposed.**
+
+- Rewrite `check_aggregate` as set-based SQL: a larger review surface, not needed by
+  the measurements.
+- Drop the deferred triggers and rely on `persist_menu`: rejected by this ADR's
+  Consequences (raw SQL must obey the same aggregate invariants).
+- A single deferred trigger on `menu_page` only: `SET CONSTRAINTS … IMMEDIATE` would
+  let later member inserts go unchecked.
+
+**Owner decisions (2026-10-08).**
+
+1. **Scope:** both changes, keyed path walk and once-per-aggregate-state check, in one
+   migration.
+2. **Memo trade-off:** accepted and documented above. Revisit it if a role other than
+   the Menu tables' owner is ever granted `INSERT` on Menu.
+3. **Tests shipped with the migration:** `SET CONSTRAINTS ALL IMMEDIATE` then a later
+   member insert is still rejected. A violation inserted after a savepoint rollback is
+   still rejected. `check_aggregate` runs once per page at commit (counted with
+   `pg_stat_user_functions` under `track_functions = 'pl'`). Old and new
+   `node_path` give identical rows on the existing fixtures, including base pins and a
+   cycle. The migration's upgrade and downgrade SQL is snapshotted under
+   `docs/reviews/sql/`.
+4. **Sequencing:** the migration is built in parallel with the v4 held-out evaluation
+   (ADR-0013 Amendment 9 item 4), which tolerates slow commits. After merge, owner-run
+   RUN-A-01 re-times the large page on a disposable clone of the laptop database before
+   the first full extraction pass.
+
 ## References
 
 - [Detailed Menu proposal](../plans/0002-step-5-menu-schema-proposal.md)

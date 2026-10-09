@@ -183,7 +183,7 @@ docs/                  # adr/, rfc/, plans/, spikes/, reviews/, diagrams/
 makefile, pyproject.toml, uv.lock, ruff.toml, mypy.ini, alembic.ini, .pre-commit-config.yaml
 ```
 
-Per [ADR-0013 §2](./docs/adr/0013-phase5-menu-pipeline.md#2-code-layout): `packages/helios_parsing/` (pure pipeline stages, Phase 3) and `apps/menu_pipeline/` (the pipeline's I/O, Phase 5). Both exist; so far they hold segmentation and the text hash, price tokens, the JSON-LD reader, chunking, the prompt and grammar, output parsing, repairs, the validator, the evaluation harness, the page classifier and the renderer.
+Per [ADR-0013 §2](./docs/adr/0013-phase5-menu-pipeline.md#2-code-layout): `packages/helios_parsing/` (pure pipeline stages, Phase 3) and `apps/menu_pipeline/` (the pipeline's I/O, Phase 5). Both exist; so far they hold segmentation and the text hash, price tokens, the JSON-LD reader, chunking, the prompt and grammar, output parsing, repairs, stitch, the validator, the menu shape, the evaluation and course-label harnesses, the page classifier, the renderer, `menu-page` Bronze writes, the `llama-server` client, extraction and Menu writes, and their batch CLIs.
 
 ### 4.2 Environments (Dev → Staging → Prod)
 
