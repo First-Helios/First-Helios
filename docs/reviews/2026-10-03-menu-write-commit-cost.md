@@ -4,7 +4,7 @@ Session A, 2026-10-03. Follows ADR-0013 Amendment 8 item 6: one large page (`llm
 `jsonld` streams, over 1,000 rows) took at least 1 h 25 min to commit on the laptop,
 and a full extraction pass waits for a fix. This record finds the cause, measures the
 current schema and two prototype changes, and backs the proposal in
-[ADR-0005 Amendment 1](../adr/0005-immutable-menu-snapshots-and-selection.md#amendment-1-2026-10-03-proposed-commit-time-integrity-check-cost).
+[ADR-0005 Amendment 1](../adr/0005-immutable-menu-snapshots-and-selection.md#amendment-1-2026-10-03-accepted-2026-10-08-commit-time-integrity-check-cost).
 
 **Measured only.** The prototypes were applied by hand to disposable `*_test`
 databases; no migration, model or repository code changed. The fix itself is a
