@@ -867,3 +867,35 @@ evaluation): [2026-10-03-p5-pipeline-v4-tuning.md](../reviews/2026-10-03-p5-pipe
    draw from the laptop pass (new seed; the P5-5 exclusions plus the 18 venues
    labelled in P5-5), with Amendment 8's blind-label and blinded-adjudicator
    procedure.
+
+## Amendment 10 (2026-10-09): v4 held-out evaluation fails
+
+Owner decisions in session P5-8 (Amendment 9 item 4's evaluation). Record:
+[2026-10-09-p5-v4-held-out-evaluation.md](../reviews/2026-10-09-p5-v4-held-out-evaluation.md).
+
+1. **v4 fails §8** on 35 static own-site pages drawn from the laptop pass (seed
+   20261008; P5-5's exclusions plus its 18 venues and their sites; quotas by page size:
+   14 small, 14 medium, 7 large): price accuracy **0.983**, item recall **0.838**,
+   false reject on gold rows **0.278** (bars 0.98, 0.85, 0.12); corruption catch
+   **0.995**; usable prices 0.647. Per §8 v4 is not cleared for extraction runs; these
+   35 pages are now tuning pages; the next version is scored on another fresh draw
+   from the laptop pass, excluding the 90 venues labelled in P5-5 and P5-8 and their
+   sites.
+2. **Evaluation procedure, available to later evaluations:** size strata from the
+   bundle's block count (read before any page content), pass/fail on the pooled set;
+   parallel fresh labeller agents on one brief, with an owner spot-check before the
+   freeze. Blinded adjudication (Amendment 8 item 3) may be skipped when no label
+   change could change the verdict; it was skipped here, so blind labels = confirmed.
+3. **Label conventions added by the owner:** a list repeated by a view toggle, tab or
+   accidental copy counts once; an add-on on its own line with its own price is an
+   item; names joined on one row with one price are one item each, but an "A or B"
+   choice row is one item; a priced heading over a flavour list in another block is
+   one item; catering service rows are not items.
+4. **Direction for the next version (owner):** printed price formats the validator
+   can't read ("12.5 USD", currency words, spacing) are fixed by a classical,
+   layout-generic normalization of price text as the last step; context collection
+   stays dynamic. The card-layout grounding gap (a price several blocks below the
+   name) is a separate lever.
+5. **The scale run (owner answer E5) is deferred to a Pi run** on the version that
+   passes §8, once the laptop pass's pages reach the Pi and the Pi `llama-server`
+   check is done; not run on the laptop.

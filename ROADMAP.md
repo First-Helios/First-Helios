@@ -563,10 +563,15 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   on the spike's 33 and P5-5's 10 pages, with the harness rules frozen first:
   on the P5-5 pages price accuracy 0.990, item recall 0.887, gold-row false
   reject 0.112, catch 0.998 (tuning numbers, not §8;
-  [record](./docs/reviews/2026-10-03-p5-pipeline-v4-tuning.md)). The
-  Menu-write commit cost is fixed (ADR-0005 Amendment 1, `db40e9424cba`; laptop
-  re-time RUN-A-01 pending). Next: score v4 on a fresh held-out draw, then the
-  laptop extraction pass.
+  [record](./docs/reviews/2026-10-03-p5-pipeline-v4-tuning.md)).
+- *Evaluated (P5-8, [Amendment 10](./docs/adr/0013-phase5-menu-pipeline.md#amendment-10-2026-10-09-v4-held-out-evaluation-fails)):*
+  v4 on 35 fresh pages (size-stratified) **fails §8**: price accuracy 0.983, item
+  recall 0.838, gold-row false reject 0.278, catch 0.995
+  ([record](./docs/reviews/2026-10-09-p5-v4-held-out-evaluation.md)). Next: tune v5
+  on the P5-5 and P5-8 pages (price-text normalization first, then card-layout
+  grounding and inline layouts), fix the Menu-write commit cost (schema,
+  stop-and-ask), score v5 on another fresh draw, then the laptop extraction pass;
+  the label-free scale run moves to the Pi.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
