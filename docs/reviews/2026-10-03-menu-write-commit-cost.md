@@ -115,6 +115,29 @@ passed (1,355 tests, coverage 92 %) and `alembic upgrade head && alembic check` 
 ## Owner-run checklist RUN-A-01 (after the migration merges)
 
 Re-time the page that took 1 h 25 min, on a disposable clone, never on
-`helios_laptop` itself. Steps to be written with the migration PR (the merged commit,
-a `TEMPLATE helios_laptop` clone, re-extracting that Version from its saved answers,
-the extract CLI's report and commit time pasted back).
+`helios_laptop` itself. Not a gate: the migration's tests already show the cost is
+linear (below); this confirms the absolute time on the laptop before the first full
+pass.
+
+1. On the laptop, check out `main` at the merge commit; paste `git rev-parse HEAD`.
+2. With no other connections to `helios_laptop`:
+   `createdb -T helios_laptop helios_a1_retime`.
+3. Against the clone only: `DATABASE_URL=…/helios_a1_retime uv run alembic upgrade head`,
+   then paste `alembic current` (expect `db40e9424cba (head)`).
+4. Re-extract the large page's Version on the clone with the extract CLI and its saved
+   raw answers (`var/replay/menu-extract/`). The coordinating session confirms the exact
+   command and that the page is due on the clone before this step, since the due set
+   depends on the pipeline version at the time.
+5. Paste the CLI's `extraction run complete` line and the page's commit time
+   (`extraction started` to completion for a one-page run).
+6. `dropdb helios_a1_retime`.
+
+**Implemented** (2026-10-08) in revision `db40e9424cba`, both changes as proposed.
+Tests: `test/test_menu_commit_check.py` (a later insert after an `IMMEDIATE` check is
+rechecked; a savepoint rollback can't skip a check; one `check_aggregate` call per
+page at commit; old and new `node_path` give identical rows on every node of a
+nested, base-pinned, variant and modifier fixture plus a self-parented section).
+SQL snapshots: [upgrade](./sql/2026-10-08-a1-menu-commit-check-upgrade.sql),
+[downgrade](./sql/2026-10-08-a1-menu-commit-check-downgrade.sql). Re-measured on a
+CI-image PostgreSQL (`imresamu/postgis:16-3.4`, 100-item page, 406 rows): commit
+0.45 s.

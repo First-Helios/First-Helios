@@ -158,7 +158,7 @@ This section is the single current-status page. Other docs link here.
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
 - A Phase 5 pipeline version that passes ADR-0013 §8 (the first one failed,
-  Amendment 8), the Menu-write commit fix, the first extraction pass (laptop),
+  Amendment 8), the first extraction pass (laptop),
   and the rendered-page quality bars (slice 6).
 - The price index's `course` category (a course-label ADR comes first) and its
   API ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md) Amendment 1).
@@ -237,8 +237,11 @@ This section is the single current-status page. Other docs link here.
   Opens when all hold:
   - [ ] a new pipeline version (next: v4) passes §8 on a fresh held-out draw from
     the laptop pass (new seed, the 18 labelled venues excluded);
-  - [ ] the Menu-write commit cost is fixed (Amendment 8 item 6; a schema change,
-    stop-and-ask).
+  - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
+    Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
+    was 226 s); the owner-run laptop re-time
+    ([RUN-A-01](./docs/reviews/2026-10-03-menu-write-commit-cost.md#owner-run-checklist-run-a-01-after-the-migration-merges))
+    is pending.
 - **Pi check, `llama-server` image: pending.** Before the first Pi extraction
   run, the owner runs the
   [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream
