@@ -144,14 +144,16 @@ This section is the single current-status page. Other docs link here.
   ([record](./docs/reviews/2026-10-03-p5-pipeline-v4-tuning.md); P5-5 pages: price
   accuracy 0.990, item recall 0.887, gold-row false reject 0.112: tuning numbers,
   not a §8 evaluation) and waits for a fresh held-out draw.
-  Large pages commit slowly: a per-row deferred integrity check re-validates the
-  whole page (at least 1 h 25 min for one 1,000-row page; a schema fix is pending).
+  Menu writes check each page once per aggregate state at commit
+  ([ADR-0005 Amendment 1](./docs/adr/0005-immutable-menu-snapshots-and-selection.md#amendment-1-2026-10-03-accepted-2026-10-08-commit-time-integrity-check-cost),
+  revision `db40e9424cba`): a 100-item page (406 rows) commits in 0.45 s, was
+  226 s; the owner-run laptop re-time is pending.
 - **Laptop first pass** (ADR-0013 Amendment 8): the first full pass runs on the
   owner's laptop against a persistent local database; the Pi hosts long-term.
   Done up to the fetch (2026-10-02): 9,996 venues seeded from Overture
   `2026-08-19.0`, 8,085 with a website, 1,635 menu-URL records on 894 distinct
   URLs, 1,632 `menu-page` Versions (static only). Extraction waits for a version
-  that passes §8 and for the Menu-write fix.
+  that passes §8.
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
@@ -457,7 +459,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0002](./docs/adr/0002-containerization.md) | Containerization, and pulling it forward from Phase 8 | Accepted |
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 |
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
-| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted |
+| [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted (commit check cost, Amendment 1) |
 | [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted |
 | [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2) |
 | [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted |
