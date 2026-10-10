@@ -308,7 +308,7 @@ def test_pipeline_version_names_every_component_within_the_column() -> None:
     spec = load_manifest()["Qwen3-4B-Instruct-2507-Q4_0"]
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm == (
-        "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.3;chunk-v2.2;segment-v2;"
+        "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.2;segment-v2;"
         "repairs-v5;validator-v5;classifier-v2"
     )
     assert len(version.llm) <= 128

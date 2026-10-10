@@ -148,13 +148,13 @@ This section is the single current-status page. Other docs link here.
   **fails §8** too: price accuracy 0.983 and catch 0.995 pass; item recall 0.838
   and gold-row false reject 0.278 miss (price formats like "12.5 USD" the validator
   can't read, card prices far from the name, inline layouts).
-  Pipeline version v5 (`chunk-v2.2`, `repairs-v5`, `validator-v5`; ADR-0013
-  Amendment 11) is tuned on the P5-5 and P5-8 pages
+  Pipeline version v5 (`prompt-v2.4`, `chunk-v2.2`, `repairs-v5`, `validator-v5`;
+  ADR-0013 Amendment 11) is tuned on the spike, P5-5 and P5-8 pages
   ([record](./docs/reviews/2026-10-09-p5-pipeline-v5-tuning.md)): one shared price
   reader ("12.5 USD", "50¢", "$.40"), column headers, repeated card names, joined
-  names, and long blocks sent whole to the model (P5-8 pages: price accuracy 0.983,
-  gold-row false reject 0.116; tuning numbers, not a §8 evaluation); it waits for a
-  fresh held-out draw. Menu-write commits check each page once per aggregate state
+  names, long blocks sent whole to the model with a token cap that fits them (P5-8
+  pages: price accuracy 0.983, item recall 0.871, gold-row false reject 0.116, catch
+  0.994; tuning numbers, not a §8 evaluation); it waits for a fresh held-out draw. Menu-write commits check each page once per aggregate state
   (ADR-0005 Amendment 1, revision `db40e9424cba`): linear in page size, flat in the
   stored corpus.
 - **Laptop first pass** (ADR-0013 Amendment 8): the first full pass runs on the

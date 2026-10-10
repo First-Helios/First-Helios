@@ -919,8 +919,8 @@ not a §8 evaluation): [2026-10-09-p5-pipeline-v5-tuning.md](../reviews/2026-10-
    Evidence locators keep their format, and a new form's span is the printed price
    with its mark ("12.5 USD"), the glued word and the underscore outside it. The page
    classifier keeps the v4 tokenizer (`price_tokens_v4`; its features are frozen
-   with `classifier-v2`), and the prompt's sparse-retry counter is part of
-   `prompt-v2.3`, unchanged.
+   with `classifier-v2`), and the prompt's sparse-retry counter (model input) is
+   unchanged.
 2. **Levers kept** (each layout-generic; keep rule: no tuning set gets worse on any
    of the four bars, a format crossing a bar blocks the lever): a price after "add"
    is a modifier's and a modifier-only line starts no price run; a claimed row is
@@ -933,19 +933,26 @@ not a §8 evaluation): [2026-10-09-p5-pipeline-v5-tuning.md](../reviews/2026-10-
    names joined by "," / "&" in a one-price row share that price ("A or B" stays one
    item); an underscore separates words in name grounding; a short lower-case line is
    an item, not a description to merge (stitch). Dropped: "|" bare pairs and
-   CamelCase name splitting (each made a set worse).
+   CamelCase name splitting (each made a set worse), and keeping a names-and-price line
+   as an item in stitch (priced description lines stopped merging).
 3. **chunk-v2.2 (decided after the levers, on new evidence).** P5-8 item recall stayed
    at 0.841 with the raw model rows at 0.842; chunk-v2.1 sends only the first 300
    characters of a block, and 54 P5-8 gold items lie past that cut on the two inline
    pages. A longer block is now sent as several lines with its block id, cut after a
    space, comma or "|". Pages whose blocks all fit get the same chunks, so their saved
-   answers stay valid (greedy decoding); the owner re-runs the affected tuning pages.
-4. **New version:**
-   `…;prompt-v2.3;chunk-v2.2;segment-v2;repairs-v5;validator-v5;classifier-v2`
-   (model, prompt and segmenter unchanged). Tuning result before chunk-v2.2 (spike /
-   P5-5 / P5-8): price accuracy 0.995 / 0.990 / 0.983, item recall 0.903 / 0.887 /
-   0.841, gold-row false reject 0.037 / 0.112 / 0.116, catch 0.987 / 0.998 / 0.994.
-5. **v5 is not cleared for extraction runs** until it passes §8 on a fresh held-out
+   answers stay valid (greedy decoding); the owner re-ran the 13 affected tuning pages
+   (recall 0.841 → 0.8498).
+4. **prompt-v2.4 (decided after chunk-v2.2, on new evidence).** 9 re-run chunks of a
+   few long lines stopped at the 40-tokens-per-line cap. The token cap is now at least
+   one token per two input characters (prompt text and grammar unchanged); only
+   chunks that stopped at the old cap can change, and the owner re-ran their 3 pages.
+5. **New version:**
+   `…;prompt-v2.4;chunk-v2.2;segment-v2;repairs-v5;validator-v5;classifier-v2`
+   (model, prompt text, grammar and segmenter unchanged). Tuning result (spike / P5-5 /
+   P5-8): price accuracy 0.995 / 0.990 / 0.983, item recall 0.905 / 0.887 / 0.871,
+   gold-row false reject 0.037 / 0.112 / 0.116, catch 0.987 / 0.998 / 0.994: all four
+   bars on every tuning set.
+6. **v5 is not cleared for extraction runs** until it passes §8 on a fresh held-out
    draw from the laptop pass: new seed 20261010, excluding P5-5's exclusions plus the
    90 venues labelled in P5-5 and P5-8 and their sites, with Amendment 10's
    procedure. The label-free scale run stays deferred to the Pi (Amendment 10 item 5).

@@ -1,4 +1,4 @@
-"""Extractor prompt v2.3, its compact GBNF grammar, the token cap and the sparse-chunk retry.
+"""Extractor prompt v2.4, its compact GBNF grammar, the token cap and the sparse-chunk retry.
 
 Ported from ``spikes/menu_model/extract.py`` with process v2 and prompt v2.3
 hard-wired (ADR-0013 §1): the configuration measured on the Pi as ``st-v23``.
@@ -13,7 +13,9 @@ text in, text or numbers out.
   id ``bNNNN``, a digits-only price with an optional ``$`` (forbidding it pushed
   ``$70.00`` into the variant), and a free variant string (forcing a letter into
   it derailed the model; ``output.rows_of`` cleans variants instead).
-- ``token_cap``: the runaway guard, ~40 output tokens per input line.
+- ``token_cap``: the runaway guard, ~40 output tokens per input line; (v2.4) at
+  least one per two input characters, so a chunk of a few long lines (chunk-v2.2
+  sends a long block in 300-character pieces) isn't cut mid-list.
 - ``sparse_retry``: one deterministic re-ask for a chunk that prints prices but
   came back (nearly) empty; the grammar lets a model close the list at once.
 """
@@ -63,11 +65,12 @@ vchr    ::= [^"\\\x00-\x1f]
 """
 
 # The prompt, grammar, token cap and sparse retry together; part of the pipeline version.
-PROMPT_VERSION = "prompt-v2.3"
+PROMPT_VERSION = "prompt-v2.4"
 
 MAX_TOKENS = 3072
 TOKENS_PER_LINE = 40  # keyed rows need headroom over the ~30 of the first process
 TOKENS_BASE = 64
+CHARS_PER_TOKEN = 2  # (v2.4) dense lines: 20+ items in 1,400 characters
 
 SPARSE_MIN_PRICES = 3  # retry trigger: a chunk printing at least this many prices ...
 SPARSE_RATIO = 1 / 3  # ... whose output holds fewer priced rows than this share of them
@@ -80,7 +83,8 @@ _PRICE_IN_LINE = re.compile(
 
 def token_cap(chunk: str) -> int:
     """``max_tokens`` for one chunk: a runaway generation stops here."""
-    return min(MAX_TOKENS, TOKENS_PER_LINE * (chunk.count("\n") + 1) + TOKENS_BASE)
+    by_lines = TOKENS_PER_LINE * (chunk.count("\n") + 1)
+    return min(MAX_TOKENS, max(by_lines, len(chunk) // CHARS_PER_TOKEN) + TOKENS_BASE)
 
 
 def printed_prices(chunk: str) -> int:

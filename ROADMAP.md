@@ -572,9 +572,11 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   Menu-write commits check each page once per aggregate state (revision
   `db40e9424cba`); the owner-run laptop re-time (RUN-A-01) is pending.
 - *Tuned (P5-9, [Amendment 11](./docs/adr/0013-phase5-menu-pipeline.md#amendment-11-2026-10-09-pipeline-version-v5-tuned-on-the-p5-8-pages)):*
-  pipeline version v5 (`chunk-v2.2`, `repairs-v5`, `validator-v5`) on the spike's
-  33, P5-5's 10 and P5-8's 35 pages: one shared price reader, then layout-generic
-  grounding and label levers, then long blocks sent whole to the model (tuning
+  pipeline version v5 (`prompt-v2.4`, `chunk-v2.2`, `repairs-v5`, `validator-v5`) on
+  the spike's 33, P5-5's 10 and P5-8's 35 pages: one shared price reader, then
+  layout-generic grounding and label levers, then long blocks sent whole to the model
+  with a token cap that fits them; every tuning set clears the four bars (P5-8: price
+  accuracy 0.983, item recall 0.871, gold-row false reject 0.116, catch 0.994; tuning
   numbers, not §8; [record](./docs/reviews/2026-10-09-p5-pipeline-v5-tuning.md)).
   Next: score v5 on a fresh draw (seed 20261010, the 90 labelled venues and their
   sites excluded), then the laptop extraction pass; the label-free scale run moves

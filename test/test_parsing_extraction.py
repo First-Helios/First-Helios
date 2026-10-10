@@ -112,6 +112,11 @@ def test_token_cap_scales_with_lines_up_to_the_maximum() -> None:
     assert token_cap("\n".join(["b0001 | x"] * 500)) == 3072
 
 
+def test_token_cap_covers_a_few_long_lines() -> None:
+    dense = "\n".join(f"b000{n} | {'Dish 9.99, ' * 27}" for n in range(5))  # 5 lines
+    assert token_cap(dense) == len(dense) // 2 + 64 > 40 * 5 + 64
+
+
 def test_printed_prices_count_block_lines_only() -> None:
     chunk = "(continued ... it ended with: '$9.99')\nb0001 | Taco $3 | Burrito 8.50\nb0002 | 12 oz"
     assert printed_prices(chunk) == 2
