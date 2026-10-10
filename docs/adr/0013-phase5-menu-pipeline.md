@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–8.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–11.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -16,6 +16,10 @@ writes were settled in session P5-4
 ([Amendment 7](#amendment-7-2026-09-29-extraction-and-menu-writes)). The first held-out
 evaluation, the laptop first pass and the disagreement review were settled in session
 P5-5 ([Amendment 8](#amendment-8-2026-10-03-laptop-first-pass-first-held-out-evaluation)).
+Pipeline version v4 was tuned in P5-7 and failed its held-out evaluation in P5-8
+([Amendments 9](#amendment-9-2026-10-03-pipeline-version-v4-tuned-on-the-p5-5-pages)
+and [10](#amendment-10-2026-10-09-v4-held-out-evaluation-fails)); v5 was tuned in
+P5-9 ([Amendment 11](#amendment-11-2026-10-09-pipeline-version-v5-tuned-on-the-p5-8-pages)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -899,3 +903,56 @@ Owner decisions in session P5-8 (Amendment 9 item 4's evaluation). Record:
 5. **The scale run (owner answer E5) is deferred to a Pi run** on the version that
    passes §8, once the laptop pass's pages reach the Pi and the Pi `llama-server`
    check is done; not run on the laptop.
+
+## Amendment 11 (2026-10-09): pipeline version v5, tuned on the P5-8 pages
+
+Owner decisions in session P5-9, before any tuning unless noted. Record (tuning numbers,
+not a §8 evaluation): [2026-10-09-p5-pipeline-v5-tuning.md](../reviews/2026-10-09-p5-pipeline-v5-tuning.md).
+
+1. **Price-text normalization (Amendment 10 item 4) is one shared reader.**
+   `prices.price_tokens` reads printed price forms the same way for the validator,
+   stitch, the row repairs and `parse_amount`: a currency word before or after the
+   amount ("12.5 USD", "USD 12", "7.5 Dollars"), a one-decimal amount only with a mark
+   ($, a currency word, an underscore), "$.40", "50¢", a word glued to the price
+   ("From4.5 USD"), an underscore separator ("Patacones_12"). An unmarked one-decimal
+   number ("6.2", "0.5 pounds") is not a price. It reads the original block text:
+   Evidence locators keep their format, and a new form's span is the printed price
+   with its mark ("12.5 USD"), the glued word and the underscore outside it. The page
+   classifier keeps the v4 tokenizer (`price_tokens_v4`; its features are frozen
+   with `classifier-v2`), and the prompt's sparse-retry counter (model input) is
+   unchanged.
+2. **Levers kept** (each layout-generic; keep rule: no tuning set gets worse on any
+   of the four bars, a format crossing a bar blocks the lever): a price after "add"
+   is a modifier's and a modifier-only line starts no price run; a claimed row is
+   grounded at an exact repeat of its name right below (the card gap of Amendment 10
+   item 4 was a repeated name, not distance); a label in parentheses after a price,
+   when nothing is printed before it, and a unit glued to it ("$9gl") are its label;
+   a column header ("16oz / 20oz / Pitcher") heading at least two rows labels each
+   price column, to the section's heading, and a "/" or "—" block inside a run
+   doesn't end it; an add-on on its own line with the block's only price is an item;
+   names joined by "," / "&" in a one-price row share that price ("A or B" stays one
+   item); an underscore separates words in name grounding; a short lower-case line is
+   an item, not a description to merge (stitch). Dropped: "|" bare pairs and
+   CamelCase name splitting (each made a set worse), and keeping a names-and-price line
+   as an item in stitch (priced description lines stopped merging).
+3. **chunk-v2.2 (decided after the levers, on new evidence).** P5-8 item recall stayed
+   at 0.841 with the raw model rows at 0.842; chunk-v2.1 sends only the first 300
+   characters of a block, and 54 P5-8 gold items lie past that cut on the two inline
+   pages. A longer block is now sent as several lines with its block id, cut after a
+   space, comma or "|". Pages whose blocks all fit get the same chunks, so their saved
+   answers stay valid (greedy decoding); the owner re-ran the 13 affected tuning pages
+   (recall 0.841 → 0.8498).
+4. **prompt-v2.4 (decided after chunk-v2.2, on new evidence).** 9 re-run chunks of a
+   few long lines stopped at the 40-tokens-per-line cap. The token cap is now at least
+   one token per two input characters (prompt text and grammar unchanged); only
+   chunks that stopped at the old cap can change, and the owner re-ran their 3 pages.
+5. **New version:**
+   `…;prompt-v2.4;chunk-v2.2;segment-v2;repairs-v5;validator-v5;classifier-v2`
+   (model, prompt text, grammar and segmenter unchanged). Tuning result (spike / P5-5 /
+   P5-8): price accuracy 0.995 / 0.990 / 0.983, item recall 0.905 / 0.887 / 0.871,
+   gold-row false reject 0.037 / 0.112 / 0.116, catch 0.987 / 0.998 / 0.994: all four
+   bars on every tuning set.
+6. **v5 is not cleared for extraction runs** until it passes §8 on a fresh held-out
+   draw from the laptop pass: new seed 20261010, excluding P5-5's exclusions plus the
+   90 venues labelled in P5-5 and P5-8 and their sites, with Amendment 10's
+   procedure. The label-free scale run stays deferred to the Pi (Amendment 10 item 5).

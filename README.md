@@ -148,8 +148,15 @@ This section is the single current-status page. Other docs link here.
   **fails §8** too: price accuracy 0.983 and catch 0.995 pass; item recall 0.838
   and gold-row false reject 0.278 miss (price formats like "12.5 USD" the validator
   can't read, card prices far from the name, inline layouts).
-  Large pages commit slowly: a per-row deferred integrity check re-validates the
-  whole page (at least 1 h 25 min for one 1,000-row page; a schema fix is pending).
+  Pipeline version v5 (`prompt-v2.4`, `chunk-v2.2`, `repairs-v5`, `validator-v5`;
+  ADR-0013 Amendment 11) is tuned on the spike, P5-5 and P5-8 pages
+  ([record](./docs/reviews/2026-10-09-p5-pipeline-v5-tuning.md)): one shared price
+  reader ("12.5 USD", "50¢", "$.40"), column headers, repeated card names, joined
+  names, long blocks sent whole to the model with a token cap that fits them (P5-8
+  pages: price accuracy 0.983, item recall 0.871, gold-row false reject 0.116, catch
+  0.994; tuning numbers, not a §8 evaluation); it waits for a fresh held-out draw. Menu-write commits check each page once per aggregate state
+  (ADR-0005 Amendment 1, revision `db40e9424cba`): linear in page size, flat in the
+  stored corpus.
 - **Laptop first pass** (ADR-0013 Amendment 8): the first full pass runs on the
   owner's laptop against a persistent local database; the Pi hosts long-term.
   Done up to the fetch (2026-10-02): 9,996 venues seeded from Overture
@@ -162,8 +169,9 @@ This section is the single current-status page. Other docs link here.
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
 - A Phase 5 pipeline version that passes ADR-0013 §8 (the slice-5 version and v4
-  failed, Amendments 8 and 10), the Menu-write commit fix, the first extraction pass (laptop),
-  and the rendered-page quality bars (slice 6).
+  failed, Amendments 8 and 10; v5 is tuned and waits for its held-out draw,
+  Amendment 11), the first extraction pass (laptop), and the rendered-page quality
+  bars (slice 6).
 - The price index's `course` category
   ([ADR-0016](./docs/adr/0016-course-labels-for-the-price-index.md), Accepted):
   slice 1a (labelling guide and comparison harness) is built; slice 1b (labels,
@@ -245,9 +253,11 @@ This section is the single current-status page. Other docs link here.
   fails its held-out evaluation on 35 fresh pages (2026-10-09,
   [record](./docs/reviews/2026-10-09-p5-v4-held-out-evaluation.md), Amendment 10:
   item recall 0.838, gold-row false reject 0.278); those pages are now tuning pages too.
-  Opens when all hold:
-  - [ ] a new pipeline version (next: v4) passes §8 on a fresh held-out draw from
-    the laptop pass (new seed, the 18 labelled venues excluded);
+  Version v5 is tuned on them ([record](./docs/reviews/2026-10-09-p5-pipeline-v5-tuning.md),
+  Amendment 11). Opens when all hold:
+  - [ ] a new pipeline version (next: v5) passes §8 on a fresh held-out draw from
+    the laptop pass (seed 20261010; the 90 venues labelled in P5-5 and P5-8 and
+    their sites excluded);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time

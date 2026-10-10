@@ -8,8 +8,9 @@ unpriced and the next line ("$7.50/Medium", or a description ending in
 "/ 15.95") comes back as its own "item" carrying the price.
 
 1. **Merge.** A priced pseudo-item (a *price line*: nothing left but the amount
-   and a size word; or a *description line*: starts lower-case, its block is
-   long and comma-listed, or it is a sentence-like line under a heading item)
+   and a size word; or a *description line*: starts lower-case (v5: in a block
+   longer than a short name line), its block is long and comma-listed, or it is a
+   sentence-like line under a heading item)
    whose name block lies 1..``MAX_GAP`` blocks after the unpriced item before it
    gives that item its price and is dropped; several price lines become one row
    per price (size variants).
@@ -19,7 +20,8 @@ unpriced and the next line ("$7.50/Medium", or a description ending in
 3. **Price fill.** An item still unpriced takes the price(s) of the price-only
    block(s) printed within ``FILL_GAP`` blocks below its name, skipping
    description/icon lines and stopping at a heading, another row's block or a
-   block with both words and a price; the label printed with each price
+   block with both words and a price (v5: a modifier's "add $.95" line is
+   skipped); the label printed with each price
    ("/2 pcs", "Small") becomes its variant. The price comes from the page.
 4. **Variant completion.** An item priced from the run of price-only lines
    below it gets the run's other *labelled* prices ("Glass $7" / "Bottle $26");
@@ -36,8 +38,14 @@ import re
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from packages.helios_parsing.prices import PriceToken, price_tokens
-from packages.helios_parsing.validator import Row, norm_tokens, parse_amount, price_label
+from packages.helios_parsing.prices import PriceToken, price_tokens, read_money
+from packages.helios_parsing.validator import (
+    Row,
+    is_addon,
+    norm_tokens,
+    parse_amount,
+    price_label,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -55,7 +63,10 @@ _DESCRIPTION_CHARS = 40
 
 
 def _is_price_line(row: Row) -> bool:
-    rest = _MONEY_TEXT.sub(" ", row.item)
+    rest = row.item
+    for start, end, _ in reversed(read_money(rest)):  # (v5) "12.5 USD" is all price
+        rest = rest[:start] + " " + rest[end:]
+    rest = _MONEY_TEXT.sub(" ", rest)
     words = [t for t in norm_tokens(rest) if not t.isdigit()]
     variant = set(norm_tokens(row.variant or ""))
     return not [w for w in words if w not in variant] and len(words) <= 3
@@ -65,7 +76,9 @@ def _is_description_line(row: Row, text: str) -> bool:
     name = row.item.strip()
     if not name:
         return False
-    return name[0].islower() or (len(text) > _DESCRIPTION_CHARS and text.count(",") >= 2)
+    # (v5) a short lower-case line ("bottled $2.50", "mojito ‘rita") is an item
+    lower = name[0].islower() and len(text) > _SENTENCE_CHARS
+    return lower or (len(text) > _DESCRIPTION_CHARS and text.count(",") >= 2)
 
 
 def _is_sentence_line(row: Row, block: Block, anchor: Block, *, block_priced: bool) -> bool:
@@ -150,6 +163,8 @@ def _run_after(
         toks = [t for t in prices[j] if t.kind == "money"]
         if j in row_blocks or blocks[j].heading:
             break
+        if not run and toks and all(is_addon(blocks[j], t) for t in toks):
+            continue  # (v5) a modifier's price line ("add $.95 per cake") ends no run
         if toks and _price_only(blocks[j].text, toks):
             run.append(j)
             continue
