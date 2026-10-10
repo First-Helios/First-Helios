@@ -13,7 +13,8 @@ extractions, so they are recovered in order and the output is marked
 generic repairs in the spike's order:
 
 1. a price printed in the variant slot with the price slot empty moves to the
-   price (small models lose the key order);
+   price (small models lose the key order; v5: any form ``prices`` reads,
+   "12.5 USD");
 2. a variant with no letters ("4") is dropped: a bare number is not a size;
 3. stitch v3 (``stitch.stitch``): split lines re-assembled into items, price
    fill, variant completion;
@@ -21,7 +22,8 @@ generic repairs in the spike's order:
    Chicken (L)") is dropped: it was not printed with the price;
 4b. (v4) a variant that is no price's printed label near the item ("chilled, hot,
    or spicy": a description put in the variant slot) is dropped
-   (``drop_unprinted_variants``);
+   (``drop_unprinted_variants``; v5: the validator's labels, column headers
+   included);
 5. exact duplicates (same name tokens, variant, amount, section, claimed block)
    collapse to one; a dish printed again in another inline menu is kept (v4).
 """
@@ -33,9 +35,9 @@ import re
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from packages.helios_parsing.prices import price_tokens
+from packages.helios_parsing.prices import price_tokens, read_amount
 from packages.helios_parsing.stitch import FILL_GAP, stitch
-from packages.helios_parsing.validator import Row, norm_tokens, price_label
+from packages.helios_parsing.validator import Row, label_tokens, norm_tokens
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -43,7 +45,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v4"
+REPAIRS_VERSION = "repairs-v5"
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
 _ITEM = re.compile(r'\{\s*"b"\s*:[^{}]*\}')
@@ -153,7 +155,7 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
                     raw.price.strip(),
                     raw.variant.strip(),
                 )
-                if not price and _AMOUNT_ONLY.match(variant):
+                if not price and (_AMOUNT_ONLY.match(variant) or read_amount(variant)):
                     price, variant = variant, ""
                 if variant and not any(ch.isalpha() for ch in variant):
                     variant = ""
@@ -211,7 +213,7 @@ def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> lis
             out.append(row)
             continue
         labels = [
-            set(norm_tokens(price_label(blocks[j].text, prices[j], t)))
+            label_tokens(list(blocks), prices, t)
             for j in range(max(0, pos - 2), min(len(blocks), pos + FILL_GAP + 1))
             for t in prices[j]
         ]

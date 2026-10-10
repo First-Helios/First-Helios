@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 
-from packages.helios_parsing.chunking import BLOCK_CHARS, CHUNK_CHARS, CHUNK_SOFT, chunks
+from packages.helios_parsing.chunking import BLOCK_CHARS, CHUNK_CHARS, CHUNK_SOFT, chunks, pieces
 from packages.helios_parsing.output import (
     ExtractorOutput,
     OutputRow,
@@ -42,9 +42,20 @@ def test_chunks_send_non_chrome_blocks_as_id_lines() -> None:
     assert _lines(only) == ["b0002 | Tacos", "b0003 | Carne Asada", "b0004 | $3.50"]
 
 
-def test_chunks_cut_long_block_text() -> None:
-    [only] = chunks(segment(f"<p>{'x' * 500}</p>"))
-    assert only == f"b0001 | {'x' * BLOCK_CHARS}"
+def test_chunks_send_a_long_block_as_several_lines_with_its_id() -> None:
+    text = ", ".join(f"Dish {n:02d} $1{n % 10}.99" for n in range(40))
+    [only] = chunks(segment(f"<p>{text}</p>"))
+    lines = _lines(only)
+    assert len(lines) > 1 and all(line.startswith("b0001 | ") for line in lines)
+    assert all(len(line) - len("b0001 | ") <= BLOCK_CHARS for line in lines)
+    assert " ".join(line.removeprefix("b0001 | ") for line in lines) == text, "nothing dropped"
+
+
+def test_pieces_cut_after_a_separator_never_inside_a_price() -> None:
+    assert pieces("short") == ["short"]
+    assert [len(p) for p in pieces("x" * 650)] == [BLOCK_CHARS, BLOCK_CHARS, 50]
+    head, tail = pieces("a " * 149 + "$ 5.99 tail")
+    assert head.endswith("a") and tail == "$ 5.99 tail", "'$' stays with its amount"
 
 
 def test_chunks_cut_at_the_size_limit_with_a_context_line() -> None:
@@ -282,6 +293,30 @@ def test_stitch_drops_an_echoed_price_and_completes_inline_prices() -> None:
     stitched = stitch(rows, blocks)
     assert _rows(stitched)[:2] == [("Soup", "20.24", None), ("Americano", "2", None)]
     assert [r.amount for r in stitched[2:]] == ["3"]
+
+
+def test_v5_stitch_keeps_a_short_lower_case_item_and_skips_an_add_line() -> None:
+    blocks = segment(
+        "<p>coca mexicana $4.00</p><p>bottled $2.50</p>"
+        "<p>Pancakes</p><p>add $.95 per cake</p><p>$4.75</p>"
+    )
+    rows = [
+        Row("coca mexicana", "4.00", claimed_block="b0001"),
+        Row("bottled", "2.50", claimed_block="b0002"),
+        Row("Pancakes", None, claimed_block="b0003"),
+    ]
+    assert _rows(stitch(rows, blocks)) == [
+        ("coca mexicana", "4.00", None),
+        ("bottled", "2.50", None),
+        ("Pancakes", "4.75", None),
+    ]
+
+
+def test_v5_rows_of_moves_a_printed_price_form_from_the_variant_slot() -> None:
+    blocks = segment("<p>Veg Lo Mein</p><p>12.5 USD</p>")
+    [row] = rows_of(_one_chunk(("b0001", "Veg Lo Mein", "", "12.5 USD")), blocks)
+    assert (row.amount, row.variant) == ("12.5 USD", None)
+    assert validate(blocks, [row]).verdicts[0].decision == "accept"
 
 
 def test_stitched_rows_pass_the_validator() -> None:

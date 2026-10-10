@@ -12,7 +12,7 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
-from packages.helios_parsing.prices import price_tokens
+from packages.helios_parsing.prices import price_tokens_v4
 
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
@@ -50,7 +50,7 @@ def layout_features(blocks: list[Block], *, heuristic_signal: bool) -> list[floa
     title or first heading), computed by the caller: this package cannot import
     the discovery app.
     """
-    prices = price_tokens(blocks)
+    prices = price_tokens_v4(blocks)  # frozen with classifier-v2
     body = [index for index, block in enumerate(blocks) if not block.in_chrome]
     priced = [index for index in body if prices[index]]
     money = sum(1 for index in body for token in prices[index] if token.kind == "money")

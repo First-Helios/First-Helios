@@ -272,3 +272,133 @@ def test_v4_an_add_on_price_grounds_no_item_price() -> None:
         ("downgrade", ("addon_price",)),
         ("accept", ()),
     ]
+
+
+def _verdicts(rows: list[Row], html: str) -> list[tuple[str, tuple[str, ...]]]:
+    return [(v.decision, v.reasons) for v in _check(rows, html).verdicts]
+
+
+def test_v5_marked_price_forms_ground_and_cite_the_printed_price() -> None:
+    html = "<p>Veg Fried Rice</p><p>12.5 USD</p><p>Sopa</p><p>From4.5 USD</p><p>Extra $.40</p>"
+    check = _check([Row("Veg Fried Rice", "12.5"), Row("Sopa", "4.50"), Row("Extra", "0.40")], html)
+    assert [v.decision for v in check.verdicts] == ["accept"] * 3
+    rice, sopa, extra = (v.price_evidence for v in check.verdicts)
+    assert rice is not None and rice.locator == "blocks:segment-v2:b0002[0:8]", "'12.5 USD'"
+    assert sopa is not None and (sopa.start, sopa.end) == (4, 11), "'4.5 USD', not 'From'"
+    assert extra is not None and (extra.start, extra.end) == (6, 10), "'$.40'"
+    # an unmarked one-decimal number is not a price
+    assert _decide([Row("IPA", "6.2")], "<p>IPA</p><p>6.2</p><p>% ABV</p>") == ["downgrade"]
+
+
+def test_v5_an_add_price_line_starts_no_run() -> None:
+    html = (
+        "<p>Pancakes</p><p>Buttermilk or wheat</p><p>Customize: add $.95 per cake</p>"
+        "<p>Cake(1)$4.75</p>"
+    )
+    assert _decide([Row("Pancakes", "4.75", variant="Cake(1)")], html) == ["accept"]
+    assert _verdicts([Row("Pancakes", "0.95")], html) == [("downgrade", ("price_not_grounded",))]
+
+
+def test_v5_a_name_printed_again_below_is_grounded_at_its_last_copy() -> None:
+    card = (
+        "<p>French Fries</p><h3>French Fries</h3><p>Appetizers, Vegetarian</p>"
+        "<p>Crispy and golden.</p><p>Select options $ 5.99</p><p>Add to wishlist</p>"
+    )
+    assert _decide([Row("French Fries", "5.99", claimed_block="b0001")], card) == ["accept"]
+    # a longer name below is another item, not a copy
+    tiers = "<p>Chicken Tenders</p><p>Kids Chicken Tenders</p><p>$7.50</p>"
+    assert _decide([Row("Chicken Tenders", "7.50", claimed_block="b0001")], tiers) == ["accept"]
+
+
+def test_v5_a_label_in_parentheses_or_glued_after_the_price() -> None:
+    html = "<p>Caesar Salad</p><p>$6.99 (Sm) / $8.99 (Lg)</p><p>Prosecco</p><p>$9gl | $32btl</p>"
+    rows = [
+        Row("Caesar Salad", "8.99", variant="Lg"),
+        Row("Caesar Salad", "6.99", variant="Lg"),
+        Row("Prosecco", "32", variant="btl"),
+        Row("Prosecco", "9", variant="btl"),
+    ]
+    assert _verdicts(rows, html) == [
+        ("accept", ()),
+        ("downgrade", ("variant_not_grounded",)),
+        ("accept", ()),
+        ("downgrade", ("variant_not_grounded",)),
+    ]
+    # a label printed before the price wins over a description in parentheses
+    cakes = "<p>Novelty Cakes</p><p>6” – $65 (8-12 servings) | 7” – $80 (15-20 servings)</p>"
+    assert _decide([Row("Novelty Cakes", "80", variant="7”")], cakes) == ["accept"]
+
+
+COLUMNS = """
+<h2>Draft Beers</h2><p>16oz / 20oz / Pitcher</p>
+<p>HELLES — / $8.95 / —</p><p>LAGER $8 / $9.95 / $24.95</p><p>Crisp and malty.</p>
+<p>IPA $8.25 / $10.25 / $25.95</p>
+<h2>Taps</h2><p>16oz / 22oz / 32oz</p>
+<p>Kolsch</p><p>7</p><p>/</p><p>9</p><p>/</p><p>12</p>
+<p>Pilsner</p><p>6</p><p>/</p><p>8</p><p>/</p><p>10</p>
+"""
+
+
+def test_v5_a_column_header_labels_each_price_column() -> None:
+    rows = [
+        Row("Helles", "8.95", variant="20oz"),
+        Row("Lager", "24.95", variant="Pitcher"),
+        Row("IPA", "8.25", variant="16oz"),
+        Row("IPA", "10.25", variant="16oz"),
+        Row("Kolsch", "12", variant="32oz"),
+        Row("Pilsner", "8", variant="22oz"),
+    ]
+    assert [v.decision for v in _check(rows, COLUMNS).verdicts] == [
+        "accept",
+        "accept",
+        "accept",
+        "downgrade",
+        "accept",
+        "accept",
+    ]
+
+
+def test_v5_a_description_line_under_one_item_is_no_column_header() -> None:
+    wine = "<p>Crianza</p><p>Tempranillo | Rioja, Spain</p><p>12/48</p><p>Malbec</p><p>46</p>"
+    assert _verdicts([Row("Crianza", "48", variant="Rioja, Spain")], wine) == [
+        ("downgrade", ("variant_not_grounded",))
+    ]
+
+
+def test_v5_an_add_on_on_its_own_line_is_an_item() -> None:
+    html = "<p>Add Sauerkraut +1</p><p>Avocado +$1.50 | Guacamole +$1.50</p>"
+    rows = [Row("Add Sauerkraut", "1"), Row("Avocado", "1.50")]
+    assert _verdicts(rows, html) == [
+        ("accept", ("bare_integer_price",)),
+        ("downgrade", ("addon_price",)),
+    ]
+
+
+def test_v5_names_joined_in_a_one_price_row_share_the_price() -> None:
+    html = "<p>sidral, sangría & topo chico $3.25</p><p>Tea or Coffee $2</p>"
+    rows = [
+        Row("sidral", "3.25"),
+        Row("sangría", "3.25"),
+        Row("topo chico", "3.25"),
+        Row("Tea", "2"),  # "A or B" is one item
+        Row("Coffee", "2"),
+    ]
+    assert [v.decision for v in _check(rows, html).verdicts] == [
+        "accept",
+        "accept",
+        "accept",
+        "downgrade",
+        "accept",
+    ]
+    # several prices in the block: each name keeps only its own
+    inline = "<p>Chicken 14.99, Beef 15.99, Shrimp 16.99</p>"
+    rows = [Row("Chicken", "16.99"), Row("Beef", "15.99"), Row("Shrimp", "16.99")]
+    assert _decide(rows, inline) == ["downgrade", "accept", "accept"]
+
+
+def test_v5_an_underscore_separates_a_name_from_its_price() -> None:
+    html = "<p>Fried plantain with cheese. Arepas_12 OUR MENU Tajadas con Queso_8</p>"
+    assert _decide([Row("Arepas", "12"), Row("Tajadas con Queso", "8")], html) == [
+        "accept",
+        "accept",
+    ]
