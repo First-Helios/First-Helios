@@ -1,10 +1,13 @@
-"""Stage [5] validator v5: static grounding checks on extracted rows (ADR-0013 §1, §5).
+"""Stage [5] validator v6: static grounding checks on extracted rows (ADR-0013 §1, §5).
 
 Ported from ``spikes/menu_model/validator.py`` as frozen at spike commit
 ``e6e4e1f`` with ``MENU_SPIKE_VALIDATOR=v3``; the per-row decisions are the
 spike's, with the v4 changes tuned on the P5-5 findings (session P5-7) and the
-v5 changes tuned on the P5-8 findings (session P5-9) marked below. Prices are
-read by ``prices.price_tokens`` (v5: currency words, cents, "$.40", "_12"). Every row (one item, at most one price) gets one decision:
+v5 changes tuned on the P5-8 findings (session P5-9) and the v6 changes tuned on
+the P5-10 findings (session P5-11) marked below. Prices are read by
+``prices.price_tokens`` (v5: currency words, cents, "$.40", "_12"; v6: on a page
+that prints its prices bare, "Cakes16" and "feta -13"). Every row (one item, at
+most one price) gets one decision:
 
 - ``accept``: the name and the price are grounded on the page, the price is
   bound to this item, and the row passes the sanity checks;
@@ -19,7 +22,8 @@ Checks:
    few connector words ignored, a dietary mark glued on allowed: "Eggplantv")
    are a subset of one block's tokens; (v5) an underscore separates words
    ("Patacones_12"), and a name printed again right below (image alt text, then
-   a card's heading) is grounded at its last copy.
+   a card's heading) is grounded at its last copy; (v6) a word with an integer
+   glued to it grounds as the word ("Cod Cakes16").
 2. **Price grounding.** The amount occurs as a price token in the item's own
    region: its block after the name, then the nearest run of price blocks after
    it before the next extracted item or a price-less heading; or a price-only
@@ -31,14 +35,21 @@ Checks:
    modifier's price too and starts no run, unless the row is that add-on on its own
    line ("Add Sauerkraut +1"); a "/" or "—" block inside a run doesn't end it
    ("9" "/" "11"); names joined by "," / "&" in a one-price row share the price
-   ("sidral, sangría, topo chico $3.25").
+   ("sidral, sangría, topo chico $3.25"). (v6) A list of names printed in one
+   block without a price shares the one price printed right above it ("3.75
+   EACH:", "$4.50") or the price-only line right below ("Glass | 6"), and only
+   it; a section's price line right under its heading ("Small $1.99 | Medium
+   $2.29") prices its unpriced items, label checked; on a page that prints its
+   prices bare, a wrapped description's last number ends the run ("pepitas 12").
 3. **Binding.** The nearest matching occurrence in document order, one
    occurrence per item unless it sits in a heading. A row's variant ("SM",
    "Large") must be the label printed with its price; (v4) a spaced unit suffix
    is a label too ("$18.00 / LB.", "$32.00 / 12 pcs"); (v5) so are a label in
    parentheses after the price ("$6.99 (Sm)"), a unit glued to it ("$9gl") and a
    column header printed over a section's price columns ("16oz / 20oz /
-   Pitcher" over "$8 / $9.95 / $24.95").
+   Pitcher" over "$8 / $9.95 / $24.95"); (v6) so are a fraction label
+   ("$10.95/1/2lb") and a label printed on the line above its price in a stack
+   ("Small" "$6" "Large" "$10").
 4. **Sanity.** USD only; 0.10 <= amount <= 500; no duplicate (item, variant,
    price, section, name block) rows: a dish printed again in another inline menu is
    another placement (v4).
@@ -64,7 +75,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
-VALIDATOR_VERSION = "validator-v5"  # part of the pipeline version
+VALIDATOR_VERSION = "validator-v6"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})

@@ -402,3 +402,110 @@ def test_v5_an_underscore_separates_a_name_from_its_price() -> None:
         "accept",
         "accept",
     ]
+
+
+def test_v6_an_integer_glued_to_a_name_or_after_a_dash_on_a_bare_price_page() -> None:
+    html = (
+        "<p>Cod Cakes16</p><p>Crispy cod and potato.</p><p>Gumbo16</p>"
+        "<p>Tirokafteri, whipped feta -13</p><p>Wings 12</p>"
+    )
+    rows = [Row("Cod Cakes", "16"), Row("Gumbo", "15"), Row("Tirokafteri", "13")]
+    assert _verdicts(rows, html) == [
+        ("accept", ("bare_integer_price",)),
+        ("downgrade", ("price_not_grounded",)),
+        ("accept", ("bare_integer_price",)),
+    ]
+    # a page that marks its prices: a tab's item count is no price
+    tabs = "<p>Cocktails16</p><p>Margarita</p><p>$16</p><p>Paloma</p><p>$14</p>"
+    assert _verdicts([Row("Cocktails", "16"), Row("Margarita", "16")], tabs) == [
+        ("downgrade", ("price_not_grounded",)),
+        ("accept", ()),
+    ]
+
+
+def test_v6_a_fraction_label_after_the_price() -> None:
+    html = "<p>Cajun Shrimp</p><p>$10.95/1/2lb</p><p>$21.95/1lb</p>"
+    rows = [
+        Row("Cajun Shrimp", "10.95", variant="1/2lb"),
+        Row("Cajun Shrimp", "21.95", variant="1/2lb"),
+    ]
+    assert _decide(rows, html) == ["accept", "downgrade"]
+
+
+STACKED = "<p>Queso</p><p>Small</p><p>$6</p><p>Large</p><p>$10</p><p>Nachos</p><p>$9</p>"
+
+
+def test_v6_labels_stacked_over_their_prices() -> None:
+    rows = [
+        Row("Queso", "6", variant="Small"),
+        Row("Queso", "10", variant="Large"),
+        Row("Nachos", "9"),
+    ]
+    assert _decide(rows, STACKED) == ["accept", "accept", "accept"]
+    swapped = [Row("Queso", "10", variant="Small"), Row("Queso", "6", variant="Large")]
+    assert _decide(swapped, STACKED) == ["downgrade", "downgrade"]
+
+
+GROUPS = """
+<h2>Breakfast Tacos</h2>
+<p>3.75 EACH:</p><p>Potato & Egg | Bean & Egg | Bean & Cheese</p>
+<p>4.50 EACH:</p><p>Bacon & Egg | Chorizo & Egg</p>
+<h2>Wine</h2><p>Chardonnay, Merlot, Pinot Grigio</p><p>Glass | 6</p>
+<h2>Cocktails</h2><p>El Camino</p><p>$16.00</p><p>El Jimador, Grand Marnier, Lime Juice</p>
+"""
+
+
+def test_v6_a_price_printed_once_for_a_list_of_names() -> None:
+    rows = [
+        Row("Potato & Egg", "3.75"),
+        Row("Bean & Egg", "3.75"),
+        Row("Bean & Cheese", "3.75"),
+        Row("Bacon & Egg", "4.50"),
+        Row("Chorizo & Egg", "4.50"),
+        Row("Merlot", "6", variant="Glass"),
+        Row("El Camino", "16.00"),
+    ]
+    assert _decide(rows, GROUPS) == ["accept"] * 7
+    # the next list's price is not this list's; the ingredients under a dish take no price
+    wrong = [Row("Bean & Egg", "4.50"), Row("El Camino", "16.00"), Row("Grand Marnier", "16.00")]
+    assert _decide(wrong, GROUPS) == ["downgrade", "accept", "downgrade"]
+
+
+SECTION_LINE = """
+<h2>Drinks</h2><p>Small $1.99 | Medium $2.29 | Large 2.69</p>
+<p>Iced Tea</p><p>Coke</p><p>Sprite</p>
+<h2>Plates</h2><p>Taco Plate $9</p><p>Enchiladas</p><p>$11</p>
+"""
+
+
+def test_v6_a_section_price_line_under_its_heading() -> None:
+    rows = [
+        Row("Iced Tea", "1.99", variant="Small"),
+        Row("Coke", "2.69", variant="Large"),
+        Row("Sprite", "2.29", variant="Small"),  # a swapped size price
+        Row("Enchiladas", "9"),  # the section prices its items: no line
+    ]
+    assert _verdicts(rows, SECTION_LINE) == [
+        ("accept", ("shared_section_price",)),
+        ("accept", ("shared_section_price",)),
+        ("downgrade", ("variant_not_grounded",)),
+        ("downgrade", ("price_not_grounded",)),
+    ]
+
+
+def test_v6_a_wrapped_description_ends_with_the_price_on_a_bare_price_page() -> None:
+    html = (
+        "<p>avocado tostada</p><p>carrot, jalapeño, radish, cabbage,</p>"
+        "<p>cilantro, cotija, pepitas 12</p><p>cinnamon toast</p>"
+        "<p>whipped mascarpone, walnut streusel 9</p>"
+    )
+    assert _decide([Row("avocado tostada", "12"), Row("cinnamon toast", "9")], html) == [
+        "accept",
+        "accept",
+    ]
+    marked = (
+        html + "<p>Latte</p><p>$5</p><p>Mocha</p><p>$6</p><p>Tea</p><p>$3</p><p>Soda</p><p>$2</p>"
+    )
+    assert _decide([Row("avocado tostada", "12")], marked) == ["downgrade"], (
+        "a page that marks prices"
+    )

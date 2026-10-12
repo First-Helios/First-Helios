@@ -349,3 +349,56 @@ def test_stitched_rows_pass_the_validator() -> None:
         ("Americano", "3", None),
     ]
     assert {v.decision for v in validate(blocks, rows).verdicts} == {"accept"}
+
+
+def test_v6_chunks_send_a_short_priced_chrome_run_inside_the_body() -> None:
+    card = "<button><h3>{name}</h3><div>{price}</div><div>Ingredients</div></button>"
+    blocks = segment(
+        "<nav><a href='/'>Home</a><span>$5 off</span></nav><h2>Tacos</h2>"
+        + card.format(name="Baja Fish Tacos", price="$20")
+        + "<p>Atlantic cod, slaw, crema.</p>"
+        + "<form><button>Order</button></form><p>Shrimp, slaw.</p>"
+        + card.format(name="Vegan Tacos", price="$17")
+        + "<p>Mushrooms, beans.</p><footer>$1 delivery</footer>"
+    )
+    [only] = chunks(blocks)
+    texts = [line.split(" | ", 1)[1] for line in _lines(only)]
+    assert texts == [
+        "Tacos",
+        "Baja Fish Tacos",
+        "$20",
+        "Ingredients",
+        "Atlantic cod, slaw, crema.",
+        "Shrimp, slaw.",  # an unpriced chrome run stays out
+        "Vegan Tacos",
+        "$17",
+        "Ingredients",
+        "Mushrooms, beans.",
+    ], "nav and footer (page edges) stay out"
+
+
+def test_v6_rows_of_splits_a_row_named_by_a_priced_list() -> None:
+    blocks = segment(
+        "<p>$4.50</p><p>Budweiser, Bud Light, O’Douls (NA)</p>"
+        "<p>Single</p><p>$6</p><p>Sausage, Egg & Cheese</p>"
+        "<p>3.75 EACH:</p><p>Potato & Egg | Bean & Egg</p>"
+        "<p>El Camino</p><p>$16</p><p>El Jimador, Grand Marnier, Lime Juice</p>"
+    )
+    rows = rows_of(
+        _one_chunk(
+            ("b0002", "Budweiser, Bud Light, O’Douls (NA)", "4.50", ""),
+            ("b0005", "Sausage, Egg & Cheese", "6", ""),  # one name with a comma
+            ("b0007", "Potato & Egg | Bean & Egg", "3.75", ""),
+            ("b0010", "Mango, Peach or Guava", "16", ""),  # a choice stays one row
+        ),
+        blocks,
+    )
+    assert _rows(rows) == [
+        ("Budweiser", "4.50", None),
+        ("Bud Light", "4.50", None),
+        ("O’Douls (NA)", "4.50", None),
+        ("Sausage, Egg & Cheese", "6", None),
+        ("Potato & Egg", "3.75", None),
+        ("Bean & Egg", "3.75", None),
+        ("Mango, Peach or Guava", "16", None),
+    ]
