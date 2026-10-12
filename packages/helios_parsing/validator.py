@@ -151,10 +151,16 @@ def norm_tokens(text: str) -> list[str]:
     return [t for t in _WORD.findall(text) if t not in IGNORED_TOKENS]
 
 
+# (v6) an integer glued to a word ("Cod Cakes16"), not a decimal price ("Chicken16.99")
+_GLUED_INT = re.compile(r"(?<=[^\W\d_]{2})(?=\d{1,3}(?!\d|[.,]\d))")
+
+
 def block_tokens(text: str) -> set[str]:
     """A block's name-grounding tokens; (v5) an underscore separates words, as it
-    separates a price ("Patacones_12": image alt text)."""
-    return set(norm_tokens(text.replace("_", " ")))
+    separates a price ("Patacones_12": image alt text); (v6) a word with an integer
+    glued to it also grounds as the word ("Cod Cakes16")."""
+    text = text.replace("_", " ")
+    return set(norm_tokens(text)) | set(norm_tokens(_GLUED_INT.sub(" ", text)))
 
 
 def parse_amount(value: str | None) -> Decimal | None:
@@ -210,7 +216,10 @@ def price_label(text: str, toks: list[PriceToken], tok: PriceToken) -> str:
     block start), past that price's own parenthesized label, and it ("Half $14.95 |
     Whole $22.95").
     """
-    suffix = re.match(r"\s*/\s*([^|•$/\d\s][^|•$/]*|\d+\s*[^\W\d][^|•$/]*)", text[tok.end :])
+    suffix = re.match(  # (v6) a fraction label: "$10.95/1/2lb"
+        r"\s*/\s*(\d+/\d+\s*[^\W\d][^|•$/]*|[^|•$/\d\s][^|•$/]*|\d+\s*[^\W\d][^|•$/]*)",
+        text[tok.end :],
+    )
     # "Half $20.95/ Whole $41.95": a label followed by a price belongs to that price
     if suffix and not re.match(r"\s*\$?\d", text[tok.end + suffix.end() :]):
         return suffix.group(1).strip()
@@ -325,9 +334,38 @@ def _heads_rows(blocks: list[Block], prices: list[list[PriceToken]], k: int, col
     return seen >= 2 * columns
 
 
+_STACK_LABEL = re.compile(r"[^$|•/]{1,30}")  # "Small", "12oz.", "5 Wings", 'Whole Pie'
+
+
+def _stack_label(blocks: list[Block], prices: list[list[PriceToken]], k: int) -> bool:
+    """(v6) A short label printed on its own line, over its price on the next line."""
+    if not 0 <= k < len(blocks) - 1 or prices[k] or blocks[k].heading:
+        return False
+    text, below = blocks[k].text.strip(), blocks[k + 1]
+    return (
+        bool(_STACK_LABEL.fullmatch(text) and _LETTER.search(text))
+        and len(text.split()) <= 4
+        and len(prices[k + 1]) == 1
+        and _is_price_only(below, prices[k + 1])
+        and not _LETTER.search(below.text[: prices[k + 1][0].start])
+    )
+
+
+def stacked(blocks: list[Block], prices: list[list[PriceToken]], k: int) -> bool:
+    """(v6) Block ``k`` is a label in a stack of at least two label / price pairs:
+    "Small" "$6" "Large" "$10"."""
+    return _stack_label(blocks, prices, k) and (
+        _stack_label(blocks, prices, k + 2) or _stack_label(blocks, prices, k - 2)
+    )
+
+
 def label_tokens(blocks: list[Block], prices: list[list[PriceToken]], tok: PriceToken) -> set[str]:
-    """The words printed as one price's label: beside it, or (v5) as its column header."""
-    beside = price_label(blocks[tok.block_index].text, prices[tok.block_index], tok)
+    """The words printed as one price's label: beside it, (v5) as its column header, or
+    (v6) on the line above it in a stack of labels and prices."""
+    j = tok.block_index
+    beside = price_label(blocks[j].text, prices[j], tok)
+    if not beside and stacked(blocks, prices, j - 1):
+        beside = blocks[j - 1].text
     return set(norm_tokens(beside)) | set(norm_tokens(column_label(blocks, prices, tok)))
 
 
@@ -365,6 +403,74 @@ def _sole_number(block: Block) -> bool:
 
 def _run_tokens(blocks: list[Block], prices: list[list[PriceToken]], j: int) -> list[PriceToken]:
     return [t for t in prices[j] if t.kind == "money" or _sole_number(blocks[j])]
+
+
+_LIST_SEP = re.compile(r"\s*[|,•·]\s*")
+
+
+def _list_names(text: str) -> list[list[str]]:
+    """(v6) The names of a block that is a list of names ("Potato & Egg | Bean & Egg",
+    "Dos Equis, Modelo Especial, Pacifico"), else []."""
+    parts = [p for p in _LIST_SEP.split(text.strip()) if p.strip()]
+    if len(parts) < 2 or not all(_LETTER.search(p) and len(p.split()) <= 6 for p in parts):
+        return []
+    return [norm_tokens(p) for p in parts]
+
+
+def list_price(
+    blocks: list[Block],
+    prices: list[list[PriceToken]],
+    nb: int,
+    name: list[str],
+    item_blocks: set[int],
+) -> list[PriceToken] | None:
+    """(v6) The price printed once for a list of names: a row named in a price-less
+    block that lists names takes the one price on the line right above ("3.75 EACH:",
+    "$4.50", "6", "... FOR .50¢ EACH:"), else the price-only line right below ("Glass |
+    6"). None when the row is not in such a list. The line above is another item's
+    price when that item's name is printed right before it ("El Camino" "$16.00" over
+    its ingredient list)."""
+    if prices[nb] or name not in _list_names(blocks[nb].text):
+        return None
+    above = nb - 1
+    owner = nb - 2
+    priced_item = owner in item_blocks and not prices[owner] and not _list_names(blocks[owner].text)
+    if (
+        above >= 0
+        and not priced_item
+        and not blocks[above].heading
+        and len(prices[above]) == 1
+        and (
+            _is_price_only(blocks[above], prices[above])
+            or blocks[above].text.rstrip().endswith(":")
+        )
+    ):
+        return prices[above]
+    below = nb + 1
+    if below < len(blocks) and prices[below] and _is_price_only(blocks[below], prices[below]):
+        return prices[below]
+    return None
+
+
+def section_line(blocks: list[Block], prices: list[list[PriceToken]], nb: int) -> list[PriceToken]:
+    """(v6) Prices printed once for a section on the line right under its heading
+    ("Small $1.99 | Medium $2.29 | Large 2.69" over a drink list): at least two
+    labelled prices, and nothing else in the section, to its next heading, is priced."""
+    for j in range(nb - 1, -1, -1):
+        if blocks[j].heading:
+            line = j + 1
+            if line >= nb or blocks[line].heading:
+                return []
+            toks = [t for t in prices[line] if t.kind == "money"]
+            if len(toks) < 2 or not all(
+                price_label(blocks[line].text, prices[line], t) for t in toks
+            ):
+                return []
+            end = next((k for k in range(line + 1, len(blocks)) if blocks[k].heading), len(blocks))
+            if nb >= end or any(prices[k] for k in range(line + 1, end)):
+                return []  # the item is no section member, or the section prices its items
+            return toks
+    return []
 
 
 _ADDON_LEAD = re.compile(r"(?:\+|(?<![^\W\d_])add)\s*$", re.IGNORECASE)
@@ -413,6 +519,8 @@ def _price_run(
                 continue
             if _SEPARATOR.fullmatch(blocks[j].text) or _PLACEHOLDER.fullmatch(blocks[j].text):
                 continue  # (v5) "9" "/" "11" "/" "-": one price column per block
+            if not inline and stacked(blocks, prices, j):
+                continue  # (v6) the next label of a stack: "Small" "$6" "Large" "$10"
             break
         if toks and all(is_addon(blocks[j], t) for t in toks):
             continue  # (v5) a modifier's price line ("add $.95 per cake") starts no run
@@ -562,7 +670,11 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
             default=len(block.text),
         )
         region = [t for t in prices[nb] if span[0] <= t.start < next_start]
-        region.extend(_price_run(blocks, prices, nb, stop_blocks, inline=bool(region)))
+        listed = list_price(blocks, prices, nb, norm_tokens(row.item), stop_blocks)
+        if listed is not None:  # (v6) one price printed for a list of names, and only it
+            region = list(listed)
+        else:
+            region.extend(_price_run(blocks, prices, nb, stop_blocks, inline=bool(region)))
         if (  # price-first layout: only when nothing is priced after the name
             not region
             and nb > 0
@@ -590,6 +702,8 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
             if blocks[j].heading and not _is_price_only(blocks[j], prices[j]):
                 shared = [t for t in prices[j] if t.kind == "money"]
                 break
+        # (v6) else the section's price line right under its heading, label checked
+        line = [] if shared else section_line(blocks, prices, nb)
 
         other_variants = variants_of[key[0]] - {row.variant}
         same = [
@@ -608,6 +722,14 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
         if match is None:
             match = next((t for t in shared if t.amount == amount), None)
             is_shared = match is not None
+        if match is None and line:
+            on_line = [t for t in line if t.amount == amount]
+            match = next(
+                (t for t in on_line if _variant_before(blocks, prices, t, row.variant)), None
+            )
+            if match is None and on_line:
+                return downgrade("variant_not_grounded")
+            is_shared = match is not None
         if match is None:
             if any(t.amount == amount for t in addons):
                 return downgrade("addon_price")
@@ -616,6 +738,7 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
         if (  # variants of one item may share one printed price
             occ in bound
             and not is_shared
+            and listed is None  # (v6) a list's names share its one price
             and not blocks[match.block_index].heading
             and rows[bound[occ]].item != row.item
             and not (group != span and groups.get(bound[occ]) == (nb, group))  # (v5) joined
