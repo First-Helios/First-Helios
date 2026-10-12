@@ -58,7 +58,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Literal
 
-from packages.helios_parsing.prices import PriceToken, price_tokens, read_amount
+from packages.helios_parsing.prices import PriceToken, bare_page, price_tokens, read_amount
 from packages.helios_parsing.segment import SEGMENTER_VERSION
 
 if TYPE_CHECKING:
@@ -401,8 +401,13 @@ def _sole_number(block: Block) -> bool:
     )
 
 
-def _run_tokens(blocks: list[Block], prices: list[list[PriceToken]], j: int) -> list[PriceToken]:
-    return [t for t in prices[j] if t.kind == "money" or _sole_number(blocks[j])]
+def _run_tokens(
+    blocks: list[Block], prices: list[list[PriceToken]], j: int, bare: bool = False
+) -> list[PriceToken]:
+    """A block's prices that make a price run: marked ones, a number standing alone,
+    and (v6) on a page that prints its prices bare, a line's last number ("... cotija,
+    pepitas 12": a description wrapped over several lines, its price at the end)."""
+    return [t for t in prices[j] if t.kind == "money" or bare or _sole_number(blocks[j])]
 
 
 _LIST_SEP = re.compile(r"\s*[|,•·]\s*")
@@ -495,6 +500,7 @@ def _price_run(
     item_blocks: set[int],
     *,
     inline: bool,
+    bare: bool = False,
 ) -> list[PriceToken]:
     """The nearest run of price blocks after an item's name block.
 
@@ -515,7 +521,7 @@ def _price_run(
     for j in range(nb + 1, min(nb + 1 + SCAN, len(blocks))):
         if j in item_blocks:
             break
-        toks = _run_tokens(blocks, prices, j)
+        toks = _run_tokens(blocks, prices, j, bare)
         if inline or run:
             if doubled:
                 break
@@ -573,6 +579,7 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
     """Decide every row against the page's segmented blocks (one linear pass)."""
     block_toks = [block_tokens(b.text) for b in blocks]
     prices = price_tokens(blocks)
+    bare = bare_page(blocks)  # (v6) the page prints its prices bare
     index_of = {b.id: i for i, b in enumerate(blocks)}
 
     # Pass 1: name grounding. Per row, the grounding block is the claimed one if it
@@ -679,7 +686,9 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
         if listed is not None:  # (v6) one price printed for a list of names, and only it
             region = list(listed)
         else:
-            region.extend(_price_run(blocks, prices, nb, stop_blocks, inline=bool(region)))
+            region.extend(
+                _price_run(blocks, prices, nb, stop_blocks, inline=bool(region), bare=bare)
+            )
         if (  # price-first layout: only when nothing is priced after the name
             not region
             and nb > 0
