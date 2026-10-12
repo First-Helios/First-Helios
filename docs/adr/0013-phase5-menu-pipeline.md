@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–12.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–13.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -21,7 +21,8 @@ Pipeline version v4 was tuned in P5-7 and failed its held-out evaluation in P5-8
 and [10](#amendment-10-2026-10-09-v4-held-out-evaluation-fails)); v5 was tuned in
 P5-9 ([Amendment 11](#amendment-11-2026-10-09-pipeline-version-v5-tuned-on-the-p5-8-pages))
 and failed its held-out evaluation in P5-10
-([Amendment 12](#amendment-12-2026-10-12-v5-held-out-evaluation-fails)).
+([Amendment 12](#amendment-12-2026-10-12-v5-held-out-evaluation-fails)); v6 was tuned in
+P5-11 ([Amendment 13](#amendment-13-2026-10-12-pipeline-version-v6-tuned-on-the-p5-10-pages)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -991,3 +992,42 @@ Owner decisions in session P5-10 (Amendment 11 item 6's evaluation). Record:
    names by its description, and an integer glued to a name ("Cod Cakes16"); each fix
    layout-generic, under Amendment 11's keep rule. The label-free scale run stays
    deferred to the Pi (Amendment 10 item 5).
+
+## Amendment 13 (2026-10-12): pipeline version v6, tuned on the P5-10 pages
+
+Owner decisions in session P5-11, before any tuning. Record (tuning numbers, not a §8
+evaluation): [2026-10-12-p5-pipeline-v6-tuning.md](../reviews/2026-10-12-p5-pipeline-v6-tuning.md).
+
+1. **Levers: all four candidates of Amendment 12 item 5, several implementations each,
+   keep the best** under Amendment 11's keep rule (no tuning set worse on any of the four
+   bars; a format crossing a bar blocks the lever). Every fix is layout-generic.
+2. **Levers kept:** a page that prints its prices bare also reads an integer glued to a
+   name ("Cod Cakes16") or after a spaced dash ("feta -13"), never a page that marks its
+   prices (a tab's item count stays unread); a fraction label ("$10.95/1/2lb"); a short
+   label on its own line over its price, in a stack of label / price pairs, labels that
+   price; a price-less block that lists names shares the one price printed right above
+   it ("3.75 EACH:", "$4.50") or the price-only line right below ("Glass | 6"), and only
+   it, unless that line belongs to the item named just before it; a section's price line
+   right under its heading (two labelled prices, nothing else priced in the section, the
+   heading no item's name) prices the section's items, label checked; a row the model
+   named by a whole priced list becomes one row per name (repairs; capitalized names,
+   "|" / "•" or three or more commas; a choice or a name described in parentheses stays
+   one row); on a bare-price page a wrapped line's last number ends the price run.
+   Dropped forms (each made a set worse or let junk through) are in the record.
+3. **chunk-v2.3 (decided before tuning, T2):** a run of at most 4 chrome blocks between
+   body blocks is sent to the model when it prints a marked price (read with the frozen
+   v4 reader, so a later reader change can't change the chunks): card layouts that wrap
+   each card's name and price in a button. It changes 2 tuning pages; their answers were
+   regenerated, the others carried over (greedy decoding). The all-heading line-wrapped
+   layout is not changed this session (T3).
+4. **New version:**
+   `…;prompt-v2.4;chunk-v2.3;segment-v2;repairs-v6;validator-v6;classifier-v2`
+   (model, prompt text, grammar, segmenter and classifier unchanged). Tuning result
+   (spike / P5-5 / P5-8 / P5-10): price accuracy 0.995 / 0.992 / 0.983 / 0.997, item
+   recall 0.907 / 0.887 / 0.871 / 0.864, gold-row false reject 0.021 / 0.105 / 0.109 /
+   0.093, catch 0.987 / 0.995 / 0.994 / 0.996: all four bars on every tuning set.
+5. **v6 is not cleared for extraction runs** until it passes §8 on a fresh held-out draw
+   from the laptop pass: seed 20261012, excluding P5-5's exclusions plus all 162 venues
+   labelled so far and their sites (Amendment 12 item 1), with Amendment 10's procedure
+   and Amendment 12's fixed strata. The label-free scale run stays deferred to the Pi
+   (Amendment 10 item 5).

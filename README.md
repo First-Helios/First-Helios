@@ -159,6 +159,14 @@ This section is the single current-status page. Other docs link here.
   **fails §8**: price accuracy 0.997 and catch 0.994 pass; item recall 0.819 and
   gold-row false reject 0.168 miss (group prices printed once over a list,
   line-wrapped layouts, a card layout the model misreads, integers glued to a name).
+  Pipeline version v6 (`chunk-v2.3`, `repairs-v6`, `validator-v6`; ADR-0013
+  Amendment 13) is tuned on the spike, P5-5, P5-8 and P5-10 pages
+  ([record](./docs/reviews/2026-10-12-p5-pipeline-v6-tuning.md)): group prices printed
+  once for a list or a section, labels stacked over their prices, bare-price pages
+  ("Cakes16", a wrapped line's last number), rows named by a whole list split per
+  name, and short priced chrome runs (card buttons) sent to the model (P5-10 pages:
+  price accuracy 0.997, item recall 0.864, gold-row false reject 0.093, catch 0.996;
+  every tuning set clears the four bars; tuning numbers, not a §8 evaluation).
   Menu-write commits check each page once per aggregate state
   (ADR-0005 Amendment 1, revision `db40e9424cba`): linear in page size, flat in the
   stored corpus.
@@ -261,6 +269,8 @@ This section is the single current-status page. Other docs link here.
   Amendment 11) and fails its held-out evaluation on 35 fresh pages (2026-10-12,
   [record](./docs/reviews/2026-10-12-p5-v5-held-out-evaluation.md), Amendment 12: item
   recall 0.819, gold-row false reject 0.168); those pages are now tuning pages too.
+  Version v6 is tuned on them ([record](./docs/reviews/2026-10-12-p5-pipeline-v6-tuning.md),
+  Amendment 13) and awaits its held-out evaluation.
   Opens when all hold:
   - [ ] a new pipeline version (next: v6) passes §8 on a fresh held-out draw from
     the laptop pass (seed 20261012; all 162 venues labelled in P5-5, P5-8 and P5-10
