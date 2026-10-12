@@ -238,6 +238,7 @@ def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> lis
 _BAR_SEP = re.compile(r"\s*[|•·]\s*")
 _COMMA_SEP = re.compile(r"\s*,\s*")
 _CHOICE = re.compile(r"(?i)(?:or|and)\b")
+_LONG_PAREN = re.compile(r"\([^()]{5,}\)")  # "(red lentils)": a description, not a tag "(GF)"
 
 
 def _names(item: str) -> list[str]:
@@ -254,8 +255,9 @@ def split_listed(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     as one item, and each is an item (P5-8 label convention). Every name must be
     capitalized and in the block, and the block must be a price-less list of names
     with its price printed once right above or below it (``validator.list_price``'s
-    layout); a choice ("or", "and" before a name) and a description's ingredients
-    ("sausage, pork ribs") stay one row."""
+    layout); a choice ("or", "and" before a name), names described in parentheses
+    ("Misir (red lentils), Kik (yellow split-pea)": a dish's parts; a tag like "(GF)"
+    is fine) and a description's ingredients ("sausage, pork ribs") stay one row."""
     index = {b.id: i for i, b in enumerate(blocks)}
     prices = price_tokens(list(blocks))
     out: list[Row] = []
@@ -265,7 +267,7 @@ def split_listed(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
         if (
             pos is None
             or not parts
-            or "(" in row.item
+            or _LONG_PAREN.search(row.item)
             or any(_CHOICE.match(p) or not p[0].isupper() for p in parts)
             or len(list_names(blocks[pos].text)) != len(parts)
             or list_price(list(blocks), prices, pos, norm_tokens(parts[0]), set()) is None
