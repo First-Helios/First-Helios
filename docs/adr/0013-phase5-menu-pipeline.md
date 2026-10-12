@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–11.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–12.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -19,7 +19,9 @@ P5-5 ([Amendment 8](#amendment-8-2026-10-03-laptop-first-pass-first-held-out-eva
 Pipeline version v4 was tuned in P5-7 and failed its held-out evaluation in P5-8
 ([Amendments 9](#amendment-9-2026-10-03-pipeline-version-v4-tuned-on-the-p5-5-pages)
 and [10](#amendment-10-2026-10-09-v4-held-out-evaluation-fails)); v5 was tuned in
-P5-9 ([Amendment 11](#amendment-11-2026-10-09-pipeline-version-v5-tuned-on-the-p5-8-pages)).
+P5-9 ([Amendment 11](#amendment-11-2026-10-09-pipeline-version-v5-tuned-on-the-p5-8-pages))
+and failed its held-out evaluation in P5-10
+([Amendment 12](#amendment-12-2026-10-12-v5-held-out-evaluation-fails)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -956,3 +958,36 @@ not a §8 evaluation): [2026-10-09-p5-pipeline-v5-tuning.md](../reviews/2026-10-
    draw from the laptop pass: new seed 20261010, excluding P5-5's exclusions plus the
    90 venues labelled in P5-5 and P5-8 and their sites, with Amendment 10's
    procedure. The label-free scale run stays deferred to the Pi (Amendment 10 item 5).
+
+## Amendment 12 (2026-10-12): v5 held-out evaluation fails
+
+Owner decisions in session P5-10 (Amendment 11 item 6's evaluation). Record:
+[2026-10-12-p5-v5-held-out-evaluation.md](../reviews/2026-10-12-p5-v5-held-out-evaluation.md).
+
+1. **v5 fails §8** on 35 static own-site pages drawn from the laptop pass (seed
+   20261010; P5-5's exclusions plus the 90 venues labelled in P5-5 and P5-8 and their
+   sites; quotas by page size: 14 small, 14 medium, 7 large): price accuracy **0.997**,
+   item recall **0.819**, false reject on gold rows **0.168** (bars 0.98, 0.85, 0.12);
+   corruption catch **0.994**; usable prices 0.663. Per §8 v5 is not cleared for
+   extraction runs; these 35 pages are now tuning pages; the next version is scored on
+   another fresh draw from the laptop pass: seed **20261012**, excluding P5-5's
+   exclusions plus **all 162 venues labelled so far** (P5-5 18, P5-8 72, P5-10 72) and
+   their sites.
+2. **Size strata use fixed cutoffs.** P5-8's block-count cutoffs (small < 176, large ≥
+   500) are kept for later draws, so strata compare across evaluations; each draw's own
+   P50 / P90 is recorded, not used.
+3. **Label conventions added by the owner:** a dish re-listed in another section of the
+   same menu ("Popular Items", a "Vegetarian" or filter category, "Related Products")
+   with the same name and the same price counts once, at its first printing; a
+   re-listing with a different price, or a different product sharing a name, is its own
+   item, and genuinely separate menus still count per placement. An identical priced
+   option list printed again under several dishes counts once, at its first printing.
+4. **Blinded adjudication skipped** (Amendment 10 item 2): both failing bars miss by
+   more than any label change could move them (recall needs 84 more found items, gold-row
+   false reject 143 fewer rejected rows).
+5. **Direction for the next version** (from the findings, for the owner to confirm at
+   tuning): group prices printed once over a list of names, line-wrapped layouts (a name
+   over two blocks, a price at the end of a wrapped description), a card layout the model
+   names by its description, and an integer glued to a name ("Cod Cakes16"); each fix
+   layout-generic, under Amendment 11's keep rule. The label-free scale run stays
+   deferred to the Pi (Amendment 10 item 5).
