@@ -406,9 +406,10 @@ def _run_tokens(blocks: list[Block], prices: list[list[PriceToken]], j: int) -> 
 
 
 _LIST_SEP = re.compile(r"\s*[|,•·]\s*")
+_WORD_ONLY = re.compile(r"[^\W\d_]+")
 
 
-def _list_names(text: str) -> list[list[str]]:
+def list_names(text: str) -> list[list[str]]:
     """(v6) The names of a block that is a list of names ("Potato & Egg | Bean & Egg",
     "Dos Equis, Modelo Especial, Pacifico"), else []."""
     parts = [p for p in _LIST_SEP.split(text.strip()) if p.strip()]
@@ -430,11 +431,11 @@ def list_price(
     6"). None when the row is not in such a list. The line above is another item's
     price when that item's name is printed right before it ("El Camino" "$16.00" over
     its ingredient list)."""
-    if prices[nb] or name not in _list_names(blocks[nb].text):
+    if prices[nb] or name not in list_names(blocks[nb].text):
         return None
     above = nb - 1
     owner = nb - 2
-    priced_item = owner in item_blocks and not prices[owner] and not _list_names(blocks[owner].text)
+    priced_item = owner in item_blocks and not prices[owner] and not list_names(blocks[owner].text)
     if (
         above >= 0
         and not priced_item
@@ -448,7 +449,11 @@ def list_price(
         return prices[above]
     below = nb + 1
     if below < len(blocks) and prices[below] and _is_price_only(blocks[below], prices[below]):
-        return prices[below]
+        rest = blocks[below].text
+        for t in sorted(prices[below], key=lambda t: -t.start):
+            rest = rest[: t.start] + rest[t.end :]
+        if len(_WORD_ONLY.findall(rest)) <= 1:  # "Glass | 6", not "FULL POCKET $9 / $11"
+            return prices[below]
     return None
 
 
