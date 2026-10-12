@@ -517,7 +517,7 @@ website/menu-URL coverage is measured and written down. Gate state:
 ### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
 > Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), accepted
-> 2026-09-29 (Amendments 1–11). It replaces this
+> 2026-09-29 (Amendments 1–12). It replaces this
 > phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
 > plan (owner decision G.b), on the evidence of the
 > [menu-model spike](./docs/spikes/menu-model/README.md).
@@ -578,9 +578,15 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   with a token cap that fits them; every tuning set clears the four bars (P5-8: price
   accuracy 0.983, item recall 0.871, gold-row false reject 0.116, catch 0.994; tuning
   numbers, not §8; [record](./docs/reviews/2026-10-09-p5-pipeline-v5-tuning.md)).
-  Next: score v5 on a fresh draw (seed 20261010, the 90 labelled venues and their
-  sites excluded), then the laptop extraction pass; the label-free scale run moves
-  to the Pi.
+- *Evaluated (P5-10, [Amendment 12](./docs/adr/0013-phase5-menu-pipeline.md#amendment-12-2026-10-12-v5-held-out-evaluation-fails)):*
+  v5 on 35 fresh pages (seed 20261010, size-stratified) **fails §8**: price accuracy
+  0.997 and catch 0.994 pass; item recall 0.819 and gold-row false reject 0.168 miss
+  (group prices printed once over a list, line-wrapped layouts, a card layout the model
+  misreads, integers glued to a name;
+  [record](./docs/reviews/2026-10-12-p5-v5-held-out-evaluation.md)). Next: tune v6 on
+  those pages, score it on a fresh draw (seed 20261012, all 162 labelled venues and
+  their sites excluded), then the laptop extraction pass; the label-free scale run
+  moves to the Pi.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
