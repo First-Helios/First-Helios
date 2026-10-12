@@ -473,14 +473,18 @@ def list_price(
     return None
 
 
-def section_line(blocks: list[Block], prices: list[list[PriceToken]], nb: int) -> list[PriceToken]:
+def section_line(
+    blocks: list[Block], prices: list[list[PriceToken]], nb: int, item_blocks: set[int]
+) -> list[PriceToken]:
     """(v6) Prices printed once for a section on the line right under its heading
     ("Small $1.99 | Medium $2.29 | Large 2.69" over a drink list): at least two
-    labelled prices, and nothing else in the section, to its next heading, is priced."""
+    labelled prices, and nothing else in the section, to its next heading, is priced.
+    A heading that names an item ("Beef Fajitas" over "For 1 $32 · For 2 $62") heads
+    no section."""
     for j in range(nb - 1, -1, -1):
         if blocks[j].heading:
             line = j + 1
-            if line >= nb or blocks[line].heading:
+            if j in item_blocks or line >= nb or blocks[line].heading:
                 return []
             toks = [t for t in prices[line] if t.kind == "money"]
             if len(toks) < 2 or not all(
@@ -728,7 +732,7 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
                 shared = [t for t in prices[j] if t.kind == "money"]
                 break
         # (v6) else the section's price line right under its heading, label checked
-        line = [] if shared else section_line(blocks, prices, nb)
+        line = [] if shared else section_line(blocks, prices, nb, stop_blocks)
 
         other_variants = variants_of[key[0]] - {row.variant}
         same = [
