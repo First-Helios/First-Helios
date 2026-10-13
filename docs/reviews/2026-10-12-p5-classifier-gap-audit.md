@@ -125,7 +125,7 @@ and `empty` isn't published.
 | P5-8 (2026-10-09) | 72 | 66 | 6 | 0.917 [0.830, 0.961] |
 | P5-10 (2026-10-12) | 72 | 67 | 5 | 0.931 [0.848, 0.970] |
 | **Pooled** | **162** | **151** | **11** | **0.932 [0.883, 0.962]** |
-| *Recorded: spike nested CV (S6d)* | *41 called a menu* | *40* | *1* | *0.976 [0.874, 0.996]* |
+| *Recorded: spike nested CV (S6d), pages called a menu* | *41* | *40* | *1* | *0.976 [0.874, 0.996]* |
 
 How to read it:
 
@@ -243,11 +243,16 @@ amendment.
 
 The scorer and its output are in gitignored `var/audits/p5-classifier-gap/` in the main
 checkout (`score_tuning.py`; `scores.jsonl`, sha256
-`c4a150cef81bb33a00e13e3d51a82034f1e617b5b1deab259861fda7388acc10`). From a checkout at
-this commit, with the `menu` extra and the pinned `potion-base-8M` under `var/models/`:
+`c4a150cef81bb33a00e13e3d51a82034f1e617b5b1deab259861fda7388acc10`). Run it from the main
+checkout, with the `menu` extra and the pinned `potion-base-8M` under `var/models/`:
 
     PYTHONPATH=. uv run --extra menu python var/audits/p5-classifier-gap/score_tuning.py \
         > scores.jsonl
 
 The script reads page HTML, the URL (from each draw's `draw.jsonl`, matched by Version
-id) and `page_label` / `format` for tuning page ids only.
+id) and `page_label` / `format` for tuning page ids only. It reads them from the session
+worktrees' gitignored directories, at absolute paths under `.claude/worktrees/`:
+`p5-5-held-out-eval/var/menu-eval/p5-5`, `p5-8-v4-held-out/var/menu-eval/p5-8`,
+`p5-10-v5-held-out/var/menu-eval/p5-10` and `p5-11-pipeline-v6/var/tune` (spike 33). If
+those worktrees are removed, the script can't be re-run until the directories are
+copied elsewhere and its paths updated.
