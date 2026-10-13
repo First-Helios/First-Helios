@@ -212,6 +212,19 @@ when the first set is labelled with it." The format is now built
 written; amendment content is not edited here. Question: record a dated note (or leave
 as historical)?
 
+### Owner decisions (2026-10-12)
+
+- **C-01: apply.** CLAUDE.md's stop-and-ask list and `.github/CODEOWNERS` name
+  `apps/discovery/models.py`, the only ORM module outside the guarded globs (a
+  `grep '(Base)'` over `apps/` and `packages/`). Named exactly rather than as
+  `apps/**/models.py`, which would also catch `apps/menu_pipeline/models.py` (the
+  model-file downloader, no ORM). CLAUDE.md also covers "any other module that
+  defines ORM models on `Base`".
+- **C-02: apply.** ADR-0010 gains an "Amendment — ADR-0015" pointer section, in the
+  form of its existing ADR-0011 one; facts from ADR-0015 Amendment 1 (`0015:116-163`)
+  and `apps/discovery/url_pipeline.py:101` (`REVERIFY_WINDOW = timedelta(days=90)`).
+- **C-03: leave as is.** Amendment 5's text stays as the historical record.
+
 ## Checked, not drift
 
 - `python -m apps.menu_pipeline.label_courses` (ADR-0016:144): an explicitly "working

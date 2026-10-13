@@ -87,9 +87,10 @@ also runs strict DB tests, `alembic check`, and the Docker build.
 - Anything touching auth, secrets, external API credentials, or
   `infra/`/deploy config.
 - Changes under `alembic/versions/**`, `packages/helios_core/**/models.py`,
-  `packages/helios_core/**/models/**`, or legacy `packages/**/db/models/**`. These
-  are the expensive-to-reverse paths — migrations touch live data, models
-  shape everything downstream.
+  `packages/helios_core/**/models/**`, `apps/discovery/models.py` (Discovery's
+  ORM tables), legacy `packages/**/db/models/**`, or any other module that
+  defines ORM models on `Base`. These are the expensive-to-reverse paths —
+  migrations touch live data, models shape everything downstream.
 
 ## What actually gates a merge
 
