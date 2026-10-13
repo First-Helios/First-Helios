@@ -90,18 +90,19 @@ This section is the single current-status page. Other docs link here.
   audit over a venue export, with a hand-labeled worksheet, plus a corpus-wide
   twin search (misplaced twins, location-label records).
 - **Menu parsing stages** (ADR-0013 slice 2): `packages/helios_parsing/`.
-  Pure functions, nothing calls them in production yet: the segmented-text hash
+  Pure functions, called by the page classifier, `menu-page` Bronze and extraction (below): the segmented-text hash
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
-  JSON-LD menu reader (`jsonld.py`), and validator v3 (`validator.py`: per-row
+  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v6`: per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
-  chunking (`chunking.py`), prompt v2.3 with its GBNF grammar, token cap and
+  chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and
   sparse-chunk retry (`prompt.py`), output parsing with truncated-output recovery
   and the row repairs (`output.py`), and stitch v3 (`stitch.py`). The evaluation
   harness is `evaluation.py` (gold-label format with the `promo` mark and promo entries, scores,
   loss buckets, corruption injection), with `apps/menu_pipeline/evaluate.py`
-  reading the gitignored labels and outputs. Chunks, rows, decisions and harness
-  numbers match the spike's on its saved Pi output and gold rows.
+  reading the gitignored labels and outputs. At slice 2 (validator v3, prompt v2.3)
+  chunks, rows, decisions and harness numbers matched the spike's on its saved Pi output
+  and gold rows (#58); pipeline versions v4–v6 (below) changed them.
 - **`menu-page` Bronze** (ADR-0013 slice 3, Amendment 4):
   `apps/menu_pipeline/page_bronze.py`, `bundle.py`, `run.py`. A resumable batch
   CLI fetches every saved menu URL of a current venue, segments and classifies it,
@@ -348,10 +349,10 @@ uv run python -m apps.api.export_openapi   # after an intentional API change
 Discovery and `resolve_urls` make network calls and write to the database
 `DATABASE_URL` names; the audit reads a venue export and needs no database.
 None of them run in CI. On the Pi they run inside the API container
-(`docker compose exec api ...`), except `resolve_urls`: its page verifier is the
+(`docker compose -f infra/docker-compose.yml --env-file .env exec api ...`), except `resolve_urls`: its page verifier is the
 ADR-0013 page classifier, which needs the `menu` extra and verified model files,
 so it runs in the worker image
-(`docker compose --profile menu run --rm worker python -m ...`).
+(`docker compose -f infra/docker-compose.yml --env-file .env --profile menu run --rm worker python -m ...`).
 
 ```bash
 # Seed venues from an Overture release, then record completion and run lifecycle
@@ -401,10 +402,10 @@ default `--server`); it waits up to `--ready-timeout` seconds for `/health` and
 refuses a server whose `/props` names another model file or slot count:
 
 ```bash
-docker compose -f infra/docker-compose.yml --profile menu up -d --wait llama-server
-docker compose -f infra/docker-compose.yml --profile menu run --rm worker \
+docker compose -f infra/docker-compose.yml --env-file .env --profile menu up -d --wait llama-server
+docker compose -f infra/docker-compose.yml --env-file .env --profile menu run --rm worker \
     python -m apps.menu_pipeline.extract --limit 20
-docker compose -f infra/docker-compose.yml --profile menu stop llama-server   # after a run
+docker compose -f infra/docker-compose.yml --env-file .env --profile menu stop llama-server   # after a run
 ```
 
 A run commits each page, so it can be stopped and restarted; it prints a JSON
@@ -458,19 +459,22 @@ alembic/                migrations (hand-reviewed)
 apps/
   api/                  FastAPI read API and OpenAPI snapshot
   discovery/            Overture discovery, URL resolution, lifecycle, audit
+  gold/                 Gold refresh CLI (current_menu + price_index)
   menu_pipeline/        page classifier, menu-page Bronze, llama-server client, extraction
                         and Menu writes, batch CLIs, model files, evaluation
 config/sources.yaml     manual website / menu-URL registry
 config/models.yaml      pinned model files (sha256, size, licence)
+config/location_overrides.yaml    reviewed coordinate/address corrections (ADR-0014)
+config/identity_corrections.yaml  reviewed duplicate merges and retirements (S6e)
 config/page_classifier_v2.json  page classifier weights (classifier-v2, the menu-URL verifier)
 config/page_classifier_v1.json  classifier-v1 weights (superseded, kept with its evaluation)
 docs/
   adr/                  architecture decisions (index below)
   rfc/  plans/          proposals and build plans
-  reviews/              review trackers and migration SQL artifacts
+  reviews/              review and evaluation records, migration SQL artifacts
   spikes/menu-model/    menu-model spike (ADR-0013 evidence)
   diagrams/             ERD and context diagrams
-infra/                  Dockerfile and docker-compose.yml
+infra/                  Dockerfile, docker-compose.yml, docker-compose.pi.yml (Pi core pinning)
 packages/helios_core/
   config.py             settings (DATABASE_URL, CORS)
   db/                   Base, schema ownership, model registry, sessions
@@ -499,15 +503,15 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted (commit check cost, Amendment 1) |
 | [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted |
 | [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2) |
-| [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted |
+| [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted (Unit A; Unit B, the staging deploy, not built) |
 | [0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) | Venue discovery: source, ingestion, dedupe/minting, and schedule | Accepted |
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
 | [0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) | Provenance endpoints vs identity match keys | Accepted |
 | [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
-| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted |
+| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted (Amendments 1–13) |
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
-| [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted |
-| [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted |
+| [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1) |
+| [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the
