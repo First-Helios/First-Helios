@@ -2,7 +2,7 @@
 
 **Status:** Accepted 2026-09-29 (owner, session S6d): option C, B first, as
 amended by [Amendment 1](#amendment-1-2026-09-29-acceptance-decisions); the
-verifier is ADR-0013's page classifier (`classifier-v1`) from the first Pi run
+verifier is ADR-0013's page classifier (`classifier-v1`; `classifier-v2` since S6f, see Amendment 1) from the first Pi run
 **Date:** 2026-09-28
 **Phase:** 4/5 boundary (Pi gate 1b)
 **Decides for:** the "page classifier or saved-menu re-verification path"

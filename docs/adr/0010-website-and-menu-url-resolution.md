@@ -370,3 +370,7 @@ checklist) settle:
 ## Amendment — ADR-0011 (accepted 2026-09-27)
 
 Website provenance points to the upstream release or registry. Verified menu provenance retains response hashes, final URLs and fetch times. Failed/skipped sites are recorded with a 20-day retry window. Ordering-platform records use independent per-GERS/domain keys; since S6b, homepage links to ordering platforms are verified and saved even when an own-site menu verifies (first link per platform host, at most `MAX_PLATFORM_CANDIDATES`). See [ADR-0011](./0011-provenance-endpoints-vs-identity-match-keys.md) for the accepted contract and rebuild requirement.
+
+## Amendment — ADR-0015 (accepted 2026-09-29)
+
+Amendment 3's own-site menu-page verifier is replaced by the ADR-0013 page classifier (`classifier-v1` at acceptance, `classifier-v2` since S6f). Saved menu URLs record their verifier and are re-verified when it changes or after 90 days; one that fails is re-discovered or withdrawn to `needs_review`. Platform pages pass the same page check, and a chain homepage's platform links are kept only for the location whose address the page shows. See [ADR-0015](./0015-menu-url-reverification.md) for the accepted decision.
