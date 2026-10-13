@@ -593,6 +593,13 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   [record](./docs/reviews/2026-10-12-p5-pipeline-v6-tuning.md)). Next: score v6 on a
   fresh draw (seed 20261012, all 162 labelled venues and their sites excluded), then
   the laptop extraction pass; the label-free scale run moves to the Pi.
+- *Audited (2026-10-12, [classifier gap audit](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)):*
+  `classifier-v2` gates the extraction queue at fetch (`due_pages` doesn't re-check);
+  precision on the held-out draws is 151/162 = 0.932 [0.883, 0.962], no demonstrated
+  gap against the §8 bar, and recall over the laptop pass is unmeasured, so no
+  classifier swap is proposed. Two paths keep a later-rejected page due (a re-fetch
+  that fails the classifier, an ADR-0015 withdrawal), to close before the Pi monthly
+  runs. Owner decisions R1–R4 (a page-level classifier evaluation sample first) pending.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).

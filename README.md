@@ -167,6 +167,11 @@ This section is the single current-status page. Other docs link here.
   name, and short priced chrome runs (card buttons) sent to the model (P5-10 pages:
   price accuracy 0.997, item recall 0.864, gold-row false reject 0.093, catch 0.996;
   every tuning set clears the four bars; tuning numbers, not a §8 evaluation).
+  A page-classifier audit
+  ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
+  demonstrated gap against the §8 classifier bar (draw precision 0.932
+  [0.883, 0.962]; recall over the laptop pass unmeasured) and two paths that keep a
+  later-rejected page in the extraction queue.
   Menu-write commits check each page once per aggregate state
   (ADR-0005 Amendment 1, revision `db40e9424cba`): linear in page size, flat in the
   stored corpus.
