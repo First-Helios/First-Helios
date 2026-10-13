@@ -274,7 +274,8 @@ commits are still quadratic: two single-page commits ran 32 and 42 min with the 
 6. **Classifier precision on this draw is lower:** 62 of 72 drawn pages are menus
    (0.861 [0.763, 0.923]; P5-8 66/72, P5-10 67/72): 8 not menus (among them menu hubs that
    only link to menus and a custom-cake options page) and 2 empty. Recorded, not gated (§8 keeps the S6f evaluation);
-   the open classifier audit (#80) proposes a page-level sample for this.
+   the classifier audit (#80; draw precision 0.932 over P5-5, P5-8 and P5-10) proposes a
+   page-level sample for this.
 7. **Many menu pages print no prices**: 16 of 62 drawn menu pages (26 %; P5-10 33 %).
 8. **Throughput.** 0 truncated chunks; 2.7 generated tokens/s per slot under thermal load
    (97 °C). Wall time is dominated by the pre-fix Menu commit on the laptop DB, not the

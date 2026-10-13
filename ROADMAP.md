@@ -166,6 +166,7 @@ What a dev needs to own this codebase professionally. Each skill is expanded int
 apps/
   api/                 # FastAPI service; routes/, committed openapi_snapshot.json
   discovery/           # Overture seeding, website/menu-URL resolution, lifecycle, audit CLIs
+  gold/                # Gold refresh CLI (python -m apps.gold.refresh)
 packages/
   helios_core/
     db/                # Base, schema names, model registry, session
@@ -175,8 +176,8 @@ packages/
     gold/              # Gold read models (schema `gold`)
     config.py, geo.py  # settings; Nominatim client
 alembic/versions/      # hand-reviewed migrations
-config/sources.yaml    # manual website / menu-URL registry
-infra/                 # Dockerfile, docker-compose.yml
+config/                # sources.yaml registry, models.yaml manifest, classifier weights, location overrides, identity corrections
+infra/                 # Dockerfile, docker-compose.yml, docker-compose.pi.yml
 test/                  # all tests, including architecture-fitness tests
 docs/                  # adr/, rfc/, plans/, spikes/, reviews/, diagrams/
 .github/               # workflows/{ci,pr-title}.yml, PR + issue templates, CODEOWNERS
@@ -517,7 +518,7 @@ website/menu-URL coverage is measured and written down. Gate state:
 ### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
 > Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), accepted
-> 2026-09-29 (Amendments 1–12). It replaces this
+> 2026-09-29 (Amendments 1–13). It replaces this
 > phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
 > plan (owner decision G.b), on the evidence of the
 > [menu-model spike](./docs/spikes/menu-model/README.md).
@@ -600,6 +601,13 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   these pages (validator levers or the model side, the owner's call), score it on a
   fresh draw (seed 20261013, all 234 labelled venues and their sites excluded), then
   the laptop extraction pass; the label-free scale run moves to the Pi.
+- *Audited (2026-10-12, [classifier gap audit](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)):*
+  `classifier-v2` gates the extraction queue at fetch (`due_pages` doesn't re-check);
+  precision on the held-out draws is 151/162 = 0.932 [0.883, 0.962], no demonstrated
+  gap against the §8 bar, and recall over the laptop pass is unmeasured, so no
+  classifier swap is proposed. Two paths keep a later-rejected page due (a re-fetch
+  that fails the classifier, an ADR-0015 withdrawal), to close before the Pi monthly
+  runs. Owner decisions R1–R4 (a page-level classifier evaluation sample first) pending.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
@@ -611,7 +619,7 @@ A fetcher that gets the project IP-banned costs more than the data was worth.
 
 **Promotional rows** ("half off", "BOGO"): deferred to a promo classifier
 (Phase 10); no rule-based flag now. Phase 5 lays the foundations: gold labels
-mark promo rows, and the harness reports promo rows stored as prices. Until the
+mark promo rows and can list each promotion as its own entry ([ADR-0013 Amendment 5](./docs/adr/0013-phase5-menu-pipeline.md#amendment-5-2026-09-29-promo-label-grain)), and the harness reports promo rows stored as prices. Until the
 classifier exists, a promo row with a printed price may be stored as an `llm`
 price ([ADR-0013 Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 
@@ -771,7 +779,7 @@ gets a real denominator.
 - `packages/helios_parsing/` ports of V1's sub-deal regex chain (pattern list in YAML, property tests), temporal parsing (a structured `Validity` dataclass: `weekdays`, `start`, `end | "close"`), and the 6-factor quality scorer (weights + thresholds in config).
 - `DealObservation` and `DealApplicability` models, deferred here from Phase 1; placement follows ADR-0004.
 - Applicability fan-out: chain-wide deals create N rows, one per active venue of that brand.
-- A promo classifier model that finds and parses promotional rows in stored menu-page bundles, trained and evaluated on the `promo` marks that Phase 5's gold labels carry. It ships as a menu pipeline-version bump (a re-interpretation), so the evidence is already captured and replayable ([ADR-0013 Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
+- A promo classifier model that finds and parses promotional rows in stored menu-page bundles, trained and evaluated on the promo entries ([ADR-0013 Amendment 5](./docs/adr/0013-phase5-menu-pipeline.md#amendment-5-2026-09-29-promo-label-grain)) and `promo` row marks that Phase 5's gold labels carry. It ships as a menu pipeline-version bump (a re-interpretation), so the evidence is already captured and replayable ([ADR-0013 Amendment 3](./docs/adr/0013-phase5-menu-pipeline.md#amendment-3-2026-09-29-accepted-open-questions-1-2-4-5-decided)).
 - Gold deal materialization + `/v1/deals` endpoints.
 
 **Port hints (`V1-Graveyard` branch):** `collectors/meal_deals/sub_deals.py`, `temporal.py`, `quality.py`, `semantic_layer.py`, `core/database.py` (~L1283, ~L1356, ~L1395).

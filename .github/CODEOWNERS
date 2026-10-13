@@ -8,6 +8,7 @@
 /alembic/env.py             @4Fortune8
 /packages/helios_core/**/models.py @4Fortune8
 /packages/helios_core/**/models/   @4Fortune8
+/apps/discovery/models.py          @4Fortune8
 /packages/helios_core/db/base.py           @4Fortune8
 /packages/helios_core/db/model_registry.py @4Fortune8
 /.github/workflows/         @4Fortune8
