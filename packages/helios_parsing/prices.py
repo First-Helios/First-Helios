@@ -16,7 +16,10 @@ Printed forms, all layout-generic:
 - (v5) an amount glued to a word by an underscore ("Patacones_12",
   "Shrimp_6.50": image alt text), the underscore outside the span;
 - bare integers, as v4: a "11 / 44" block is a glass/bottle pair, and otherwise
-  a bare integer counts only as a block's last token.
+  a bare integer counts only as a block's last token; (v6) on a page that prints
+  its prices bare (``bare_page``), that last integer may also follow a spaced dash
+  ("peppers -13") or be glued to a word ("Cod Cakes16"), never on a page that marks
+  its prices ("Margaritas & Cocktails16" over "$16" cards is a tab's item count).
 
 A one-decimal amount needs a mark ("$", a currency word, an underscore): an
 unmarked "6.2", "0.5 pounds" or "WCAG 2.1" is not a price.
@@ -48,6 +51,9 @@ _MONEY = re.compile(
 )
 _BARE_PAIR = re.compile(r"\s*\d{1,3}(?:\s*/\s*\d{1,3})+\s*")  # "11 / 44"
 _BARE_INT = re.compile(r"(?<![\w$.,:/-])(\d{1,3})(?![\w.,:%/])")
+# (v6) a block's last integer after a spaced dash ("peppers -13"; "8-12" stays a range)
+# or glued to a word of two or more letters ("Cod Cakes16")
+_BARE_INT_V6 = re.compile(r"(?:(?<=\s-)|(?<=[^\W\d_]{2}))(\d{1,3})(?![\w.,:%/])")
 
 # --- v5 additions: each pattern's groups are the whole part "w" and cents "c" ---
 _AMOUNT = r"(?P<w>\d{1,3}(?:,\d{3})+|\d+)(?:[.,](?P<c>\d{2})|\.(?P<c1>\d))?"
@@ -118,8 +124,28 @@ def read_amount(text: str) -> Decimal | None:
     return None
 
 
-def _tokens(blocks: list[Block], money: Reader) -> list[list[PriceToken]]:
+def _last_bare(text: str, forms: tuple[re.Pattern[str], ...]) -> re.Match[str] | None:
+    """The block's last bare integer when nothing but punctuation follows it."""
+    found = [m for form in forms for m in form.finditer(text)]
+    last = max(found, key=lambda m: m.start(), default=None)
+    return last if last is not None and not text[last.end() :].strip(" .-–—|") else None
+
+
+def bare_page(blocks: list[Block]) -> bool:
+    """(v6) The page prints its prices bare: more blocks end in a bare integer (any form)
+    than print a marked or decimal price, chrome included."""
+    marked = bare = 0
+    for block in blocks:
+        if read_money(block.text):
+            marked += 1
+        elif _last_bare(block.text, (_BARE_INT, _BARE_INT_V6)):
+            bare += 1
+    return bare > marked
+
+
+def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[list[PriceToken]]:
     out: list[list[PriceToken]] = []
+    forms = (_BARE_INT, _BARE_INT_V6) if v6 and bare_page(blocks) else (_BARE_INT,)
     for index, block in enumerate(blocks):
         tokens = [
             PriceToken(index, start, end, amount, "money")
@@ -130,20 +156,17 @@ def _tokens(blocks: list[Block], money: Reader) -> list[list[PriceToken]]:
                 PriceToken(index, m.start(), m.end(), Decimal(m.group(0)), "bare")
                 for m in re.finditer(r"\d{1,3}", block.text)
             )
-        if not tokens:
-            bare = list(_BARE_INT.finditer(block.text))
-            if bare and not block.text[bare[-1].end() :].strip(" .-–—|"):
-                last = bare[-1]
-                tokens.append(
-                    PriceToken(index, last.start(), last.end(), Decimal(last.group(1)), "bare")
-                )
+        if not tokens and (last := _last_bare(block.text, forms)):
+            tokens.append(
+                PriceToken(index, last.start(), last.end(), Decimal(last.group(1)), "bare")
+            )
         out.append(tokens)
     return out
 
 
 def price_tokens(blocks: list[Block]) -> list[list[PriceToken]]:
-    """Price occurrences per block, in block order (the pipeline's v5 reader)."""
-    return _tokens(blocks, read_money)
+    """Price occurrences per block, in block order (the pipeline's reader, v6)."""
+    return _tokens(blocks, read_money, v6=True)
 
 
 def price_tokens_v4(blocks: list[Block]) -> list[list[PriceToken]]:

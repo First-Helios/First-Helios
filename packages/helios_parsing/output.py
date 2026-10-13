@@ -24,6 +24,10 @@ generic repairs in the spike's order:
    or spicy": a description put in the variant slot) is dropped
    (``drop_unprinted_variants``; v5: the validator's labels, column headers
    included);
+4c. (v6) a row named by a whole list of names printed in its block ("Deep Eddy,
+   Tito's Handmade Vodka, Absolut Vodka") becomes one row per name, each with the
+   row's price and variant (``split_listed``); a choice ("Mango, Peach or Guava")
+   stays one row;
 5. exact duplicates (same name tokens, variant, amount, section, claimed block)
    collapse to one; a dish printed again in another inline menu is kept (v4).
 """
@@ -37,7 +41,14 @@ from typing import TYPE_CHECKING, Any
 
 from packages.helios_parsing.prices import price_tokens, read_amount
 from packages.helios_parsing.stitch import FILL_GAP, stitch
-from packages.helios_parsing.validator import Row, label_tokens, norm_tokens
+from packages.helios_parsing.validator import (
+    Row,
+    block_tokens,
+    label_tokens,
+    list_names,
+    list_price,
+    norm_tokens,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -45,7 +56,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v5"
+REPAIRS_VERSION = "repairs-v6"
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
 _ITEM = re.compile(r'\{\s*"b"\s*:[^{}]*\}')
@@ -179,6 +190,7 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
         for row in rows
     ]
     rows = drop_unprinted_variants(rows, blocks)
+    rows = split_listed(rows, blocks)
     seen: set[tuple[str, str | None, str | None, str | None, str | None]] = set()
     unique: list[Row] = []
     for row in rows:
@@ -220,4 +232,48 @@ def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> lis
         own = set(norm_tokens(row.variant))
         printed = not labels or any(own <= label for label in labels)
         out.append(row if printed else replace(row, variant=None))
+    return out
+
+
+_BAR_SEP = re.compile(r"\s*[|•·]\s*")
+_COMMA_SEP = re.compile(r"\s*,\s*")
+_CHOICE = re.compile(r"(?i)(?:or|and)\b")
+_LONG_PAREN = re.compile(r"\([^()]{5,}\)")  # "(red lentils)": a description, not a tag "(GF)"
+
+
+def _names(item: str) -> list[str]:
+    """The names a row's name lists: split on "|" / "•" (two or more), else on commas
+    (three or more: "Sausage, Egg & Cheese" and "Chardonnay, CA" are one name)."""
+    sep = _BAR_SEP if _BAR_SEP.search(item) else _COMMA_SEP
+    parts = [p.strip() for p in sep.split(item) if p.strip()]
+    return parts if len(parts) >= (2 if sep is _BAR_SEP else 3) else []
+
+
+def split_listed(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
+    """(v6) A row named by a list of names printed in its claimed block becomes one row
+    per name: the model read "Bud Light, Coors Light, Shiner Bock" (under one price)
+    as one item, and each is an item (P5-8 label convention). Every name must be
+    capitalized and in the block, and the block must be a price-less list of names
+    with its price printed once right above or below it (``validator.list_price``'s
+    layout); a choice ("or", "and" before a name), names described in parentheses
+    ("Misir (red lentils), Kik (yellow split-pea)": a dish's parts; a tag like "(GF)"
+    is fine) and a description's ingredients ("sausage, pork ribs") stay one row."""
+    index = {b.id: i for i, b in enumerate(blocks)}
+    prices = price_tokens(list(blocks))
+    out: list[Row] = []
+    for row in rows:
+        pos = index.get(row.claimed_block or "")
+        parts = _names(row.item)
+        if (
+            pos is None
+            or not parts
+            or _LONG_PAREN.search(row.item)
+            or any(_CHOICE.match(p) or not p[0].isupper() for p in parts)
+            or len(list_names(blocks[pos].text)) != len(parts)
+            or list_price(list(blocks), prices, pos, norm_tokens(parts[0]), set()) is None
+            or not all(set(norm_tokens(p)) <= block_tokens(blocks[pos].text) for p in parts)
+        ):
+            out.append(row)
+            continue
+        out.extend(replace(row, item=p) for p in parts)
     return out

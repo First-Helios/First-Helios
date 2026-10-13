@@ -583,10 +583,16 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   0.997 and catch 0.994 pass; item recall 0.819 and gold-row false reject 0.168 miss
   (group prices printed once over a list, line-wrapped layouts, a card layout the model
   misreads, integers glued to a name;
-  [record](./docs/reviews/2026-10-12-p5-v5-held-out-evaluation.md)). Next: tune v6 on
-  those pages, score it on a fresh draw (seed 20261012, all 162 labelled venues and
-  their sites excluded), then the laptop extraction pass; the label-free scale run
-  moves to the Pi.
+  [record](./docs/reviews/2026-10-12-p5-v5-held-out-evaluation.md)).
+- *Tuned (P5-11, [Amendment 13](./docs/adr/0013-phase5-menu-pipeline.md#amendment-13-2026-10-12-pipeline-version-v6-tuned-on-the-p5-10-pages)):*
+  pipeline version v6 (`chunk-v2.3`, `repairs-v6`, `validator-v6`) on the spike's 33,
+  P5-5's 10, P5-8's 35 and P5-10's 35 pages: group and stacked prices, bare-price page
+  forms, rows named by a whole list split per name, priced card buttons sent to the
+  model; every tuning set clears the four bars (P5-10: price accuracy 0.997, item
+  recall 0.864, gold-row false reject 0.093, catch 0.996; tuning numbers, not §8;
+  [record](./docs/reviews/2026-10-12-p5-pipeline-v6-tuning.md)). Next: score v6 on a
+  fresh draw (seed 20261012, all 162 labelled venues and their sites excluded), then
+  the laptop extraction pass; the label-free scale run moves to the Pi.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
