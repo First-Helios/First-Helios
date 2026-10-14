@@ -29,7 +29,8 @@ generic repairs in the spike's order:
    row's price and variant (``split_listed``); a choice ("Mango, Peach or Guava")
    stays one row;
 4d. (v7) a row named by its description takes the short title line printed right
-   above it (``name_by_title``);
+   above it (``name_by_title``); a diet mark glued to the end of a name ("Thighgf",
+   "PotatoV") is dropped (``strip_diet_marks``);
 5. exact duplicates (same name tokens, variant, amount, section, claimed block)
    collapse to one; a dish printed again in another inline menu is kept (v4).
 """
@@ -41,7 +42,7 @@ import re
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from packages.helios_parsing.prices import price_tokens, read_amount
+from packages.helios_parsing.prices import PriceToken, price_tokens, read_amount
 from packages.helios_parsing.stitch import FILL_GAP, stitch
 from packages.helios_parsing.validator import (
     Row,
@@ -194,6 +195,7 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
     rows = drop_unprinted_variants(rows, blocks)
     rows = split_listed(rows, blocks)
     rows = name_by_title(rows, blocks)
+    rows = strip_diet_marks(rows)
     seen: set[tuple[str, str | None, str | None, str | None, str | None]] = set()
     unique: list[Row] = []
     for row in rows:
@@ -293,16 +295,25 @@ def _description_like(text: str) -> bool:
     return text.count(",") >= 2 or text.endswith(".") or len(text.split()) >= _DESCRIPTION_WORDS
 
 
+def _misnamed(row: Row, block: Block, toks: Sequence[PriceToken]) -> bool:
+    """The row is named by its claimed block's whole text (prices aside), and that text
+    is a description."""
+    text = block.text
+    price_words = {t for tok in toks for t in norm_tokens(text[tok.start : tok.end])}
+    words = set(norm_tokens(text)) - price_words
+    return _description_like(row.item) and set(norm_tokens(row.item)) == words
+
+
 def name_by_title(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     """(v7) A row named by its description takes the title line printed right above it.
 
     A small model drifts into naming dishes by the line just before the price when a
     description sits between the title and the price ("Lasagna Roll" / "Baked crab,
-    avocado, cream cheese and sweet sauce." / "$11"). When the row's name is
-    description-like and is its claimed block's text (prices aside), and the nearest
+    avocado, cream cheese and sweet sauce." / "$11"). When the row is named by its
+    claimed block's text and that text is a description (``_misnamed``), and the nearest
     non-blank block above is a short unpriced title line (at most six words, not
-    description-like, outside page chrome, no section name the model gave) that no
-    other row names, the row is renamed to that line and claims its block."""
+    description-like, outside page chrome, no section name the model gave) that no other
+    row names, the row is renamed to that line and claims its block."""
     index = {b.id: i for i, b in enumerate(blocks)}
     prices = price_tokens(list(blocks))
     named = {row.claimed_block for row in rows if not _description_like(row.item)}
@@ -310,20 +321,15 @@ def name_by_title(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     out: list[Row] = []
     for row in rows:
         pos = index.get(row.claimed_block or "")
-        if pos is None or not _description_like(row.item):
+        if pos is None or not _misnamed(row, blocks[pos], prices[pos]):
             out.append(row)
             continue
-        text = blocks[pos].text
-        printed = set(norm_tokens(text)) - {
-            t for tok in prices[pos] for t in norm_tokens(text[tok.start : tok.end])
-        }
         above = pos - 1
         while above >= 0 and not blocks[above].text.strip(" ​ "):
             above -= 1
         title = blocks[above].text.strip() if above >= 0 else ""
         if (
-            set(norm_tokens(row.item)) != printed
-            or not title
+            not title
             or prices[above]
             or blocks[above].in_chrome
             or frozenset(norm_tokens(title)) in sections
@@ -335,4 +341,22 @@ def name_by_title(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
             continue
         named.add(blocks[above].id)
         out.append(replace(row, item=title, claimed_block=blocks[above].id))
+    return out
+
+
+# (v7) diet marks the model copied glued to the name: "Thighgf", "Applev, gf", "PotatoV"
+_GLUED_MARKS = re.compile(r"(?<=[a-z]{3})(?:gf|vg|df|GF|VG|DF)(?:[,\s]+(?:gf|vg|df|v))*\s*$")
+_GLUED_V = re.compile(r"(?<=[a-z]{3})(?:V|v(?=[,\s]+(?:gf|vg|df)\b))(?:[,\s]+(?:gf|vg|df))*\s*$")
+
+
+def strip_diet_marks(rows: Sequence[Row]) -> list[Row]:
+    """(v7) A diet mark glued to the end of a name is dropped ("Spiced Chicken Thighgf",
+    "Puffy PotatoV", "Honey Crisp Applev, gf"): the menu prints it as a tag, not as part
+    of the name. A lowercase "v" alone is kept ("Molotov")."""
+    out: list[Row] = []
+    for row in rows:
+        name = _GLUED_V.sub("", _GLUED_MARKS.sub("", row.item))
+        if name != row.item and name.rstrip(" ,"):
+            row = replace(row, item=name.rstrip(" ,"))
+        out.append(row)
     return out

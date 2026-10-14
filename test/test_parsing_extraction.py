@@ -430,3 +430,19 @@ def test_v7_rows_of_names_a_description_row_by_the_title_above() -> None:
         ("Eggs, potatoes, bacon or sausage, toast.", "b0012"),
         ("Pie", "b0007"),
     ]
+
+
+def test_v7_rows_of_drops_a_diet_mark_glued_to_the_name() -> None:
+    blocks = segment(
+        "<p>Spiced Chicken Thighgf 18</p><p>Puffy PotatoV 9</p><p>Applev, gf 12</p><p>Molotov 7</p>"
+    )
+    rows = rows_of(
+        _one_chunk(
+            ("b0001", "Spiced Chicken Thighgf", "18", ""),
+            ("b0002", "Puffy PotatoV", "9", ""),
+            ("b0003", "Applev, gf", "12", ""),
+            ("b0004", "Molotov", "7", ""),  # a word ending in "v" stays whole
+        ),
+        blocks,
+    )
+    assert [r.item for r in rows] == ["Spiced Chicken Thigh", "Puffy Potato", "Apple", "Molotov"]
