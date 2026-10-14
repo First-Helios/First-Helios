@@ -167,7 +167,13 @@ This section is the single current-status page. Other docs link here.
   ("Cakes16", a wrapped line's last number), rows named by a whole list split per
   name, and short priced chrome runs (card buttons) sent to the model (P5-10 pages:
   price accuracy 0.997, item recall 0.864, gold-row false reject 0.093, catch 0.996;
-  every tuning set clears the four bars; tuning numbers, not a §8 evaluation).
+  every tuning set clears the four bars; tuning numbers, not a §8 evaluation). Its
+  held-out evaluation on 35 fresh pages
+  ([record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md), Amendment 14)
+  **fails §8**: price accuracy 0.991 and catch 0.994 pass; item recall 0.821 and
+  gold-row false reject 0.126 miss (the model naming a dish by its description, heading
+  or a wine's cuvée line; one page printing its prices in a separate column). A blinded
+  adjudication upheld the blind labels; its proposed label changes leave both bars failing.
   A page-classifier audit
   ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
   demonstrated gap against the §8 classifier bar (draw precision 0.932
@@ -187,8 +193,8 @@ This section is the single current-status page. Other docs link here.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- A Phase 5 pipeline version that passes ADR-0013 §8 (the slice-5 version, v4 and
-  v5 failed, Amendments 8, 10 and 12), the first extraction pass (laptop), and the
+- A Phase 5 pipeline version that passes ADR-0013 §8 (the slice-5 version, v4, v5
+  and v6 failed, Amendments 8, 10, 12 and 14), the first extraction pass (laptop), and the
   rendered-page quality bars (slice 6).
 - The price index's `course` category
   ([ADR-0016](./docs/adr/0016-course-labels-for-the-price-index.md), Accepted):
@@ -276,11 +282,13 @@ This section is the single current-status page. Other docs link here.
   [record](./docs/reviews/2026-10-12-p5-v5-held-out-evaluation.md), Amendment 12: item
   recall 0.819, gold-row false reject 0.168); those pages are now tuning pages too.
   Version v6 is tuned on them ([record](./docs/reviews/2026-10-12-p5-pipeline-v6-tuning.md),
-  Amendment 13) and awaits its held-out evaluation.
+  Amendment 13) and fails its held-out evaluation on 35 fresh pages (2026-10-13,
+  [record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md), Amendment 14: item
+  recall 0.821, gold-row false reject 0.126); those pages are now tuning pages too.
   Opens when all hold:
-  - [ ] a new pipeline version (next: v6) passes §8 on a fresh held-out draw from
-    the laptop pass (seed 20261012; all 162 venues labelled in P5-5, P5-8 and P5-10
-    and their sites excluded);
+  - [ ] a new pipeline version (next: v7) passes §8 on a fresh held-out draw from
+    the laptop pass (seed 20261013; all 234 venues labelled in P5-5, P5-8, P5-10 and
+    P5-12 and their sites excluded);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time

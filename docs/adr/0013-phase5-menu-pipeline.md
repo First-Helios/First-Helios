@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–13.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–14.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -22,7 +22,9 @@ and [10](#amendment-10-2026-10-09-v4-held-out-evaluation-fails)); v5 was tuned i
 P5-9 ([Amendment 11](#amendment-11-2026-10-09-pipeline-version-v5-tuned-on-the-p5-8-pages))
 and failed its held-out evaluation in P5-10
 ([Amendment 12](#amendment-12-2026-10-12-v5-held-out-evaluation-fails)); v6 was tuned in
-P5-11 ([Amendment 13](#amendment-13-2026-10-12-pipeline-version-v6-tuned-on-the-p5-10-pages)).
+P5-11 ([Amendment 13](#amendment-13-2026-10-12-pipeline-version-v6-tuned-on-the-p5-10-pages))
+and failed its held-out evaluation in P5-12
+([Amendment 14](#amendment-14-2026-10-13-v6-held-out-evaluation-fails)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1031,3 +1033,37 @@ evaluation): [2026-10-12-p5-pipeline-v6-tuning.md](../reviews/2026-10-12-p5-pipe
    labelled so far and their sites (Amendment 12 item 1), with Amendment 10's procedure
    and Amendment 12's fixed strata. The label-free scale run stays deferred to the Pi
    (Amendment 10 item 5).
+
+## Amendment 14 (2026-10-13): v6 held-out evaluation fails
+
+Owner decisions in session P5-12 (Amendment 13 item 5's evaluation). Record:
+[2026-10-13-p5-v6-held-out-evaluation.md](../reviews/2026-10-13-p5-v6-held-out-evaluation.md).
+
+1. **v6 fails §8** on 35 static own-site pages drawn from the laptop pass (seed
+   20261012; P5-5's exclusions plus the 162 venues labelled in P5-5, P5-8 and P5-10 and
+   their sites; quotas by page size with the fixed cutoffs: 14 small, 14 medium, 7 large):
+   price accuracy **0.991**, item recall **0.821**, false reject on gold rows **0.126**
+   (bars 0.98, 0.85, 0.12); corruption catch **0.994**; usable prices 0.702. Per §8 v6 is
+   not cleared for extraction runs; these 35 pages are now tuning pages; the next version
+   is scored on another fresh draw from the laptop pass: seed **20261013**, excluding
+   P5-5's exclusions plus **all 234 venues labelled so far** (P5-5 18, P5-8 72, P5-10 72,
+   P5-12 72) and their sites.
+2. **Blinded adjudication run** (Amendment 8 item 3), because label changes could have
+   moved the verdict (Amendment 10 item 2): recall needed 75 more found items, gold-row
+   false reject 16 fewer rejected rows, and 218 unmatched labelled items had a pipeline
+   row with one of their prices within 2 blocks under another name. Added to P5-5's packet:
+   **D rows**, the label's and the pipeline's reading of one dish in random order, so
+   naming and placement are judged blind. The adjudicators upheld the label on all 218 D
+   rows and all 17 price disagreements and propose 26 label changes (24 missed items, 2
+   upcharges that are modifiers); with all of them applied v6 still fails both bars
+   (recall 0.819, gold-row false reject 0.133). The blind labels stand as confirmed for
+   the verdict; the owner confirms or declines the 26 changes on the record's PR.
+3. **Direction for the next version** (from the findings, for the owner to decide at
+   tuning): most of the recall gap is what the model names (a dish named by its
+   description, its section heading, an ingredient line or a wine's cuvée line; a
+   numbered dish read from the previous price block), which no validator or repair lever
+   reaches; the false-reject fail sits on one page that prints its prices in a separate
+   column. Validator-side candidates: column-aligned prices, bare one-decimal prices on
+   their own line, one-decimal prices glued to a name. Model-side candidates (prompt, or a
+   stronger model under its own amendment, Amendment 9 item 3) are the owner's call. The
+   label-free scale run stays deferred to the Pi (Amendment 10 item 5).
