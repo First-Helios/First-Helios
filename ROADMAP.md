@@ -599,12 +599,14 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   (the model naming a dish by its description, heading or a wine's cuvée line; one page
   printing its prices in a separate column); a blinded adjudication upheld the labels
   ([record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md)).
-- *Tuned (P5-13, [Amendment 15](./docs/adr/0013-phase5-menu-pipeline.md#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages)):*
-  pipeline version v7 (`repairs-v7`, `validator-v7`; `prompt-v2.4` kept) with P5-12's
-  35 pages held out as a dev check: bare one-decimal prices, description-named rows
-  renamed to the title line above, glued diet marks dropped; prompt naming rules
-  rejected. Every tuning set clears the four bars (P5-10: item recall 0.871, gold-row
-  false reject 0.086); dev check item recall 0.834, false reject 0.118 (tuning
+- *Tuned (P5-13, [Amendment 15](./docs/adr/0013-phase5-menu-pipeline.md#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages-wine-lists-out-of-scope)):*
+  pipeline version v7 (`repairs-v7`, `validator-v7`; prompt and chunker kept) with
+  P5-12's 35 pages held out as a dev check: bare one-decimal prices, description-named
+  rows renamed to the title line above, glued diet marks dropped; **wine lists out of
+  scope** and leading menu numbers ignored in matching; prompt rules, chunking
+  pre-treatment and a stronger retry rejected. Every tuning set clears the four bars
+  (P5-10: item recall 0.868, gold-row false reject 0.087); dev check item recall 0.865,
+  false reject 0.115 (tuning
   numbers, not §8; [record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md)). Next: score v7 on a fresh draw
   (seed 20261013, all 234 labelled venues and their sites excluded), then the laptop
   extraction pass; the label-free scale run moves to the Pi. If recall fails again, a

@@ -25,7 +25,7 @@ and failed its held-out evaluation in P5-10
 P5-11 ([Amendment 13](#amendment-13-2026-10-12-pipeline-version-v6-tuned-on-the-p5-10-pages))
 and failed its held-out evaluation in P5-12
 ([Amendment 14](#amendment-14-2026-10-13-v6-held-out-evaluation-fails)); v7 was tuned in
-P5-13 ([Amendment 15](#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages)).
+P5-13, with wine lists put out of scope ([Amendment 15](#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages-wine-lists-out-of-scope)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1070,7 +1070,7 @@ Owner decisions in session P5-12 (Amendment 13 item 5's evaluation). Record:
    stronger model under its own amendment, Amendment 9 item 3) are the owner's call. The
    label-free scale run stays deferred to the Pi (Amendment 10 item 5).
 
-## Amendment 15 (2026-10-14): pipeline version v7, tuned on the P5-12 pages
+## Amendment 15 (2026-10-14): pipeline version v7, tuned on the P5-12 pages; wine lists out of scope
 
 Owner decisions in session P5-13 (Amendment 14 item 3). Record (tuning numbers, not a §8
 evaluation): [2026-10-14-p5-pipeline-v7-tuning.md](../reviews/2026-10-14-p5-pipeline-v7-tuning.md).
@@ -1078,11 +1078,11 @@ evaluation): [2026-10-14-p5-pipeline-v7-tuning.md](../reviews/2026-10-14-p5-pipe
 1. **Overfitting guard:** P5-12's 35 pages are a dev check, scored and never tuned on; the
    levers are designed on the other 113 tuning pages. Layouts printed only on dev pages
    (prices in their own column, one-decimal prices glued to a name) are not built.
-2. **Prompt lever rejected.** Naming rules (prompt-v2.5, rules only, and v2.5b) were
-   measured alone on all 148 pages: two tuning sets lose items beyond the run-to-run noise
-   and the dev gain is inside it (the rules fix description-named dishes but the model
-   over-applies them: coded names rewritten, sections skipped, a wine named by its style
-   line). The prompt stays `prompt-v2.4`, so every page's saved answers stay valid.
+2. **Model-input levers rejected.** Naming rules in the prompt (prompt-v2.5, rules only, and
+   v2.5b), and, after the miss diagnosis, sending a repeated line once, cutting a long block
+   after each printed price (chunk-v2.4) and re-asking a chunk below 2/3 of its printed prices:
+   each made a tuning set worse than both of two v6 runs on the same runtime. The prompt stays
+   `prompt-v2.4` and the chunker `chunk-v2.3`, so every page's saved answers stay valid.
 3. **Levers kept** (layout-generic; keep rule as Amendment 11): on a page that prints its
    prices bare, a block's last one-decimal amount is a price ("6.5", "salsa roja 7.5"),
    not a parenthesized or percent figure nor a ".0" after words (`validator-v7`, the
@@ -1090,26 +1090,36 @@ evaluation): [2026-10-14-p5-pipeline-v7-tuning.md](../reviews/2026-10-14-p5-pipe
    title line printed right above it, outside chrome and no section name the model gave
    (`repairs-v7`); a diet mark glued to the end of a name is dropped ("Thighgf",
    "PotatoV"). Dropped forms (price-line names, heading-named rows) are in the record.
-4. **New version:**
+4. **Wine lists are out of scope** (owner, after the diagnosis: two wine lists hold 99 of
+   the dev set's 179 wrongly named items). A section whose heading names wine, or is only
+   colour words and their modifiers ("Red", "Italian Reds"), unless it also names another
+   dish or drink, is not extracted (`repairs-v7`, `output.wine_section`) and its labels are
+   not scored; labellers keep labelling it, so wine can come back by deleting the gate. What
+   it needs first is in the record ("Putting wine back later").
+5. **Harness amendment** (amends Amendment 9 item 1): a leading menu number or code is not
+   part of a name when a row is matched to a label ("13) Aloo Chaat", "H1: Scallop", "1.
+   CHEESE"; labels differ on keeping it). The harness is frozen again as amended.
+6. **New version:**
    `…;prompt-v2.4;chunk-v2.3;segment-v2;repairs-v7;validator-v7;classifier-v2` (model,
-   prompt, grammar, chunker, segmenter and classifier unchanged). Tuning result (spike /
-   P5-5 / P5-8 / P5-10): price accuracy 0.995 / 0.992 / 0.983 / 0.997, item recall 0.910 /
-   0.887 / 0.874 / 0.871, gold-row false reject 0.021 / 0.105 / 0.109 / 0.086, catch 0.987
-   / 0.995 / 0.994 / 0.996: all four bars on every tuning set. Dev check (P5-12): 0.991 /
-   **0.834** / **0.118** / 0.994 (v6: 0.991 / 0.821 / 0.126 / 0.995): recall still under
-   its bar.
-5. **Runtimes for tuning.** Prompt versions were screened on the laptop GPU (the same
-   llama.cpp build's CUDA image, flash attention off, compared only with v6 runs on the
-   same GPU); a tuning tool, not a production path, and nothing under `infra/` changed.
-   The Pi ran the pinned CPU image outside the deployed Compose project. Kept levers are
+   prompt, grammar, chunker, segmenter and classifier unchanged). Tuning result with the
+   scope and harness changes (spike / P5-5 / P5-8 / P5-10): price accuracy 0.996 / 0.992 /
+   0.983 / 0.997, item recall 0.914 / 0.886 / 0.879 / 0.868, gold-row false reject 0.014 /
+   0.107 / 0.112 / 0.087, catch 0.989 / 1.000 / 0.996 / 0.997. Dev check (P5-12): 0.991 /
+   **0.865** / **0.115** / 0.995 (v6: 0.991 / 0.821 / 0.126 / 0.995): all four bars, on a
+   holdout weakened by the scope and harness choices made after reading its misses.
+7. **Runtimes for tuning.** Model-input versions were screened on the laptop GPU (the same
+   llama.cpp build's CUDA image, flash attention off, each compared with two v6 runs on the
+   same GPU); a tuning tool, not a production path, and nothing under `infra/` changed. The
+   Pi ran the pinned CPU image outside the deployed Compose project. Kept levers are
    measured on the laptop CPU's saved answers.
-6. **RUN-A-01 done** (ADR-0005 Amendment 1): on a disposable clone upgraded to
+8. **RUN-A-01 done** (ADR-0005 Amendment 1): on a disposable clone upgraded to
    `db40e9424cba`, the page whose commit took at least 1 h 25 min (993 items, 810 prices,
    `llm` and `jsonld`) extracted in 24.5 s from its saved answers. `helios_laptop` stays at
    `7c2e4b9d1f3a`; eval clones are upgraded instead.
-7. **v7 is not cleared for extraction runs** until it passes §8 on a fresh held-out draw
-   from the laptop pass: seed 20261013, excluding P5-5's exclusions plus all 234 venues
-   labelled so far and their sites (Amendment 14 item 1), with Amendment 10's procedure
-   and Amendment 12's fixed strata. A model change (another model of this size; a larger
-   one is not feasible on the Pi) needs its own amendment (Amendment 9 item 3). The
-   label-free scale run stays deferred to the Pi (Amendment 10 item 5).
+9. **v7 is not cleared for extraction runs** until it passes §8 on a fresh held-out draw
+   from the laptop pass, scored with the amended harness and scope: seed 20261013,
+   excluding P5-5's exclusions plus all 234 venues labelled so far and their sites
+   (Amendment 14 item 1), with Amendment 10's procedure and Amendment 12's fixed strata. A
+   model change (another model of this size; a larger one is not feasible on the Pi) needs
+   its own amendment (Amendment 9 item 3). The label-free scale run stays deferred to the Pi
+   (Amendment 10 item 5).
