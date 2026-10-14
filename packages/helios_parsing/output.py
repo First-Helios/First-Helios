@@ -10,7 +10,8 @@ extractions, so they are recovered in order and the output is marked
 ``recovered``.
 
 ``rows_of`` turns a page's chunk outputs into ``validator.Row``s, applying the
-generic repairs in the spike's order:
+generic repairs in the spike's order ((v7) after dropping the rows of a wine list's
+section, ``wine_section``: out of scope, Amendment 15):
 
 1. a price printed in the variant slot with the price slot empty moves to the
    price (small models lose the key order; v5: any form ``prices`` reads,
@@ -60,6 +61,23 @@ if TYPE_CHECKING:
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
 REPAIRS_VERSION = "repairs-v7"
+
+# (v7) wine lists are out of scope (ADR-0013 Amendment 15): a section whose heading names
+# wine, unless it also names another kind of dish or drink ("Beer & Wine", "Red Meat
+# Entrées", "Prosecco Cocktails", "White Pizza").
+_WINE = re.compile(
+    r"(?i)\b(wines?|vinos?|reds?|whites?|ros[eé]s?|sparkling|bubbles|champagnes?|cava|"
+    r"prosecco|by the (glass|bottle)|cellar)\b"
+)
+_NOT_WINE = re.compile(
+    r"(?i)\b(beers?|cocktails?|meats?|entr[eé]es?|pizzas?|sauces?|chicken|fish|rice|beans|chocolate)\b"
+)
+
+
+def wine_section(heading: str | None) -> bool:
+    """A wine list's section: rows under it are not extracted, labels under it not scored."""
+    return bool(heading and _WINE.search(heading) and not _NOT_WINE.search(heading))
+
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
 _ITEM = re.compile(r'\{\s*"b"\s*:[^{}]*\}')
@@ -173,7 +191,7 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
                     price, variant = variant, ""
                 if variant and not any(ch.isalpha() for ch in variant):
                     variant = ""
-                if name:
+                if name and not wine_section(section.section):
                     rows.append(
                         Row(
                             item=name,
