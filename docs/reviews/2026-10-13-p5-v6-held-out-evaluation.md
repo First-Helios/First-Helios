@@ -11,11 +11,12 @@ qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;repai
 ```
 
 **Result: v6 fails §8.** Item recall (0.821) and the false-reject rate on gold rows
-(0.126) miss their bars; price accuracy (0.991) and corruption catch (0.994) pass. Recall's
+(0.126) miss their bars; price accuracy (0.991) and corruption catch (0.995) pass. Recall's
 Wilson interval lies wholly under its bar; false reject's straddles it. A blinded
 adjudication was run because label changes could plausibly have moved the verdict
 (finding 3): it upheld the blind label on every row where the two readings differed, and
-even with every label change it proposes applied v6 still fails both bars. Per §8 and the
+the owner confirmed its only 2 label changes (two crust upcharges removed); the scores
+below use those confirmed labels. Per §8 and the
 owner's answer E4, v6 is not cleared for extraction runs, these 35 pages become tuning
 pages, and the next version needs another fresh draw.
 
@@ -36,7 +37,7 @@ The P5-10 answers stand (session brief: "with the P5-10 procedure"; the session 
 | E4 | Pass / fail | **Point estimates** on the pooled pages; Wilson intervals recorded, not gated. A fail makes the pages tuning pages |
 | E5 | Scale run | **Deferred to the Pi** (Amendment 10 item 5); not run here |
 | — | Extraction run | **The session runs it**, as in P5-10: the extract CLI unchanged, on a disposable clone, against the pinned `llama-server` |
-| — | Blinded adjudication | **Only if label changes could change the verdict** (Amendment 10 item 2). They could here (finding 3), so it was run |
+| — | Blinded adjudication | **Only if label changes could change the verdict** (Amendment 10 item 2). They could here (finding 3), so it was run; the owner confirmed its label changes (2026-10-13: "confirm all") |
 
 ## Procedure
 
@@ -77,7 +78,8 @@ in draw order (small 14, medium 14, large 7), positions 1–61. Frozen and hashe
 
 | Label set | Manifest sha256 |
 |---|---|
-| Blind (72 pages; = confirmed, finding 3) | `58020fa1fc064289f3c4e7791f0d0028e671d49d9e4c41d8aee0db04a73eab51` |
+| Blind (72 pages) | `58020fa1fc064289f3c4e7791f0d0028e671d49d9e4c41d8aee0db04a73eab51` |
+| Confirmed (blind minus the 2 upcharge rows, owner-confirmed) | `03e6a9926174c03f13a25893186ed9b0786a814e8150deb48e69e5f97bb69383` |
 
 **Extraction.** The real extract CLI on a disposable `TEMPLATE` clone of `helios_laptop`
 (`helios_p512_eval`, dropped afterwards), narrowed to the 35 held-out Versions by P5-8's
@@ -104,28 +106,31 @@ outside their folder. 697 rows: A 17, B 242, C 220, D 218.
 | A (price) | 17 | label 17 |
 | D (two readings of one dish) | 218 | label 218 |
 | B (labelled, never produced) | 242 | item 240, not an item 2 (a "+$5" crust upcharge printed inside a pizza's text, twice) |
-| C (accepted, unlabelled) | 220 | not an item 112, same dish as a recorded one 84, a missed item 24 |
+| C (accepted, unmatched) | 220 | not an item 112, same dish as a recorded one 84, "a real item" 24 |
 
-The adjudicators propose **26 label changes**: remove the 2 upcharge rows; add 24 priced
-items the labellers missed (12 numbered curries and drinks on one page, 10 vermouths,
-dessert wines and beers on a wine list, one pizza's two sizes). They don't change the
-verdict (below), so the blind labels stand as confirmed for the verdict; the owner
-confirms or declines the 26 changes on this PR, and only the secondary numbers move.
+**2 label changes:** remove the 2 upcharge rows; the owner confirmed them. The 24 C rows
+answered "a real item" are not additions: each dish is already labelled at its name block
+one or two blocks above (12 numbered curries and drinks, 10 vermouths, beers and dessert
+wines on a wine list, one pizza's two sizes). The C packet showed the adjudicator only
+what was recorded at the pipeline's claimed block (the price block), so "yes" there meant
+"a real priced item", not "missing from the labels"; these are the model naming a dish
+from its price block, as in the D rows. A later packet should list what is recorded
+within 2 blocks.
 
 ## Results (§8)
 
 | Stage | Metric | Bar | v6, 35 pages [Wilson 95 %] | |
 |---|---|---|---|---|
 | [4]+repairs+[5] | Exact price accuracy, accepted rows | ≥ 0.98 | **0.991** (1939/1956) [0.986, 0.995] | ✔ |
-| [4] | Item recall | ≥ 0.85 | **0.821** (2107/2567) [0.805, 0.835] | ✗ |
-| [5] | Injected-corruption catch (gold rows, seed 7) | ≥ 0.97 | **0.994** (1503/1512) [0.989, 0.997] | ✔ |
-| [5] | False reject, correct (gold) rows | ≤ 0.12 | **0.126** (337/2676) [0.114, 0.139] | ✗ |
+| [4] | Item recall | ≥ 0.85 | **0.821** (2107/2565) [0.806, 0.836] | ✗ |
+| [5] | Injected-corruption catch (gold rows, seed 7) | ≥ 0.97 | **0.995** (1506/1514) [0.990, 0.997] | ✔ |
+| [5] | False reject, correct (gold) rows | ≤ 0.12 | **0.126** (337/2674) [0.114, 0.139] | ✗ |
 | [1] | Classifier precision on the draw | (S6f evaluation stands) | 62/72 menus | — |
-| End to end | Usable prices | recorded | 0.702 (1878/2676) [0.684, 0.719] | — |
+| End to end | Usable prices | recorded | 0.702 (1878/2674) [0.685, 0.719] | — |
 | [5] on real output | False reject / catch | recorded | 0.080 (169/2108) / 0.466 (354/760) | — |
 
-With all 26 proposed label changes applied: 0.991 (1962/1980) / 0.819 (2121/2589) / 0.994
-/ 0.133 (359/2698), usable 0.704: **fails the same two bars.**
+Scores use the confirmed labels. Blind labels: 0.991 / 0.821 (2107/2567) / 0.994
+(1503/1512) / 0.126 (337/2676), usable 0.702: **the same verdict.**
 
 v5 on P5-10's 35 pages for comparison: 0.997 / 0.819 / 0.994 / 0.168, usable 0.663. v6's
 tuning numbers on those pages: 0.997 / 0.864 / 0.996 / 0.093.
@@ -134,7 +139,7 @@ tuning numbers on those pages: 0.997 / 0.864 / 0.996 / 0.093.
 
 | Stratum | Pages | Gold items / prices | Accuracy | Recall | Gold FR | Usable |
 |---|---|---|---|---|---|---|
-| small | 14 | 473 / 496 | 0.992 | 0.856 | 0.115 | 0.764 |
+| small | 14 | 471 / 494 | 0.992 | 0.860 | 0.115 | 0.767 |
 | medium | 14 | 997 / 1,037 | 0.987 | 0.787 | 0.124 | 0.689 |
 | large | 7 | 1,097 / 1,143 | 0.995 | 0.836 | 0.132 | 0.687 |
 
@@ -142,7 +147,7 @@ tuning numbers on those pages: 0.997 / 0.864 / 0.996 / 0.093.
 
 | Format | Pages | Accuracy | Recall | Gold FR | Usable |
 |---|---|---|---|---|---|
-| `html_list` | 29 | 0.992 | 0.815 | 0.130 | 0.698 |
+| `html_list` | 29 | 0.992 | 0.816 | 0.130 | 0.698 |
 | `html_cards` | 4 | 0.980 (100/102) | 0.850 | 0.135 | 0.631 |
 | `price_list` | 2 | 0.989 (93/94) | 0.894 | 0.019 | 0.894 |
 
@@ -154,19 +159,19 @@ No `html_inline` page was drawn.
 |---|---|---|---|
 | `invented_item` | 320 | 320 | 0 |
 | `mutated_price` | 310 | 309 | 1 |
-| `other_section_price` | 290 | 288 | 0 |
-| `swapped_prices` | 592 | 586 | 2 |
+| `other_section_price` | 290 | 289 | 0 |
+| `swapped_prices` | 594 | 588 | 3 |
 
 **False rejects of gold rows by reason** (337 rows; a row can carry several reasons):
 `price_not_grounded` 261, `variant_not_grounded` 57, `name_not_grounded` 10,
 `price_bound_to_other_item` 9.
 
-**Loss buckets** (every gold price in one bucket, 2,676):
+**Loss buckets** (every gold price in one bucket, 2,674):
 
 | Bucket | Prices | Share |
 |---|---|---|
 | `accepted` | 1,881 | 0.703 |
-| `item_missed` | 495 | 0.185 |
+| `item_missed` | 493 | 0.184 |
 | `wrong_amount` | 130 | 0.049 |
 | `not_accepted:price_not_grounded` | 97 | 0.036 |
 | `row_unpriced` | 57 | 0.021 |
@@ -200,7 +205,7 @@ prices exact, gold rows rejected):
 | 29612ad9e3eb | 29 | medium | `html_cards` | 62 | 81 | 59 | 52/52 | 19/81 |
 | e442534a6bed | 30 | small | `html_cards` | 30 | 30 | 16 | 16/16 | 0/30 |
 | 10e411124d6d | 31 | small | `html_list` | 15 | 15 | 14 | 14/14 | 0/15 |
-| 11d4f5f97057 | 35 | small | `html_list` | 51 | 60 | 44 | 44/44 | 0/60 |
+| 11d4f5f97057 | 35 | small | `html_list` | 49 | 58 | 44 | 44/44 | 0/58 |
 | 242bc3a4971e | 36 | small | `html_list` | 18 | 18 | 17 | 15/15 | 3/18 |
 | d7fe468d32c1 | 37 | large | `html_list` | 122 | 162 | 57 | 67/67 | 5/162 |
 | a4911b31d522 | 38 | medium | `html_list` | 38 | 59 | 11 | 7/7 | 48/59 |
@@ -238,13 +243,13 @@ commits are still quadratic: two single-page commits ran 32 and 42 min with the 
 ## Findings
 
 1. **Recall stays where v5 left it.** Item recall is 0.821 (v5 on P5-10: 0.819; v4 on
-   P5-8: 0.838), against 0.864 for v6 on its own tuning pages. Small pages pass (0.856);
-   medium pages lose most (0.787). Of the 460 labelled items the pipeline never matched,
+   P5-8: 0.838), against 0.864 for v6 on its own tuning pages. Small pages pass (0.860);
+   medium pages lose most (0.787). Of the 458 labelled items the pipeline never matched,
    218 have a pipeline row with the right price within 2 blocks under another name, and
    the blinded adjudicator gave every one of them to the label: the model's reading names
    the dish by its description, its section heading ("Salad", "Pasta"), an ingredient
    line, a wine's cuvée line instead of its producer, or the previous dish's name read
-   from its price block. The other 242 the model never emitted near their place (unpriced
+   from its price block. The other 240 the model never emitted near their place (unpriced
    course dishes, beer lists, sides).
 2. **Two-line and description-first layouts.** The recall loss sits on a few pages:
    a wine list printed as producer over cuvée-and-price (43 of 109 items found), a page
@@ -257,8 +262,8 @@ commits are still quadratic: two single-page commits ran 32 and 42 min with the 
    items, gold-row FR 16 fewer rejected rows) and 218 nearby same-price rows under another
    name could, in principle, have been label choices (a wine named by producer or by
    cuvée, a dish number kept or trimmed). The adjudicators upheld the label on all 218 and
-   on all 17 price disagreements; the 26 changes they propose (24 missed items, 2
-   upcharges) leave both bars failing (0.819, 0.133).
+   on all 17 price disagreements; their only label changes (2 upcharges removed,
+   owner-confirmed) leave both bars failing (0.821, 0.126).
 4. **The false-reject fail sits on one page.** A page that prints its prices in a separate
    column beside the names (aligned only by line spacing) has all 146 gold rows rejected
    (`price_not_grounded`) and 0 of 4 accepted rows exact; without it gold-row FR is 0.075
@@ -268,7 +273,7 @@ commits are still quadratic: two single-page commits ran 32 and 42 min with the 
    ("Cold Brew4.5 / 6.5"), and a size label over its price several blocks from the base
    price (48 of 59 on one page).
 5. **Price accuracy and catch hold.** Accuracy 0.991 on 1,956 accepted rows and catch
-   0.994; 10 of the 17 wrong accepts are on one wings page whose "Only" and "Meal" cards
+   0.995; 10 of the 17 wrong accepts are on one wings page whose "Only" and "Meal" cards
    share names (the adjudicator sided with the label on all 10). On real output the
    validator catches 0.466 of wrong rows (P5-10 v5: 0.693).
 6. **Classifier precision on this draw is lower:** 62 of 72 drawn pages are menus

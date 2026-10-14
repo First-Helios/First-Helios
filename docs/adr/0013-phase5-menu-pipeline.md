@@ -1043,7 +1043,7 @@ Owner decisions in session P5-12 (Amendment 13 item 5's evaluation). Record:
    20261012; P5-5's exclusions plus the 162 venues labelled in P5-5, P5-8 and P5-10 and
    their sites; quotas by page size with the fixed cutoffs: 14 small, 14 medium, 7 large):
    price accuracy **0.991**, item recall **0.821**, false reject on gold rows **0.126**
-   (bars 0.98, 0.85, 0.12); corruption catch **0.994**; usable prices 0.702. Per §8 v6 is
+   (bars 0.98, 0.85, 0.12); corruption catch **0.995**; usable prices 0.702. Per §8 v6 is
    not cleared for extraction runs; these 35 pages are now tuning pages; the next version
    is scored on another fresh draw from the laptop pass: seed **20261013**, excluding
    P5-5's exclusions plus **all 234 venues labelled so far** (P5-5 18, P5-8 72, P5-10 72,
@@ -1054,10 +1054,11 @@ Owner decisions in session P5-12 (Amendment 13 item 5's evaluation). Record:
    row with one of their prices within 2 blocks under another name. Added to P5-5's packet:
    **D rows**, the label's and the pipeline's reading of one dish in random order, so
    naming and placement are judged blind. The adjudicators upheld the label on all 218 D
-   rows and all 17 price disagreements and propose 26 label changes (24 missed items, 2
-   upcharges that are modifiers); with all of them applied v6 still fails both bars
-   (recall 0.819, gold-row false reject 0.133). The blind labels stand as confirmed for
-   the verdict; the owner confirms or declines the 26 changes on the record's PR.
+   rows and all 17 price disagreements. Their only label changes, 2 upcharges that are
+   modifiers, were confirmed by the owner; the scores above use the confirmed labels (the
+   blind labels give the same verdict). The 24 C rows answered "a real item" were already
+   labelled one or two blocks above: the C packet showed only what was recorded at the
+   pipeline's claimed block; a later packet should show what is recorded within 2 blocks.
 3. **Direction for the next version** (from the findings, for the owner to decide at
    tuning): most of the recall gap is what the model names (a dish named by its
    description, its section heading, an ingredient line or a wine's cuvée line; a
