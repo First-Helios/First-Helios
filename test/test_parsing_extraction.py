@@ -402,3 +402,31 @@ def test_v6_rows_of_splits_a_row_named_by_a_priced_list() -> None:
         ("Bean & Egg", "3.75", None),
         ("Mango, Peach or Guava", "16", None),
     ]
+
+
+def test_v7_rows_of_names_a_description_row_by_the_title_above() -> None:
+    blocks = segment(
+        "<p>$16</p><p>Lasagna Roll</p><p>Baked crab, avocado, cream cheese and sweet sauce.</p>"
+        "<p>$11</p><p>Desserts</p><p>Flan ~ family recipe, made with vanilla, caramel.</p>"
+        "<p>$6</p><p>Crunch Roll</p><p>Crab, avocado, cucumber, eel sauce.</p><p>$9</p>"
+        "<nav><p>Show More</p></nav><p>Eggs, potatoes, bacon or sausage, toast.</p><p>$14</p>"
+    )
+    rows = rows_of(
+        _one_chunk(
+            ("b0003", "Baked crab, avocado, cream cheese and sweet sauce.", "11", ""),
+            ("b0006", "Flan ~ family recipe, made with vanilla, caramel.", "6", ""),
+            ("b0008", "Crunch Roll", "9", ""),  # the title is already named
+            ("b0009", "Crab, avocado, cucumber, eel sauce.", "9", ""),
+            ("b0012", "Eggs, potatoes, bacon or sausage, toast.", "14", ""),  # chrome above
+        )
+        + _one_chunk(("b0007", "Pie", "6", ""), section="Desserts"),
+        blocks,
+    )
+    assert [(r.item, r.claimed_block) for r in rows] == [
+        ("Lasagna Roll", "b0002"),
+        ("Flan ~ family recipe, made with vanilla, caramel.", "b0006"),  # a section heading
+        ("Crunch Roll", "b0008"),
+        ("Crab, avocado, cucumber, eel sauce.", "b0009"),
+        ("Eggs, potatoes, bacon or sausage, toast.", "b0012"),
+        ("Pie", "b0007"),
+    ]

@@ -28,6 +28,8 @@ generic repairs in the spike's order:
    Tito's Handmade Vodka, Absolut Vodka") becomes one row per name, each with the
    row's price and variant (``split_listed``); a choice ("Mango, Peach or Guava")
    stays one row;
+4d. (v7) a row named by its description takes the short title line printed right
+   above it (``name_by_title``);
 5. exact duplicates (same name tokens, variant, amount, section, claimed block)
    collapse to one; a dish printed again in another inline menu is kept (v4).
 """
@@ -56,7 +58,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v6"
+REPAIRS_VERSION = "repairs-v7"
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
 _ITEM = re.compile(r'\{\s*"b"\s*:[^{}]*\}')
@@ -191,6 +193,7 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
     ]
     rows = drop_unprinted_variants(rows, blocks)
     rows = split_listed(rows, blocks)
+    rows = name_by_title(rows, blocks)
     seen: set[tuple[str, str | None, str | None, str | None, str | None]] = set()
     unique: list[Row] = []
     for row in rows:
@@ -276,4 +279,60 @@ def split_listed(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
             out.append(row)
             continue
         out.extend(replace(row, item=p) for p in parts)
+    return out
+
+
+_TITLE_MAX_WORDS = 6
+_DESCRIPTION_WORDS = 8
+
+
+def _description_like(text: str) -> bool:
+    """A sentence or ingredient list, not a dish's title: two or more commas, a final
+    period, or a long run of words."""
+    text = text.strip()
+    return text.count(",") >= 2 or text.endswith(".") or len(text.split()) >= _DESCRIPTION_WORDS
+
+
+def name_by_title(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
+    """(v7) A row named by its description takes the title line printed right above it.
+
+    A small model drifts into naming dishes by the line just before the price when a
+    description sits between the title and the price ("Lasagna Roll" / "Baked crab,
+    avocado, cream cheese and sweet sauce." / "$11"). When the row's name is
+    description-like and is its claimed block's text (prices aside), and the nearest
+    non-blank block above is a short unpriced title line (at most six words, not
+    description-like, outside page chrome, no section name the model gave) that no
+    other row names, the row is renamed to that line and claims its block."""
+    index = {b.id: i for i, b in enumerate(blocks)}
+    prices = price_tokens(list(blocks))
+    named = {row.claimed_block for row in rows if not _description_like(row.item)}
+    sections = {frozenset(norm_tokens(row.section)) for row in rows if row.section}
+    out: list[Row] = []
+    for row in rows:
+        pos = index.get(row.claimed_block or "")
+        if pos is None or not _description_like(row.item):
+            out.append(row)
+            continue
+        text = blocks[pos].text
+        printed = set(norm_tokens(text)) - {
+            t for tok in prices[pos] for t in norm_tokens(text[tok.start : tok.end])
+        }
+        above = pos - 1
+        while above >= 0 and not blocks[above].text.strip(" ​ "):
+            above -= 1
+        title = blocks[above].text.strip() if above >= 0 else ""
+        if (
+            set(norm_tokens(row.item)) != printed
+            or not title
+            or prices[above]
+            or blocks[above].in_chrome
+            or frozenset(norm_tokens(title)) in sections
+            or len(title.split()) > _TITLE_MAX_WORDS
+            or _description_like(title)
+            or blocks[above].id in named
+        ):
+            out.append(row)
+            continue
+        named.add(blocks[above].id)
+        out.append(replace(row, item=title, claimed_block=blocks[above].id))
     return out

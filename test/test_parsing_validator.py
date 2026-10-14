@@ -509,3 +509,22 @@ def test_v6_a_wrapped_description_ends_with_the_price_on_a_bare_price_page() -> 
     assert _decide([Row("avocado tostada", "12")], marked) == ["downgrade"], (
         "a page that marks prices"
     )
+
+
+def test_v7_a_one_decimal_price_on_a_bare_price_page() -> None:
+    html = (
+        "<p>chorizo empanada</p><p>7.5</p><p>pancake, maple syrup 12.5</p>"
+        "<p>Lager</p><p>(</p><p>4.5</p><p>% ABV)</p><p>7</p>"
+        "<p>HAWAII 5.0</p><p>Canadian bacon, pineapple.</p><p>16</p><p>toast 9</p>"
+    )
+    rows = [
+        Row("chorizo empanada", "7.5"),
+        Row("pancake", "12.5"),
+        Row("Lager", "4.5"),  # a strength in parentheses, not a price
+        Row("Lager", "7"),
+        Row("HAWAII 5.0", "16"),  # ".0" after words is part of the name
+    ]
+    assert _decide(rows, html) == ["accept", "accept", "downgrade", "accept", "accept"]
+    # a page that marks its prices: an unmarked one-decimal is still no price
+    marked = "<p>Latte</p><p>6.5</p><p>Mocha</p><p>$6</p><p>Tea</p><p>$3</p><p>Soda</p><p>$2</p>"
+    assert _decide([Row("Latte", "6.5")], marked) == ["downgrade"]
