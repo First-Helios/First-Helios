@@ -170,10 +170,10 @@ This section is the single current-status page. Other docs link here.
   every tuning set clears the four bars; tuning numbers, not a §8 evaluation). Its
   held-out evaluation on 35 fresh pages
   ([record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md), Amendment 14)
-  **fails §8**: price accuracy 0.991 and catch 0.994 pass; item recall 0.821 and
+  **fails §8**: price accuracy 0.991 and catch 0.995 pass; item recall 0.821 and
   gold-row false reject 0.126 miss (the model naming a dish by its description, heading
   or a wine's cuvée line; one page printing its prices in a separate column). A blinded
-  adjudication upheld the blind labels; its proposed label changes leave both bars failing.
+  adjudication upheld the blind labels (2 owner-confirmed label changes).
   A page-classifier audit
   ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
   demonstrated gap against the §8 classifier bar (draw precision 0.932

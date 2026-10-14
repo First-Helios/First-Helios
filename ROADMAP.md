@@ -594,7 +594,7 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   [record](./docs/reviews/2026-10-12-p5-pipeline-v6-tuning.md)).
 - *Evaluated (P5-12, [Amendment 14](./docs/adr/0013-phase5-menu-pipeline.md#amendment-14-2026-10-13-v6-held-out-evaluation-fails)):*
   v6 on 35 fresh pages (seed 20261012, size-stratified) **fails §8**: price accuracy
-  0.991 and catch 0.994 pass; item recall 0.821 and gold-row false reject 0.126 miss
+  0.991 and catch 0.995 pass; item recall 0.821 and gold-row false reject 0.126 miss
   (the model naming a dish by its description, heading or a wine's cuvée line; one page
   printing its prices in a separate column); a blinded adjudication upheld the labels
   ([record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md)). Next: tune v7 on
