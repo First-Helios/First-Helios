@@ -1,4 +1,4 @@
-"""Extractor prompt v2.4, its compact GBNF grammar, the token cap and the sparse-chunk retry.
+"""Extractor prompt v2.5, its compact GBNF grammar, the token cap and the sparse-chunk retry.
 
 Ported from ``spikes/menu_model/extract.py`` with process v2 and prompt v2.3
 hard-wired (ADR-0013 §1): the configuration measured on the Pi as ``st-v23``.
@@ -7,7 +7,10 @@ text in, text or numbers out.
 
 - ``SYSTEM_PROMPT``: keyed items ``{"b","n","p","v"}`` grouped by section, and
   (v2.3) the rule that a name line and the price/description lines after it are
-  one item, with a worked example in that layout.
+  one item, with a worked example in that layout; (v2.5) naming rules: the title
+  line names the item, never a description, ingredient list, section heading,
+  place, size or wine's second line; no leading menu number; ``b`` is the title's
+  block.
 - ``GRAMMAR``: GBNF passed to llama-server as ``grammar`` (not a JSON schema,
   whose ``pattern`` the server ignored). Compact JSON with no whitespace, a block
   id ``bNNNN``, a digits-only price with an optional ``$`` (forbidding it pushed
@@ -39,6 +42,13 @@ SYSTEM_PROMPT = (
     "and/or a description line, in either order. Those lines are ONE item: its name is the "
     "short name line (never the description sentence), its price comes from the price line "
     "after the name, and a price line or description line is never an item of its own. "
+    "Name every item by its title line, the short line that names the dish or drink, even "
+    "when a description line sits between the title and the price. Never take a name from a "
+    "description or ingredient list (a sentence, or words separated by commas), a section "
+    "heading, a place, region or country line, a size or serving line, or a wine's second "
+    "line (grape, style, region or vintage) under its producer. Leave out a menu number "
+    'printed before the name ("12) Garlic Naan" is named "Garlic Naan"). "b" is the block of '
+    "the title line, never of the price or description line. "
     "Do not invent items or prices, do not convert or compute prices, skip section headings, "
     "descriptions, navigation, hours, addresses, reviews and add-on/extra lines. "
     "If the text contains no menu items, return no sections. "
@@ -65,7 +75,7 @@ vchr    ::= [^"\\\x00-\x1f]
 """
 
 # The prompt, grammar, token cap and sparse retry together; part of the pipeline version.
-PROMPT_VERSION = "prompt-v2.4"
+PROMPT_VERSION = "prompt-v2.5"
 
 MAX_TOKENS = 3072
 TOKENS_PER_LINE = 40  # keyed rows need headroom over the ~30 of the first process
