@@ -1,4 +1,4 @@
-"""Price occurrences in segmented blocks: the pipeline's price reader (v5) and the frozen v4 one.
+"""Price occurrences in segmented blocks: the pipeline's price reader (v5-v7) and the frozen v4 one.
 
 ``price_tokens`` is the reader the validator, stitch and the row repairs share
 (pipeline v5, ADR-0013 Amendment 11), so a printed price reads the same way at
@@ -22,7 +22,10 @@ Printed forms, all layout-generic:
   its prices ("Margaritas & Cocktails16" over "$16" cards is a tab's item count).
 
 A one-decimal amount needs a mark ("$", a currency word, an underscore): an
-unmarked "6.2", "0.5 pounds" or "WCAG 2.1" is not a price.
+unmarked "6.2", "0.5 pounds" or "WCAG 2.1" is not a price; (v7) except on a bare
+page, where a block's last one-decimal amount reads like its last integer ("6.5",
+"salsa roja 7.5"), unless it is a parenthesized or percent figure ("( 6.2 % ABV)")
+or a ".0" after words ("HAWAII 5.0").
 
 ``price_tokens_v4`` is the spike validator's v3 tokenizer, unchanged: the page
 classifier's layout features (``page_features``) are frozen per classifier
@@ -54,6 +57,9 @@ _BARE_INT = re.compile(r"(?<![\w$.,:/-])(\d{1,3})(?![\w.,:%/])")
 # (v6) a block's last integer after a spaced dash ("peppers -13"; "8-12" stays a range)
 # or glued to a word of two or more letters ("Cod Cakes16")
 _BARE_INT_V6 = re.compile(r"(?:(?<=\s-)|(?<=[^\W\d_]{2}))(\d{1,3})(?![\w.,:%/])")
+# (v7) on a bare page, a block's last one-decimal amount ("6.5", "salsa roja 7.5")
+_BARE_DEC_V7 = re.compile(r"(?<![\w$.,:/(-])(\d{1,3}\.\d)(?![\w.,:%/])")
+_LETTER = re.compile(r"[^\W\d_]")
 
 # --- v5 additions: each pattern's groups are the whole part "w" and cents "c" ---
 _AMOUNT = r"(?P<w>\d{1,3}(?:,\d{3})+|\d+)(?:[.,](?P<c>\d{2})|\.(?P<c1>\d))?"
@@ -143,9 +149,37 @@ def bare_page(blocks: list[Block]) -> bool:
     return bare > marked
 
 
+def _blank(block: Block) -> bool:
+    return not block.text.strip(" ​ ")
+
+
+def _neighbour(blocks: list[Block], index: int, step: int) -> str:
+    """The nearest non-blank block's text before (step -1) or after (step 1) ``index``."""
+    index += step
+    while 0 <= index < len(blocks) and _blank(blocks[index]):
+        index += step
+    return blocks[index].text.strip() if 0 <= index < len(blocks) else ""
+
+
+def _bare_decimal(blocks: list[Block], index: int) -> re.Match[str] | None:
+    """(v7) The block's last one-decimal amount on a bare page, unless it is a parenthesized
+    or percent figure ("( 6.2 % ABV)" printed over three blocks is a strength), or a ".0"
+    after words ("HAWAII 5.0", a name; a sole "12.0" line still reads)."""
+    text = blocks[index].text
+    last = _last_bare(text, (_BARE_DEC_V7,))
+    if last is None or text[last.end() :].lstrip().startswith("%"):
+        return None
+    if _neighbour(blocks, index, 1).startswith("%") or _neighbour(blocks, index, -1).endswith("("):
+        return None
+    if last.group(1).endswith(".0") and _LETTER.search(text[: last.start()]):
+        return None
+    return last
+
+
 def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[list[PriceToken]]:
     out: list[list[PriceToken]] = []
-    forms = (_BARE_INT, _BARE_INT_V6) if v6 and bare_page(blocks) else (_BARE_INT,)
+    bare = v6 and bare_page(blocks)
+    forms = (_BARE_INT, _BARE_INT_V6) if bare else (_BARE_INT,)
     for index, block in enumerate(blocks):
         tokens = [
             PriceToken(index, start, end, amount, "money")
@@ -160,12 +194,14 @@ def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[lis
             tokens.append(
                 PriceToken(index, last.start(), last.end(), Decimal(last.group(1)), "bare")
             )
+        if not tokens and bare and (dec := _bare_decimal(blocks, index)):
+            tokens.append(PriceToken(index, dec.start(), dec.end(), Decimal(dec.group(1)), "bare"))
         out.append(tokens)
     return out
 
 
 def price_tokens(blocks: list[Block]) -> list[list[PriceToken]]:
-    """Price occurrences per block, in block order (the pipeline's reader, v6)."""
+    """Price occurrences per block, in block order (the pipeline's reader, v7)."""
     return _tokens(blocks, read_money, v6=True)
 
 

@@ -571,7 +571,8 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   ([record](./docs/reviews/2026-10-09-p5-v4-held-out-evaluation.md)).
 - *Fixed (#74, [ADR-0005 Amendment 1](./docs/adr/0005-immutable-menu-snapshots-and-selection.md#amendment-1-2026-10-03-accepted-2026-10-08-commit-time-integrity-check-cost)):*
   Menu-write commits check each page once per aggregate state (revision
-  `db40e9424cba`); the owner-run laptop re-time (RUN-A-01) is pending.
+  `db40e9424cba`); the laptop re-time (RUN-A-01, P5-13): the page that took at least
+  1 h 25 min now commits in 24.5 s on a disposable clone.
 - *Tuned (P5-9, [Amendment 11](./docs/adr/0013-phase5-menu-pipeline.md#amendment-11-2026-10-09-pipeline-version-v5-tuned-on-the-p5-8-pages)):*
   pipeline version v5 (`prompt-v2.4`, `chunk-v2.2`, `repairs-v5`, `validator-v5`) on
   the spike's 33, P5-5's 10 and P5-8's 35 pages: one shared price reader, then
@@ -597,10 +598,17 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   0.991 and catch 0.995 pass; item recall 0.821 and gold-row false reject 0.126 miss
   (the model naming a dish by its description, heading or a wine's cuvée line; one page
   printing its prices in a separate column); a blinded adjudication upheld the labels
-  ([record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md)). Next: tune v7 on
-  these pages (validator levers or the model side, the owner's call), score it on a
-  fresh draw (seed 20261013, all 234 labelled venues and their sites excluded), then
-  the laptop extraction pass; the label-free scale run moves to the Pi.
+  ([record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md)).
+- *Tuned (P5-13, [Amendment 15](./docs/adr/0013-phase5-menu-pipeline.md#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages)):*
+  pipeline version v7 (`repairs-v7`, `validator-v7`; `prompt-v2.4` kept) with P5-12's
+  35 pages held out as a dev check: bare one-decimal prices, description-named rows
+  renamed to the title line above, glued diet marks dropped; prompt naming rules
+  rejected. Every tuning set clears the four bars (P5-10: item recall 0.871, gold-row
+  false reject 0.086); dev check item recall 0.834, false reject 0.118 (tuning
+  numbers, not §8; [record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md)). Next: score v7 on a fresh draw
+  (seed 20261013, all 234 labelled venues and their sites excluded), then the laptop
+  extraction pass; the label-free scale run moves to the Pi. If recall fails again, a
+  same-size model screen needs its own ADR-0013 amendment first.
 - *Audited (2026-10-12, [classifier gap audit](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)):*
   `classifier-v2` gates the extraction queue at fetch (`due_pages` doesn't re-check);
   precision on the held-out draws is 151/162 = 0.932 [0.883, 0.962], no demonstrated
