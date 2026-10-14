@@ -63,20 +63,46 @@ if TYPE_CHECKING:
 REPAIRS_VERSION = "repairs-v7"
 
 # (v7) wine lists are out of scope (ADR-0013 Amendment 15): a section whose heading names
-# wine, unless it also names another kind of dish or drink ("Beer & Wine", "Red Meat
-# Entrées", "Prosecco Cocktails", "White Pizza").
+# wine ("Wine by the Glass", "Sparkling", "Champagne"), or is only colour words and their
+# modifiers ("Red", "Italian Reds", "Rosé & White"), unless it also names another kind of
+# dish or drink ("Beer & Wine", "Prosecco Cocktails"). A dish that names a colour ("Red
+# Oil Dumpling", "White Pizza") is no wine heading.
 _WINE = re.compile(
-    r"(?i)\b(wines?|vinos?|reds?|whites?|ros[eé]s?|sparkling|bubbles|champagnes?|cava|"
-    r"prosecco|by the (glass|bottle)|cellar)\b"
+    r"(?i)\b(wines?|vinos?|sparkling|bubbles|champagnes?|cava|prosecco|by the (glass|bottle)|cellar)\b"
 )
 _NOT_WINE = re.compile(
     r"(?i)\b(beers?|cocktails?|meats?|entr[eé]es?|pizzas?|sauces?|chicken|fish|rice|beans|chocolate)\b"
 )
+_COLOURS = frozenset({"red", "reds", "white", "whites", "rosé", "rosés", "rose", "roses"})
+_COLOUR_GLUE = frozenset(
+    {
+        "and",
+        "the",
+        "by",
+        "glass",
+        "bottle",
+        "house",
+        "other",
+        "our",
+        "local",
+        "italian",
+        "french",
+        "spanish",
+        "california",
+        "texas",
+    }
+)
+_WORDS = re.compile(r"[^\W\d_]+")
 
 
 def wine_section(heading: str | None) -> bool:
     """A wine list's section: rows under it are not extracted, labels under it not scored."""
-    return bool(heading and _WINE.search(heading) and not _NOT_WINE.search(heading))
+    if not heading or _NOT_WINE.search(heading):
+        return False
+    if _WINE.search(heading):
+        return True
+    words = {w.lower() for w in _WORDS.findall(heading)}
+    return bool(words & _COLOURS) and words <= _COLOURS | _COLOUR_GLUE
 
 
 _SECTION = re.compile(r'"section"\s*:\s*("(?:[^"\\]|\\.)*")')
