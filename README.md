@@ -92,7 +92,7 @@ This section is the single current-status page. Other docs link here.
 - **Menu parsing stages** (ADR-0013 slice 2): `packages/helios_parsing/`.
   Pure functions, called by the page classifier, `menu-page` Bronze and extraction (below): the segmented-text hash
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
-  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v6`: per-row
+  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v7`: per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
   chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and
@@ -174,6 +174,14 @@ This section is the single current-status page. Other docs link here.
   gold-row false reject 0.126 miss (the model naming a dish by its description, heading
   or a wine's cuvée line; one page printing its prices in a separate column). A blinded
   adjudication upheld the blind labels (2 owner-confirmed label changes).
+  Pipeline version v7 (`repairs-v7`, `validator-v7`; prompt unchanged at `prompt-v2.4`;
+  ADR-0013 [Amendment 15](./docs/adr/0013-phase5-menu-pipeline.md#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages)) is tuned with P5-12's
+  pages held out as a dev check ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md)): bare one-decimal
+  prices on bare-price pages, rows named by their description renamed to the title
+  line above, glued diet marks dropped; prompt naming rules were tried and rejected
+  (they lost items on two tuning sets). Every tuning set clears the four bars; the dev
+  check moves to item recall 0.834 (still under 0.85) and gold-row false reject 0.118
+  (tuning numbers, not a §8 evaluation).
   A page-classifier audit
   ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
   demonstrated gap against the §8 classifier bar (draw precision 0.932
@@ -285,15 +293,18 @@ This section is the single current-status page. Other docs link here.
   Amendment 13) and fails its held-out evaluation on 35 fresh pages (2026-10-13,
   [record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md), Amendment 14: item
   recall 0.821, gold-row false reject 0.126); those pages are now tuning pages too.
+  Version v7 is tuned with them held out as a dev check ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md),
+  Amendment 15: dev item recall 0.834, gold-row false reject 0.118).
   Opens when all hold:
-  - [ ] a new pipeline version (next: v7) passes §8 on a fresh held-out draw from
+  - [ ] a new pipeline version (v7 is next) passes §8 on a fresh held-out draw from
     the laptop pass (seed 20261013; all 234 venues labelled in P5-5, P5-8, P5-10 and
     P5-12 and their sites excluded);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
     ([RUN-A-01](./docs/reviews/2026-10-03-menu-write-commit-cost.md#owner-run-checklist-run-a-01-after-the-migration-merges))
-    is pending.
+    ran 2026-10-14 on a disposable clone: the page that took at least 1 h 25 min commits
+    in 24.5 s ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md#run-a-01-q7a-the-menu-write-commit-re-timed)).
 - **Pi check, `llama-server` image: pending.** Before the first Pi extraction
   run, the owner runs the
   [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream

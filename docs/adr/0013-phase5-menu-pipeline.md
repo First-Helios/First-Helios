@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–14.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–15.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -24,7 +24,8 @@ and failed its held-out evaluation in P5-10
 ([Amendment 12](#amendment-12-2026-10-12-v5-held-out-evaluation-fails)); v6 was tuned in
 P5-11 ([Amendment 13](#amendment-13-2026-10-12-pipeline-version-v6-tuned-on-the-p5-10-pages))
 and failed its held-out evaluation in P5-12
-([Amendment 14](#amendment-14-2026-10-13-v6-held-out-evaluation-fails)).
+([Amendment 14](#amendment-14-2026-10-13-v6-held-out-evaluation-fails)); v7 was tuned in
+P5-13 ([Amendment 15](#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1067,4 +1068,48 @@ Owner decisions in session P5-12 (Amendment 13 item 5's evaluation). Record:
    column. Validator-side candidates: column-aligned prices, bare one-decimal prices on
    their own line, one-decimal prices glued to a name. Model-side candidates (prompt, or a
    stronger model under its own amendment, Amendment 9 item 3) are the owner's call. The
+   label-free scale run stays deferred to the Pi (Amendment 10 item 5).
+
+## Amendment 15 (2026-10-14): pipeline version v7, tuned on the P5-12 pages
+
+Owner decisions in session P5-13 (Amendment 14 item 3). Record (tuning numbers, not a §8
+evaluation): [2026-10-14-p5-pipeline-v7-tuning.md](../reviews/2026-10-14-p5-pipeline-v7-tuning.md).
+
+1. **Overfitting guard:** P5-12's 35 pages are a dev check, scored and never tuned on; the
+   levers are designed on the other 113 tuning pages. Layouts printed only on dev pages
+   (prices in their own column, one-decimal prices glued to a name) are not built.
+2. **Prompt lever rejected.** Naming rules (prompt-v2.5, rules only, and v2.5b) were
+   measured alone on all 148 pages: two tuning sets lose items beyond the run-to-run noise
+   and the dev gain is inside it (the rules fix description-named dishes but the model
+   over-applies them: coded names rewritten, sections skipped, a wine named by its style
+   line). The prompt stays `prompt-v2.4`, so every page's saved answers stay valid.
+3. **Levers kept** (layout-generic; keep rule as Amendment 11): on a page that prints its
+   prices bare, a block's last one-decimal amount is a price ("6.5", "salsa roja 7.5"),
+   not a parenthesized or percent figure nor a ".0" after words (`validator-v7`, the
+   shared reader); a row the model named by its description takes the short unpriced
+   title line printed right above it, outside chrome and no section name the model gave
+   (`repairs-v7`); a diet mark glued to the end of a name is dropped ("Thighgf",
+   "PotatoV"). Dropped forms (price-line names, heading-named rows) are in the record.
+4. **New version:**
+   `…;prompt-v2.4;chunk-v2.3;segment-v2;repairs-v7;validator-v7;classifier-v2` (model,
+   prompt, grammar, chunker, segmenter and classifier unchanged). Tuning result (spike /
+   P5-5 / P5-8 / P5-10): price accuracy 0.995 / 0.992 / 0.983 / 0.997, item recall 0.910 /
+   0.887 / 0.874 / 0.871, gold-row false reject 0.021 / 0.105 / 0.109 / 0.086, catch 0.987
+   / 0.995 / 0.994 / 0.996: all four bars on every tuning set. Dev check (P5-12): 0.991 /
+   **0.834** / **0.118** / 0.994 (v6: 0.991 / 0.821 / 0.126 / 0.995): recall still under
+   its bar.
+5. **Runtimes for tuning.** Prompt versions were screened on the laptop GPU (the same
+   llama.cpp build's CUDA image, flash attention off, compared only with v6 runs on the
+   same GPU); a tuning tool, not a production path, and nothing under `infra/` changed.
+   The Pi ran the pinned CPU image outside the deployed Compose project. Kept levers are
+   measured on the laptop CPU's saved answers.
+6. **RUN-A-01 done** (ADR-0005 Amendment 1): on a disposable clone upgraded to
+   `db40e9424cba`, the page whose commit took at least 1 h 25 min (993 items, 810 prices,
+   `llm` and `jsonld`) extracted in 24.5 s from its saved answers. `helios_laptop` stays at
+   `7c2e4b9d1f3a`; eval clones are upgraded instead.
+7. **v7 is not cleared for extraction runs** until it passes §8 on a fresh held-out draw
+   from the laptop pass: seed 20261013, excluding P5-5's exclusions plus all 234 venues
+   labelled so far and their sites (Amendment 14 item 1), with Amendment 10's procedure
+   and Amendment 12's fixed strata. A model change (another model of this size; a larger
+   one is not feasible on the Pi) needs its own amendment (Amendment 9 item 3). The
    label-free scale run stays deferred to the Pi (Amendment 10 item 5).
