@@ -614,11 +614,14 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   pass) and catch 0.991 pass; gold-row false reject 0.153 misses (variant labels printed
   once as a column header, which the validator can't ground, are half of it);
   adjudication skipped (no label change could reach the verdict)
-  ([record](./docs/reviews/2026-10-15-p5-v7-held-out-evaluation.md)). Next: a v8
-  tuning session (its direction is the owner's call; the failing bar is validator-side),
-  scored on a fresh draw (seed 20261014, all 306 labelled venues
-  and their sites excluded), then the laptop extraction pass; the label-free scale run
-  moves to the Pi.
+  ([record](./docs/reviews/2026-10-15-p5-v7-held-out-evaluation.md)).
+- *Tuned (P5-15, [Amendment 17](./docs/adr/0013-phase5-menu-pipeline.md#amendment-17-2026-10-15-pipeline-version-v8-split-column-headers)):*
+  pipeline version v8 (`validator-v8`): a column header printed one label per block labels
+  each row's prices by column; P5-14's gold-row false reject 0.153 → 0.094, catch 0.993, no
+  row changed on the older tuning sets (tuning numbers, not §8;
+  [record](./docs/reviews/2026-10-15-p5-pipeline-v8-tuning.md)). Next: score v8 on a fresh
+  draw (seed 20261014, all 306 labelled venues and their sites excluded), then the laptop
+  extraction pass; the label-free scale run moves to the Pi.
 - *Audited (2026-10-12, [classifier gap audit](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)):*
   `classifier-v2` gates the extraction queue at fetch (`due_pages` doesn't re-check);
   precision on the held-out draws is 151/162 = 0.932 [0.883, 0.962], no demonstrated

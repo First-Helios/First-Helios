@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–16.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–17.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -27,7 +27,8 @@ and failed its held-out evaluation in P5-12
 ([Amendment 14](#amendment-14-2026-10-13-v6-held-out-evaluation-fails)); v7 was tuned in
 P5-13, with wine lists put out of scope ([Amendment 15](#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages-wine-lists-out-of-scope)),
 and failed its held-out evaluation in P5-14 on the false-reject bar
-([Amendment 16](#amendment-16-2026-10-15-v7-held-out-evaluation-fails)).
+([Amendment 16](#amendment-16-2026-10-15-v7-held-out-evaluation-fails)); v8 was tuned in
+P5-15 ([Amendment 17](#amendment-17-2026-10-15-pipeline-version-v8-split-column-headers)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1165,3 +1166,29 @@ Owner decisions in session P5-14 (Amendment 15 item 9's evaluation). Record:
    of joined names. Which runtime is the evaluated one from now on (Pi or laptop CPU) is
    also the owner's call. The label-free scale run stays deferred to the Pi (Amendment 10
    item 5).
+
+## Amendment 17 (2026-10-15): pipeline version v8, split column headers
+
+Owner decision in session P5-15 (Amendment 16 item 4). Record (tuning numbers, not a §8
+evaluation): [2026-10-15-p5-pipeline-v8-tuning.md](../reviews/2026-10-15-p5-pipeline-v8-tuning.md).
+
+1. **One lever, owner's choice from the P5-14 cause analysis:** a column header printed one
+   label per block over rows that print each price in its own block ("each" "doz." over
+   "Fruit" "$1.60" "$17.60"; notes such as "(qty. 10)" between the prices) labels each price
+   by its column, as v5's header in one block does; the table holds at least two rows; a
+   description line is a sentence, not a name. Layout-generic. The repairs' variant check
+   reads the same labels.
+2. **New version:**
+   `…;prompt-v2.4;chunk-v2.3;segment-v2;repairs-v7;validator-v8;classifier-v2` (only the
+   validator changes; saved answers stay valid). On the five older sets no row changes; on
+   P5-14's 35 pages (now tuning pages) gold-row false reject 0.153 → 0.094 and catch 0.991 →
+   0.993, with item recall 0.883 and price accuracy 0.990 unchanged; on the four changed
+   pages every seeded corruption is caught and 0 of 230 wrong-column prices are accepted.
+3. **Not built:** a one-column label printed over a whole section (the group / header price
+   family), a size printed under its price, and the other P5-14 classes; each is the owner's
+   call at a later tuning session.
+4. **v8 is not cleared for extraction runs** until it passes §8 on a fresh held-out draw
+   from the laptop pass: seed 20261014, excluding P5-5's exclusions plus all 306 venues
+   labelled so far and their sites (Amendment 16 item 1), with Amendment 10's procedure and
+   Amendment 12's fixed strata, scored with the harness as amended in Amendment 15. The
+   label-free scale run stays deferred to the Pi (Amendment 10 item 5).

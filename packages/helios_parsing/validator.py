@@ -49,7 +49,9 @@ Checks:
    column header printed over a section's price columns ("16oz / 20oz /
    Pitcher" over "$8 / $9.95 / $24.95"); (v6) so are a fraction label
    ("$10.95/1/2lb") and a label printed on the line above its price in a stack
-   ("Small" "$6" "Large" "$10").
+   ("Small" "$6" "Large" "$10"); (v8) so is a column header printed one label per
+   block over rows that print each price in its own block ("each" "doz." over
+   "Fruit" "$1.60" "$17.60").
 4. **Sanity.** USD only; 0.10 <= amount <= 500; no duplicate (item, variant,
    price, section, name block) rows: a dish printed again in another inline menu is
    another placement (v4).
@@ -75,7 +77,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
-VALIDATOR_VERSION = "validator-v7"  # part of the pipeline version
+VALIDATOR_VERSION = "validator-v8"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})
@@ -345,6 +347,141 @@ def _heads_rows(blocks: list[Block], prices: list[list[PriceToken]], k: int, col
     return seen >= 2 * columns
 
 
+# (v8) a column header split over blocks: one label per block, over rows that print each
+# price in its own block ("each" "doz." over "Fruit" "$1.60" "$17.60" "Cream Cheese" ...)
+_ROW_NOTE = re.compile(r"\s*\([^()]*\)\s*|[\W_]*")  # "(qty. 10)", a spacer: inside a row
+SPLIT_LABEL_WORDS, SPLIT_LABEL_CHARS = 4, 24
+
+
+def _cell(block: Block, toks: list[PriceToken]) -> bool:
+    """One price and nothing else with a letter ("$1.60", "​$14.95")."""
+    if len(toks) != 1:
+        return False
+    return not _LETTER.search(block.text[: toks[0].start] + block.text[toks[0].end :])
+
+
+def _note(block: Block, toks: list[PriceToken]) -> bool:
+    return not toks and bool(_ROW_NOTE.fullmatch(block.text))
+
+
+def _header_cell(block: Block, toks: list[PriceToken]) -> bool:
+    """A short line with a letter and no price ("doz.", "Sushi · 1 pc", 'REGULAR 10"')."""
+    text = block.text.strip()
+    return (
+        not toks
+        and bool(_LETTER.search(text))
+        and len(text) <= SPLIT_LABEL_CHARS
+        and len(text.split()) <= SPLIT_LABEL_WORDS
+        and "," not in text
+    )
+
+
+def _description(block: Block, toks: list[PriceToken]) -> bool:
+    """A line printed between a row's name and its prices: a sentence or a long list
+    ("Apple, Apricot, Blueberry, Cherry, Lemon, Peach, Pineapple, Poppy Seed"), not a
+    name ("Omelet (Egg, Cheese, Tomato & Vegetables)")."""
+    text = block.text.strip()
+    return (
+        not toks
+        and not _note(block, toks)
+        and (len(text.split()) > 8 or text.endswith(".") or len(text) > 60)
+    )
+
+
+def _cells(blocks: list[Block], prices: list[list[PriceToken]], j: int) -> tuple[int, list[int]]:
+    """(the row's first block, notes included; its price cells) for the run of price
+    cells and notes holding block j."""
+    first = j
+    while first > 0 and (
+        _cell(blocks[first - 1], prices[first - 1]) or _note(blocks[first - 1], prices[first - 1])
+    ):
+        first -= 1
+    last = j
+    while last + 1 < len(blocks) and (
+        _cell(blocks[last + 1], prices[last + 1]) or _note(blocks[last + 1], prices[last + 1])
+    ):
+        last += 1
+    return first, [k for k in range(first, last + 1) if _cell(blocks[k], prices[k])]
+
+
+def _row_below(
+    blocks: list[Block], prices: list[list[PriceToken]], after: int, columns: int
+) -> bool:
+    """Another row of ``columns`` price cells starts after block ``after``: a name, lines
+    of description, then the cells."""
+    k = after + 1
+    while k < len(blocks) and _note(blocks[k], prices[k]):
+        k += 1
+    if k >= len(blocks) or prices[k] or not _LETTER.search(blocks[k].text):
+        return False
+    k += 1
+    while k < len(blocks) and _description(blocks[k], prices[k]):
+        k += 1
+    return (
+        k < len(blocks)
+        and _cell(blocks[k], prices[k])
+        and len(_cells(blocks, prices, k)[1]) == columns
+    )
+
+
+def _header_over(
+    blocks: list[Block], prices: list[list[PriceToken]], stretch: list[int], columns: int
+) -> list[int]:
+    """The header cells in the lines above a table's first row (header, name, then any
+    description lines), or [] when they don't end that way."""
+    for i in range(len(stretch) - 1, columns - 1, -1):
+        name = stretch[i]
+        if _description(blocks[name], prices[name]):
+            continue  # a description line under the name
+        header = stretch[i - columns : i]
+        return header if all(_header_cell(blocks[h], prices[h]) for h in header) else []
+    return []
+
+
+def split_column_label(blocks: list[Block], prices: list[list[PriceToken]], tok: PriceToken) -> str:
+    """(v8) The header over a price printed in its own block, in a table whose header
+    prints one label per block ("each" "doz." over "Fruit" "$1.60" "$17.60"), or "".
+
+    The price's row is a run of price cells (notes such as "(qty. 10)" between them).
+    Walking up, each earlier row (as many cells) is separated from the next by its
+    name and description lines; the first row's lines start with the header, as many
+    short label lines as the row has cells. Lines holding more than one name start a
+    new table. The table holds at least two rows (as v5's ``_heads_rows``).
+    """
+    j = tok.block_index
+    if not _cell(blocks[j], prices[j]):
+        return ""
+    top, cells = _cells(blocks, prices, j)
+    columns = len(cells)
+    if columns < 2:
+        return ""
+    column, rows, last_cell = cells.index(j), 1, cells[-1]
+    while True:
+        k = top - 1
+        while (
+            k >= 0 and not prices[k] and not _note(blocks[k], prices[k]) and top - k <= COLUMN_SCAN
+        ):
+            k -= 1
+        stretch = list(range(k + 1, top))  # name and description lines, or header first
+        if not stretch:
+            return ""
+        names = [b for b in stretch if not _description(blocks[b], prices[b])] or stretch[:1]
+        if (
+            len(names) == 1
+            and k >= 0
+            and (_cell(blocks[k], prices[k]) or _note(blocks[k], prices[k]))
+        ):
+            top, cells = _cells(blocks, prices, k)  # the previous row
+            if len(cells) != columns:
+                return ""
+            rows += 1
+            continue
+        header = _header_over(blocks, prices, stretch, columns)
+        if not header or (rows < 2 and not _row_below(blocks, prices, last_cell, columns)):
+            return ""
+        return blocks[header[column]].text.strip()
+
+
 _STACK_LABEL = re.compile(r"[^$|•/]{1,30}")  # "Small", "12oz.", "5 Wings", 'Whole Pie'
 
 
@@ -371,13 +508,18 @@ def stacked(blocks: list[Block], prices: list[list[PriceToken]], k: int) -> bool
 
 
 def label_tokens(blocks: list[Block], prices: list[list[PriceToken]], tok: PriceToken) -> set[str]:
-    """The words printed as one price's label: beside it, (v5) as its column header, or
-    (v6) on the line above it in a stack of labels and prices."""
+    """The words printed as one price's label: beside it, (v5) as its column header,
+    (v6) on the line above it in a stack of labels and prices, or (v8) as a column
+    header printed one label per block."""
     j = tok.block_index
     beside = price_label(blocks[j].text, prices[j], tok)
     if not beside and stacked(blocks, prices, j - 1):
         beside = blocks[j - 1].text
-    return set(norm_tokens(beside)) | set(norm_tokens(column_label(blocks, prices, tok)))
+    return (
+        set(norm_tokens(beside))
+        | set(norm_tokens(column_label(blocks, prices, tok)))
+        | set(norm_tokens(split_column_label(blocks, prices, tok)))
+    )
 
 
 def _variant_before(
