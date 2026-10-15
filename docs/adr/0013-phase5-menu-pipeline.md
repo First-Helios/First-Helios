@@ -31,6 +31,8 @@ and failed its held-out evaluation in P5-14 on the false-reject bar
 P5-15 ([Amendment 17](#amendment-17-2026-10-15-pipeline-version-v8-split-column-headers))
 and failed its held-out evaluation in P5-16 on the false-reject bar
 ([Amendment 18](#amendment-18-2026-10-15-v8-held-out-evaluation-fails)).
+[Amendment 19](#amendment-19-2026-10-15-proposed-false-reject-structure) (P5-17, a
+false-reject structure proposal) is **Proposed** and not in force.
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1227,3 +1229,75 @@ Owner decisions in session P5-16 (Amendment 17 item 4's evaluation). Record:
    alone in its block; one page's labels take variants from a "3/6" in the dish name, a label
    convention to settle. The "+$" add-on policy and the evaluated runtime (GPU or CPU) remain
    open. The label-free scale run stays deferred to the Pi (Amendment 10 item 5).
+
+## Amendment 19 (2026-10-15, Proposed): false-reject structure
+
+**Status: Proposed, awaiting owner review. Not in force; nothing below is built.** Session P5-17.
+Record: [2026-10-15-p5-false-reject-structure.md](../reviews/2026-10-15-p5-false-reject-structure.md).
+Asked first (owner): scope = structure, measurement and labels; keep vs omit = measure both,
+decide later; future evaluation runtime = the laptop GPU; single-price sections = measure and
+compare.
+
+**Why.** Three held-out draws in a row (P5-12 0.126, P5-14 0.153, P5-16 0.134) fail only the
+gold-row false-reject bar. Pooled over all 218 labelled pages under validator-v8, 96 % of the
+1,523 rejected gold rows are "no price match" downgrades. No layout class holds more than 15 %
+of them, and in each set the four worst pages hold 50–93 %. A per-layout lever per version
+doesn't carry to the next draw. At 35 pages the page-clustered interval (P5-16: [0.061,
+0.235]) is wider than any lever's effect.
+
+Proposed, each item the owner's to accept, change or reject:
+
+1. **Measurement (§8, before any next draw; the 0.12 bar unchanged).**
+   - (a) Every §8 record adds a page-clustered bootstrap interval beside Wilson; pass/fail
+     stays on the point estimate.
+   - (b) Two new recorded numbers: accepted rows that match no label, and real-output
+     wrong-price rows accepted.
+   - (c) Per-format and per-page FR tables.
+   - Owner options, not proposed as defaults: a 70-scorable-page held-out set, and gating
+     usable prices beside FR with a bar set from tuning data.
+2. **Labels (from the next draw only; recorded verdicts unchanged).**
+   - A variant encoded in a dish name ("3/6 Catfish … $9.95/$17.99") stays labelled; the
+     validator may ground a slash-joined number pair against the same-order price pair.
+   - A variant is a label printed with its price; inferred variants are corrected.
+   - A "+$" row is a modifier, not an item.
+   - Before any group-price resolver, the owner states whether a priced heading over a named
+     list prices each name.
+3. **Stage [5b] price resolution.** It runs after the validator, over its no-match downgrades
+   only (`price_not_grounded`, `variant_not_grounded`, `price_bound_to_other_item`,
+   `price_belongs_to_other_variant`, `addon_price`). Outcomes:
+   - **accept**, with the resolver's grounding span as price evidence;
+   - **keep unpriced**, today's downgrade and the default;
+   - **omit**, only if the owner chooses it, and then §8 item recall counts items stored.
+
+   The validator and the rows it accepts are unchanged.
+4. **[5b] contents, in order.**
+   - (a) Generic deterministic resolvers chosen per page by measured signals, never by site.
+     The first candidate is a section single-price rule (the section's price-only lines print
+     one amount, above the item, with no "from / starting at / choose / any N / combo"
+     wording).
+   - (b) A learned row classifier ("does this printed price belong to this item"), only after
+     it holds catch ≥ 0.97 and price accuracy ≥ 0.98 on every tuning set, leave-one-set-out,
+     with real-output wrong rows among its negatives.
+     - Its weights are checked in with a version in the pipeline version string, as with
+       `classifier-v2`.
+     - No runtime scikit-learn; it may reuse potion-base-8M, so no new model.
+     - It trains on tuning pages only, never on a future draw. Retraining on a scored draw
+       makes that draw tuning data.
+   - A second extractor call is not an acceptance authority. The same model confirming its
+     own reading is not grounding.
+5. **Keep rule for every resolver:**
+   - no tuning set worse on any §8 bar (Amendment 11's rule);
+   - the accepted-unmatched count is recorded per lever.
+6. **Before spending the next draw** (seed 20261015, exclusions sha256 `dd748ff5…`), the
+   version's pooled tuning FR should be near 0.05. On the measured curve, that passes a
+   35-page draw ~97 % of the time, versus 74 % at v8's pooled 0.096.
+
+Measured feasibility (the record has the full tables):
+
+| Option | Effect |
+|---|---|
+| Oracle second pass | FR 0.096 → 0.004; usable prices 0.780 → 0.818 |
+| Location rules | FR down to 0.04, but catch falls to 0.81–0.85 |
+| Section single-price rule | +20 gold rows at catch −0.002 |
+| Location-feature logistic classifier, leave-one-set-out | FR about halved, but catch broke on 3 of 7 sets (0.959–0.968) |
+| Omit with a perfect classifier | 240 labelled items lost (items stored 0.882 → 0.867) |
