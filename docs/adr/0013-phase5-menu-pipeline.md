@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–15.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–16.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -25,7 +25,9 @@ and failed its held-out evaluation in P5-10
 P5-11 ([Amendment 13](#amendment-13-2026-10-12-pipeline-version-v6-tuned-on-the-p5-10-pages))
 and failed its held-out evaluation in P5-12
 ([Amendment 14](#amendment-14-2026-10-13-v6-held-out-evaluation-fails)); v7 was tuned in
-P5-13, with wine lists put out of scope ([Amendment 15](#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages-wine-lists-out-of-scope)).
+P5-13, with wine lists put out of scope ([Amendment 15](#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages-wine-lists-out-of-scope)),
+and failed its held-out evaluation in P5-14 on the false-reject bar
+([Amendment 16](#amendment-16-2026-10-15-v7-held-out-evaluation-fails)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1123,3 +1125,43 @@ evaluation): [2026-10-14-p5-pipeline-v7-tuning.md](../reviews/2026-10-14-p5-pipe
    model change (another model of this size; a larger one is not feasible on the Pi) needs
    its own amendment (Amendment 9 item 3). The label-free scale run stays deferred to the Pi
    (Amendment 10 item 5).
+
+## Amendment 16 (2026-10-15): v7 held-out evaluation fails
+
+Owner decisions in session P5-14 (Amendment 15 item 9's evaluation). Record:
+[2026-10-15-p5-v7-held-out-evaluation.md](../reviews/2026-10-15-p5-v7-held-out-evaluation.md).
+
+1. **v7 fails §8** on 35 static own-site pages drawn from the laptop pass (seed
+   20261013; P5-5's exclusions plus the 234 venues labelled in P5-5, P5-8, P5-10 and P5-12
+   and their sites; quotas by page size with the fixed cutoffs: 14 small, 14 medium, 7
+   large), scored with the harness as amended in Amendment 15: price accuracy **0.990**,
+   item recall **0.883** (the first held-out pass of the recall bar), corruption catch
+   **0.991**, false reject on gold rows **0.153** (bar ≤ 0.12); usable prices 0.786. The
+   wine scope left 140 labelled items (222 prices) on 6 held-out pages unscored. Per §8 v7
+   is not cleared for extraction runs; these 35 pages are now tuning pages; the next
+   version is scored on another fresh draw from the laptop pass: seed **20261014**,
+   excluding P5-5's exclusions plus **all 306 venues labelled so far** (P5-5 18, P5-8 72,
+   P5-10 72, P5-12 72, P5-14 72) and their sites (`next-draw-exclusions-p5-15.json`,
+   sha256 `b4ba244f4abc399d776efc18d527abb643d7aa1da0901abd740b8a401b80b9ab`).
+2. **The model ran on the Pi** (owner, this session): the pinned CPU `llama-server` image
+   with the Compose service's flags on the A76 cores, outside the deployed Compose
+   project, reached from the laptop's extract CLI over ssh; the disposable clone and the
+   laptop pass's bundles stayed on the laptop. Item recall and price accuracy are Pi
+   numbers (the Pi's greedy answers differ from the laptop's); gold-row false reject and
+   catch do not depend on the host. 4.8 pages/h model time. This is not the pending
+   `llama-server` Pi image check (no comparison with the spike's build).
+3. **Blinded adjudication skipped** (Amendment 10 item 2; owner: only when margins are
+   small): of the 425 rejected gold rows only 75 belong to items the packet would show,
+   and removing all of them leaves gold-row false reject at 0.130; label changes can only
+   raise recall. The C-row fix Amendment 14 item 2 asked for (list what is labelled within
+   2 blocks of the claimed block) is built for the next adjudication.
+4. **Direction for the next version** (from the findings, for the owner to decide at
+   tuning): the failing bar is validator-side. Half the rejected gold rows (210) are
+   variants the validator cannot ground, 174 of them labels printed once as a column or
+   table header over the prices ("each" / "doz.", "Sushi · 1 pc" / "Sashimi · 3 pc", a
+   size header row); without those rejects gold-row false reject would be 0.077. The rest
+   are prices applied from a group heading several blocks up, names that hold a number,
+   a bare integer before a mark, pipe-separated inline rows and one price closing a list
+   of joined names. Which runtime is the evaluated one from now on (Pi or laptop CPU) is
+   also the owner's call. The label-free scale run stays deferred to the Pi (Amendment 10
+   item 5).
