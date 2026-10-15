@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–18.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–19.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -31,6 +31,8 @@ and failed its held-out evaluation in P5-14 on the false-reject bar
 P5-15 ([Amendment 17](#amendment-17-2026-10-15-pipeline-version-v8-split-column-headers))
 and failed its held-out evaluation in P5-16 on the false-reject bar
 ([Amendment 18](#amendment-18-2026-10-15-v8-held-out-evaluation-fails)).
+The false-reject structure was assessed in P5-17, with production constraints set by the owner
+([Amendment 19](#amendment-19-2026-10-15-false-reject-structure-and-production-constraints)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1227,3 +1229,94 @@ Owner decisions in session P5-16 (Amendment 17 item 4's evaluation). Record:
    alone in its block; one page's labels take variants from a "3/6" in the dish name, a label
    convention to settle. The "+$" add-on policy and the evaluated runtime (GPU or CPU) remain
    open. The label-free scale run stays deferred to the Pi (Amendment 10 item 5).
+
+## Amendment 19 (2026-10-15): false-reject structure and production constraints
+
+Owner decisions in session P5-17, after a production review of the proposals. Record:
+[2026-10-15-p5-false-reject-structure.md](../reviews/2026-10-15-p5-false-reject-structure.md).
+Asked first: scope = structure, measurement and labels; keep vs omit = measure both, decide
+later; future evaluation runtime = the laptop GPU; single-price sections = measure and compare.
+**Decided, not built:** every item below that changes the pipeline or the harness is built in a
+later session under its own keep rule.
+
+**Why.** Three held-out draws in a row (P5-12 0.126, P5-14 0.153, P5-16 0.134) fail only the
+gold-row false-reject bar. Pooled over all 218 labelled pages under validator-v8, 96 % of the
+1,523 rejected gold rows are "no price match" downgrades. No layout class holds more than 15 %
+of them, and in each set the four worst pages hold 50–93 %. A per-layout lever per version
+doesn't carry to the next draw. At 35 pages the page-clustered interval (P5-16: [0.061,
+0.235]) is wider than any lever's effect.
+
+**Production constraint (owner).** Production has no labels, so nothing checks a decision the
+runtime makes:
+- what the validator (or any later stage) accepts is stored as a true price, with §6's
+  constant confidence (`PRICE_CONFIDENCE` 0.98, itself a §8 claim);
+- an error surfaces only at the monthly spot check, or never.
+
+The validator does run in production, but it can't be leaned on as a safety net. On real
+output it catches 0.595 of wrong rows (0.994 of injected ones), and it lets 1,189 priced rows
+that match no label through (8 % of accepted rows). Every decision below is therefore judged by
+what it stores without labels, not by the gold-row FR alone.
+
+1. **Measurement (§8; the 0.12 FR bar unchanged).**
+   - (a) Every §8 record adds a page-clustered bootstrap interval beside Wilson. Pass/fail stays
+     on the point estimate.
+   - (b) Every §8 record and tuning record adds two numbers: **accepted rows that match no
+     label** and **real-output wrong-price rows accepted**.
+   - (c) Every §8 record and tuning record adds per-format and per-page FR tables.
+   - (d) Usable prices are recorded now. Their bar is set from tuning data at the next tuning
+     session, before any next draw, and gated from the next §8 evaluation. They measure what
+     production stores.
+   - (e) Held-out size stays at 35 scorable pages. A 70-page set is revisited once a version
+     reads near the target in item 7.
+2. **Labels** (from the next draw; recorded verdicts unchanged; tuning labels corrected when a
+   set is next touched):
+   - (a) a size count encoded in a dish name ("3/6 Catfish … $9.95/$17.99") stays labelled as
+     variants "3" / "6";
+   - (b) a variant is a label printed with its price, never inferred;
+   - (c) a "+$" row is a modifier, not an item;
+   - (d) one price printed over a list of names prices each name when the entries are named
+     dishes (distinct names, often with their own description line); when the entries are
+     options of one dish (flavours, fillings, under "choose" / "any N"), they are one item.
+3. **Stage [5b] price resolution.** It runs after the validator, over its no-match downgrades
+   only (`price_not_grounded`, `variant_not_grounded`, `price_bound_to_other_item`,
+   `price_belongs_to_other_variant`, `addon_price`). The validator and the rows it accepts are
+   unchanged.
+   - Production constraints:
+     - **no printed price, no accept:** every accept cites the printed span of its price as
+       Evidence, as today's accepts do;
+     - **its own price confidence**, lower than `PRICE_CONFIDENCE`, and its own reason, so
+       downstream can rank or filter it and a later version can re-interpret it;
+     - **refuse by default.**
+   - When [5b] rejects a row, the item is **kept unpriced** (today's downgrade). Omit is not
+     adopted: it would lose items silently in production.
+4. **[5b] contents: generic deterministic resolvers only**, chosen per page by measured
+   signals, never by site.
+   - The first is a section single-price rule:
+     - the section's price-only lines all print one amount, above the item;
+     - no "from / starting at / choose / any N / combo" wording on that line or the heading;
+     - the row's name is a dish title, not a sentence.
+   - Item 2(a)'s name-encoded variants are grounded by a generic rule, in the validator or
+     [5b]: a slash-joined number pair in a name grounds the same-order price pair.
+5. **Keep rule for every [5b] resolver and validator lever:**
+   - no tuning set worse on any §8 bar (Amendment 11's rule);
+   - **no rise in accepted rows that match no label**, gated, not only recorded.
+6. **Not adopted:**
+   - a learned row classifier. In production it would fail silently on new layouts, which are
+     where the rejects concentrate, with no runtime signal. It is revisited only with a
+     label-free drift monitor in place and its own amendment;
+   - a second extractor call as an acceptance authority. The same model confirming its own
+     reading is not grounding.
+7. **Next draw** (seed 20261015, exclusions sha256 `dd748ff5…`) only when the version, on every
+   tuning set:
+   - reads a pooled gold-row FR near **0.05**;
+   - holds price accuracy;
+   - shows no rise in wrong rows accepted or in accepted rows matching no label.
+
+   On the measured curve, 0.05 passes a 35-page draw ~97 % of the time, versus 74 % at v8's
+   0.096. Lowering FR by accepting more is the production risk, so the other conditions bind
+   too.
+8. **Production monitoring** (recorded, no new dependency):
+   - (a) the monthly spot check (Amendment 3) oversamples [5b] accepts and flagged pages, so
+     their production error is measured;
+   - (b) each extraction run records per-page shares of downgraded, [5b]-accepted and flagged
+     rows, and lists pages outside the tuning sets' range for review.

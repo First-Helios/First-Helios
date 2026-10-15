@@ -322,10 +322,15 @@ This section is the single current-status page. Other docs link here.
   held-out evaluation on 35 fresh pages (2026-10-15,
   [record](./docs/reviews/2026-10-15-p5-v8-held-out-evaluation.md), Amendment 18: item recall
   0.905 passes, gold-row false reject 0.134 misses); those pages are now tuning pages too.
+  P5-17 ([record](./docs/reviews/2026-10-15-p5-false-reject-structure.md), Amendment 19)
+  decided the next version's structure (a deterministic [5b] price-resolution stage), new
+  recorded and gated numbers, and when the next draw is spent.
   Opens when all hold:
   - [ ] a new pipeline version (v9 is next) passes §8 on a fresh held-out draw from
     the laptop pass (seed 20261015; all 378 venues labelled in P5-5 to P5-16 and their
-    sites excluded);
+    sites excluded). That draw is spent only once v9 reads near 0.05 pooled gold-row FR on
+    the tuning sets, with price accuracy held and no rise in wrong or unmatched accepted
+    rows (Amendment 19 item 7);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
@@ -554,7 +559,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
 | [0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) | Provenance endpoints vs identity match keys | Accepted |
 | [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
-| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted (Amendments 1–13) |
+| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted (Amendments 1–19) |
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1) |
 | [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
