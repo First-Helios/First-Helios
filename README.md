@@ -92,7 +92,7 @@ This section is the single current-status page. Other docs link here.
 - **Menu parsing stages** (ADR-0013 slice 2): `packages/helios_parsing/`.
   Pure functions, called by the page classifier, `menu-page` Bronze and extraction (below): the segmented-text hash
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
-  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v7`: per-row
+  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v8`: per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
   chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and
@@ -190,6 +190,12 @@ This section is the single current-status page. Other docs link here.
   gold-row false reject 0.153 misses (mostly variant labels printed once as a column
   header, which the validator can't ground). Adjudication was skipped: no label change
   could reach that verdict.
+  Pipeline version v8 (`validator-v8`; ADR-0013
+  [Amendment 17](./docs/adr/0013-phase5-menu-pipeline.md#amendment-17-2026-10-15-pipeline-version-v8-split-column-headers))
+  reads a column header printed one label per block ("each" "doz." over each row's prices):
+  P5-14's gold-row false reject 0.153 → 0.094, catch 0.993, no row changed on the older
+  tuning sets ([record](./docs/reviews/2026-10-15-p5-pipeline-v8-tuning.md); tuning numbers,
+  not a §8 evaluation).
   A page-classifier audit
   ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
   demonstrated gap against the §8 classifier bar (draw precision 0.932
@@ -306,9 +312,10 @@ This section is the single current-status page. Other docs link here.
   0.115) and fails its held-out evaluation on 35 fresh pages (2026-10-15,
   [record](./docs/reviews/2026-10-15-p5-v7-held-out-evaluation.md), Amendment 16: item
   recall 0.883 passes, gold-row false reject 0.153 misses); those pages are now tuning
-  pages too.
+  pages too. Version v8 is tuned on them ([record](./docs/reviews/2026-10-15-p5-pipeline-v8-tuning.md),
+  Amendment 17: split column headers; P5-14 gold-row false reject 0.094).
   Opens when all hold:
-  - [ ] a new pipeline version (v8 is next) passes §8 on a fresh held-out draw from
+  - [ ] a new pipeline version (v8 is the candidate) passes §8 on a fresh held-out draw from
     the laptop pass (seed 20261014; all 306 venues labelled in P5-5, P5-8, P5-10, P5-12
     and P5-14 and their sites excluded);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005

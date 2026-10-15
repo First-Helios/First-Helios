@@ -528,3 +528,65 @@ def test_v7_a_one_decimal_price_on_a_bare_price_page() -> None:
     # a page that marks its prices: an unmarked one-decimal is still no price
     marked = "<p>Latte</p><p>6.5</p><p>Mocha</p><p>$6</p><p>Tea</p><p>$3</p><p>Soda</p><p>$2</p>"
     assert _decide([Row("Latte", "6.5")], marked) == ["downgrade"]
+
+
+SPLIT_HEADER = """
+<h2>Sweet Kolaches</h2><h3>each</h3><h3>doz.</h3>
+<p>Fruit</p><p>Apple, Apricot, Blueberry, Cherry, Lemon, Peach, Pineapple, Poppy Seed</p>
+<p>$1.60</p><p>$17.60</p>
+<p>Bacon, Egg & Cheese</p><p>$4.00</p><p>$44.00</p>
+<p>Omelet (Egg, Cheese, Tomato & Vegetables)</p><p>$4.25</p><p>$46.75</p>
+<h2>Pizza</h2><p>PIZZA SIZE</p><p>REGULAR 10"</p><p>LARGE 14"</p><p>X-LARGE 16"</p>
+<p>CHEESE PIZZA</p><p>$10.95</p><p>$14.95</p><p>&#8203;$16.95</p>
+<p>PER TOPPING</p><p>$0.95</p><p>$1.95</p><p>$2.25</p>
+<h2>Pasta Add-ons</h2><p>Item</p><p>Half Tray</p><p>Full Tray</p>
+<p>Chicken</p><p>$18</p><p>(qty. 10)</p><p>$36</p><p>(qty. 20)</p>
+<p>Meatballs</p><p>$26</p><p>(qty. 10)</p><p>$52</p><p>(qty. 20)</p>
+"""
+
+
+def test_v8_a_column_header_printed_one_label_per_block() -> None:
+    rows = [
+        Row("Fruit", "1.60", variant="each"),  # a description line under the name
+        Row("Fruit", "17.60", variant="doz."),
+        Row("Bacon, Egg & Cheese", "44.00", variant="doz."),  # a name with a comma
+        Row("Omelet (Egg, Cheese, Tomato & Vegetables)", "4.25", variant="each"),
+        Row("CHEESE PIZZA", "14.95", variant='LARGE 14"'),
+        Row("CHEESE PIZZA", "16.95", variant='X-LARGE 16"'),  # a zero-width space
+        Row("PER TOPPING", "0.95", variant='REGULAR 10"'),
+        Row("Chicken", "36", variant="Full Tray"),  # notes between the cells
+        Row("Meatballs", "26", variant="Half Tray"),
+    ]
+    assert _decide(rows, SPLIT_HEADER) == ["accept"] * len(rows)
+
+
+def test_v8_a_split_column_header_catches_swapped_variants() -> None:
+    rows = [
+        Row("Fruit", "17.60", variant="each"),
+        Row("Bacon, Egg & Cheese", "4.00", variant="doz."),
+        Row("CHEESE PIZZA", "10.95", variant='LARGE 14"'),
+        Row("Meatballs", "52", variant="Half Tray"),
+    ]
+    assert _decide(rows, SPLIT_HEADER) == ["downgrade"] * len(rows)
+
+
+def test_v8_labels_over_a_single_row_or_per_item_are_no_split_header() -> None:
+    one_row = "<p>Size</p><p>Small</p><p>Large</p><p>Cheese Pizza</p><p>$10</p><p>$14</p>"
+    assert _decide([Row("Cheese Pizza", "14", variant="Large")], one_row) == ["downgrade"]
+    # each item prints its own labels: no table header above the first row's name
+    per_item = (
+        "<p>Pizza</p><p>Small</p><p>Large</p><p>$10</p><p>$14</p>"
+        "<p>Pasta</p><p>Small</p><p>Large</p><p>$9</p><p>$12</p>"
+    )
+    assert _decide([Row("Pasta", "9", variant="Large")], per_item) == ["downgrade"]
+
+
+def test_v8_a_second_table_reads_its_own_split_header() -> None:
+    html = (
+        "<p>Fruit Kolaches</p><p>each</p><p>doz.</p>"
+        "<p>Peach</p><p>$1.60</p><p>$17.60</p><p>Cherry</p><p>$1.60</p><p>$17.60</p>"
+        "<p>Party Trays</p><p>Half</p><p>Full</p>"
+        "<p>Wings</p><p>$40</p><p>$75</p><p>Tenders</p><p>$35</p><p>$65</p>"
+    )
+    rows = [Row("Tenders", "65", variant="Full"), Row("Tenders", "35", variant="each")]
+    assert _decide(rows, html) == ["accept", "downgrade"]
