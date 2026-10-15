@@ -607,10 +607,18 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   pre-treatment and a stronger retry rejected. Every tuning set clears the four bars
   (P5-10: item recall 0.868, gold-row false reject 0.087); dev check item recall 0.865,
   false reject 0.115 (tuning
-  numbers, not §8; [record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md)). Next: score v7 on a fresh draw
-  (seed 20261013, all 234 labelled venues and their sites excluded), then the laptop
-  extraction pass; the label-free scale run moves to the Pi. If recall fails again, a
-  same-size model screen needs its own ADR-0013 amendment first.
+  numbers, not §8; [record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md)).
+- *Evaluated (P5-14, [Amendment 16](./docs/adr/0013-phase5-menu-pipeline.md#amendment-16-2026-10-15-v7-held-out-evaluation-fails)):*
+  v7 on 35 fresh pages (seed 20261013, size-stratified, the model on the Pi) **fails
+  §8 on the false-reject bar**: price accuracy 0.990, item recall 0.883 (first held-out
+  pass) and catch 0.991 pass; gold-row false reject 0.153 misses (variant labels printed
+  once as a column header, which the validator can't ground, are half of it);
+  adjudication skipped (no label change could reach the verdict)
+  ([record](./docs/reviews/2026-10-15-p5-v7-held-out-evaluation.md)). Next: a v8
+  tuning session (its direction is the owner's call; the failing bar is validator-side),
+  scored on a fresh draw (seed 20261014, all 306 labelled venues
+  and their sites excluded), then the laptop extraction pass; the label-free scale run
+  moves to the Pi.
 - *Audited (2026-10-12, [classifier gap audit](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)):*
   `classifier-v2` gates the extraction queue at fetch (`due_pages` doesn't re-check);
   precision on the held-out draws is 151/162 = 0.932 [0.883, 0.962], no demonstrated

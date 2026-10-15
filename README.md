@@ -183,7 +183,13 @@ This section is the single current-status page. Other docs link here.
   harness ignores a leading menu number when matching names. Prompt naming rules,
   chunking pre-treatment and a stronger retry were tried and rejected. Every tuning set
   and the dev check clear the four bars (dev: item recall 0.865, gold-row false reject
-  0.115; tuning numbers, not a §8 evaluation).
+  0.115; tuning numbers, not a §8 evaluation). Its held-out evaluation on 35 fresh pages
+  ([record](./docs/reviews/2026-10-15-p5-v7-held-out-evaluation.md), Amendment 16; the
+  model on the Pi, owner's choice) **fails §8 on the false-reject bar**: price accuracy
+  0.990, item recall 0.883 (the first held-out pass of that bar) and catch 0.991 pass;
+  gold-row false reject 0.153 misses (mostly variant labels printed once as a column
+  header, which the validator can't ground). Adjudication was skipped: no label change
+  could reach that verdict.
   A page-classifier audit
   ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
   demonstrated gap against the §8 classifier bar (draw precision 0.932
@@ -297,11 +303,14 @@ This section is the single current-status page. Other docs link here.
   recall 0.821, gold-row false reject 0.126); those pages are now tuning pages too.
   Version v7 is tuned with them held out as a dev check ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md),
   Amendment 15, wine lists out of scope: dev item recall 0.865, gold-row false reject
-  0.115).
+  0.115) and fails its held-out evaluation on 35 fresh pages (2026-10-15,
+  [record](./docs/reviews/2026-10-15-p5-v7-held-out-evaluation.md), Amendment 16: item
+  recall 0.883 passes, gold-row false reject 0.153 misses); those pages are now tuning
+  pages too.
   Opens when all hold:
-  - [ ] a new pipeline version (v7 is next) passes §8 on a fresh held-out draw from
-    the laptop pass (seed 20261013; all 234 venues labelled in P5-5, P5-8, P5-10 and
-    P5-12 and their sites excluded);
+  - [ ] a new pipeline version (v8 is next) passes §8 on a fresh held-out draw from
+    the laptop pass (seed 20261014; all 306 venues labelled in P5-5, P5-8, P5-10, P5-12
+    and P5-14 and their sites excluded);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
