@@ -1,6 +1,6 @@
 # ADR-0013: Phase 5 menu pipeline — page classifier, on-device LLM extraction, validator
 
-**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–17.
+**Status:** Accepted 2026-09-29 (owner, session P5-0), as amended by Amendments 1–18.
 The page classifier parts were accepted earlier the same day (session S6d;
 [Amendment 1](#amendment-1-2026-09-29-page-classifier-accepted-early-rendering-decision)).
 Rendering for discovery was built in session S6f and open question 3 decided
@@ -28,7 +28,9 @@ and failed its held-out evaluation in P5-12
 P5-13, with wine lists put out of scope ([Amendment 15](#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages-wine-lists-out-of-scope)),
 and failed its held-out evaluation in P5-14 on the false-reject bar
 ([Amendment 16](#amendment-16-2026-10-15-v7-held-out-evaluation-fails)); v8 was tuned in
-P5-15 ([Amendment 17](#amendment-17-2026-10-15-pipeline-version-v8-split-column-headers)).
+P5-15 ([Amendment 17](#amendment-17-2026-10-15-pipeline-version-v8-split-column-headers))
+and failed its held-out evaluation in P5-16 on the false-reject bar
+([Amendment 18](#amendment-18-2026-10-15-v8-held-out-evaluation-fails)).
 **Date:** 2026-09-28
 **Phase:** 5 (absorbs the menu-reading parts of ROADMAP Phases 3 and 6)
 **Decides for:** owner decision G.b ("Phase 5 menu processing uses the spike's
@@ -1192,3 +1194,36 @@ evaluation): [2026-10-15-p5-pipeline-v8-tuning.md](../reviews/2026-10-15-p5-pipe
    labelled so far and their sites (Amendment 16 item 1), with Amendment 10's procedure and
    Amendment 12's fixed strata, scored with the harness as amended in Amendment 15. The
    label-free scale run stays deferred to the Pi (Amendment 10 item 5).
+
+## Amendment 18 (2026-10-15): v8 held-out evaluation fails
+
+Owner decisions in session P5-16 (Amendment 17 item 4's evaluation). Record:
+[2026-10-15-p5-v8-held-out-evaluation.md](../reviews/2026-10-15-p5-v8-held-out-evaluation.md).
+
+1. **v8 fails §8** (commit `43d4482`, PR #87 unmerged, evaluated as it stands at the owner's
+   choice) on 35 static own-site pages drawn from the laptop pass (seed 20261014; P5-5's
+   exclusions plus the 306 venues labelled in P5-5 to P5-14 and their sites; quotas 14 / 14 /
+   7 with the fixed cutoffs), scored with the harness as amended in Amendment 15: price
+   accuracy **0.990**, item recall **0.905**, corruption catch **0.992**, false reject on gold
+   rows **0.134** (bar ≤ 0.12); usable prices 0.790. Per §8 v8 is not cleared for extraction
+   runs; these 35 pages are now tuning pages; the next version is scored on another fresh
+   draw: seed **20261015**, excluding P5-5's exclusions plus **all 378 venues labelled so far**
+   and their sites (`next-draw-exclusions-p5-17.json`, sha256
+   `dd748ff55c3b2987506997200029d8b6ead8caff92278943081e2c56dd167c9b`).
+2. **The model ran on the laptop GPU** (owner): the pinned CUDA image of the same llama.cpp
+   build, P5-13's GPU flags (flash attention off, f16 KV cache) with the CPU service's 2 slots
+   and context, 136 pages/h. Not the production runtime (Amendment 15 item 7) and not
+   repeatable run to run: item recall and price accuracy are GPU numbers; gold-row false
+   reject and catch do not depend on the runtime.
+3. **Blinded adjudication run** (Amendment 10 item 2): 73 rejected gold rows sat on items the
+   packet shows, enough in principle to reach the bar. The adjudicators upheld the labels (all
+   157 B rows, 57 of 59 D rows); their only label changes (2 rows: a "(loaded $1)" price) await
+   the owner and leave the verdict unchanged (0.134). 42 C answers named wines already
+   labelled out of scope: a later packet lists out-of-scope labels in its nearby list too.
+4. **Direction for the next version** (for the owner at tuning): v8's lever changed one page of
+   this draw (v7's validator: 0.137). The false rejects sit on layouts left open after P5-14 (a
+   group price over a list of dishes, a unit printed after its price, two prices on one
+   bare-price line, an unpriced gallery before a priced table) plus a currency sign printed
+   alone in its block; one page's labels take variants from a "3/6" in the dish name, a label
+   convention to settle. The "+$" add-on policy and the evaluated runtime (GPU or CPU) remain
+   open. The label-free scale run stays deferred to the Pi (Amendment 10 item 5).

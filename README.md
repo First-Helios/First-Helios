@@ -195,7 +195,12 @@ This section is the single current-status page. Other docs link here.
   reads a column header printed one label per block ("each" "doz." over each row's prices):
   P5-14's gold-row false reject 0.153 → 0.094, catch 0.993, no row changed on the older
   tuning sets ([record](./docs/reviews/2026-10-15-p5-pipeline-v8-tuning.md); tuning numbers,
-  not a §8 evaluation).
+  not a §8 evaluation). Its held-out evaluation on 35 fresh pages
+  ([record](./docs/reviews/2026-10-15-p5-v8-held-out-evaluation.md), Amendment 18; the model
+  on the laptop GPU, owner's choice) **fails §8 on the false-reject bar**: price accuracy
+  0.990, item recall 0.905 and catch 0.992 pass; gold-row false reject 0.134 misses (a group
+  price over a list, a unit after its price, a currency sign alone in its block). A blinded
+  adjudication upheld the labels.
   A page-classifier audit
   ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
   demonstrated gap against the §8 classifier bar (draw precision 0.932
@@ -313,11 +318,14 @@ This section is the single current-status page. Other docs link here.
   [record](./docs/reviews/2026-10-15-p5-v7-held-out-evaluation.md), Amendment 16: item
   recall 0.883 passes, gold-row false reject 0.153 misses); those pages are now tuning
   pages too. Version v8 is tuned on them ([record](./docs/reviews/2026-10-15-p5-pipeline-v8-tuning.md),
-  Amendment 17: split column headers; P5-14 gold-row false reject 0.094).
+  Amendment 17: split column headers; P5-14 gold-row false reject 0.094) and fails its
+  held-out evaluation on 35 fresh pages (2026-10-15,
+  [record](./docs/reviews/2026-10-15-p5-v8-held-out-evaluation.md), Amendment 18: item recall
+  0.905 passes, gold-row false reject 0.134 misses); those pages are now tuning pages too.
   Opens when all hold:
-  - [ ] a new pipeline version (v8 is the candidate) passes §8 on a fresh held-out draw from
-    the laptop pass (seed 20261014; all 306 venues labelled in P5-5, P5-8, P5-10, P5-12
-    and P5-14 and their sites excluded);
+  - [ ] a new pipeline version (v9 is next) passes §8 on a fresh held-out draw from
+    the laptop pass (seed 20261015; all 378 venues labelled in P5-5 to P5-16 and their
+    sites excluded);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
