@@ -3,11 +3,11 @@
 Session P5-17, 2026-10-15. Since recall started passing, three held-out evaluations in a row
 have failed only on the validator's gold-row false-reject (FR) bar: P5-12 v6 **0.126**, P5-14
 v7 **0.153**, P5-16 v8 **0.134** (bar ≤ 0.12). This session asks whether the problem is in the
-pipeline's structure, in how §8 measures it, or in the labels, and it proposes a structural
-change for the owner to review. **Proposal only:** no pipeline, harness, schema, dependency or
-`infra/` change, no model run and no held-out draw. The proposal is
-[ADR-0013 Amendment 19](../adr/0013-phase5-menu-pipeline.md#amendment-19-2026-10-15-proposed-false-reject-structure),
-marked **Proposed**.
+pipeline's structure, in how §8 measures it, or in the labels. The owner accepted the
+proposals after a production review that revised them (the last section). The decisions are
+[ADR-0013 Amendment 19](../adr/0013-phase5-menu-pipeline.md#amendment-19-2026-10-15-false-reject-structure-and-production-constraints).
+**Assessment and decisions only:** no pipeline, harness, schema, dependency or `infra/` change,
+no model run and no held-out draw.
 
 Code under test: `main` at `9f334ae` (PR #87 validator-v8 and PR #88 P5-16 record merged),
 pipeline version
@@ -58,13 +58,16 @@ counts and rates only.
    **0.119**. That is not a reason to change P5-16's recorded verdict. The conventions need
    settling before the next draw, on their merits.
 
-**Recommendation:** split the change into three decisions, in this order. First, fix the
-measurement: page-clustered intervals, a 70-page held-out set, and two new recorded numbers.
-Second, decide the label conventions. Third, add a second-pass stage **[5b] price resolution**
-that only sees no-match downgrades and keeps rejected rows unpriced. It starts with generic
-deterministic resolvers. A learned row classifier is added only after it holds catch ≥ 0.97 on
-every tuning set, leave-one-set-out, with real-output wrong rows as negatives. Don't spend the
-next draw (seed 20261015) until the tuning sets read near 0.05 pooled.
+**Decided (owner, after the production review below):**
+1. Measurement first: page-clustered intervals; two new numbers (accepted rows matching no
+   label, real wrong rows accepted); usable prices gated from the next evaluation.
+2. The label conventions.
+3. A second-pass stage **[5b] price resolution** over no-match downgrades. It is
+   deterministic only, every accept cites its printed price, it has its own lower confidence,
+   and rejected rows stay unpriced.
+4. **No learned classifier.**
+5. The next draw (seed 20261015) waits until the tuning sets read near 0.05 pooled, with no
+   rise in wrong or unmatched accepted rows.
 
 ## 1. Structure: where the rejects are and what a second pass could do
 
@@ -375,6 +378,10 @@ prices each name.
 
 ## 5. Recommendation
 
+*As first proposed. Revised by the owner's production review (last section): the learned
+classifier (3b) is dropped, [5b] accepts need a printed span and their own confidence, and
+accepted rows matching no label become a gate.*
+
 1. **Measurement first (owner, before any draw):** M1 page-clustered interval, M5 the two new
    numbers, M3 per-format/per-page tables; M2 (70 pages) and M4 (usable prices) are the owner's
    call. The FR bar stays at 0.12.
@@ -400,7 +407,31 @@ prices each name.
    held on every set. On the curve above, that passes a 35-page draw about 97 % of the time.
    Below that, another draw mostly measures luck and uses up the pool.
 
+## Production review and owner decisions
+
+**Owner (after reading §1–§5):** production has no labels, so everything the runtime accepts is
+assumed correct, and the design can't lean on a validator.
+
+The validator does run in production (`apps/menu_pipeline/extraction.py`, before Menu writes,
+label-free). But nothing checks its decisions, and every accepted price is stored with
+`PRICE_CONFIDENCE` 0.98 (`menu_writes.py`). On real output it catches 0.595 of wrong rows, and
+1,189 accepted priced rows (8 %) match no label: their quality is unknown, and §8 doesn't
+count them. Read that way:
+
+| Proposal (§5) | Revision after the production review |
+|---|---|
+| Measurement M1–M5 | Kept. **M4 and M5 move up:** they are the production-faithful numbers. Usable prices get a bar from tuning data before the next draw. Gold-row FR (perfect input, which production never has) stays a bar, but not the only target |
+| M2 70 pages | Stays at 35 for now; revisited near the item-7 target |
+| Labels L1–L4 | Kept. Conventions define what production should output, not only how it is scored. L4 is stated as a structural rule (named dishes are each priced; options of one dish are one item) |
+| [5b] stage | Kept, with production constraints: no printed span, no accept; its own lower confidence and reason; refuse by default |
+| Keep vs omit | **Keep.** Omit is a silent loss in production |
+| Deterministic resolvers | Kept, with a dish-title name guard. **Accepted rows matching no label become a gate**, not a recorded number: the section rule's +101 such rows would be stored unchecked |
+| Learned row classifier | **Dropped.** It would fail silently on the new layouts where rejects concentrate, with no runtime drift signal |
+| Second model call | Not adopted |
+| Next-draw target | Pooled FR near 0.05 **and** price accuracy held **and** no rise in wrong or unmatched accepted rows, on every tuning set |
+| New | The monthly spot check oversamples [5b] accepts and flagged pages; each run records per-page shares of downgraded, [5b]-accepted and flagged rows and lists pages outside the tuning range |
+
 ## Doc drift noticed
 
-ROADMAP Phase 5's header says "ADR-0013 … (Amendments 1–13)"; the ADR is at Amendment 18
-(19 proposed). Not changed here: no decision is recorded in this session.
+ROADMAP Phase 5's header said "ADR-0013 … (Amendments 1–13)" and README's ADR table
+"Accepted (Amendments 1–13)"; both are updated to 1–19 with this record.

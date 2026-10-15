@@ -518,7 +518,7 @@ website/menu-URL coverage is measured and written down. Gate state:
 ### Phase 5 — Menu Pipeline: fetch, classify, extract, validate
 
 > Defined by [ADR-0013](./docs/adr/0013-phase5-menu-pipeline.md), accepted
-> 2026-09-29 (Amendments 1–13). It replaces this
+> 2026-09-29 (Amendments 1–19). It replaces this
 > phase's earlier "Scrapy vs Crawlee spikes, then a scraper-framework ADR"
 > plan (owner decision G.b), on the evidence of the
 > [menu-model spike](./docs/spikes/menu-model/README.md).
@@ -624,10 +624,23 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   v8 on 35 fresh pages (seed 20261014, size-stratified, the model on the laptop GPU)
   **fails §8 on the false-reject bar**: price accuracy 0.990, item recall 0.905 and catch
   0.992 pass; gold-row false reject 0.134 misses; a blinded adjudication upheld the labels
-  ([record](./docs/reviews/2026-10-15-p5-v8-held-out-evaluation.md)). Next: a v9 tuning
-  session (its direction is the owner's call; the failing bar is validator-side), scored on a
-  fresh draw (seed 20261015, all 378 labelled venues and their sites excluded), then the
-  laptop extraction pass; the label-free scale run moves to the Pi.
+  ([record](./docs/reviews/2026-10-15-p5-v8-held-out-evaluation.md)).
+- *Assessed (P5-17, [Amendment 19](./docs/adr/0013-phase5-menu-pipeline.md#amendment-19-2026-10-15-false-reject-structure-and-production-constraints)):*
+  why the false-reject bar keeps failing
+  ([record](./docs/reviews/2026-10-15-p5-false-reject-structure.md)). 96 % of gold-row
+  rejects are "no price match" downgrades; catch, not FR, is the binding constraint. Decided:
+  - measurement: page-clustered intervals, accepted rows matching no label and real wrong
+    rows accepted recorded, usable prices gated from the next evaluation;
+  - four label conventions;
+  - a deterministic second-pass stage **[5b] price resolution**: every accept cites a printed
+    price, carries its own lower confidence, and rejected rows stay unpriced;
+  - no learned classifier;
+  - production monitoring.
+
+  Next: a v9 tuning session that builds these, then a fresh draw (seed 20261015, all 378
+  labelled venues and their sites excluded) only once the tuning sets read near 0.05 pooled
+  FR with no rise in wrong or unmatched accepted rows. Then the laptop extraction pass; the
+  label-free scale run moves to the Pi.
 - *Audited (2026-10-12, [classifier gap audit](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)):*
   `classifier-v2` gates the extraction queue at fetch (`due_pages` doesn't re-check);
   precision on the held-out draws is 151/162 = 0.932 [0.883, 0.962], no demonstrated
