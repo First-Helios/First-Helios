@@ -18,10 +18,12 @@ from packages.helios_parsing.evaluation import (
     corruption_eval,
     corruption_metrics,
     gold_page,
+    gold_reject_page,
     gold_rows,
     loss_page,
     match,
     metrics,
+    page_clustered,
     score_page,
 )
 from packages.helios_parsing.segment import segment
@@ -288,6 +290,18 @@ def test_evaluate_cli_scores_saved_output(
     evaluate.main()
     assert "false_reject=0 rate=0.000" in capsys.readouterr().out
 
+    monkeypatch.setattr(sys, "argv", ["evaluate", "report", "t1", *common])
+    evaluate.main()
+    out = capsys.readouterr().out
+    assert "price accuracy    1.000 (2/2)" in out
+    assert "gold-row FR       0.000 (0/6)" in out
+    assert "page-clustered  [0.000, 0.000]; resamples <= 0.12: 1.000" in out
+    assert "usable prices     0.333 (2/6)" in out
+    assert "accepted rows matching no label   0" in out
+    assert "real-output wrong-price accepted  0" in out
+    assert "[5b] accepted 0" in out
+    assert "html_list      pages=  1 0.000 (0/6)" in out
+
 
 def test_amendment_15_menu_numbers_are_not_part_of_a_name_and_wine_lists_are_out_of_scope() -> None:
     page = gold_page(
@@ -304,3 +318,57 @@ def test_amendment_15_menu_numbers_are_not_part_of_a_name_and_wine_lists_are_out
     assert [it.name for it in page.items] == ["Aloo Chaat", "H1: Scallop", "Lager"]
     assert match(Row("13) Aloo Chaat", "9", claimed_block="b0004"), page.items) == 0
     assert match(Row("Scallop", "8", claimed_block="b0011"), page.items) == 1
+
+
+def test_page_clustered_interval_resamples_whole_pages() -> None:
+    pages = [(0, 10), (5, 10), (1, 50), (0, 30)]
+    first = page_clustered(pages, 0.12)
+    assert first == page_clustered(pages, 0.12), "one seed, one result"
+    assert first.rate == 6 / 100
+    assert first.low is not None and first.high is not None and first.at_most is not None
+    assert first.low <= first.rate <= first.high
+    assert 0.0 < first.at_most < 1.0  # some resamples draw the 0.5 page twice
+    assert page_clustered(pages).at_most is None  # no bar, no share
+    assert page_clustered([(0, 0)]) == page_clustered([])  # nothing to rate
+    assert page_clustered([]).rate is None
+
+
+PAIR_PAGE = (
+    "<h2>Seafood</h2><p>3/6 Catfish Dinner</p><p>$9.95/$17.99</p>"
+    "<p>6/12 Wings</p><p>$8.99/$15.99</p>"
+)
+PAIR_LABEL: dict[str, Any] = {
+    **LABEL,
+    "items": [
+        {
+            "name": "3/6 Catfish Dinner",
+            "block": "b0002",
+            "section": "Seafood",
+            "prices": [{"amount": "9.95", "variant": "3"}, {"amount": "17.99", "variant": "6"}],
+        }
+    ],
+}
+
+
+def test_gold_reject_page_counts_one_pages_gold_rows() -> None:
+    counts = gold_reject_page(_gold(), segment(PAGE))
+    assert (counts["correct_rows"], counts["false_reject"]) == (6, 0)
+    # "3" / "6" read from the name by [5b]; without resolvers the validator rejects both
+    pairs = gold_page(PAIR_LABEL), segment(PAIR_PAGE)
+    assert gold_reject_page(*pairs)["false_reject"] == 0
+    assert gold_reject_page(*pairs, ())["false_reject"] == 2
+
+
+def test_score_page_counts_resolved_accepts_apart() -> None:
+    rows = [
+        Row("3/6 Catfish Dinner", "9.95", variant="3", claimed_block="b0002"),
+        Row("3/6 Catfish Dinner", "17.99", variant="6", claimed_block="b0002"),
+        Row("6/12 Wings", "8.99", variant="6", claimed_block="b0004"),  # no label: unchecked
+    ]
+    counts = score_page(gold_page(PAIR_LABEL), segment(PAIR_PAGE), rows)
+    assert counts["resolved_accepted"] == 3
+    assert (counts["resolved_price_exact"], counts["resolved_matched_priced"]) == (2, 2)
+    assert counts["resolved_unmatched"] == counts["accepted_unmatched"] == 1
+    assert counts["wrong_accepted_price"] == 0
+    without = score_page(gold_page(PAIR_LABEL), segment(PAIR_PAGE), rows, ())
+    assert (without["resolved_accepted"], without["false_reject"]) == (0, 2)

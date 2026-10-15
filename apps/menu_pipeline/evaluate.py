@@ -11,6 +11,7 @@ chunk under ``"chunks"``, in chunk order: the spike's record) and gold labels
         [--splits var/menu-eval/splits.json --split ho3] TAG [TAG ...]
     uv run python -m apps.menu_pipeline.evaluate loss --data … --labels … TAG [--pages]
     uv run python -m apps.menu_pipeline.evaluate corrupt --data … --labels … [--seed 7]
+    uv run python -m apps.menu_pipeline.evaluate report TAG --data … --labels … [--seed 7]
     uv run python -m apps.menu_pipeline.evaluate extract --data … --labels … \\
         [--server http://localhost:8080] TAG
 
@@ -18,6 +19,11 @@ chunk under ``"chunks"``, in chunk order: the spike's record) and gold labels
 chunking, sparse retry; 2 requests in flight) over the gold pages and saves each
 page's answers as ``<data>/extract/<TAG>/<page_id>.json``, skipping pages already
 saved; ``compare`` / ``loss`` then score them. Scoring alone needs no server.
+
+``report`` prints one tag's §8 record as Amendment 19 item 1 asks: the §8 numbers;
+gold-row FR and usable prices with page-clustered 95 % intervals (and the share of
+resamples within the FR bar); accepted rows that match no label; real-output
+wrong-price rows accepted; [5b]'s accepts; and per-format and per-page gold-row FR.
 
 ``--splits`` names a JSON file mapping split names to page ids (e.g. the tuning
 pages and each held-out set); without it every scorable gold page is scored.
@@ -43,8 +49,10 @@ from packages.helios_parsing.evaluation import (
     corruption_eval,
     corruption_metrics,
     gold_page,
+    gold_reject_page,
     loss_page,
     metrics,
+    page_clustered,
     score_page,
 )
 from packages.helios_parsing.output import parse_output, rows_of
@@ -144,6 +152,70 @@ def cmd_corrupt(data: Path, gold: dict[str, GoldPage], seed: int) -> None:
     print(f"catch rate={_fmt(m['catch'])}")
 
 
+FR_BAR = 0.12  # §8 gold-row false-reject bar
+
+
+def _ratio(num: int, den: int) -> str:
+    return f"{num / den:.3f} ({num}/{den})" if den else "  n/a"
+
+
+def _interval(low: float | None, high: float | None) -> str:
+    return "n/a" if low is None or high is None else f"[{low:.3f}, {high:.3f}]"
+
+
+def cmd_report(data: Path, gold: dict[str, GoldPage], tag: str, seed: int) -> None:
+    pids = [pid for pid in gold if (data / "extract" / tag / f"{pid}.json").exists()]
+    total: Counter[str] = Counter()
+    usable: list[tuple[int, int]] = []
+    rejects: dict[str, Counter[str]] = {}
+    pages: list[tuple[GoldPage, list[Block]]] = []
+    for pid in pids:
+        blocks = blocks_of(data, pid)
+        pages.append((gold[pid], blocks))
+        counts = score_page(gold[pid], blocks, extracted_rows(data, tag, pid, blocks))
+        total += counts
+        usable.append((counts["found_price"], counts["gold_prices"]))
+        rejects[pid] = gold_reject_page(gold[pid], blocks)
+    corrupt = corruption_eval(pages, seed)
+    caught = sum(n for k, n in corrupt.items() if k.startswith("caught:"))
+    trials = sum(n for k, n in corrupt.items() if k.startswith("n:"))
+    fr = page_clustered([(c["false_reject"], c["correct_rows"]) for c in rejects.values()], FR_BAR)
+    use = page_clustered(usable)
+    print(f"{tag} pages={len(pids)} (of {len(gold)} gold) seed={seed}")
+    print(f"  item recall       {_ratio(total['found_raw'], total['gold_items'])}")
+    print(
+        f"  price accuracy    {_ratio(total['accepted_price_exact'], total['accepted_matched_priced'])}"
+    )
+    print(f"  gold-row FR       {_ratio(corrupt['false_reject'], corrupt['correct_rows'])}")
+    print(
+        f"    page-clustered  {_interval(fr.low, fr.high)}; resamples <= {FR_BAR}: {_fmt(fr.at_most)}"
+    )
+    print(f"  catch             {_ratio(caught, trials)}")
+    print(f"  usable prices     {_ratio(total['found_price'], total['gold_prices'])}")
+    print(f"    page-clustered  {_interval(use.low, use.high)}")
+    print(f"  accepted rows matching no label   {total['accepted_unmatched']}")
+    print(f"  real-output wrong-price accepted  {total['wrong_accepted_price']}")
+    print(
+        f"  [5b] accepted {total['resolved_accepted']}: exact "
+        f"{_ratio(total['resolved_price_exact'], total['resolved_matched_priced'])}, "
+        f"matching no label {total['resolved_unmatched']}"
+    )
+    by_format: dict[str, Counter[str]] = {}
+    for pid, c in rejects.items():
+        fmt = by_format.setdefault(str(gold[pid].format), Counter())
+        fmt.update(c)
+        fmt["pages"] += 1
+    print("  gold-row FR per format:")
+    for fmt_name, c in sorted(by_format.items()):
+        print(
+            f"    {fmt_name:14} pages={c['pages']:3} {_ratio(c['false_reject'], c['correct_rows'])}"
+        )
+    print("  gold-row FR per page (pages with a reject, worst first):")
+    for pid, c in sorted(rejects.items(), key=lambda kv: -kv[1]["false_reject"]):
+        if c["false_reject"]:
+            print(f"    {pid} [{gold[pid].format}] {_ratio(c['false_reject'], c['correct_rows'])}")
+
+
 def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaClient) -> None:
     out = data / "extract" / tag
     out.mkdir(parents=True, exist_ok=True)
@@ -162,7 +234,7 @@ def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaCl
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=["compare", "loss", "corrupt", "extract"])
+    parser.add_argument("command", choices=["compare", "loss", "corrupt", "report", "extract"])
     parser.add_argument("tags", nargs="*")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--labels", type=Path, required=True)
@@ -178,6 +250,9 @@ def main() -> None:
     elif args.command == "loss":
         for tag in args.tags:
             cmd_loss(args.data, gold, tag, per_page=args.pages)
+    elif args.command == "report":
+        for tag in args.tags:
+            cmd_report(args.data, gold, tag, args.seed)
     elif args.command == "extract":
         (tag,) = args.tags
         with http_client() as http:

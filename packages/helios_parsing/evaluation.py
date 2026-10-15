@@ -65,6 +65,7 @@ corruption equal to a legitimate price of that item is also counted as
 
 from __future__ import annotations
 
+import math
 import random
 import re
 from collections import Counter
@@ -73,16 +74,20 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from packages.helios_parsing.output import wine_section
-from packages.helios_parsing.validator import Row, norm_tokens, parse_amount, validate
+from packages.helios_parsing.resolve import RESOLVERS, judge, resolved
+from packages.helios_parsing.validator import Row, norm_tokens, parse_amount
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from packages.helios_parsing.resolve import Resolver
     from packages.helios_parsing.segment import Block
 
 CORRUPTION_SEED = 7
 CORRUPTIONS_PER_TYPE = 10  # trials per corruption type per page
 SWAP_DISTANCE = 3  # swapped prices come from rows at most this far apart
+BOOTSTRAP_REPS = 4000  # page-clustered resamples (Amendment 19 item 1a)
+BOOTSTRAP_SEED = 7
 
 PROMO_SCOPES = frozenset({"items", "sections", "menu"})
 PROMO_TERMS = frozenset({"percent_off", "amount_off", "fixed_price", "bogo", "free_item", "other"})
@@ -265,14 +270,26 @@ def match(row: Row, items: Sequence[GoldItem]) -> int | None:
     return None
 
 
-def score_page(page: GoldPage, blocks: list[Block], rows: list[Row]) -> Counter[str]:
-    """Counts for one page's extracted (repaired, stitched) rows; sum pages, then ``metrics``."""
+def score_page(
+    page: GoldPage,
+    blocks: list[Block],
+    rows: list[Row],
+    resolvers: Sequence[tuple[str, Resolver]] = RESOLVERS,
+) -> Counter[str]:
+    """Counts for one page's extracted (repaired, stitched) rows; sum pages, then ``metrics``.
+
+    Rows are judged as the pipeline judges them: the validator, then [5b] price
+    resolution (``resolve.judge``). (Amendment 19) ``accepted_unmatched`` counts
+    accepted priced rows that match no labelled item, ``wrong_accepted_price``
+    accepted rows of a labelled item at a wrong amount; ``resolved_*`` count [5b]'s
+    accepts: all, matched and priced, at an exact gold amount, matching no item.
+    """
     c: Counter[str] = Counter(pages=1)
     items = page.items
     found_raw: set[int] = set()
     found_kept: set[int] = set()
     found_price: set[tuple[int, Decimal]] = set()
-    for v in validate(blocks, rows).verdicts:
+    for v in judge(blocks, rows, resolvers).verdicts:
         g = match(v.row, items)
         amt = parse_amount(v.row.amount)
         gold_amts = {parse_amount(p.amount) for p in items[g].prices} if g is not None else set()
@@ -283,6 +300,13 @@ def score_page(page: GoldPage, blocks: list[Block], rows: list[Row]) -> Counter[
             found_raw.add(g)
             if v.decision != "reject":
                 found_kept.add(g)
+        if resolved(v):
+            c["resolved_accepted"] += 1
+            if g is None:
+                c["resolved_unmatched"] += 1
+            elif amt is not None:
+                c["resolved_matched_priced"] += 1
+                c["resolved_price_exact"] += int(amt in gold_amts)
         if v.decision == "accept":
             if g is not None and amt is not None:
                 c["accepted_matched_priced"] += 1
@@ -331,10 +355,15 @@ def metrics(c: Counter[str]) -> dict[str, float | None]:
     }
 
 
-def loss_page(page: GoldPage, blocks: list[Block], rows: list[Row]) -> Counter[str]:
+def loss_page(
+    page: GoldPage,
+    blocks: list[Block],
+    rows: list[Row],
+    resolvers: Sequence[tuple[str, Resolver]] = RESOLVERS,
+) -> Counter[str]:
     """Where each of the page's gold prices went (one bucket per gold price)."""
     by_item: dict[int, list[tuple[Decimal | None, str, tuple[str, ...]]]] = {}
-    for v in validate(blocks, rows).verdicts:
+    for v in judge(blocks, rows, resolvers).verdicts:
         g = match(v.row, page.items)
         if g is not None:
             by_item.setdefault(g, []).append((parse_amount(v.row.amount), v.decision, v.reasons))
@@ -373,8 +402,63 @@ def _with_amount(row: Row, amount: str | None) -> Row:
     return Row(row.item, amount, row.variant, row.section, "USD", row.claimed_block)
 
 
+def gold_reject_page(
+    page: GoldPage, blocks: list[Block], resolvers: Sequence[tuple[str, Resolver]] = RESOLVERS
+) -> Counter[str]:
+    """One page's gold-row false rejects: ``correct_rows`` and ``false_reject``, as
+    ``corruption_eval`` counts them (Amendment 19 item 1c: per-page and per-format FR)."""
+    rows = [r for r in gold_rows(page) if r.amount is not None]
+    c: Counter[str] = Counter(correct_rows=len(rows))
+    c["false_reject"] = sum(v.decision != "accept" for v in judge(blocks, rows, resolvers).verdicts)
+    return c
+
+
+@dataclass(frozen=True, slots=True)
+class Clustered:
+    """A rate over pages with its page-clustered bootstrap interval (Amendment 19 item 1a)."""
+
+    rate: float | None
+    low: float | None
+    high: float | None
+    at_most: float | None  # share of resamples at or under the bar; None without a bar
+
+
+def page_clustered(
+    pages: Sequence[tuple[int, int]],
+    bar: float | None = None,
+    *,
+    reps: int = BOOTSTRAP_REPS,
+    seed: int = BOOTSTRAP_SEED,
+) -> Clustered:
+    """The rate sum(num) / sum(den) over ``pages`` (one (num, den) pair per page) and its
+    95 % interval from resampling whole pages with replacement: rows of one page are
+    not independent, so the row-level Wilson interval is too narrow. Resamples with a
+    zero denominator are skipped."""
+    num = sum(n for n, _ in pages)
+    den = sum(d for _, d in pages)
+    if not den:
+        return Clustered(None, None, None, None)
+    rng = random.Random(seed)  # noqa: S311 - reproducible resampling, not security
+    rates = []
+    for _ in range(reps):
+        draw = [pages[rng.randrange(len(pages))] for _ in pages]
+        d = sum(x for _, x in draw)
+        if d:
+            rates.append(sum(x for x, _ in draw) / d)
+    rates.sort()
+    last = len(rates) - 1
+    return Clustered(
+        rate=num / den,
+        low=rates[int(0.025 * last)],
+        high=rates[math.ceil(0.975 * last)],
+        at_most=None if bar is None else sum(r <= bar for r in rates) / len(rates),
+    )
+
+
 def corruption_eval(
-    pages: Sequence[tuple[GoldPage, list[Block]]], seed: int = CORRUPTION_SEED
+    pages: Sequence[tuple[GoldPage, list[Block]]],
+    seed: int = CORRUPTION_SEED,
+    resolvers: Sequence[tuple[str, Resolver]] = RESOLVERS,
 ) -> Counter[str]:
     """Validator false rejects on gold rows and catch rate on injected corruptions.
 
@@ -390,7 +474,7 @@ def corruption_eval(
         rows = [r for r in gold_rows(page) if r.amount is not None]
         if not rows:
             continue
-        clean = validate(blocks, rows).verdicts
+        clean = judge(blocks, rows, resolvers).verdicts
         for v in clean:
             c["correct_rows"] += 1
             if v.decision != "accept":
@@ -415,7 +499,7 @@ def corruption_eval(
             legit: list[set[Decimal]],
             blocks: list[Block] = blocks,
         ) -> None:
-            verdicts = validate(blocks, corrupt).verdicts
+            verdicts = judge(blocks, corrupt, resolvers).verdicts
             for k, i in enumerate(at):
                 c[f"n:{kind}"] += 1
                 decision = verdicts[i].decision

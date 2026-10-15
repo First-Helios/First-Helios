@@ -34,7 +34,11 @@ from apps.discovery.pipeline import run_discovery
 from apps.discovery.url_pipeline import resolve_urls
 from apps.menu_pipeline.bundle import BundleStore, excerpt
 from apps.menu_pipeline.extraction import (
+    TUNING_MIN_ROWS,
+    TUNING_RESOLVED_SHARE_MAX,
+    ExtractionReport,
     OutputStore,
+    PageShares,
     PipelineVersion,
     SocProbe,
     model_tag,
@@ -46,7 +50,11 @@ from apps.menu_pipeline.llama_client import (
     ServerNotReady,
     WrongModel,
 )
-from apps.menu_pipeline.menu_writes import FLAGGED_PRICE_CONFIDENCE, PRICE_CONFIDENCE
+from apps.menu_pipeline.menu_writes import (
+    FLAGGED_PRICE_CONFIDENCE,
+    PRICE_CONFIDENCE,
+    RESOLVED_PRICE_CONFIDENCE,
+)
 from apps.menu_pipeline.models import load_manifest
 from apps.menu_pipeline.page_bronze import REFETCH_WINDOW, run_menu_pages
 from packages.helios_core.config import get_database_url
@@ -86,6 +94,7 @@ _PRICES: dict[str, list[tuple[str, str | None]]] = {
     "Queso": [("6.00", None)],
     "Horchata": [("2.50", "Small"), ("3.50", "Large")],
     "Elote": [("4.25", None)],
+    "3/6 Catfish Dinner": [("9.95", "3"), ("17.99", "6")],
 }
 _SECTIONS = {"Carne Asada Taco": "Tacos", "Queso": "Tacos", "Horchata": "Drinks"}
 
@@ -309,7 +318,7 @@ def test_pipeline_version_names_every_component_within_the_column() -> None:
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm == (
         "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;"
-        "repairs-v7;validator-v8;classifier-v2"
+        "repairs-v8;validator-v8;resolve-v1;classifier-v2"
     )
     assert len(version.llm) <= 128
     assert version.jsonld == "jsonld-v1;validator-v8;segment-v2;classifier-v2"
@@ -675,6 +684,51 @@ def test_flagged_page_gets_the_lower_price_confidence(venues: _Venues) -> None:
     with venues.factory() as session:
         confidences = {c for *_, c in _rows(session, page.id)}
     assert confidences == {FLAGGED_PRICE_CONFIDENCE}
+
+
+def test_a_resolved_price_gets_its_own_confidence_reason_and_run_share(venues: _Venues) -> None:
+    gers = venues.add("Catfish Shack")
+    venues.resolve()
+    catfish = _MENU.replace("</body>", "<p>3/6 Catfish Dinner</p><p>$9.95/$17.99</p></body>")
+    venues.fetch({gers: catfish}, at=_T1)
+
+    report = venues.extract(_Server())
+
+    # "3" / "6" are read from the name, not printed with the prices: [5b] grounds them
+    assert report.rows["llm:accept:resolved_name_pair"] == 2
+    assert report.rows["llm:accept"] == 4
+    (shares,) = report.pages
+    assert (shares.priced, shares.resolved, shares.downgraded) == (6, 2 / 6, 0.0)
+    assert shares.flagged and report.flagged == 1  # "$9.95/$17.99" is an unlabeled run
+    (page,) = venues.pages(gers)
+    with venues.factory() as session:
+        rows = _rows(session, page.id)
+    assert ("3/6 Catfish Dinner", "3", 995, RESOLVED_PRICE_CONFIDENCE) in rows
+    assert ("3/6 Catfish Dinner", "6", 1799, RESOLVED_PRICE_CONFIDENCE) in rows
+    assert ("Queso", None, 600, FLAGGED_PRICE_CONFIDENCE) in rows
+    assert RESOLVED_PRICE_CONFIDENCE < FLAGGED_PRICE_CONFIDENCE < PRICE_CONFIDENCE
+    assert "resolve-v1" in page.method_version
+
+
+def test_run_report_lists_pages_outside_the_tuning_range() -> None:
+    inside = PageShares("a", priced=10, downgraded=0.1, resolved=0.0, flagged=False)
+    resolved_many = PageShares(
+        "b", priced=10, downgraded=0.1, resolved=TUNING_RESOLVED_SHARE_MAX + 0.1, flagged=True
+    )
+    tiny = PageShares("c", priced=TUNING_MIN_ROWS - 1, downgraded=1.0, resolved=1.0, flagged=False)
+    report = ExtractionReport(pages=[inside, resolved_many, tiny])
+    summary = report.summary()
+    assert "pages" not in summary
+    assert summary["pages_with_resolved_rows"] == 2
+    assert summary["outside_tuning_range"] == [
+        {
+            "key": "b",
+            "priced": 10,
+            "downgraded": 0.1,
+            "resolved": round(resolved_many.resolved, 3),
+            "flagged": True,
+        }
+    ]
 
 
 def test_failed_pages_stay_due_and_repeated_failures_stop_the_run(venues: _Venues) -> None:
