@@ -35,6 +35,10 @@ Capture-targeted span (ADR-0013 §5).
 **Scoring** (``score_page``, per page; ``metrics`` over summed counts): each
 extracted row is validated against the page and matched to a gold item by
 normalized name tokens (``match``; a row naming a variant of an item matches it).
+(ADR-0013 Amendment 15) A leading menu number or code is not part of a name ("13)
+Aloo Chaat", "H1: Scallop", "1. CHEESE"): labels keep it on some pages and drop it
+on others. Labels under a wine list's section are out of scope and not scored
+(``output.wine_section``; the pipeline doesn't extract them either).
 
 - item recall: gold items with a matching row (``found_raw``), and with one the
   validator kept (``found_kept``);
@@ -68,6 +72,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from packages.helios_parsing.output import wine_section
 from packages.helios_parsing.validator import Row, norm_tokens, parse_amount, validate
 
 if TYPE_CHECKING:
@@ -159,6 +164,7 @@ def gold_page(label: Mapping[str, Any]) -> GoldPage:
                 promo=bool(it.get("promo", False)),
             )
             for it in label.get("items") or []
+            if not wine_section(it.get("section"))
         ),
         promos=tuple(_gold_promo(p) for p in label.get("promos") or []),
     )
@@ -210,12 +216,22 @@ def _block_no(block_id: str | None) -> int:
     return int(block_id[1:]) if block_id and block_id[1:].isdigit() else 0
 
 
+# (Amendment 15) a leading menu number or code: "13) ", "H1: ", "1. ", "#4 - ", "No. 7 "
+_MENU_NUMBER = re.compile(r"^\s*(?:#|no\.?\s*)?[A-Za-z]{0,2}\d{1,4}[a-z]?\s*[).:–—-]+\s*", re.I)
+
+
+def name_key(name: str) -> frozenset[str]:
+    """A name's tokens for matching, without a leading menu number or code."""
+    rest = _MENU_NUMBER.sub("", name, count=1)
+    return frozenset(norm_tokens(rest if rest.strip() else name))
+
+
 def _variant_keys(name: str, variant: str | None) -> tuple[frozenset[str], ...]:
     """The name tokens a row naming this variant carries: the variant's, or name + variant."""
     if not variant:
         return ()
     own = frozenset(norm_tokens(variant))
-    return (own, own | frozenset(norm_tokens(name)))
+    return (own, own | name_key(name))
 
 
 def match(row: Row, items: Sequence[GoldItem]) -> int | None:
@@ -228,12 +244,12 @@ def match(row: Row, items: Sequence[GoldItem]) -> int | None:
     qualify. Else an item in the claimed block whose tokens are a subset or
     superset of the row's.
     """
-    key = frozenset(norm_tokens(row.item))
+    key = name_key(row.item)
     claim = _block_no(row.claimed_block)
     same = [
         i
         for i, it in enumerate(items)
-        if frozenset(norm_tokens(it.name)) == key
+        if name_key(it.name) == key
         or (
             key
             and _block_no(it.block) <= claim
@@ -243,7 +259,7 @@ def match(row: Row, items: Sequence[GoldItem]) -> int | None:
     if same:
         return min(same, key=lambda i: abs(_block_no(items[i].block) - claim))
     for i, it in enumerate(items):
-        gold_key = frozenset(norm_tokens(it.name))
+        gold_key = name_key(it.name)
         if it.block == row.claimed_block and key and (key <= gold_key or gold_key <= key):
             return i
     return None

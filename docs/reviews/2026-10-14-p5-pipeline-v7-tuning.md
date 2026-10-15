@@ -9,7 +9,8 @@ extraction runs until it passes §8 on a fresh held-out draw (below, "Next held-
 evaluation").
 
 Candidate version (model, prompt, grammar, chunker, segmenter and classifier unchanged: the
-prompt levers tried here were rejected, so every page's saved answers stay valid):
+prompt and chunking levers tried here were rejected, so every page's saved answers stay
+valid; wine lists are out of scope and the harness ignores leading menu numbers, Q10):
 
 ```
 qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;repairs-v7;validator-v7;classifier-v2
@@ -32,6 +33,7 @@ Page bodies, labels, outputs and scratch scripts stay in the worktree's gitignor
 | Q7b laptop DB | Upgrade `helios_laptop` to `db40e9424cba`? | **No: disposable clones only** |
 | Q8 (during the session) run split | The Pi is ~2× slower than the laptop and gives different greedy answers | **The laptop is free to use, and its GPU** ("Where the model runs") |
 | Q9 (during the session) dev-only layouts | The price-column page and glued one-decimal prices exist only on dev pages | **Skip them this session**: the dev check stays clean |
+| Q10 (after the levers) | Scope, scoring and pre-treatment from the miss diagnosis | **Wine lists out of scope; ignore leading menu numbers in matching; run the GPU experiment** ("Scope and harness changes") |
 
 ## Tuning data
 
@@ -163,7 +165,118 @@ Brew4.5"): only dev pages print them. **Not changed:** wine lists printed produc
 cuvée-and-price (labels name a wine by its producer on one page and by its whole line on
 another), lines collapsed by image alt text ("WalnutShrimp"), the model's skipped lists.
 
-## Candidate v7 (final)
+## What is still missed (diagnosis after the levers)
+
+Every missed gold item on all 148 pages (10,417 items, 1,347 missed under the levers above,
+frozen harness), one cause each, by the size of the chunk that held it:
+
+| Chunk size | Items | Missed | Skipped (no row within 2 blocks) | Named wrongly (a row with its price within 2 blocks) | Near, wrong price | Not sent |
+|---|---|---|---|---|---|---|
+| < 15 lines | 380 | 88 (23.2 %) | 14 | 45 | 29 | — |
+| 15–24 | 1,691 | 171 (10.1 %) | 78 | 71 | 22 | — |
+| 25–34 | 3,136 | 417 (13.3 %) | 222 | 150 | 45 | — |
+| 35–49 | 2,978 | 408 (13.7 %) | 233 | 133 | 42 | — |
+| 50–69 | 1,829 | 190 (10.4 %) | 109 | 66 | 15 | — |
+| 70+ | 336 | 44 (13.1 %) | 29 | 13 | 2 | — |
+| in no chunk | 67 | 29 | — | — | — | 29 |
+| **All** | 10,417 | 1,347 | **685** | **478** | 155 | 29 |
+
+- **Skipped (51 %):** 437 priced dishes mid-chunk (rows emitted before and after them), 147
+  after the chunk's last emitted row, 101 unpriced list items. No chunk came back empty, and
+  items early, middle and late in a chunk are found alike (0.869 / 0.869 / 0.867): the model
+  drops runs of dishes in layouts it reads elsewhere on the same page.
+- **Named wrongly (35 %):** by a description 113, the line below (a wine's cuvée or region line,
+  a size line) 103, a section heading 103, the line above (the previous dish) 96, other words
+  of the same block 49, a kept menu number 14.
+- **Chunk size is not the driver:** recall by lines per chunk is 0.86–0.90 from 15 lines up;
+  the under-15 band's misses are two pages printing the whole menu as one paragraph (image alt
+  text; run-together descriptions), 71 of its 88.
+- **On the dev set** three pages hold 160 of 426 misses: two wine lists (a price-above-and-below
+  list named by region lines; a producer-over-cuvée list named by its cuvée lines, 99 of the dev
+  set's 179 wrongly named items) and a numbered menu (the number kept, the price line claimed).
+
+## Scope and harness changes (Q10, owner, 2026-10-14)
+
+| | Decision |
+|---|---|
+| Q10a | **Wine lists are out of scope** for now: not extracted and not scored |
+| Q10b | **The harness ignores a leading menu number or code** when it matches a row to a label |
+| Q10c | **Run the GPU experiment** (pre-treatment and a stronger retry; below) |
+
+**Wine gate** (`repairs-v7`, `output.wine_section`; the same rule drops labels in the
+harness): a section whose heading names wine ("Wine by the Glass", "Sparkling",
+"Champagne", "Booze & Bubbles"), or is only colour words and their modifiers ("Red",
+"Italian Reds", "Rosé & White"), unless it also names another dish or drink ("Beer & Wine",
+"Reds & Sangrias", "Prosecco Cocktails", "Red Meat Entrées", "White Pizza"). A first form
+counted a colour word anywhere and dropped dishes the model used as one-dish section names
+("Red Oil Dumpling", "Mexican White Wings"); fixed. Labels out of scope: spike 47, P5-5 18,
+P5-8 88, P5-10 41, P5-12 151. Remaining collateral: 19 non-wine rows the model itself filed
+under a section it called "Wine", "Wines" or "Sparkling" (P5-10 9 sides, P5-12 8 prosecco
+cocktails, P5-8 2).
+
+**Putting wine back later.** The labels keep every wine item (they are only filtered at
+scoring), so re-including wine is: delete the `wine_section` gate in `rows_of` and in
+`evaluation.gold_page`, and score again. What it has to solve first (P5-12 and P5-8 pages):
+wines printed producer over a "cuvée, region, vintage, price" line, where the model names
+the cuvée line and the labels name the producer (on one page) or the whole line (on
+another): the label convention needs settling before any lever; price-above-and-below
+lists, where the model names a wine by its region line ("Sicily") and takes the next wine's
+price; menu numbers on wine lines ("375 — NEBBIOLO"). A narrower option the owner raised:
+extract wine names without prices.
+
+**Menu numbers** (`evaluation.name_key`): "13) Aloo Chaat", "H1: Scallop", "1. CHEESE" and
+"Aloo Chaat" match the same label; labels kept the code on some pages (spike, P5-5) and
+dropped it on others (P5-12). Dish names are otherwise matched as before (the blinded
+adjudication upheld the labels on all 218 naming disagreements, so names aren't loosened).
+
+## Re-run experiments (Q10c): rejected
+
+Measured on the laptop GPU (all 148 pages, scored with the levers, the wine gate and the
+amended harness), against the two v6 runs on the same GPU, item recall:
+
+| Set | v6 A | v6 B | combined | x2: chunk-v2.4 only | x3: retry 2/3 only |
+|---|---|---|---|---|---|
+| Spike | 0.913 | 0.915 | 0.925 | 0.899 ¹ | 0.911 ¹ |
+| P5-5 | 0.876 | 0.853 | 0.867 | 0.863 | 0.866 |
+| P5-8 | 0.886 | 0.878 | 0.891 | 0.863 ¹ | 0.877 ¹ |
+| P5-10 | 0.880 | 0.875 | 0.864 | 0.864 ¹ | 0.863 ¹ |
+| P5-12 dev | 0.863 | 0.859 | 0.884 | 0.906 ¹ | 0.920 ¹ |
+
+¹ On the pages every run finished (spike 29, P5-8 29, P5-10 21, dev 23 of 35; the v6
+columns on the same pages: spike 0.913 / 0.912, P5-8 0.878 / 0.876, P5-10 0.881 / 0.875, dev
+0.908 / 0.912): the GPU crashed during these runs (below).
+
+- **chunk-v2.4:** a line identical to the one before it sent once (a dish name printed twice);
+  a long block cut after each printed price ("Chicken 14.99, Beef 14.99, …"). The combined run
+  had a bug: zero-width spacer lines counted as repeats and were dropped (126 on the price-column
+  page), so x2 repeats it with only lines that hold letters. x2 is worse than both v6 runs on
+  spike, P5-8 and P5-10. **Rejected.**
+- **Sparse retry at 2/3** (re-ask a chunk that returns fewer priced rows than 2/3 of the prices it
+  prints; today 1/3): neutral on spike, P5-5 and P5-8, a dev gain, P5-10 below both v6 runs; it
+  also costs model calls and the combined run's dev price accuracy fell to 0.985 (31 wrong
+  accepts, 11 before). **Rejected.**
+- **The laptop GPU** crashed three times under sustained load ("illegal instruction" twice with
+  flash attention, "unspecified launch failure" without) and is now in an error state
+  (`nvidia-smi` reports `ERR!`; the server finds no CUDA device): it needs a reboot. It runs at
+  its thermal limit (89 °C, clock held at 780 of 2,100 MHz).
+
+## Candidate v7 (final: levers, wine gate, amended harness)
+
+| Set | Item recall | Usable | Price accuracy | Gold FR | Catch |
+|---|---|---|---|---|---|
+| Spike 33 | 0.914 (1642/1796) | 0.865 (1703/1969) | 0.996 (1722/1729) | 0.014 (27/1969) | 0.989 |
+| P5-5 10 | 0.886 (712/804) | 0.763 (582/763) | 0.992 (590/595) | 0.107 (82/763) | 1.000 |
+| P5-8 35 | 0.879 (2082/2368) | 0.755 (1974/2614) | 0.983 (2077/2113) | 0.112 (294/2614) | 0.996 |
+| P5-10 35 | 0.868 (2336/2690) | 0.749 (2196/2933) | 0.997 (2348/2355) | 0.087 (256/2933) | 0.997 |
+| **P5-12 dev 35** | **0.865** (2089/2414) | **0.763** (1877/2459) | 0.991 (1939/1956) | **0.115** (284/2459) | 0.995 |
+
+All five sets clear all four bars, **the dev set included** (recall 0.865 ≥ 0.85, FR 0.115 ≤
+0.12, by 11 rows). The dev check is weaker than a fresh draw: the wine gate and the number
+rule were chosen after reading its misses. Against the levers alone (below, frozen harness),
+the changes in rates come from the smaller denominators and the menu-number matches; the
+only lost finds are the 19 collateral rows above.
+
+## Candidate v7 before the scope change (levers only, frozen harness)
 
 | Set / format | Pages | Item recall | Usable | Price accuracy | Gold FR | Catch | Real-output FR / catch |
 |---|---|---|---|---|---|---|---|
@@ -246,7 +359,9 @@ in P5-12's worktree, copied here as `var/tune/next-draw-exclusions.json`, sha256
 `0c383cac72ea15f72f204077e353d4c05e8de0d8e50bd8e0ca845144b7e435c1`, checked); size strata
 with the fixed cutoffs; blind labellers, frozen and hashed before the first model call; the
 real extract CLI against the pinned CPU `llama-server` (the GPU path above is not it);
-scored with this harness as frozen. For that session: the adjudication packet's C rows
+scored with the harness as amended here (wine sections out of scope, leading menu numbers
+ignored), frozen again from this record on. Labellers still label wine items (the scope
+filter is applied at scoring), so wine can be scored later without relabelling. For that session: the adjudication packet's C rows
 should list what is labelled within 2 blocks, not only at the claimed block (P5-12's 24
 false "missing item" answers). The label-free scale run stays deferred to the Pi.
 

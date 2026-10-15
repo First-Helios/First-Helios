@@ -446,3 +446,13 @@ def test_v7_rows_of_drops_a_diet_mark_glued_to_the_name() -> None:
         blocks,
     )
     assert [r.item for r in rows] == ["Spiced Chicken Thigh", "Puffy Potato", "Apple", "Molotov"]
+
+
+def test_v7_rows_of_drops_a_wine_list_section() -> None:
+    blocks = segment("<p>Cabernet 14</p><p>Lager 6</p><p>White Pizza 12</p>")
+    outputs = (
+        _one_chunk(("b0001", "Cabernet", "14", ""), section="Red Wine")
+        + _one_chunk(("b0002", "Lager", "6", ""), section="Beer & Wine")
+        + _one_chunk(("b0003", "White Pizza", "12", ""), section="White Pizza")
+    )
+    assert [r.item for r in rows_of(outputs, blocks)] == ["Lager", "White Pizza"]

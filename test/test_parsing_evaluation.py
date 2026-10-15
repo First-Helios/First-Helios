@@ -287,3 +287,20 @@ def test_evaluate_cli_scores_saved_output(
     monkeypatch.setattr(sys, "argv", ["evaluate", "corrupt", *common])
     evaluate.main()
     assert "false_reject=0 rate=0.000" in capsys.readouterr().out
+
+
+def test_amendment_15_menu_numbers_are_not_part_of_a_name_and_wine_lists_are_out_of_scope() -> None:
+    page = gold_page(
+        {
+            **LABEL,
+            "items": [
+                _item("Aloo Chaat", "b0002", "Appetizers", "9"),
+                _item("H1: Scallop", "b0010", "Handrolls", "8"),
+                _item("Cabernet", "b0020", "Red Wine", "14"),
+                _item("Lager", "b0030", "Beer & Wine", "6"),
+            ],
+        }
+    )
+    assert [it.name for it in page.items] == ["Aloo Chaat", "H1: Scallop", "Lager"]
+    assert match(Row("13) Aloo Chaat", "9", claimed_block="b0004"), page.items) == 0
+    assert match(Row("Scallop", "8", claimed_block="b0011"), page.items) == 1

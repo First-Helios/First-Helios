@@ -174,14 +174,16 @@ This section is the single current-status page. Other docs link here.
   gold-row false reject 0.126 miss (the model naming a dish by its description, heading
   or a wine's cuvée line; one page printing its prices in a separate column). A blinded
   adjudication upheld the blind labels (2 owner-confirmed label changes).
-  Pipeline version v7 (`repairs-v7`, `validator-v7`; prompt unchanged at `prompt-v2.4`;
-  ADR-0013 [Amendment 15](./docs/adr/0013-phase5-menu-pipeline.md#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages)) is tuned with P5-12's
-  pages held out as a dev check ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md)): bare one-decimal
-  prices on bare-price pages, rows named by their description renamed to the title
-  line above, glued diet marks dropped; prompt naming rules were tried and rejected
-  (they lost items on two tuning sets). Every tuning set clears the four bars; the dev
-  check moves to item recall 0.834 (still under 0.85) and gold-row false reject 0.118
-  (tuning numbers, not a §8 evaluation).
+  Pipeline version v7 (`repairs-v7`, `validator-v7`; prompt and chunker unchanged;
+  ADR-0013 [Amendment 15](./docs/adr/0013-phase5-menu-pipeline.md#amendment-15-2026-10-14-pipeline-version-v7-tuned-on-the-p5-12-pages-wine-lists-out-of-scope)) is tuned with
+  P5-12's pages held out as a dev check ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md)): bare
+  one-decimal prices on bare-price pages, rows named by their description renamed to the
+  title line above, glued diet marks dropped. **Wine lists are out of scope** for now
+  (not extracted, not scored; the record says what re-including them needs), and the
+  harness ignores a leading menu number when matching names. Prompt naming rules,
+  chunking pre-treatment and a stronger retry were tried and rejected. Every tuning set
+  and the dev check clear the four bars (dev: item recall 0.865, gold-row false reject
+  0.115; tuning numbers, not a §8 evaluation).
   A page-classifier audit
   ([record](./docs/reviews/2026-10-12-p5-classifier-gap-audit.md)) found no
   demonstrated gap against the §8 classifier bar (draw precision 0.932
@@ -294,7 +296,8 @@ This section is the single current-status page. Other docs link here.
   [record](./docs/reviews/2026-10-13-p5-v6-held-out-evaluation.md), Amendment 14: item
   recall 0.821, gold-row false reject 0.126); those pages are now tuning pages too.
   Version v7 is tuned with them held out as a dev check ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md),
-  Amendment 15: dev item recall 0.834, gold-row false reject 0.118).
+  Amendment 15, wine lists out of scope: dev item recall 0.865, gold-row false reject
+  0.115).
   Opens when all hold:
   - [ ] a new pipeline version (v7 is next) passes §8 on a fresh held-out draw from
     the laptop pass (seed 20261013; all 234 venues labelled in P5-5, P5-8, P5-10 and
