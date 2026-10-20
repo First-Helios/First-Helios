@@ -1321,10 +1321,37 @@ what it stores without labels, not by the gold-row FR alone.
    - (b) each extraction run records per-page shares of downgraded, [5b]-accepted and flagged
      rows, and lists pages outside the tuning sets' range for review.
 
-## Amendment 20 (2026-10-19, Proposed): Qwen3.5-9B fallback on the Pi CPU
+## Amendment 20 (2026-10-19, accepted 2026-10-20): Qwen3.5-9B fallback on the Pi CPU
 
-**Status: Proposed** (session P5-22, for owner review). Nothing is built, no routing score
-has been run, and no deploy or infra file changes until the owner accepts this amendment.
+**Status: Accepted 2026-10-20 (session P5-23) with the owner rulings below. Scored the
+same day as registered: no policy passed, so no fallback ships** (item 5). Proposed in
+session P5-22. Nothing was built.
+
+**Owner rulings (2026-10-20, P5-23):**
+- **R2 is allowed** under Amendment 19 item 6. It is a label-free choice between two pages
+  that the same validator grounds, not an acceptance authority; the registered guards on
+  accepted-unmatched and wrong-accepted rows bind.
+- **ADR-0017 items 1–2 are accepted** (items 3–4 deferred), so item 8's dependency is met
+  and routing used H4 as registered.
+- **Context: both services at 12,288 (6,144 per slot).** This replaces item 3's "the
+  primary keeps 8,192". The primary's own retry prompt plus token cap reaches 4,679 tokens
+  (P5-19), above the 4,096-token slot of Amendment 6 item 6. The primary's flag change is
+  built with v9 and recorded in its amendment; the Pi 4B was measured at 12,288 (10.49
+  pages/h, 3.20 GiB).
+- Item 6's "§3's first-pass size (~2,300 menu pages)" is stale: the first pass runs on the
+  laptop (Amendment 8 item 1), and the laptop pass holds 886 distinct page texts (6,194
+  chunks).
+
+**Outcome (2026-10-20,
+[record](../reviews/2026-10-20-p5-23-fallback-routing.md)).** DEV made R2 the only
+eligible policy (+2 usable prices pooled over both primary replicates; R1 −3, R3 −4).
+On VAL, R2 raised usable prices (+38 / +29), but both replicates regressed on price
+accuracy (0.9956 vs 0.9966) and wrong-price-accepted rows (0.0030 / 0.0031 vs 0.0023),
+where the registered A/B band is 0. VAL fails, and there is no re-selection. v9
+continues primary-only. Data mapping, disclosed before scoring: item 5's primary tags
+hold TEST3 answers only, so DEV and VAL used P5-19's `screen-baseline-a` / `-b` (the pair
+behind the registered H4 DEV band) and the fallback's `p520-q35-9b__g-v24`.
+
 Evidence: [P5-20 bracket screen](../reviews/2026-10-16-p5-20-bracket-screen.md),
 [P5-21 TEST3](../reviews/2026-10-17-p5-21-harness-h-test3.md),
 [P5-21 closeout and Pi cost](../reviews/2026-10-18-p5-21-closeout-pi-cost.md).
