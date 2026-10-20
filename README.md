@@ -345,14 +345,17 @@ This section is the single current-status page. Other docs link here.
   opened, nothing built.** Model screen
   ([record](./docs/reviews/2026-10-15-p5-model-screen.md)), harness-free bracket screen
   ([record](./docs/reviews/2026-10-16-p5-20-bracket-screen.md),
-  [ADR-0017](./docs/adr/0017-extraction-harness-generalization.md) Proposed), per-model
+  [ADR-0017](./docs/adr/0017-extraction-harness-generalization.md), items 1–2 accepted), per-model
   prompts ([record](./docs/reviews/2026-10-16-p5-21-per-model-prompts.md)), the H4 harness
   repair and TEST3 ([record](./docs/reviews/2026-10-17-p5-21-harness-h-test3.md)) and the
   closeout with Pi cost ([record](./docs/reviews/2026-10-18-p5-21-closeout-pi-cost.md)).
   Qwen3-4B-Instruct-2507 Q4_0 on the Pi CPU stays the extractor (the NPU W8A8 probe was
-  slower and lower on its 3 pages); Qwen3.5-9B Q4_K_M is a fallback candidate (run on
-  every TEST3 tuning page: +131/+138 correct prices of 3,664 over the v8 baseline),
-  pending a label-free routing rule and an ADR-0013 amendment.
+  slower and lower on its 3 pages). Qwen3.5-9B Q4_K_M as a fallback (+131/+138 correct
+  prices of 3,664 over the v8 baseline when run on every TEST3 tuning page) was accepted
+  as ADR-0013 Amendment 20, but its registered label-free routing failed VAL
+  ([record](./docs/reviews/2026-10-20-p5-23-fallback-routing.md)), so **no fallback
+  ships** and v9 is primary-only. Integration of these findings:
+  [P5-23 register](./docs/reviews/2026-10-20-p5-23-findings-integration.md).
 - **Pi check, `llama-server` image: pending.** Before the first Pi extraction
   run, the owner runs the
   [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream
