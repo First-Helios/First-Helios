@@ -1568,10 +1568,10 @@ This amendment records what v9 contains and the rules its levers were judged by.
    worse than its tuning sets. The owner chose 35 pages over item 1(e)'s 70-page set and
    over another `price_not_grounded` block.
 
-## Amendment 22 (2026-10-20, proposed): v9 held-out evaluation passes
+## Amendment 22 (2026-10-20, accepted 2026-10-20): v9 held-out evaluation passes
 
-**Status: Proposed 2026-10-20 (session P5-26), with the owner's rulings below. It takes
-effect when PR #93 merges.**
+**Status: Accepted 2026-10-20 (owner): PR #93 merged as `75feffb`, with the rulings below.**
+Proposed in session P5-26.
 
 **Owner rulings (2026-10-20):**
 - The first extraction pass runs on the laptop GPU into `helios_laptop` (Amendment 8 item
@@ -1583,7 +1583,7 @@ effect when PR #93 merges.**
 Record:
 [2026-10-20-p5-26-v9-held-out-evaluation.md](../reviews/2026-10-20-p5-26-v9-held-out-evaluation.md).
 
-1. **v9 passes §8** (commit `07e9b49`, PR #93 unmerged; Amendment 21's version string). The
+1. **v9 passes §8** (commit `07e9b49`, PR #93, merged as `75feffb`; Amendment 21's version string). The
    draw: 35 static own-site pages from the laptop pass (seed 20261015; P5-5's exclusions plus
    the 378 venues labelled in P5-5 to P5-16 and their sites; quotas 14 / 14 / 7 with the fixed
    cutoffs), scored with the v9 harness.
