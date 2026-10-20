@@ -1570,8 +1570,17 @@ This amendment records what v9 contains and the rules its levers were judged by.
 
 ## Amendment 22 (2026-10-20, proposed): v9 held-out evaluation passes
 
-**Status: Proposed 2026-10-20 (session P5-26).** The verdict is measured. The label changes
-and what runs next await the owner. Record:
+**Status: Proposed 2026-10-20 (session P5-26), with the owner's rulings below. It takes
+effect when PR #93 merges.**
+
+**Owner rulings (2026-10-20):**
+- The first extraction pass runs on the laptop GPU into `helios_laptop` (Amendment 8 item
+  1), with the evaluated flags and the production context. It follows the merge.
+- The adjudication's 4 label changes stand, with C3 at its printed block. The confirmed
+  set gives the same verdict.
+- A classifier precision check is opened (item 4).
+
+Record:
 [2026-10-20-p5-26-v9-held-out-evaluation.md](../reviews/2026-10-20-p5-26-v9-held-out-evaluation.md).
 
 1. **v9 passes §8** (commit `07e9b49`, PR #93 unmerged; Amendment 21's version string). The

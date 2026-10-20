@@ -338,6 +338,16 @@ GPU throughput is not a Pi number.
   `3439a96175c87b03ad1397d6eb9a3207e0a1d064a12be59c8c287bcc7e9a528d`). These 35 pages are
   now tuning pages (§8).
 
+## Owner decisions after the evaluation (2026-10-20)
+
+| | Answer |
+|---|---|
+| Q-A | **The owner merges PR #93; then the full laptop extraction pass runs into `helios_laptop` on the laptop GPU.** It uses the evaluated flags, the production context (12,288) and the 93/78 °C guard. Production on the Pi stays the CPU service. |
+| Q-B | **The 4 changes stand, with C3 placed at its printed name block b0184** (section "Tacos & Enchiladas"). B190 and C181 stay as labelled. The confirmed set's held-out manifest is `e1309014790701ce9c8995f9f45d44045fad060989e00032d89bef59f45eac24`. It scores as the adjudicated set: 0.993 / 0.874 / 0.996 / FR 0.096 (293/3038), usable 0.755. |
+| Q-C | **A classifier check is opened** for a later session: all draws' page labels pooled against classifier-v2, for §8's 0.95 precision bar (the classifier gap audit's R1 sample). |
+| Q-D | Seed 20261016 and `next-draw-exclusions-p5-27.json`, as recorded, for the next version's draw. |
+| — | The disposable clone `helios_p526_eval` was dropped and the stopped GPU container removed. The answers stay in `var/menu-eval/p5-26/base`. |
+
 ## Verification
 
 Measured only; no code changed in this session. `make ci` on the branch is run before the
