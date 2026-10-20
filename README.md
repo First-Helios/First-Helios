@@ -337,6 +337,18 @@ This section is the single current-status page. Other docs link here.
     ([RUN-A-01](./docs/reviews/2026-10-03-menu-write-commit-cost.md#owner-run-checklist-run-a-01-after-the-migration-merges))
     ran 2026-10-14 on a disposable clone: the page that took at least 1 h 25 min commits
     in 24.5 s ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md#run-a-01-q7a-the-menu-write-commit-re-timed)).
+- **Phase 5 model/harness findings (P5-19 to P5-21): tuning evidence only; no gate
+  opened, nothing built.** Model screen
+  ([record](./docs/reviews/2026-10-15-p5-model-screen.md)), harness-free bracket screen
+  ([record](./docs/reviews/2026-10-16-p5-20-bracket-screen.md),
+  [ADR-0017](./docs/adr/0017-extraction-harness-generalization.md) Proposed), per-model
+  prompts ([record](./docs/reviews/2026-10-16-p5-21-per-model-prompts.md)), the H4 harness
+  repair and TEST3 ([record](./docs/reviews/2026-10-17-p5-21-harness-h-test3.md)) and the
+  closeout with Pi cost ([record](./docs/reviews/2026-10-18-p5-21-closeout-pi-cost.md)).
+  Qwen3-4B-Instruct-2507 Q4_0 on the Pi CPU stays the extractor (the NPU W8A8 probe was
+  slower and lower on its 3 pages); Qwen3.5-9B Q4_K_M is a fallback candidate (run on
+  every TEST3 tuning page: +131/+138 correct prices of 3,664 over the v8 baseline),
+  pending a label-free routing rule and an ADR-0013 amendment.
 - **Pi check, `llama-server` image: pending.** Before the first Pi extraction
   run, the owner runs the
   [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream
