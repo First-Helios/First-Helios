@@ -11,6 +11,9 @@ chunk under ``"chunks"``, in chunk order: the spike's record) and gold labels
         [--splits var/menu-eval/splits.json --split ho3] TAG [TAG ...]
     uv run python -m apps.menu_pipeline.evaluate loss --data … --labels … TAG [--pages]
     uv run python -m apps.menu_pipeline.evaluate corrupt --data … --labels … [--seed 7]
+    uv run python -m apps.menu_pipeline.evaluate report TAG --data … --labels … [--seed 7]
+    uv run python -m apps.menu_pipeline.evaluate invariance --data … --labels … \\
+        [--out FLIPS.json] [--baseline FLIPS.json]
     uv run python -m apps.menu_pipeline.evaluate extract --data … --labels … \\
         [--server http://localhost:8080] TAG
 
@@ -19,9 +22,22 @@ chunking, sparse retry; 2 requests in flight) over the gold pages and saves each
 page's answers as ``<data>/extract/<TAG>/<page_id>.json``, skipping pages already
 saved; ``compare`` / ``loss`` then score them. Scoring alone needs no server.
 
+``report`` prints one tag's §8 record as Amendment 19 item 1 asks: the §8 numbers;
+gold-row FR and usable prices with page-clustered 95 % intervals (and the share of
+resamples within the FR bar); accepted rows that match no label; real-output
+wrong-price rows accepted; [5b]'s accepts; and per-format and per-page gold-row FR.
+(Amendment 21) Usable prices are checked against :data:`USABLE_BAR`.
+
+``invariance`` runs the invariance suite (ADR-0017 item 1,
+``packages.helios_parsing.invariance``) over the gold pages: no extractor output is
+read. It prints each style's flips, writes per-page counts with ``--out``, and with
+``--baseline`` (an earlier ``--out``) lists every page and style that flips more than
+before and exits non-zero if there is one.
+
 ``--splits`` names a JSON file mapping split names to page ids (e.g. the tuning
 pages and each held-out set); without it every scorable gold page is scored.
-``compare`` scores only pages every tag has output for, so its lines compare.
+``compare`` and ``report`` refuse to score when a tag has no saved output for a gold
+page (an incomplete ``extract`` job must not pass as a smaller score).
 Pages are segmented with the current segmenter; the rows are repaired and
 stitched exactly as the pipeline does. Gold labels, pages and outputs stay in
 ``var/``; only counts and rates go into ``docs/reviews/``.
@@ -43,10 +59,13 @@ from packages.helios_parsing.evaluation import (
     corruption_eval,
     corruption_metrics,
     gold_page,
+    gold_reject_page,
     loss_page,
     metrics,
+    page_clustered,
     score_page,
 )
+from packages.helios_parsing.invariance import VARIANTS, added_flips, invariance_page
 from packages.helios_parsing.output import parse_output, rows_of
 from packages.helios_parsing.segment import segment
 
@@ -81,12 +100,21 @@ def _fmt(value: float | None) -> str:
     return "  n/a" if value is None else f"{value:.3f}"
 
 
+def complete(data: Path, gold: dict[str, GoldPage], tags: list[str]) -> list[str]:
+    """The gold pages, once every tag has saved output for each; an incomplete job (a failed
+    or interrupted ``extract``) stops the scoring instead of scoring a subset."""
+    for tag in tags:
+        missing = [pid for pid in gold if not (data / "extract" / tag / f"{pid}.json").exists()]
+        if missing:
+            raise SystemExit(
+                f"{tag}: no saved output for {len(missing)} of {len(gold)} gold pages "
+                f"(first: {missing[0]}); finish the extract run or narrow --split"
+            )
+    return list(gold)
+
+
 def cmd_compare(data: Path, gold: dict[str, GoldPage], tags: list[str]) -> None:
-    common = [
-        pid
-        for pid in gold
-        if all((data / "extract" / tag / f"{pid}.json").exists() for tag in tags)
-    ]
+    common = complete(data, gold, tags)
     promos = sum(len(gold[pid].promos) for pid in common)
     print(f"pages={len(common)} (of {len(gold)} gold) promo_entries={promos}")
     print(f"{'tag':18} items  usable  acc    FR     catch  rows  promo_stored")
@@ -144,6 +172,98 @@ def cmd_corrupt(data: Path, gold: dict[str, GoldPage], seed: int) -> None:
     print(f"catch rate={_fmt(m['catch'])}")
 
 
+FR_BAR = 0.12  # §8 gold-row false-reject bar
+USABLE_BAR = 0.74  # (Amendment 21) usable prices, gated from the next §8 evaluation
+
+
+def _ratio(num: int, den: int) -> str:
+    return f"{num / den:.3f} ({num}/{den})" if den else "  n/a"
+
+
+def _interval(low: float | None, high: float | None) -> str:
+    return "n/a" if low is None or high is None else f"[{low:.3f}, {high:.3f}]"
+
+
+def cmd_report(data: Path, gold: dict[str, GoldPage], tag: str, seed: int) -> None:
+    pids = complete(data, gold, [tag])
+    total: Counter[str] = Counter()
+    usable: list[tuple[int, int]] = []
+    rejects: dict[str, Counter[str]] = {}
+    pages: list[tuple[GoldPage, list[Block]]] = []
+    for pid in pids:
+        blocks = blocks_of(data, pid)
+        pages.append((gold[pid], blocks))
+        counts = score_page(gold[pid], blocks, extracted_rows(data, tag, pid, blocks))
+        total += counts
+        usable.append((counts["found_price"], counts["gold_prices"]))
+        rejects[pid] = gold_reject_page(gold[pid], blocks)
+    corrupt = corruption_eval(pages, seed)
+    caught = sum(n for k, n in corrupt.items() if k.startswith("caught:"))
+    trials = sum(n for k, n in corrupt.items() if k.startswith("n:"))
+    fr = page_clustered([(c["false_reject"], c["correct_rows"]) for c in rejects.values()], FR_BAR)
+    use = page_clustered(usable)
+    print(f"{tag} pages={len(pids)} (of {len(gold)} gold) seed={seed}")
+    print(f"  item recall       {_ratio(total['found_raw'], total['gold_items'])}")
+    print(
+        f"  price accuracy    {_ratio(total['accepted_price_exact'], total['accepted_matched_priced'])}"
+    )
+    print(f"  gold-row FR       {_ratio(corrupt['false_reject'], corrupt['correct_rows'])}")
+    print(
+        f"    page-clustered  {_interval(fr.low, fr.high)}; resamples <= {FR_BAR}: {_fmt(fr.at_most)}"
+    )
+    print(f"  catch             {_ratio(caught, trials)}")
+    usable_rate = total["found_price"] / total["gold_prices"] if total["gold_prices"] else 0.0
+    print(
+        f"  usable prices     {_ratio(total['found_price'], total['gold_prices'])}; "
+        f"bar >= {USABLE_BAR}: {'pass' if usable_rate >= USABLE_BAR else 'FAIL'}"
+    )
+    print(f"    page-clustered  {_interval(use.low, use.high)}")
+    print(f"  accepted rows matching no label   {total['accepted_unmatched']}")
+    print(f"  real-output wrong-price accepted  {total['wrong_accepted_price']}")
+    print(
+        f"  [5b] accepted {total['resolved_accepted']}: exact "
+        f"{_ratio(total['resolved_price_exact'], total['resolved_matched_priced'])}, "
+        f"matching no label {total['resolved_unmatched']}"
+    )
+    by_format: dict[str, Counter[str]] = {}
+    for pid, c in rejects.items():
+        fmt = by_format.setdefault(str(gold[pid].format), Counter())
+        fmt.update(c)
+        fmt["pages"] += 1
+    print("  gold-row FR per format:")
+    for fmt_name, c in sorted(by_format.items()):
+        print(
+            f"    {fmt_name:14} pages={c['pages']:3} {_ratio(c['false_reject'], c['correct_rows'])}"
+        )
+    print("  gold-row FR per page (pages with a reject, worst first):")
+    for pid, c in sorted(rejects.items(), key=lambda kv: -kv[1]["false_reject"]):
+        if c["false_reject"]:
+            print(f"    {pid} [{gold[pid].format}] {_ratio(c['false_reject'], c['correct_rows'])}")
+
+
+def cmd_invariance(
+    data: Path, gold: dict[str, GoldPage], out: Path | None, baseline: Path | None
+) -> None:
+    pages = {pid: dict(invariance_page(page, blocks_of(data, pid))) for pid, page in gold.items()}
+    total: Counter[str] = sum((Counter(c) for c in pages.values()), Counter())
+    print(f"pages={len(pages)} gold prices={total['gold_prices']} accepted={total['base:accept']}")
+    for style in VARIANTS:
+        print(
+            f"  {style:22} flips={total['flip:' + style]:5} "
+            f"lost_accept={total['lost_accept:' + style]:5} "
+            f"gained_accept={total['gained_accept:' + style]:4}"
+        )
+    if out is not None:
+        out.write_text(json.dumps(pages, indent=1, sort_keys=True), encoding="utf-8")
+    if baseline is not None:
+        added = added_flips(json.loads(baseline.read_text(encoding="utf-8")), pages)
+        for pid, style, before, after in added:
+            print(f"  added flips: {pid} {style} {before} -> {after}")
+        if added:
+            raise SystemExit(f"{len(added)} page/style pairs flip more than the baseline")
+        print("  no added flips")
+
+
 def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaClient) -> None:
     out = data / "extract" / tag
     out.mkdir(parents=True, exist_ok=True)
@@ -162,7 +282,9 @@ def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaCl
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=["compare", "loss", "corrupt", "extract"])
+    parser.add_argument(
+        "command", choices=["compare", "loss", "corrupt", "report", "extract", "invariance"]
+    )
     parser.add_argument("tags", nargs="*")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--labels", type=Path, required=True)
@@ -171,6 +293,8 @@ def main() -> None:
     parser.add_argument("--pages", action="store_true", help="loss: one line per page")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--server", default="http://localhost:8080", help="extract: llama-server")
+    parser.add_argument("--out", type=Path, help="invariance: write per-page flip counts")
+    parser.add_argument("--baseline", type=Path, help="invariance: fail on flips added to it")
     args = parser.parse_args()
     gold = load_gold(args.labels, args.splits, args.split)
     if args.command == "compare":
@@ -178,6 +302,11 @@ def main() -> None:
     elif args.command == "loss":
         for tag in args.tags:
             cmd_loss(args.data, gold, tag, per_page=args.pages)
+    elif args.command == "report":
+        for tag in args.tags:
+            cmd_report(args.data, gold, tag, args.seed)
+    elif args.command == "invariance":
+        cmd_invariance(args.data, gold, args.out, args.baseline)
     elif args.command == "extract":
         (tag,) = args.tags
         with http_client() as http:

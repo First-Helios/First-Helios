@@ -108,7 +108,7 @@ def stitch(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     anchor_priced = False
     last_priced: tuple[int, str | None] | None = None
     for row in rows:
-        pos = _name_block(row, blocks, index)
+        pos = name_block(row, blocks, index)
         text = blocks[pos].text if pos is not None else ""
         near = pos is not None and anchor is not None and 0 < pos - anchor_block <= MAX_GAP
         sentence = (
@@ -165,7 +165,7 @@ def _run_after(
             break
         if not run and toks and all(is_addon(blocks[j], t) for t in toks):
             continue  # (v5) a modifier's price line ("add $.95 per cake") ends no run
-        if toks and _price_only(blocks[j].text, toks):
+        if toks and price_only(blocks[j].text, toks):
             run.append(j)
             continue
         if run or toks:
@@ -194,10 +194,10 @@ def fill_prices(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     """Unpriced items take the price-only block(s) printed just below them."""
     index = {b.id: i for i, b in enumerate(blocks)}
     prices = price_tokens(list(blocks))
-    row_blocks = {j for r in rows if (j := _name_block(r, blocks, index)) is not None}
+    row_blocks = {j for r in rows if (j := name_block(r, blocks, index)) is not None}
     out: list[Row] = []
     for row in rows:
-        pos = _name_block(row, blocks, index)
+        pos = name_block(row, blocks, index)
         if row.amount is not None or pos is None or not _names_in(row.item, blocks[pos].text):
             out.append(row)
             continue
@@ -216,10 +216,10 @@ def complete_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]
     """
     index = {b.id: i for i, b in enumerate(blocks)}
     prices = price_tokens(list(blocks))
-    row_blocks = {j for r in rows if (j := _name_block(r, blocks, index)) is not None}
+    row_blocks = {j for r in rows if (j := name_block(r, blocks, index)) is not None}
     groups: dict[tuple[str, int], list[int]] = {}  # (name, name block) -> row positions
     for i, r in enumerate(rows):
-        pos = _name_block(r, blocks, index)
+        pos = name_block(r, blocks, index)
         if r.amount is not None and pos is not None and _names_in(r.item, blocks[pos].text):
             groups.setdefault((" ".join(norm_tokens(r.item)), pos), []).append(i)
     per_block: dict[int, int] = {}
@@ -255,7 +255,7 @@ def complete_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]
     return out
 
 
-def _name_block(row: Row, blocks: Sequence[Block], index: dict[str, int]) -> int | None:
+def name_block(row: Row, blocks: Sequence[Block], index: dict[str, int]) -> int | None:
     """The block the row's name is printed in: the claimed one, else the nearest within 2.
 
     The model sometimes claims a neighbour's id (a description row claiming the price line).
@@ -274,7 +274,7 @@ def _names_in(name: str, text: str) -> bool:
     return bool(toks) and set(toks) <= set(norm_tokens(text))
 
 
-def _price_only(text: str, toks: list[PriceToken]) -> bool:
+def price_only(text: str, toks: list[PriceToken]) -> bool:
     rest = text
     for t in sorted(toks, key=lambda t: -t.start):
         rest = rest[: t.start] + rest[t.end :]

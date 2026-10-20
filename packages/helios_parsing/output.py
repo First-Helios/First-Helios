@@ -16,15 +16,18 @@ section, ``wine_section``: out of scope, Amendment 15):
 1. a price printed in the variant slot with the price slot empty moves to the
    price (small models lose the key order; v5: any form ``prices`` reads,
    "12.5 USD");
-2. a variant with no letters ("4") is dropped: a bare number is not a size;
+2. a variant with no letters ("4") is dropped: a bare number is not a size; (v8)
+   unless it is one count of a "3/6" pair in the row's name (see 4);
 3. stitch v3 (``stitch.stitch``): split lines re-assembled into items, price
    fill, variant completion;
 4. a variant whose words are all in the item name ("(L)" copied from "Orange
-   Chicken (L)") is dropped: it was not printed with the price;
+   Chicken (L)") is dropped: it was not printed with the price; (v8) unless it is
+   one count of a "3/6" pair in the name ("3/6 Catfish Dinner", "6"), which [5b]
+   grounds against the same-order price pair (``resolve.pair_position``);
 4b. (v4) a variant that is no price's printed label near the item ("chilled, hot,
    or spicy": a description put in the variant slot) is dropped
    (``drop_unprinted_variants``; v5: the validator's labels, column headers
-   included);
+   included; v9: near the block printing the name, not the claimed block);
 4c. (v6) a row named by a whole list of names printed in its block ("Deep Eddy,
    Tito's Handmade Vodka, Absolut Vodka") becomes one row per name, each with the
    row's price and variant (``split_listed``); a choice ("Mango, Peach or Guava")
@@ -44,7 +47,8 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from packages.helios_parsing.prices import PriceToken, price_tokens, read_amount
-from packages.helios_parsing.stitch import FILL_GAP, stitch
+from packages.helios_parsing.resolve import pair_position
+from packages.helios_parsing.stitch import FILL_GAP, name_block, price_only, stitch
 from packages.helios_parsing.validator import (
     Row,
     block_tokens,
@@ -60,7 +64,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v7"
+REPAIRS_VERSION = "repairs-v9"
 
 # (v7) wine lists are out of scope (ADR-0013 Amendment 15): a section whose heading names
 # wine ("Wine by the Glass", "Sparkling", "Champagne"), or is only colour words and their
@@ -215,7 +219,11 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
                 )
                 if not price and (_AMOUNT_ONLY.match(variant) or read_amount(variant)):
                     price, variant = variant, ""
-                if variant and not any(ch.isalpha() for ch in variant):
+                if (
+                    variant
+                    and not any(ch.isalpha() for ch in variant)
+                    and not pair_position(name, variant)  # (v8) "6" of "3/6 Catfish Dinner"
+                ):
                     variant = ""
                 if name and not wine_section(section.section):
                     rows.append(
@@ -232,7 +240,9 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
     rows = stitch(rows, blocks)
     rows = [
         replace(row, variant=None)
-        if row.variant and set(norm_tokens(row.variant)) <= set(norm_tokens(row.item))
+        if row.variant
+        and set(norm_tokens(row.variant)) <= set(norm_tokens(row.item))
+        and not pair_position(row.item, row.variant)  # (v8) a count of a "3/6" name pair
         else row
         for row in rows
     ]
@@ -256,26 +266,49 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
     return unique
 
 
+NAME_ABOVE = 8  # (v9) blocks above a claim searched for the row's printed name
+
+
+def printed_name_block(row: Row, blocks: Sequence[Block], index: dict[str, int]) -> int | None:
+    """(v9) The block printing the row's name: the claimed one, else the nearest of the
+    ``NAME_ABOVE`` blocks above it (a claim on the item's description or price line), else
+    ``stitch.name_block``'s nearest within 2 (ADR-0017 item 1: claim drift)."""
+    pos = index.get(row.claimed_block or "")
+    if pos is None:
+        return None
+    toks = set(norm_tokens(row.item))
+    for j in range(pos, max(-1, pos - 1 - NAME_ABOVE), -1):
+        if toks and toks <= set(norm_tokens(blocks[j].text)):
+            return j
+    return name_block(row, blocks, index)
+
+
 def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     """Rows whose variant isn't the label of any price printed near the item lose it.
 
     The prompt asks for the size/variant word printed next to the price; a small
     model sometimes copies the description there instead, and the validator then
-    downgrades a correctly priced row (``variant_not_grounded``). Near = the claimed
-    block from 2 above to ``FILL_GAP`` below. Kept when nothing near prints a price
-    (a shared section price) or the claimed block is unknown.
+    downgrades a correctly priced row (``variant_not_grounded``). Near = from 2 above
+    to ``FILL_GAP`` below the block printing the row's name; (v9) that block, not the
+    claimed one (``printed_name_block``: a claim on the item's description or price line
+    decides as a claim on its name, ADR-0017 item 1), and above it only price-first lines
+    ("$12", "Small $6"), not a note's words. Kept when nothing near prints a price
+    (a shared section price) or the claimed block is unknown, and (v8) when it is a
+    count of a "3/6" pair in the row's own name (``resolve.pair_position``: [5b]
+    grounds it against the same-order price pair, Amendment 19 item 4).
     """
     index = {b.id: i for i, b in enumerate(blocks)}
     prices = price_tokens(list(blocks))
     out: list[Row] = []
     for row in rows:
-        pos = index.get(row.claimed_block or "")
-        if not row.variant or pos is None:
+        pos = printed_name_block(row, blocks, index)  # (v9) the printed name, not the claim
+        if not row.variant or pos is None or pair_position(row.item, row.variant):
             out.append(row)
             continue
         labels = [
             label_tokens(list(blocks), prices, t)
             for j in range(max(0, pos - 2), min(len(blocks), pos + FILL_GAP + 1))
+            if j >= pos or (prices[j] and price_only(blocks[j].text, prices[j]))  # (v9)
             for t in prices[j]
         ]
         own = set(norm_tokens(row.variant))

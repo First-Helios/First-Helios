@@ -29,6 +29,9 @@ What one page writes (X4, N1, N2), through :func:`persist_menu`:
   prices cite Capture-targeted ``blocks:`` spans in the Version's bundle.
 - Trust (§6, Q6): price confidence is :data:`PRICE_CONFIDENCE`, or
   :data:`FLAGGED_PRICE_CONFIDENCE` on a page flagged ``unlabeled_price_runs``;
+  a price [5b] price resolution accepted (Amendment 19) takes
+  :data:`RESOLVED_PRICE_CONFIDENCE`, or the flagged one when that is lower, so
+  downstream can rank or filter it apart from the validator's accepts;
   page confidence is the page classifier's probability.
 """
 
@@ -80,6 +83,9 @@ ROOT_KEY = "page"  # one menu per menu-page record
 METHOD = "menu-pipeline"
 PRICE_CONFIDENCE = Decimal("0.9800")  # measured exact-price accuracy on accepted rows (§8)
 FLAGGED_PRICE_CONFIDENCE = Decimal("0.9000")  # pages printing unlabeled size-price runs
+# (Amendment 21) [5b] accepts: the 95 % Wilson lower bound of their measured exact-price
+# accuracy on the tuning sets, rounded down (resolve-v2: 26 of 26 exact, 0.871)
+RESOLVED_PRICE_CONFIDENCE = Decimal("0.8700")
 APPLICABILITY_KEY = "unspecified"
 UNSECTIONED = "Unsectioned"
 _MAX_KEY = 512
@@ -327,6 +333,7 @@ def write_page(  # noqa: PLR0913 - one page's inputs
         return evidence_ids[span.locator]
 
     price_confidence = FLAGGED_PRICE_CONFIDENCE if flagged else PRICE_CONFIDENCE
+    resolved_confidence = min(price_confidence, RESOLVED_PRICE_CONFIDENCE)
     vid = page.version_id
     written = PageWrite()
     section_inputs: list[SectionInput] = []
@@ -346,7 +353,7 @@ def write_page(  # noqa: PLR0913 - one page's inputs
                     price_state="priced",
                     amount_minor=price.amount_minor,
                     currency_code="USD",
-                    confidence=price_confidence,
+                    confidence=resolved_confidence if price.resolved else price_confidence,
                     evidence_ids=tuple(sorted({evidence(e) for e in price.evidence})),
                 )
             )

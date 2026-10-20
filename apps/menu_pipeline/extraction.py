@@ -14,8 +14,10 @@ ADR-0013 implementation slice 5 (session P5-4). For each due Version
    saved answers in minutes, and only a model, prompt, chunking or segmenter
    bump runs the model again (X2).
 2. **Validate.** The answers are parsed, repaired and stitched
-   (``output.rows_of``), and validator v3 decides every row; the page's
-   schema.org JSON-LD goes through the same validator (§1).
+   (``output.rows_of``), the validator decides every row, and [5b] price
+   resolution (``resolve.judge``, Amendment 19) re-judges its no-match
+   downgrades; the page's schema.org JSON-LD goes through the same validator
+   (§1), without [5b] (no tuning data for it).
 3. **Write.** Per page, the Evidence its nodes cite is committed first (Menu
    admission accepts only committed input), then in one transaction the ``llm``
    page aggregate and, when
@@ -31,6 +33,12 @@ server is likely gone) and says so.
 **Pipeline version** (X2): ``method_version`` names every component of the
 interpretation (:class:`PipelineVersion`); a page is up to date when its
 ``llm`` head is on the record's latest Version with exactly this string.
+
+**Run report** (Amendment 19 item 8b): per extracted page, the shares of its
+priced ``llm`` rows the validator downgraded and [5b] accepted, and its
+``unlabeled_price_runs`` flag (:class:`PageShares`); pages above the tuning sets'
+range (:data:`TUNING_DOWNGRADED_SHARE_MAX`, :data:`TUNING_RESOLVED_SHARE_MAX`) are
+listed for review.
 """
 
 from __future__ import annotations
@@ -62,6 +70,7 @@ from packages.helios_parsing.jsonld import JSONLD_VERSION, menu_items, validator
 from packages.helios_parsing.menu_shape import shape
 from packages.helios_parsing.output import REPAIRS_VERSION, parse_output, rows_of
 from packages.helios_parsing.prompt import PROMPT_VERSION
+from packages.helios_parsing.resolve import RESOLVER_VERSION, judge, resolved
 from packages.helios_parsing.segment import SEGMENTER_VERSION, text_hash
 from packages.helios_parsing.validator import VALIDATOR_VERSION, validate
 
@@ -80,6 +89,13 @@ OUTPUT_FORMAT = "menu-extract-v1"
 OUTPUT_PREFIX = PurePosixPath("var/replay/menu-extract")
 LOOKAHEAD = 2  # pages whose chunks are queued behind the one being finished
 MAX_CONSECUTIVE_FAILURES = 3
+# (Amendment 21) the tuning sets' range of per-page shares of priced llm rows, on their
+# saved answers under v9 (212 pages with at least TUNING_MIN_ROWS priced rows), rounded
+# up; a page above either is listed for review. Downgrades: the 95th percentile (0.462;
+# the maximum is 1.0, which would list nothing). [5b] accepts: the maximum (0.222).
+TUNING_DOWNGRADED_SHARE_MAX = 0.47
+TUNING_RESOLVED_SHARE_MAX = 0.23
+TUNING_MIN_ROWS = 5
 _METHOD_VERSION_MAX = 128  # menu_page.method_version
 
 
@@ -118,7 +134,10 @@ class PipelineVersion:
 
     @property
     def llm(self) -> str:
-        return _checked(f"{self.extractor};{REPAIRS_VERSION};{VALIDATOR_VERSION};{self.classifier}")
+        return _checked(
+            f"{self.extractor};{REPAIRS_VERSION};{VALIDATOR_VERSION};{RESOLVER_VERSION};"
+            f"{self.classifier}"
+        )
 
     @property
     def jsonld(self) -> str:
@@ -212,6 +231,37 @@ class SocProbe:
             self.freq_cap = min(ratio, self.freq_cap or ratio)
 
 
+@dataclass(frozen=True, slots=True)
+class PageShares:
+    """One extracted page's priced ``llm`` rows: how many, and the shares the validator
+    downgraded and [5b] accepted."""
+
+    key: str
+    priced: int
+    downgraded: float
+    resolved: float
+    flagged: bool
+
+    @property
+    def outside_tuning_range(self) -> bool:
+        return self.priced >= TUNING_MIN_ROWS and (
+            self.downgraded > TUNING_DOWNGRADED_SHARE_MAX
+            or self.resolved > TUNING_RESOLVED_SHARE_MAX
+        )
+
+
+def page_shares(key: str, validation: Validation) -> PageShares:
+    priced = [v for v in validation.verdicts if v.row.amount is not None]
+    n = len(priced)
+    return PageShares(
+        key=key,
+        priced=n,
+        downgraded=sum(v.decision == "downgrade" for v in priced) / n if n else 0.0,
+        resolved=sum(resolved(v) for v in priced) / n if n else 0.0,
+        flagged=validation.unlabeled_price_runs,
+    )
+
+
 @dataclass(slots=True)
 class ExtractionReport:
     """Counts from one extraction run (pages unless named otherwise)."""
@@ -236,6 +286,7 @@ class ExtractionReport:
     truncated_chunks: int = 0
     resent_requests: int = 0
     rows: Counter[str] = field(default_factory=Counter)  # "<kind>:<decision>[:<reason>]"
+    pages: list[PageShares] = field(default_factory=list)  # per extracted page (llm rows)
     items_written: int = 0
     prices_written: int = 0
     unsectioned_items: int = 0  # stored, not projected to Gold (no native key)
@@ -246,8 +297,22 @@ class ExtractionReport:
     def summary(self) -> dict[str, object]:
         out: dict[str, object] = {}
         for name in self.__dataclass_fields__:
+            if name == "pages":
+                continue
             value = getattr(self, name)
             out[name] = dict(sorted(value.items())) if isinstance(value, Counter) else value
+        out["pages_with_resolved_rows"] = sum(p.resolved > 0 for p in self.pages)
+        out["outside_tuning_range"] = [
+            {
+                "key": p.key,
+                "priced": p.priced,
+                "downgraded": round(p.downgraded, 3),
+                "resolved": round(p.resolved, 3),
+                "flagged": p.flagged,
+            }
+            for p in self.pages
+            if p.outside_tuning_range
+        ]
         out["wall_s"] = round(self.wall_s, 1)
         hours = self.wall_s / 3600
         out["pages_per_hour"] = round(self.extracted / hours, 2) if hours > 0 else None
@@ -286,9 +351,8 @@ def _confidence(probability: float) -> Decimal:
 
 def _count_rows(report: ExtractionReport, kind: str, validation: Validation) -> None:
     for verdict in validation.verdicts:
-        reason = (
-            f":{verdict.reasons[0]}" if verdict.decision != "accept" and verdict.reasons else ""
-        )
+        shown = verdict.decision != "accept" or resolved(verdict)  # [5b]: its resolver
+        reason = f":{verdict.reasons[0]}" if shown and verdict.reasons else ""
         report.rows[f"{kind}:{verdict.decision}{reason}"] += 1
 
 
@@ -368,7 +432,7 @@ class _Run:
         report = self._report
         blocks = list(bundle.blocks)
         html = page_html(bundle)
-        llm = validate(blocks, rows_of([parse_output(raw) for raw in raws], blocks))
+        llm = judge(blocks, rows_of([parse_output(raw) for raw in raws], blocks))
         streams: list[tuple[SourceKind, Validation]] = [("llm", llm)]
         jsonld_rows = validator_rows(menu_items(html))
         if jsonld_rows or head_has_items(self._session, due.source_record_id, "jsonld"):
@@ -404,6 +468,7 @@ class _Run:
         self._commit()
         report.extracted += 1
         report.flagged += llm.unlabeled_price_runs
+        report.pages.append(page_shares(due.key, llm))
         for kind, validation, page in written:
             _count_rows(report, kind, validation)
             report.items_written += page.items

@@ -21,7 +21,8 @@ node carries the Capture-targeted Evidence of the text it states:
   with the price). A row without a label prices the item itself; several such
   prices stay separate price rows, since nothing on the page names them.
 - **Prices.** Integer minor units (USD), with the price span and the name span
-  as Evidence.
+  as Evidence; a price [5b] accepted (``resolve.resolved``) is marked, so the
+  Menu writer stores it with its own confidence.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from packages.helios_parsing.resolve import resolved
 from packages.helios_parsing.validator import (
     Evidence,
     name_evidence,
@@ -49,6 +51,7 @@ MAX_TEXT = 512  # Menu name and label columns
 class ShapedPrice:
     amount_minor: int
     evidence: tuple[Evidence, ...]  # the price span, then the item's name span
+    resolved: bool = False  # accepted by [5b] price resolution, not the validator
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,7 +149,7 @@ def shape(blocks: Sequence[Block], verdicts: Sequence[Verdict]) -> tuple[ShapedS
         if amount is None or v.price_evidence.locator in item.seen:
             continue
         item.seen.add(v.price_evidence.locator)
-        price = ShapedPrice(int(amount * 100), (v.price_evidence, item.evidence))
+        price = ShapedPrice(int(amount * 100), (v.price_evidence, item.evidence), resolved(v))
         label = _clip(row.variant or "")
         variant_key = _norm(label)
         if not variant_key:
