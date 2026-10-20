@@ -33,11 +33,13 @@ Amendment 19's section single-price rule was built and measured in P5-18 and not
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from packages.helios_parsing.prices import price_tokens
 from packages.helios_parsing.validator import (
+    IGNORED_TOKENS,
     Validation,
     Verdict,
     evidence,
@@ -65,9 +67,17 @@ NO_MATCH = frozenset(
 )
 NAME_PAIR = "resolved_name_pair"
 PAIR_SCAN = 3  # blocks after the name searched for its price group
+LABEL_LINE = "resolved_label_line"
+LABEL_SCAN = 6  # blocks after the name in the item's region
+LABEL_ABOVE = 2  # lines above a price searched for its label
+NAME_PRICE = "resolved_name_price"
 
 _COUNT_PAIR = re.compile(r"(?<![\d.$/])\d{1,3}(?:\s*/\s*\d{1,3})+(?![\d.%/])")  # "3/6"
 _PAIR_SEP = re.compile(r"\s*/\s*")
+_WORD = re.compile(r"\w+", re.UNICODE)
+_NAME_GAP = re.compile(r"[^\w]{0,3}|\s*(?:&|and)\s*", re.I)  # between two words of a name
+_PRICE_GAP = re.compile(r"[\s_:|\-–—.,()]*")  # between a name and its price
+_GLUED = re.compile(r"[a-z][A-Z]")
 
 
 class Page:
@@ -135,7 +145,77 @@ def name_pair(page: Page, nb: int, verdict: Verdict) -> PriceToken | None:
     return None
 
 
-RESOLVERS: tuple[tuple[str, Resolver], ...] = ((NAME_PAIR, name_pair),)
+def _region(page: Page, nb: int, scan: int) -> list[int]:
+    """The name's block and the next ``scan``, up to another item's name or a heading."""
+    out = [nb]
+    for j in range(nb + 1, min(len(page.blocks), nb + 1 + scan)):
+        if j in page.item_blocks or page.blocks[j].heading:
+            break
+        out.append(j)
+    return out
+
+
+def label_line(page: Page, nb: int, verdict: Verdict) -> PriceToken | None:
+    """The price of the row's amount printed right under the variant's own line."""
+    row = verdict.row
+    amount = parse_amount(row.amount)
+    want = norm_tokens(row.variant or "")
+    if amount is None or not want:
+        return None
+    region = _region(page, nb, LABEL_SCAN)
+    for j in region:
+        tok = next((t for t in page.prices[j] if t.amount == amount), None)
+        above = next(  # the nearest price-free line above the price is its label
+            (k for k in range(j - 1, max(nb, j - LABEL_ABOVE) - 1, -1) if not page.prices[k]),
+            None,
+        )
+        if tok is not None and above is not None and norm_tokens(page.blocks[above].text) == want:
+            return tok
+    return None
+
+
+def _words(text: str) -> list[tuple[str, int, int]]:
+    """``norm_tokens``'s words of ``text`` with their spans."""
+    out = []
+    for m in _WORD.finditer(text):
+        word = unicodedata.normalize("NFKC", m.group(0)).lower()
+        if word not in IGNORED_TOKENS:
+            out.append((word, m.start(), m.end()))
+    return out
+
+
+def name_price(page: Page, nb: int, verdict: Verdict) -> PriceToken | None:
+    """The price of the row's amount printed right after the row's name in its block."""
+    row = verdict.row
+    amount = parse_amount(row.amount)
+    want = norm_tokens(row.item)
+    if amount is None or not want or row.variant:  # a variant needs its printed label
+        return None
+    text = page.blocks[nb].text
+    words = _words(text)
+    spans = [
+        (words[i][1], words[i + len(want) - 1][2])
+        for i in range(len(words) - len(want) + 1)
+        if [w for w, _, _ in words[i : i + len(want)]] == want
+        and all(
+            _NAME_GAP.fullmatch(text[a[2] : b[1]])
+            for a, b in zip(words[i : i + len(want)], words[i + 1 : i + len(want)], strict=False)
+        )
+    ]
+    if len(spans) != 1 or _GLUED.search(text[spans[0][0] : spans[0][1]]):
+        return None
+    end = spans[0][1]
+    tok = next((t for t in page.prices[nb] if t.start >= end), None)
+    if tok is None or tok.amount != amount or not _PRICE_GAP.fullmatch(text[end : tok.start]):
+        return None
+    return tok
+
+
+RESOLVERS: tuple[tuple[str, Resolver], ...] = (
+    (NAME_PAIR, name_pair),
+    (LABEL_LINE, label_line),
+    (NAME_PRICE, name_price),
+)
 _TAGS = frozenset(name for name, _ in RESOLVERS)
 
 

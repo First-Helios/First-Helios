@@ -10,9 +10,13 @@ import json
 
 from packages.helios_parsing.output import parse_output, rows_of
 from packages.helios_parsing.resolve import (
+    LABEL_LINE,
     NAME_PAIR,
+    NAME_PRICE,
     RESOLVERS,
+    Page,
     judge,
+    name_price,
     pair_position,
     resolve,
     resolved,
@@ -110,3 +114,67 @@ def test_repairs_keep_a_count_of_a_name_pair_for_5b() -> None:
     assert pair_position("3/6 Catfish Dinner", "Large") is None
     assert pair_position("3/3 Combo", "3") is None  # not distinct counts
     assert pair_position("Matcha 5/6", None) is None
+
+
+SIDES = (
+    "<h2>Sides</h2><p>Cream Corn</p><p>$3.50</p><p>Small (6oz)</p>"
+    "<p>Medium (16oz)</p><p>$4.50</p><p>Large (32oz)</p><p>$11.50</p>"
+    "<p>BBQ Beans</p><p>$3.50</p>"
+)
+
+
+def test_a_label_on_its_own_line_grounds_the_price_under_it() -> None:
+    rows = [
+        Row("Cream Corn", "3.50"),
+        Row("Cream Corn", "4.50", variant="Medium (16oz)"),
+        Row("Cream Corn", "11.50", variant="Large (32oz)"),
+        Row("BBQ Beans", "3.50"),
+    ]
+    verdicts = judge(segment(SIDES), rows).verdicts
+    assert [v.decision for v in verdicts] == ["accept"] * 4
+    assert [v.reasons[0] for v in verdicts[1:3]] == [LABEL_LINE, LABEL_LINE]
+    assert [v.price_evidence.block_id for v in verdicts[1:3] if v.price_evidence] == [
+        "b0006",  # "$4.50"
+        "b0008",  # "$11.50"
+    ]
+
+
+def test_label_line_refuses_another_label_or_another_items_price() -> None:
+    blocks = segment(SIDES)
+    # "Small (6oz)" is not the line right above "$4.50": that is "Medium (16oz)"
+    assert _decisions(SIDES, [Row("Cream Corn", "4.50", variant="Small (6oz)")]) == ["downgrade"]
+    # a label printed under the next item's name is not this item's
+    rows = [Row("Cream Corn", "3.50"), Row("BBQ Beans", "3.50", variant="Large (32oz)")]
+    assert [v.decision for v in judge(blocks, rows).verdicts][1] != "accept"
+
+
+INLINE = (
+    "<p>Appetizers: Fried Pork Dumplings 9.99, Seaweed Salad 6.99 | Takoyaki (6 pcs) 8.99,"
+    " Chicken 12.99, Noodles: Chicken 14.99, ShuMai 7.99</p>"
+)
+
+
+def test_a_price_printed_right_after_the_name_grounds_it() -> None:
+    verdicts = judge(segment(INLINE), [Row("Takoyaki (6 pcs)", "8.99")]).verdicts
+    assert verdicts[0].decision == "accept"
+    if verdicts[0].reasons:  # the validator may ground it itself; [5b] then never runs
+        assert verdicts[0].reasons[0] == NAME_PRICE
+    blocks = segment(INLINE)
+    page = Page(blocks, validate(blocks, [Row("Seaweed Salad", "6.99")]).verdicts)
+    tok = name_price(page, 0, validate(blocks, [Row("Seaweed Salad", "6.99")]).verdicts[0])
+    assert tok is not None
+    assert blocks[0].text[tok.start : tok.end] == "6.99"
+
+
+def test_name_price_refuses_a_repeated_or_glued_name_and_another_price() -> None:
+    blocks = segment(INLINE)
+
+    def resolved_by_name_price(row: Row) -> bool:
+        verdict = validate(blocks, [row]).verdicts[0]
+        return name_price(Page(blocks, [verdict]), 0, verdict) is not None
+
+    assert not resolved_by_name_price(Row("Chicken", "12.99"))  # printed twice
+    assert not resolved_by_name_price(Row("ShuMai", "7.99"))  # glued words
+    assert not resolved_by_name_price(Row("Seaweed Salad", "9.99"))  # not its price
+    assert not resolved_by_name_price(Row("Pork Dumplings", "6.99"))  # a price printed elsewhere
+    assert not resolved_by_name_price(Row("Seaweed Salad", "6.99", variant="Large"))  # unprinted
