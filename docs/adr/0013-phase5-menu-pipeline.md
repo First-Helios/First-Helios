@@ -1567,3 +1567,48 @@ This amendment records what v9 contains and the rules its levers were judged by.
    0.875 of the time (v9 resolve-v1: 0.714 / 0.815), an upper bound: every past draw read
    worse than its tuning sets. The owner chose 35 pages over item 1(e)'s 70-page set and
    over another `price_not_grounded` block.
+
+## Amendment 22 (2026-10-20, proposed): v9 held-out evaluation passes
+
+**Status: Proposed 2026-10-20 (session P5-26).** The verdict is measured. The label changes
+and what runs next await the owner. Record:
+[2026-10-20-p5-26-v9-held-out-evaluation.md](../reviews/2026-10-20-p5-26-v9-held-out-evaluation.md).
+
+1. **v9 passes §8** (commit `07e9b49`, PR #93 unmerged; Amendment 21's version string). The
+   draw: 35 static own-site pages from the laptop pass (seed 20261015; P5-5's exclusions plus
+   the 378 venues labelled in P5-5 to P5-16 and their sites; quotas 14 / 14 / 7 with the fixed
+   cutoffs), scored with the v9 harness.
+
+   | Bar | v9 | Bar |
+   |---|---|---|
+   | Price accuracy | **0.993** | ≥ 0.98 |
+   | Item recall | **0.874** | ≥ 0.85 |
+   | Corruption catch | **0.996** | ≥ 0.97 |
+   | False reject on gold rows | **0.097** (page-clustered [0.050, 0.156]) | ≤ 0.12 |
+   | Usable prices (Amendment 21) | **0.755** | ≥ 0.74 |
+
+   It is the first version to pass. Per §8, v9 may ship, and these 35 pages are now tuning
+   pages.
+2. **The model ran on the laptop GPU** (Amendment 19's evaluation runtime): the pinned CUDA
+   image of the same llama.cpp build, P5-13's GPU flags, 2 slots, and the production context
+   of Amendment 21 item 1. 117 pages/h. This is not the production runtime (Amendment 15
+   item 7): item recall, accuracy and usable prices are GPU numbers. Gold-row false reject
+   and catch do not depend on the runtime.
+3. **Blinded adjudication ran** (Amendment 10 item 2). The worst case over the packet's
+   answers (FR 0.158) could have reached the bar. The adjudicators upheld the labels:
+   - of 641 rows, 4 changes apply mechanically;
+   - 2 more are left for the owner;
+   - the verdict is the same (FR 0.096, usable 0.755).
+
+   The packet now takes its classes from the v9 harness and lists out-of-scope labels too
+   (Amendment 18 item 3).
+4. **Margins are thin, and they are recorded, not gated.** The FR point estimate sits 70 rows
+   inside the bar and usable prices 44 inside theirs. Small and medium pages read FR
+   0.138 / 0.141. Classifier-v2 precision on the draw is 0.903 [0.813, 0.952] (§8 judges the
+   classifier on its S6f evaluation).
+5. **For the owner:** what runs next and where (Amendment 8 item 1's laptop extraction pass;
+   Amendment 10 item 5's Pi scale run after the Pi gates); the label changes; whether to
+   check the classifier against 0.95. The next held-out draw (for a later version) is seed
+   **20261016**, excluding P5-5's exclusions plus all 450 venues labelled so far and their
+   sites (`next-draw-exclusions-p5-27.json`, sha256
+   `3439a96175c87b03ad1397d6eb9a3207e0a1d064a12be59c8c287bcc7e9a528d`).

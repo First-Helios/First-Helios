@@ -220,9 +220,9 @@ This section is the single current-status page. Other docs link here.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- A Phase 5 pipeline version that passes ADR-0013 §8 (the slice-5 version, v4, v5
-  and v6 failed, Amendments 8, 10, 12 and 14), the first extraction pass (laptop), and the
-  rendered-page quality bars (slice 6).
+- The first extraction pass (laptop) with v9, the version that passes ADR-0013 §8
+  (P5-26, Amendment 22; the slice-5 version and v4 to v8 failed), and the rendered-page
+  quality bars (slice 6).
 - The price index's `course` category
   ([ADR-0016](./docs/adr/0016-course-labels-for-the-price-index.md), Accepted):
   slice 1a (labelling guide and comparison harness) is built; slice 1b (labels,
@@ -326,17 +326,20 @@ This section is the single current-status page. Other docs link here.
   decided the next version's structure (a deterministic [5b] price-resolution stage), new
   recorded and gated numbers, and when the next draw is spent.
   Opens when all hold:
-  - [ ] a new pipeline version (v9 is next) passes §8 on a fresh held-out draw from
-    the laptop pass (seed 20261015; all 378 venues labelled in P5-5 to P5-16 and their
-    sites excluded). That draw is spent only once v9 reads near 0.05 pooled gold-row FR on
-    the tuning sets, with price accuracy held and no rise in wrong or unmatched accepted
-    rows (Amendment 19 item 7). From that evaluation on, usable prices are gated too:
-    **≥ 0.74** (owner, 2026-10-20, Amendment 19 item 1(d)). v9 is primary-only, with both
-    `llama-server` slots at 6,144 tokens (`--ctx-size 12288`; owner Q5 in the
-    [P5-23 register](./docs/reviews/2026-10-20-p5-23-findings-integration.md)). Under
-    labels-v9, v9 reads a pooled gold-row FR of 0.093, and 0.084 after P5-25's resolve-v2 and
-    repairs-v9 ([record](./docs/reviews/2026-10-20-p5-25-invariance-debt.md); Amendment 21
-    proposed, the draw decision is the owner's);
+  - [x] a new pipeline version passes §8 on a fresh held-out draw from the laptop pass:
+    **v9 passes** (P5-26, 2026-10-20,
+    [record](./docs/reviews/2026-10-20-p5-26-v9-held-out-evaluation.md), Amendment 22
+    proposed). On 35 pages (seed 20261015; all 378 venues labelled in P5-5 to P5-16 and their
+    sites excluded; the model on the laptop GPU):
+    - price accuracy 0.993, item recall 0.874, catch 0.996;
+    - gold-row false reject **0.097** (bar 0.12; page-clustered [0.050, 0.156]);
+    - usable prices **0.755** (bar 0.74).
+
+    A blinded adjudication upheld the labels. The owner drew at 35 pages with tuning FR 0.084,
+    not near Amendment 19 item 7's 0.05
+    ([P5-25 record](./docs/reviews/2026-10-20-p5-25-invariance-debt.md), Amendment 21).
+    v9 is primary-only, with both `llama-server` slots at 6,144 tokens (`--ctx-size 12288`).
+    It is unmerged (PR #93) until the owner merges;
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
