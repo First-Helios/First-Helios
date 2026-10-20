@@ -191,6 +191,11 @@ New runtime dependencies (each needs owner approval by accepting this ADR):
   ≈ 12 days for ~2,300 menu pages (7.8 pages/h), then monthly change-only runs after
   discovery (ADR-0009 cadence). The model call is an HTTP endpoint, so another host
   can run `llama-server` later without code changes.
+  *(Drift note, 2026-10-20: the first pass moved to the laptop, Amendment 8 item 1. The
+  12-day figure is the spike's estimate. The laptop pass holds 886 distinct page texts in
+  6,194 chunks; at the Pi probe's 114 s per chunk on two slots, a Pi primary pass would be
+  ~197 h. See the [P5-23 register](../reviews/2026-10-20-p5-23-findings-integration.md),
+  F10.)*
 - **Pi platform (Q7, Q8).** Phase 5 is CPU-only and must not depend on the NPU. An
   rknpu ≥ 0.9.7 kernel upgrade is planned as a separate owner-run operation with its
   own runbook (backup, recovery path for the headless box, rollback) before any NPU
