@@ -334,7 +334,9 @@ This section is the single current-status page. Other docs link here.
     **≥ 0.74** (owner, 2026-10-20, Amendment 19 item 1(d)). v9 is primary-only, with both
     `llama-server` slots at 6,144 tokens (`--ctx-size 12288`; owner Q5 in the
     [P5-23 register](./docs/reviews/2026-10-20-p5-23-findings-integration.md)). Under
-    labels-v9, v9 reads a pooled gold-row FR of 0.093;
+    labels-v9, v9 reads a pooled gold-row FR of 0.093, and 0.084 after P5-25's resolve-v2 and
+    repairs-v9 ([record](./docs/reviews/2026-10-20-p5-25-invariance-debt.md); Amendment 21
+    proposed, the draw decision is the owner's);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
