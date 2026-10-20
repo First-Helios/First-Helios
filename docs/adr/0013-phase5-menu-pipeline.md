@@ -1621,3 +1621,50 @@ Record:
    **20261016**, excluding P5-5's exclusions plus all 450 venues labelled so far and their
    sites (`next-draw-exclusions-p5-27.json`, sha256
    `3439a96175c87b03ad1397d6eb9a3207e0a1d064a12be59c8c287bcc7e9a528d`).
+
+## Amendment 23 (2026-10-20, accepted 2026-10-20): classifier-v2 misses §8 precision on the laptop pass — a known gap of v9
+
+**Status: Accepted 2026-10-20 by the owner (session P5-27).** Record:
+[2026-10-20-p5-27-classifier-check.md](../reviews/2026-10-20-p5-27-classifier-check.md).
+
+1. **The measurement.** All seven held-out draws (P5-5 to P5-26) had their frozen blind page
+   labels pooled: 450 pages, one per venue and site, every manifest verified. 413 are menus,
+   so `classifier-v2` precision is **0.918 [0.889, 0.940]**; weighted by the frame's size
+   strata, 0.915 [0.889, 0.941]. The bar is precision ≥ 0.95, and both upper bounds sit below
+   it. The gap is in small pages (0.855; medium 0.975, large 0.973).
+
+   What the 37 non-menu pages are:
+   - 20 of the restaurant's own menu hubs or homepages, which write no prices;
+   - 10 off-domain pages, the only ones that write prices: 92, or 0.40 % of the sample's
+     prices;
+   - 5 menu URLs whose menu never reaches the page text;
+   - 2 judgement calls.
+
+   Recall is unmeasured.
+2. **A known gap of v9; v9 stays cleared.** §8's classifier bar was judged on the S6f
+   evaluation (Amendment 22 item 4). This is the first measurement on the production
+   distribution. The laptop pass's writes stay. They were made 2026-10-20 into `helios_laptop`
+   at 1,632 pages, 120,816 items and 67,305 prices; one CUDA fault aborted the run after 254
+   pages and it resumed without loss. The fix ships as a later pipeline-version bump, which
+   re-interprets the stored bundles.
+3. **Next: a replacement survey, then a fresh sample.**
+   - The gap audit's step 3 runs with leave-one-set-out over these 450 labels and the spike
+     labels.
+   - Candidates are generic only:
+     - `classifier-v2`'s features retrained with the new negatives;
+     - added generic page signals, for example link density, price-token density, and cart
+       or product markup;
+     - a threshold.
+   - The chosen classifier is proposed as an amendment before it is built. It is then
+     verified on a fresh page-level precision sample (gap audit R1(a), about 260–440 pages)
+     and a rejected-page recall sample (R1(b)).
+   - A threshold picked on these 450 pages is tuned, not held out.
+4. **Accepted static pages with no menu text are rendered, as part of the rendering rollout.**
+   A page the classifier accepts but whose static text yields no menu (0 blocks, or no
+   extracted items) takes the render path. This is built with the Pi rendering switch-on
+   (§4), so its cost is measured once with the rest. It is not built separately now.
+5. **Rows from non-menu pages stay until R4 removes them automatically.** Nothing is deleted
+   and nothing is entered by hand. A new classifier alone would not remove them: a page
+   rejected later stays in the due queue (gap audit finding 2). The gap audit's R4 is built
+   together with the classifier fix: a rejected or withdrawn page leaves the queue, and its
+   Menu rows are retracted. Cleanup then covers the whole pass, not only the sampled pages.

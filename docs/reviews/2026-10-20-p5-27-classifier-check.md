@@ -179,6 +179,17 @@ A higher threshold over these 450 pages:
   - The 10 off-domain pages' 92 prices are in `helios_laptop`, each with its page confidence.
   - Across the whole pass, the non-menu pages aren't identified; only the sampled ones are.
 
+## Owner decisions (2026-10-20)
+
+Recorded as [ADR-0013 Amendment 23](../adr/0013-phase5-menu-pipeline.md).
+
+| | Answer |
+|---|---|
+| Q1 | **A known gap of v9.** v9 stays cleared, and the laptop pass's writes stay. The classifier fix ships as a later pipeline-version bump. |
+| Q2 | **A replacement survey, then a fresh sample.** Leave-one-set-out over these 450 pages plus the spike labels, with generic candidates only (retrained v2 features, generic hub and retail signals, a threshold). An amendment is proposed before any build. It is then verified on a fresh R1(a) precision sample and an R1(b) rejected-page recall sample. |
+| Q3 | **Folded into the rendering rollout.** "Accepted, but no menu text, so render" is built with the Pi rendering switch-on, so its cost is measured once with the rest. |
+| Q4 | **Leave the rows; R4 removes them.** Nothing is deleted. R4 (a rejected or withdrawn page leaves the due queue and its Menu rows are retracted) is built with the classifier fix, so cleanup covers the whole pass. |
+
 ## Reproduce
 
 The script and its outputs are in the main checkout's gitignored

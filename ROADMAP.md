@@ -652,7 +652,11 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   all seven draws pooled, 413/450 menus = 0.918 [0.889, 0.940] (stratified 0.915): `classifier-v2`
   misses the §8 precision bar on the laptop pass. The gap is small pages (0.855), mostly menu
   hubs; only off-domain pages write prices (0.40 % of the sample's prices). Recall still
-  unmeasured. Owner decisions Q1–Q4 (record the miss, replacement survey) pending.
+  unmeasured. Owner ([Amendment 23](./docs/adr/0013-phase5-menu-pipeline.md)): a known gap of
+  v9, whose writes stay. Next comes a generic replacement survey (amendment before build), then
+  fresh precision and recall samples. Render accepted-but-empty static pages with the Pi
+  rendering rollout. Build R4 with the classifier fix, so the non-menu rows retract
+  automatically.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
