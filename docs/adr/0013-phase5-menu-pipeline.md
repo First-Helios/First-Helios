@@ -1320,3 +1320,129 @@ what it stores without labels, not by the gold-row FR alone.
      their production error is measured;
    - (b) each extraction run records per-page shares of downgraded, [5b]-accepted and flagged
      rows, and lists pages outside the tuning sets' range for review.
+
+## Amendment 20 (2026-10-19, Proposed): Qwen3.5-9B fallback on the Pi CPU
+
+**Status: Proposed** (session P5-22, for owner review). Nothing is built, no routing score
+has been run, and no deploy or infra file changes until the owner accepts this amendment.
+Evidence: [P5-20 bracket screen](../reviews/2026-10-16-p5-20-bracket-screen.md),
+[P5-21 TEST3](../reviews/2026-10-17-p5-21-harness-h-test3.md),
+[P5-21 closeout and Pi cost](../reviews/2026-10-18-p5-21-closeout-pi-cost.md).
+
+**Why.**
+- Owner direction (2026-10-19): the NPU is not used, and the default model stays. The NPU
+  W8A8 probe was slower than the CPU path (6.5 vs 10.4 pages/h) and lower on raw usable
+  prices (0.761 vs 0.844, 3 pages). §3's CPU-only rule and Amendment 6 stand unchanged.
+- Qwen3.5-9B Q4_K_M is the only model result that held. On TEST3 (45 fresh tuning pages),
+  with the 9B on every page and the H4 repair:
+  - +131/+138 correct prices out of 3,664 over both v8 baseline replicates;
+  - paired 95 % CIs exclude zero; 5 of 6 sets gain;
+  - accepted-unmatched, wrong-accepted and accuracy guards all pass.
+
+  Its raw price accuracy (0.926 vs 0.940) is lower, so the gain depends on the validator.
+- On the Pi CPU an extra 9B pass costs 1.87× the primary pass (5.61 vs 10.49 pages/h on
+  3 pages, 88.6 °C vs 72.1 °C). Running it on every page is not affordable. It is a
+  fallback for some pages only.
+- The router is the hard part. P5-19's coverage < 0.70 trigger routed 43 % of pages,
+  against a 30 % cap.
+
+**Decided if accepted:**
+
+1. **Primary unchanged.** The primary stays Qwen3-4B-Instruct-2507 Q4_0 under Amendment 6:
+   same image, flags, prompt v2.4 and GBNF.
+2. **Fallback model.**
+   - Manifest entry `Qwen3.5-9B-Q4_K_M`: publisher `unsloth/Qwen3.5-9B-GGUF`, revision
+     `3885219b6810b007914f3a7950a8d1b469d598a5`, file `Qwen3.5-9B-Q4_K_M.gguf`.
+   - Size 5,680,522,464 bytes, sha256
+     `03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8`, Apache-2.0.
+   - Downloaded and checksum-refused like the primary.
+   - Same prompt v2.4, greedy decoding, GBNF, chunking and harness as the primary. No
+     model-specific prompt, repair or branch.
+3. **Runtime.** The fallback is a second Compose service, `llama-server-fallback`:
+   - same pinned image digest as the primary;
+   - its own `menu-fallback` profile and its own model-check init step;
+   - same cores (CPUs 4–7 on the Pi), `--threads 4 --parallel 2`;
+   - `--ctx-size 12288`, the context its quality and Pi cost were measured at (6,144 per
+     slot). The primary keeps 8,192;
+   - `mem_limit: 8g` (measured peak 5.65–6.38 GiB).
+
+   **Two phases per batch; the services never run together:**
+   - phase 1: the primary extracts every page of the batch;
+   - the owner stops `llama-server` and starts `llama-server-fallback`;
+   - phase 2: the fallback extracts only the routed pages.
+
+   This keeps the owner-run start and stop of Amendment 6 item 6. It needs no orchestration
+   code, and the two models never share the CPU or the RAM. A page's Menu write waits until
+   its routing decision is final. Each stored extraction records which model produced it,
+   as part of the pipeline version.
+4. **Routing: the policies registered on 2026-10-17, unchanged.**
+   - The registration is `var/menu-eval/p5-22-heldout/protocol/routing.md` (sha256
+     `520be0be…4ada`), archived in `p5-21-prompt-opt.tar.zst`. It was registered before
+     any routing score, and none has been run since.
+   - Signals come from page text and the primary's output only:
+     - printed price-token count;
+     - H4-accepted count;
+     - coverage = accepted / printed;
+     - "bad" = a malformed or `length`-finished kept chunk.
+   - No labels, site, platform or page-identity lookup. Cap: at most ⌊0.30 × batch pages⌋
+     routed per batch.
+
+   | Policy | Eligible | Order | Use of fallback output |
+   |---|---|---|---|
+   | R1 | printed > 0 and (bad or coverage < 0.70) | bad first, then lowest coverage | the whole fallback page replaces the primary page |
+   | R2 | as R1 | as R1 | the fallback page is used only if its H4-accepted count is higher; every attempt is still charged |
+   | R3 | printed > 0 and (bad or accepted = 0) | bad first, then most printed tokens | as R1 |
+
+   - Rows are never merged. Every page goes through the same harness. On a fallback
+     failure the primary page stays, and the failure is recorded.
+   - **R2 needs the owner's explicit ruling against Amendment 19 item 6** ("a second
+     extractor call as an acceptance authority").
+     - R2 does not let the 9B confirm rows: both pages are grounded by the same validator.
+     - But its choice between two pages does depend on a second call.
+     - If the owner rules it out, only R1 and R3 are scored.
+5. **Selection and confirmation: the registered rule, unchanged.**
+   - Data: existing laptop-GPU outputs, which need no new inference:
+     - primary Q4_0 replicates A/B `p521-q3-4b-2507-q40__g-v24`, `__g-v24-b`;
+     - fallback `p521-q35-9b__g-v24`;
+     - splits `splits-p520.json`, sha256 `5630f78d…23d7`.
+   - **DEV (15 pages) chooses.** A policy is eligible only if all of these hold:
+     - pooled usable prices over both primary replicates rise;
+     - neither replicate regresses beyond the H4 DEV A/B band on price accuracy,
+       accepted-unmatched per row or wrong-price-accepted per row;
+     - routed share ≤ 30 % for each replicate.
+   - Choose the eligible policy with the largest pooled gain. Ties go to fewer fallback
+     tokens, then to the policy id.
+   - **VAL (15 pages) confirms once:**
+     - non-negative usable gain on each replicate;
+     - guards within the VAL H4 bands;
+     - share ≤ 30 %.
+
+     There is no re-selection.
+   - **Added before any score, descriptive only:** the chosen policy is also reported on
+     TEST3 (45 pages, 13 routable). DEV and VAL route at most 4 pages each, so they are
+     thin evidence. TEST3 is not a pass criterion and never changes the choice.
+   - **If no policy is eligible or VAL fails, no fallback ships.** v9 continues primary-only,
+     and no other trigger is designed in its place (owner: no more screening).
+6. **Cost (recorded, not gated, as in §8).**
+   - Fallback cost is the primary pass plus every routed attempt, including discarded ones.
+   - Projection (3 probe pages, same page mix): 30 % share → 6.72 pages/h, 20 % → 7.64.
+   - Routed pages are expected to be harder and longer than average. So after selection,
+     one Pi CPU run times both models on the chosen policy's routed DEV+VAL pages, with
+     production images and flags, and records pages/h, s/chunk, RAM and SoC temperature.
+   - At §3's first-pass size (~2,300 menu pages), the owner sets the acceptable
+     wall time from these numbers.
+   - A 9B SoC temperature at or above the guard is recorded as throttling, not hidden.
+7. **§8.**
+   - If a policy ships, the pipeline version under §8 is the routed configuration: primary,
+     routing and fallback.
+   - Its held-out evaluation runs both models on the laptop GPU (Amendment 19: the same
+     llama.cpp runtime; Pi for speed only), at each service's production context.
+   - It reports the routed share and the primary-only numbers next to the routed numbers.
+   - The §8 bars and Amendment 19 item 7 are unchanged. The fallback raises usable prices;
+     it does not move gold-row false reject, which is a validator / [5b] property. The
+     gate still depends on v9.
+8. **Dependency.** The registered signals use H4-accepted counts, and H4 is accepted only
+   under ADR-0017 item 2, which is still Proposed.
+   - If the owner accepts ADR-0017 (at least item 2), routing uses H4 as registered.
+   - Otherwise this amendment waits. Re-registering on v8 counts would be a new
+     registration, so it would be done before any score.
