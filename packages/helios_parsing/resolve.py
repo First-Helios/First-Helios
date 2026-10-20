@@ -1,5 +1,5 @@
 """Stage [5b] price resolution: generic deterministic resolvers over the validator's
-no-match downgrades (ADR-0013 Amendments 19-20; built in session P5-18).
+no-match downgrades (ADR-0013 Amendments 19 and 21; built in sessions P5-18 to P5-25).
 
 It runs after the validator (:func:`judge`) and sees only rows the validator kept
 unpriced because their amount matched no price it could bind to the item
@@ -18,16 +18,24 @@ Production has no labels, so whatever [5b] accepts is stored as a true price:
 
 Resolvers (generic, chosen per row by what the page prints, never by site); each is
 kept only under Amendment 19 item 5's rule (no tuning set worse on any §8 bar, no
-rise in accepted rows matching no label):
+rise in accepted rows matching no label), ADR-0017 item 2 (the DEV configurations)
+and the invariance suite (no added flips); (Amendment 21) a resolver's catch is
+judged on the paired corruption trials, where it must accept no corrupt row:
 
 - ``resolved_name_pair`` (:func:`name_pair`): a slash-joined count pair in a dish's
   name ("3/6 Catfish Strips Dinner" over "$9.95/$17.99") grounds the same-order price
   pair: the row's variant is one count of the pair, and its amount is the price at
   the same position in the item's first slash-joined price group, printed right after
-  the name (in its block or the next :data:`PAIR_SCAN`, before another item).
+  the name (in its block or the next :data:`PAIR_SCAN`, before another item);
+- ``resolved_label_line`` (:func:`label_line`, resolve-v2): the variant printed on its
+  own line, the nearest price-free line above a price at the row's amount, in the
+  item's region ("Medium (16oz)" over "$4.50");
+- ``resolved_name_price`` (:func:`name_price`, resolve-v2): a row without a variant
+  whose name is printed once, unglued, in its block, with the row's price right after
+  it ("... Takoyaki (6 pcs) 8.99, ...").
 
 Amendment 19's section single-price rule was built and measured in P5-18 and not kept
-(it failed the accepted-rows-matching-no-label gate); Amendment 20 records it.
+(it failed the accepted-rows-matching-no-label gate); Amendment 21 records it.
 """
 
 from __future__ import annotations
@@ -55,7 +63,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
     from packages.helios_parsing.validator import Row
 
-RESOLVER_VERSION = "resolve-v1"  # part of the pipeline version
+RESOLVER_VERSION = "resolve-v2"  # part of the pipeline version
 NO_MATCH = frozenset(
     {
         "price_not_grounded",

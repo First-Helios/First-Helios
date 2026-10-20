@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v8"
+REPAIRS_VERSION = "repairs-v9"
 
 # (v7) wine lists are out of scope (ADR-0013 Amendment 15): a section whose heading names
 # wine ("Wine by the Glass", "Sparkling", "Champagne"), or is only colour words and their

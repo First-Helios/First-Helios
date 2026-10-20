@@ -26,6 +26,7 @@ saved; ``compare`` / ``loss`` then score them. Scoring alone needs no server.
 gold-row FR and usable prices with page-clustered 95 % intervals (and the share of
 resamples within the FR bar); accepted rows that match no label; real-output
 wrong-price rows accepted; [5b]'s accepts; and per-format and per-page gold-row FR.
+(Amendment 21) Usable prices are checked against :data:`USABLE_BAR`.
 
 ``invariance`` runs the invariance suite (ADR-0017 item 1,
 ``packages.helios_parsing.invariance``) over the gold pages: no extractor output is
@@ -172,6 +173,7 @@ def cmd_corrupt(data: Path, gold: dict[str, GoldPage], seed: int) -> None:
 
 
 FR_BAR = 0.12  # §8 gold-row false-reject bar
+USABLE_BAR = 0.74  # (Amendment 21) usable prices, gated from the next §8 evaluation
 
 
 def _ratio(num: int, den: int) -> str:
@@ -210,7 +212,11 @@ def cmd_report(data: Path, gold: dict[str, GoldPage], tag: str, seed: int) -> No
         f"    page-clustered  {_interval(fr.low, fr.high)}; resamples <= {FR_BAR}: {_fmt(fr.at_most)}"
     )
     print(f"  catch             {_ratio(caught, trials)}")
-    print(f"  usable prices     {_ratio(total['found_price'], total['gold_prices'])}")
+    usable_rate = total["found_price"] / total["gold_prices"] if total["gold_prices"] else 0.0
+    print(
+        f"  usable prices     {_ratio(total['found_price'], total['gold_prices'])}; "
+        f"bar >= {USABLE_BAR}: {'pass' if usable_rate >= USABLE_BAR else 'FAIL'}"
+    )
     print(f"    page-clustered  {_interval(use.low, use.high)}")
     print(f"  accepted rows matching no label   {total['accepted_unmatched']}")
     print(f"  real-output wrong-price accepted  {total['wrong_accepted_price']}")

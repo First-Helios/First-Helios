@@ -83,9 +83,9 @@ ROOT_KEY = "page"  # one menu per menu-page record
 METHOD = "menu-pipeline"
 PRICE_CONFIDENCE = Decimal("0.9800")  # measured exact-price accuracy on accepted rows (§8)
 FLAGGED_PRICE_CONFIDENCE = Decimal("0.9000")  # pages printing unlabeled size-price runs
-# (Amendment 20) [5b] accepts: the 95 % Wilson lower bound of their measured exact-price
-# accuracy on the tuning sets, rounded down
-RESOLVED_PRICE_CONFIDENCE = Decimal("0.8300")
+# (Amendment 21) [5b] accepts: the 95 % Wilson lower bound of their measured exact-price
+# accuracy on the tuning sets, rounded down (resolve-v2: 26 of 26 exact, 0.871)
+RESOLVED_PRICE_CONFIDENCE = Decimal("0.8700")
 APPLICABILITY_KEY = "unspecified"
 UNSECTIONED = "Unsectioned"
 _MAX_KEY = 512

@@ -1,4 +1,4 @@
-"""Stage [5b] price resolution (ADR-0013 Amendments 19-20) on synthetic pages.
+"""Stage [5b] price resolution (ADR-0013 Amendments 19 and 21) on synthetic pages.
 
 [5b] sees only the validator's no-match downgrades, refuses by default, cites the
 printed price it read and tags its accepts with its own reason.

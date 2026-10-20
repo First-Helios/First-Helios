@@ -89,12 +89,12 @@ OUTPUT_FORMAT = "menu-extract-v1"
 OUTPUT_PREFIX = PurePosixPath("var/replay/menu-extract")
 LOOKAHEAD = 2  # pages whose chunks are queued behind the one being finished
 MAX_CONSECUTIVE_FAILURES = 3
-# (Amendment 20) the tuning sets' range of per-page shares of priced llm rows, on their
-# saved answers under v9 (212 pages with at least TUNING_MIN_ROWS priced rows); a page
-# above either is listed for review. Downgrades: the 95th percentile (0.469; the maximum
-# is 1.0, which would list nothing). [5b] accepts: the maximum (no tuning page has one).
+# (Amendment 21) the tuning sets' range of per-page shares of priced llm rows, on their
+# saved answers under v9 (212 pages with at least TUNING_MIN_ROWS priced rows), rounded
+# up; a page above either is listed for review. Downgrades: the 95th percentile (0.462;
+# the maximum is 1.0, which would list nothing). [5b] accepts: the maximum (0.222).
 TUNING_DOWNGRADED_SHARE_MAX = 0.47
-TUNING_RESOLVED_SHARE_MAX = 0.0
+TUNING_RESOLVED_SHARE_MAX = 0.23
 TUNING_MIN_ROWS = 5
 _METHOD_VERSION_MAX = 128  # menu_page.method_version
 

@@ -296,7 +296,7 @@ def test_evaluate_cli_scores_saved_output(
     assert "price accuracy    1.000 (2/2)" in out
     assert "gold-row FR       0.000 (0/6)" in out
     assert "page-clustered  [0.000, 0.000]; resamples <= 0.12: 1.000" in out
-    assert "usable prices     0.333 (2/6)" in out
+    assert "usable prices     0.333 (2/6); bar >= 0.74: FAIL" in out
     assert "accepted rows matching no label   0" in out
     assert "real-output wrong-price accepted  0" in out
     assert "[5b] accepted 0" in out
