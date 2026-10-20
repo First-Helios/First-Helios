@@ -12,6 +12,8 @@ chunk under ``"chunks"``, in chunk order: the spike's record) and gold labels
     uv run python -m apps.menu_pipeline.evaluate loss --data … --labels … TAG [--pages]
     uv run python -m apps.menu_pipeline.evaluate corrupt --data … --labels … [--seed 7]
     uv run python -m apps.menu_pipeline.evaluate report TAG --data … --labels … [--seed 7]
+    uv run python -m apps.menu_pipeline.evaluate invariance --data … --labels … \\
+        [--out FLIPS.json] [--baseline FLIPS.json]
     uv run python -m apps.menu_pipeline.evaluate extract --data … --labels … \\
         [--server http://localhost:8080] TAG
 
@@ -24,6 +26,12 @@ saved; ``compare`` / ``loss`` then score them. Scoring alone needs no server.
 gold-row FR and usable prices with page-clustered 95 % intervals (and the share of
 resamples within the FR bar); accepted rows that match no label; real-output
 wrong-price rows accepted; [5b]'s accepts; and per-format and per-page gold-row FR.
+
+``invariance`` runs the invariance suite (ADR-0017 item 1,
+``packages.helios_parsing.invariance``) over the gold pages: no extractor output is
+read. It prints each style's flips, writes per-page counts with ``--out``, and with
+``--baseline`` (an earlier ``--out``) lists every page and style that flips more than
+before and exits non-zero if there is one.
 
 ``--splits`` names a JSON file mapping split names to page ids (e.g. the tuning
 pages and each held-out set); without it every scorable gold page is scored.
@@ -56,6 +64,7 @@ from packages.helios_parsing.evaluation import (
     page_clustered,
     score_page,
 )
+from packages.helios_parsing.invariance import VARIANTS, added_flips, invariance_page
 from packages.helios_parsing.output import parse_output, rows_of
 from packages.helios_parsing.segment import segment
 
@@ -226,6 +235,29 @@ def cmd_report(data: Path, gold: dict[str, GoldPage], tag: str, seed: int) -> No
             print(f"    {pid} [{gold[pid].format}] {_ratio(c['false_reject'], c['correct_rows'])}")
 
 
+def cmd_invariance(
+    data: Path, gold: dict[str, GoldPage], out: Path | None, baseline: Path | None
+) -> None:
+    pages = {pid: dict(invariance_page(page, blocks_of(data, pid))) for pid, page in gold.items()}
+    total: Counter[str] = sum((Counter(c) for c in pages.values()), Counter())
+    print(f"pages={len(pages)} gold prices={total['gold_prices']} accepted={total['base:accept']}")
+    for style in VARIANTS:
+        print(
+            f"  {style:22} flips={total['flip:' + style]:5} "
+            f"lost_accept={total['lost_accept:' + style]:5} "
+            f"gained_accept={total['gained_accept:' + style]:4}"
+        )
+    if out is not None:
+        out.write_text(json.dumps(pages, indent=1, sort_keys=True), encoding="utf-8")
+    if baseline is not None:
+        added = added_flips(json.loads(baseline.read_text(encoding="utf-8")), pages)
+        for pid, style, before, after in added:
+            print(f"  added flips: {pid} {style} {before} -> {after}")
+        if added:
+            raise SystemExit(f"{len(added)} page/style pairs flip more than the baseline")
+        print("  no added flips")
+
+
 def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaClient) -> None:
     out = data / "extract" / tag
     out.mkdir(parents=True, exist_ok=True)
@@ -244,7 +276,9 @@ def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaCl
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=["compare", "loss", "corrupt", "report", "extract"])
+    parser.add_argument(
+        "command", choices=["compare", "loss", "corrupt", "report", "extract", "invariance"]
+    )
     parser.add_argument("tags", nargs="*")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--labels", type=Path, required=True)
@@ -253,6 +287,8 @@ def main() -> None:
     parser.add_argument("--pages", action="store_true", help="loss: one line per page")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--server", default="http://localhost:8080", help="extract: llama-server")
+    parser.add_argument("--out", type=Path, help="invariance: write per-page flip counts")
+    parser.add_argument("--baseline", type=Path, help="invariance: fail on flips added to it")
     args = parser.parse_args()
     gold = load_gold(args.labels, args.splits, args.split)
     if args.command == "compare":
@@ -263,6 +299,8 @@ def main() -> None:
     elif args.command == "report":
         for tag in args.tags:
             cmd_report(args.data, gold, tag, args.seed)
+    elif args.command == "invariance":
+        cmd_invariance(args.data, gold, args.out, args.baseline)
     elif args.command == "extract":
         (tag,) = args.tags
         with http_client() as http:
