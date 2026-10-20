@@ -303,6 +303,19 @@ def test_evaluate_cli_scores_saved_output(
     assert "html_list      pages=  1 0.000 (0/6)" in out
 
 
+def test_evaluate_cli_refuses_an_incomplete_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data, labels = _write_fixture(tmp_path)
+    (data / "pages" / "page2.html").write_text(OTHER_PAGE, encoding="utf-8")
+    (labels / "page2.json").write_text(json.dumps({**LABEL, "page_id": "page2"}), encoding="utf-8")
+    common = ["--data", str(data), "--labels", str(labels)]
+    for command in ("compare", "report"):
+        monkeypatch.setattr(sys, "argv", ["evaluate", command, "t1", *common])
+        with pytest.raises(SystemExit, match="t1: no saved output for 1 of 2 gold pages"):
+            evaluate.main()
+
+
 def test_amendment_15_menu_numbers_are_not_part_of_a_name_and_wine_lists_are_out_of_scope() -> None:
     page = gold_page(
         {

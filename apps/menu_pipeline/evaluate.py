@@ -27,7 +27,8 @@ wrong-price rows accepted; [5b]'s accepts; and per-format and per-page gold-row 
 
 ``--splits`` names a JSON file mapping split names to page ids (e.g. the tuning
 pages and each held-out set); without it every scorable gold page is scored.
-``compare`` scores only pages every tag has output for, so its lines compare.
+``compare`` and ``report`` refuse to score when a tag has no saved output for a gold
+page (an incomplete ``extract`` job must not pass as a smaller score).
 Pages are segmented with the current segmenter; the rows are repaired and
 stitched exactly as the pipeline does. Gold labels, pages and outputs stay in
 ``var/``; only counts and rates go into ``docs/reviews/``.
@@ -89,12 +90,21 @@ def _fmt(value: float | None) -> str:
     return "  n/a" if value is None else f"{value:.3f}"
 
 
+def complete(data: Path, gold: dict[str, GoldPage], tags: list[str]) -> list[str]:
+    """The gold pages, once every tag has saved output for each; an incomplete job (a failed
+    or interrupted ``extract``) stops the scoring instead of scoring a subset."""
+    for tag in tags:
+        missing = [pid for pid in gold if not (data / "extract" / tag / f"{pid}.json").exists()]
+        if missing:
+            raise SystemExit(
+                f"{tag}: no saved output for {len(missing)} of {len(gold)} gold pages "
+                f"(first: {missing[0]}); finish the extract run or narrow --split"
+            )
+    return list(gold)
+
+
 def cmd_compare(data: Path, gold: dict[str, GoldPage], tags: list[str]) -> None:
-    common = [
-        pid
-        for pid in gold
-        if all((data / "extract" / tag / f"{pid}.json").exists() for tag in tags)
-    ]
+    common = complete(data, gold, tags)
     promos = sum(len(gold[pid].promos) for pid in common)
     print(f"pages={len(common)} (of {len(gold)} gold) promo_entries={promos}")
     print(f"{'tag':18} items  usable  acc    FR     catch  rows  promo_stored")
@@ -164,7 +174,7 @@ def _interval(low: float | None, high: float | None) -> str:
 
 
 def cmd_report(data: Path, gold: dict[str, GoldPage], tag: str, seed: int) -> None:
-    pids = [pid for pid in gold if (data / "extract" / tag / f"{pid}.json").exists()]
+    pids = complete(data, gold, [tag])
     total: Counter[str] = Counter()
     usable: list[tuple[int, int]] = []
     rejects: dict[str, Counter[str]] = {}
