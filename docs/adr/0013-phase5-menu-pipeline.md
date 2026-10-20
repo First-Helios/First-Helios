@@ -1478,3 +1478,77 @@ Evidence: [P5-20 bracket screen](../reviews/2026-10-16-p5-20-bracket-screen.md),
    - If the owner accepts ADR-0017 (at least item 2), routing uses H4 as registered.
    - Otherwise this amendment waits. Re-registering on v8 counts would be a new
      registration, so it would be done before any score.
+
+## Amendment 21 (2026-10-20, proposed): pipeline version v9 — [5b] resolve-v2, repairs-v9, context, usable bar
+
+**Status: Proposed 2026-10-20 (session P5-25) for owner review. Not accepted.** Built on
+branch `worktree-p5-18-pipeline-v9`; numbers are tuning numbers on the saved Qwen3-4B
+Q4_0 answers under labels-v9 (218 pages, 15,791 gold rows), not a §8 evaluation. Records:
+[P5-24 resolver block](../reviews/2026-10-20-p5-24-resolver-block.md) (owner rulings R1–R3,
+its §6) and [P5-25 invariance debt](../reviews/2026-10-20-p5-25-invariance-debt.md).
+
+**Why.** Amendment 19 decided v9's structure ([5b] price resolution, production
+constraints, keep rule); P5-18 built the stage with one resolver; P5-24 and P5-25 added
+resolvers and harness fixes under the keep rule, ADR-0017 item 2 and the invariance suite.
+This amendment records what v9 contains and the rules its levers were judged by.
+
+1. **Context: 6,144 tokens per slot** (`llama-server --ctx-size 12288 --parallel 2`;
+   Compose, commit `43bc411`). Replaces Amendment 6 item 6's 8,192 (4,096 per slot) and
+   Amendment 20 item 3's "the primary keeps 8,192": the primary's longest rendered retry
+   prompt plus its token cap reaches 4,679 tokens (P5-19, P5-14 page `77796540a06c`),
+   above a 4,096-token slot. Owner decision Q5 (P5-23). The Pi 4B was measured at this
+   context (10.49 pages/h, 3.20 GiB). Saved tuning answers were produced at 8,192; only a
+   chunk that overflowed a 4,096 slot can differ, and none is re-run here.
+2. **Catch for a [5b] change (owner ruling R1).** `corruption_eval` draws its trials from
+   the rows the harness accepts when clean, so a resolver that accepts more gold rows
+   reshuffles the seed-7 trials. A [5b] resolver is judged on the **paired trials** (the
+   trials seed 7 draws from the baseline's clean accepts): it must accept **0 corrupt
+   rows** there, and each tuning set's seed-7 catch must stay **≥ 0.97**. Repair and
+   validator changes keep Amendment 11's literal rule (seed-7 catch no worse on any set).
+3. **[5b] resolve-v2** (generic, deterministic, refuse by default, each accept citing its
+   printed price; Amendment 19 items 3–4):
+   - `resolved_name_pair` (P5-18): a "3/6" count pair in a dish's name grounds the
+     same-order price pair;
+   - `resolved_label_line` (C3t, P5-24): the variant printed on its own line, the nearest
+     price-free line above a price at the row's amount, in the item's region;
+   - `resolved_name_price` (C4, P5-24): a row without a variant whose name is printed once,
+     unglued, with the row's price right after it.
+
+   Owner ruling R2 (ADR-0017 literal: any added invariance flip rejects, gains included)
+   removed C3t while repair 4b's claim-relative window let a claim change its decision;
+   with item 4's repair it adds 0 flips and returns. Not kept: Amendment 19's section
+   single-price rule (P5-18: accepted-unmatched rose), C2 numbers in names (P5-24: +15
+   gold rows, 6 junk accepts, below the Q6 budget), C1 (junk-heavy).
+4. **repairs-v9: repair 4b reads the printed name, not the claim** (ADR-0017 item 1, claim
+   drift). `drop_unprinted_variants` looks for a variant's printed label from 2 blocks
+   above to 4 below the block that prints the row's name (the claimed block, else the
+   nearest of the 8 blocks above it, else the nearest within 2); above the name only
+   price-first lines count. The validator is unchanged (`validator-v8`).
+5. **Invariance debt not paid** (measured in P5-25, not kept): the validator's
+   claim fallback (accepted-unmatched rose on 5 sets), a variant written into the name
+   split back to `v` (+2 real usable prices, below the 25-row budget, and 4 added flips),
+   letter case read from the page (31 added flips, item recall down on 4 sets). The saved
+   real answers almost never write those styles: 66 rows in another letter case, 413 with
+   the variant in the name, of 21,038. The debt stays recorded (6,638 flips).
+6. **Constants.**
+   - `RESOLVED_PRICE_CONFIDENCE` **0.87**: the 95 % Wilson lower bound of [5b]'s
+     measured exact-price share on the tuning sets (26 of 26 real accepts exact), rounded
+     down, as P5-18 decided. In-sample: the resolvers were built on these sets.
+   - Run report tuning range: [5b] share max **0.23** (the tuning maximum, 0.222; was 0.0),
+     downgraded share **0.47** (95th percentile 0.462).
+   - **Usable prices ≥ 0.74**, gated from the next §8 evaluation (owner, P5-23; Amendment 19
+     item 1(d)); `evaluate report` prints it beside the usable-price line.
+7. **New version:**
+   `…;prompt-v2.4;chunk-v2.3;segment-v2;repairs-v9;validator-v8;resolve-v2;classifier-v2`
+   (model, prompt, grammar, chunking and segmenter unchanged).
+8. **Tuning result** (v9 resolve-v1 → this version, pooled over the seven tuning sets):
+   gold-row FR 0.0930 → **0.0842** (page-clustered 95 % [0.058, 0.116]); usable prices
+   0.7837 → 0.7855; price accuracy 0.9911 → 0.9912; item recall 0.8880 =; catch 0.9938 →
+   0.9944; accepted rows matching no label 1,207 =; wrong prices accepted 117 → 116; [5b]
+   accepts 0 → 26, all exact; 0 corrupt [5b] accepts on the paired trials. DEV (17
+   configurations): pooled usable +10, no configuration beyond the band, every
+   leave-one-model-out fold passes. Invariance 6,655 → 6,638 flips, 0 added.
+9. **Next draw: not decided** (owner ruling R3). Amendment 19 item 7 asks for a pooled
+   gold-row FR near 0.05; this version reads 0.084. Resampled 35- and 70-page draws from the
+   tuning pages pass all four gated bars 0.765 / 0.875 of the time (v9 resolve-v1: 0.714 /
+   0.815), an upper bound: every past draw read worse than its tuning sets.
