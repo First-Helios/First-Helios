@@ -119,8 +119,10 @@ services:
   # port: only services on the Compose network reach it, at http://llama-server:8080.
   # Upstream's CPU server image; Pi-only core pinning is in docker-compose.pi.yml.
   #   docker compose --profile menu up -d llama-server
-  # Flags are the spike's measured set: 2 slots of 4096 tokens, flash attention,
-  # q8_0 KV cache, and no host prompt cache (13.8 GB peak RSS with it, 5.2 GB without).
+  # Flags are the spike's measured set (2 slots, flash attention, q8_0 KV cache, no
+  # host prompt cache: 13.8 GB peak RSS with it, 5.2 GB without), except the context:
+  # 6144 tokens per slot (ADR-0013 Amendment 21), since a retry prompt plus its token
+  # cap reaches 4679 tokens, over the spike's 4096.
   llama-server:
     profiles: ["menu"]
     # Pinned by digest (R90); the spike ran llama.cpp 84e76d8 = b11173, which has
@@ -138,7 +140,7 @@ services:
       - --parallel
       - "2"
       - --ctx-size
-      - "8192"
+      - "12288"
       - --flash-attn
       - "on"
       - --cache-type-k

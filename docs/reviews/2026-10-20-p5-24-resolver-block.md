@@ -125,3 +125,18 @@ These are in-sample: every past draw read worse than its tuning sets (P5-12 0.12
   resolvers) and Amendment 21 wait on R1–R3.
 - `make ci` on the branch: 686 passed, 727 skipped (database tests skipped: not database
   acceptance), with the gitignored scratch moved aside.
+
+## 6. Owner rulings (2026-10-20)
+
+- **R1: paired trials.** For a [5b] change, catch is judged on the paired trials (the
+  trials seed 7 draws from the baseline's clean accepts): [5b] must accept 0 corrupt rows
+  there, and each set's seed-7 catch must still be ≥ 0.97. To be recorded in Amendment 21.
+  Repair and validator changes keep the literal seed-7 rule.
+- **R2: drop C3t, keep C4.** ADR-0017 applies literally: any added flip rejects, gains
+  included. C3t (`resolved_label_line`) comes out of `RESOLVERS`; it may return once the
+  repair 4b claim-relative window no longer drifts.
+- **R3: fix invariance debt first.** No draw yet. Next block: generic harness work on the
+  largest debt classes (claim drift, `case_lower`, variant written into the name), under
+  the keep rule, ADR-0017 item 2 and invariance, then re-measure FR and re-decide the draw.
+- **Compose `--ctx-size 12288`: approved** and committed on this branch (no deploy, no Pi
+  change).
