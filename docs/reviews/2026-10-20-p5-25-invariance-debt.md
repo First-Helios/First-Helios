@@ -13,7 +13,8 @@ accepts 26 real rows, all exact, and 0 corrupt rows on the paired trials. Invari
 6,655 to 6,638 flips with 0 added. One debt fix was kept (repair 4b reads the printed name).
 It let C3t back in under R2. The block stopped at the next class, variant written into the
 name, which gains +2 real prices. FR is not near 0.05, and the debt barely explains it
-(§2). **The draw decision is the owner's** (§7). Amendment 21 is drafted, not accepted.
+(§2). **Owner decisions (§7a):** the budget applies per class, Amendment 21 is accepted as
+drafted, the debt is recorded as risk, and the 35-page draw runs next on seed 20261015.
 
 ## 1. Gates
 
@@ -180,6 +181,15 @@ the debt not paid, the constants, the version string, the tuning result and the 
   fixed (4 added flips, +2 unmatched).
 - **Q4. Amendment 21** (Proposed): accept as drafted, including `RESOLVED_PRICE_CONFIDENCE`
   0.87 (in-sample Wilson; 0.83 was 20/20 under resolve-v1).
+
+## 7a. Owner decisions (2026-10-20)
+
+| | Answer |
+|---|---|
+| Q1 | **(a) Draw now at 35 pages**, seed 20261015 |
+| Q2 | **Per class**: D5 and C3t stay |
+| Q3 | **Record the debt as risk**; no debt-only budget |
+| Q4 | **Amendment 21 accepted as drafted**, `RESOLVED_PRICE_CONFIDENCE` 0.87 included |
 
 ## 8. Verification
 

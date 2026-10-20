@@ -1479,9 +1479,21 @@ Evidence: [P5-20 bracket screen](../reviews/2026-10-16-p5-20-bracket-screen.md),
    - Otherwise this amendment waits. Re-registering on v8 counts would be a new
      registration, so it would be done before any score.
 
-## Amendment 21 (2026-10-20, proposed): pipeline version v9 — [5b] resolve-v2, repairs-v9, context, usable bar
+## Amendment 21 (2026-10-20, accepted 2026-10-20): pipeline version v9 — [5b] resolve-v2, repairs-v9, context, usable bar
 
-**Status: Proposed 2026-10-20 (session P5-25) for owner review. Not accepted.** Built on
+**Status: Accepted 2026-10-20 as drafted (owner, after session P5-25), with the rulings
+below.** Proposed in session P5-25.
+
+**Owner rulings (2026-10-20):**
+- **The 25-row budget applies per class.** Claim drift is D5 plus the C3t re-test (99 gold
+  rows), so item 3's C3t and item 4's repair stay.
+- **Item 6's constants are accepted as drafted**, including `RESOLVED_PRICE_CONFIDENCE`
+  0.87.
+- **The remaining invariance debt is recorded as risk** (item 5). There is no
+  debt-only budget. It is revisited if the model changes.
+- **Next draw: 35 pages now** (item 9's option (a)), on seed 20261015.
+
+Built on
 branch `worktree-p5-18-pipeline-v9`; numbers are tuning numbers on the saved Qwen3-4B
 Q4_0 answers under labels-v9 (218 pages, 15,791 gold rows), not a §8 evaluation. Records:
 [P5-24 resolver block](../reviews/2026-10-20-p5-24-resolver-block.md) (owner rulings R1–R3,
@@ -1529,7 +1541,8 @@ This amendment records what v9 contains and the rules its levers were judged by.
    split back to `v` (+2 real usable prices, below the 25-row budget, and 4 added flips),
    letter case read from the page (31 added flips, item recall down on 4 sets). The saved
    real answers almost never write those styles: 66 rows in another letter case, 413 with
-   the variant in the name, of 21,038. The debt stays recorded (6,638 flips).
+   the variant in the name, of 21,038. The debt stays recorded (6,638 flips) as latent risk
+   for the next model (ADR-0017 Consequences); owner: no debt-only budget.
 6. **Constants.**
    - `RESOLVED_PRICE_CONFIDENCE` **0.87**: the 95 % Wilson lower bound of [5b]'s
      measured exact-price share on the tuning sets (26 of 26 real accepts exact), rounded
@@ -1548,7 +1561,9 @@ This amendment records what v9 contains and the rules its levers were judged by.
    accepts 0 → 26, all exact; 0 corrupt [5b] accepts on the paired trials. DEV (17
    configurations): pooled usable +10, no configuration beyond the band, every
    leave-one-model-out fold passes. Invariance 6,655 → 6,638 flips, 0 added.
-9. **Next draw: not decided** (owner ruling R3). Amendment 19 item 7 asks for a pooled
-   gold-row FR near 0.05; this version reads 0.084. Resampled 35- and 70-page draws from the
-   tuning pages pass all four gated bars 0.765 / 0.875 of the time (v9 resolve-v1: 0.714 /
-   0.815), an upper bound: every past draw read worse than its tuning sets.
+9. **Next draw: 35 pages on seed 20261015** (owner, 2026-10-20, after ruling R3).
+   Amendment 19 item 7 asks for a pooled gold-row FR near 0.05; this version reads 0.084.
+   Resampled 35- and 70-page draws from the tuning pages pass all four gated bars 0.765 /
+   0.875 of the time (v9 resolve-v1: 0.714 / 0.815), an upper bound: every past draw read
+   worse than its tuning sets. The owner chose 35 pages over item 1(e)'s 70-page set and
+   over another `price_not_grounded` block.
