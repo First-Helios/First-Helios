@@ -1,7 +1,12 @@
 # ADR-0017: Extraction harness generalization — invariance, multi-model acceptance, per-model configuration
 
-**Status:** Proposed 2026-10-16 (session P5-20, for owner review). Nothing is built: no
-tracked code changes until the owner accepts this ADR.
+**Status:** Items 1–2 accepted 2026-10-20 (session P5-23); items 3–4 deferred until a
+model comparison is reopened (the owner has ruled further screening out for now).
+Proposed 2026-10-16 (session P5-20). Item 2 admits the H4 description-row repair (its DEV
+checks are in the [H4 / TEST3 record](../reviews/2026-10-17-p5-21-harness-h-test3.md)) and
+gates every later repair, validator and [5b] change, v9's resolvers included. "Every model
+configuration on record" means the 17 DEV configurations archived from P5-19 to P5-21
+(`var/archive/2026-10-p5-19-21/`).
 **Date:** 2026-10-16
 **Phase:** 5 (menu pipeline)
 **Extends:** [ADR-0013](./0013-phase5-menu-pipeline.md) §8 and Amendments 11 (keep rule),

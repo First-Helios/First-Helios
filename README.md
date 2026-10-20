@@ -330,7 +330,11 @@ This section is the single current-status page. Other docs link here.
     the laptop pass (seed 20261015; all 378 venues labelled in P5-5 to P5-16 and their
     sites excluded). That draw is spent only once v9 reads near 0.05 pooled gold-row FR on
     the tuning sets, with price accuracy held and no rise in wrong or unmatched accepted
-    rows (Amendment 19 item 7);
+    rows (Amendment 19 item 7). From that evaluation on, usable prices are gated too:
+    **≥ 0.74** (owner, 2026-10-20, Amendment 19 item 1(d)). v9 is primary-only, with both
+    `llama-server` slots at 6,144 tokens (`--ctx-size 12288`; owner Q5 in the
+    [P5-23 register](./docs/reviews/2026-10-20-p5-23-findings-integration.md)). Under
+    labels-v9, v9 reads a pooled gold-row FR of 0.093;
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
@@ -341,20 +345,25 @@ This section is the single current-status page. Other docs link here.
   opened, nothing built.** Model screen
   ([record](./docs/reviews/2026-10-15-p5-model-screen.md)), harness-free bracket screen
   ([record](./docs/reviews/2026-10-16-p5-20-bracket-screen.md),
-  [ADR-0017](./docs/adr/0017-extraction-harness-generalization.md) Proposed), per-model
+  [ADR-0017](./docs/adr/0017-extraction-harness-generalization.md), items 1–2 accepted), per-model
   prompts ([record](./docs/reviews/2026-10-16-p5-21-per-model-prompts.md)), the H4 harness
   repair and TEST3 ([record](./docs/reviews/2026-10-17-p5-21-harness-h-test3.md)) and the
   closeout with Pi cost ([record](./docs/reviews/2026-10-18-p5-21-closeout-pi-cost.md)).
   Qwen3-4B-Instruct-2507 Q4_0 on the Pi CPU stays the extractor (the NPU W8A8 probe was
-  slower and lower on its 3 pages); Qwen3.5-9B Q4_K_M is a fallback candidate (run on
-  every TEST3 tuning page: +131/+138 correct prices of 3,664 over the v8 baseline),
-  pending a label-free routing rule and an ADR-0013 amendment.
+  slower and lower on its 3 pages). Qwen3.5-9B Q4_K_M as a fallback (+131/+138 correct
+  prices of 3,664 over the v8 baseline when run on every TEST3 tuning page) was accepted
+  as ADR-0013 Amendment 20, but its registered label-free routing failed VAL
+  ([record](./docs/reviews/2026-10-20-p5-23-fallback-routing.md)), so **no fallback
+  ships** and v9 is primary-only. Integration of these findings:
+  [P5-23 register](./docs/reviews/2026-10-20-p5-23-findings-integration.md).
 - **Pi check, `llama-server` image: pending.** Before the first Pi extraction
   run, the owner runs the
   [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream
   image's prompt and generation tokens/s must each be ≥ 95% of the spike's own
   build on the A76 cores (ADR-0013 §3, Amendment 6). A fail means a source build
-  of the spike's commit replaces it.
+  of the spike's commit replaces it. Owner order for the Pi items (2026-10-20, in
+  parallel with v9): this check first (run with `--ctx-size 12288`), then gate 1b,
+  then gate 1a.
 - **Code review remediation R01–R117: complete 2026-09-29 (S17).** Every
   finding was fixed or accepted/deferred by the owner; deferrals and their
   triggers are in [ROADMAP §7](./ROADMAP.md#7-open-questions). Close-out note at
