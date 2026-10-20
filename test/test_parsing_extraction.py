@@ -243,6 +243,35 @@ def test_rows_of_drops_a_variant_that_is_no_printed_price_label() -> None:
     assert [v.decision for v in validate(blocks, rows).verdicts] == ["accept"] * 3
 
 
+SIZES_FAR = (
+    "<h2>Sides</h2><p>Cream Corn</p><p>Sweet corn in butter.</p><p>$3.50</p>"
+    "<p>Small (6oz)</p><p>Medium (16oz)</p><p>$4.50</p><p>Large (32oz)</p><p>$11.50</p>"
+)
+
+
+def test_unprinted_variants_read_the_printed_name_not_the_claim() -> None:
+    # v9: the window starts at the block printing the name, so a claim on the price
+    # line ("$4.50", 5 blocks down) decides as a claim on the name does
+    blocks = segment(SIZES_FAR)
+    on_name = rows_of(_one_chunk(("b0002", "Cream Corn", "4.50", "Medium (16oz)")), blocks)
+    on_price = rows_of(_one_chunk(("b0007", "Cream Corn", "4.50", "Medium (16oz)")), blocks)
+    assert [r.variant for r in on_name] == [r.variant for r in on_price] == [None]
+
+
+def test_unprinted_variants_read_only_price_lines_above_the_name() -> None:
+    # v9: above the name only a price-first line counts; a note's words ("listed
+    # below are Large") are no price's label
+    blocks = segment(
+        "<h2>Pizzas</h2><p>All pizzas below are Large (16 in). Medium $3 less.</p>"
+        "<p>Veggie Pizza</p><p>$22.99</p>"
+    )
+    rows = rows_of(_one_chunk(("b0003", "Veggie Pizza", "22.99", "Large")), blocks)
+    assert _rows(rows) == [("Veggie Pizza", "22.99", None)]
+    blocks = segment("<p>Small $6</p><p>Veggie Pizza</p><p>Fresh vegetables.</p>")
+    rows = rows_of(_one_chunk(("b0002", "Veggie Pizza", "6", "Small")), blocks)
+    assert _rows(rows) == [("Veggie Pizza", "6", "Small")]
+
+
 STITCH_PAGE = """
 <h2>Drinks</h2>
 <h4>Horchata</h4><p>$2.50/Small</p><p>$3.50/Large</p>

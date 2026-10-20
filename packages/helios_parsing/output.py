@@ -27,7 +27,7 @@ section, ``wine_section``: out of scope, Amendment 15):
 4b. (v4) a variant that is no price's printed label near the item ("chilled, hot,
    or spicy": a description put in the variant slot) is dropped
    (``drop_unprinted_variants``; v5: the validator's labels, column headers
-   included);
+   included; v9: near the block printing the name, not the claimed block);
 4c. (v6) a row named by a whole list of names printed in its block ("Deep Eddy,
    Tito's Handmade Vodka, Absolut Vodka") becomes one row per name, each with the
    row's price and variant (``split_listed``); a choice ("Mango, Peach or Guava")
@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any
 
 from packages.helios_parsing.prices import PriceToken, price_tokens, read_amount
 from packages.helios_parsing.resolve import pair_position
-from packages.helios_parsing.stitch import FILL_GAP, stitch
+from packages.helios_parsing.stitch import FILL_GAP, name_block, price_only, stitch
 from packages.helios_parsing.validator import (
     Row,
     block_tokens,
@@ -266,13 +266,33 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
     return unique
 
 
+NAME_ABOVE = 8  # (v9) blocks above a claim searched for the row's printed name
+
+
+def printed_name_block(row: Row, blocks: Sequence[Block], index: dict[str, int]) -> int | None:
+    """(v9) The block printing the row's name: the claimed one, else the nearest of the
+    ``NAME_ABOVE`` blocks above it (a claim on the item's description or price line), else
+    ``stitch.name_block``'s nearest within 2 (ADR-0017 item 1: claim drift)."""
+    pos = index.get(row.claimed_block or "")
+    if pos is None:
+        return None
+    toks = set(norm_tokens(row.item))
+    for j in range(pos, max(-1, pos - 1 - NAME_ABOVE), -1):
+        if toks and toks <= set(norm_tokens(blocks[j].text)):
+            return j
+    return name_block(row, blocks, index)
+
+
 def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     """Rows whose variant isn't the label of any price printed near the item lose it.
 
     The prompt asks for the size/variant word printed next to the price; a small
     model sometimes copies the description there instead, and the validator then
-    downgrades a correctly priced row (``variant_not_grounded``). Near = the claimed
-    block from 2 above to ``FILL_GAP`` below. Kept when nothing near prints a price
+    downgrades a correctly priced row (``variant_not_grounded``). Near = from 2 above
+    to ``FILL_GAP`` below the block printing the row's name; (v9) that block, not the
+    claimed one (``printed_name_block``: a claim on the item's description or price line
+    decides as a claim on its name, ADR-0017 item 1), and above it only price-first lines
+    ("$12", "Small $6"), not a note's words. Kept when nothing near prints a price
     (a shared section price) or the claimed block is unknown, and (v8) when it is a
     count of a "3/6" pair in the row's own name (``resolve.pair_position``: [5b]
     grounds it against the same-order price pair, Amendment 19 item 4).
@@ -281,13 +301,14 @@ def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> lis
     prices = price_tokens(list(blocks))
     out: list[Row] = []
     for row in rows:
-        pos = index.get(row.claimed_block or "")
+        pos = printed_name_block(row, blocks, index)  # (v9) the printed name, not the claim
         if not row.variant or pos is None or pair_position(row.item, row.variant):
             out.append(row)
             continue
         labels = [
             label_tokens(list(blocks), prices, t)
             for j in range(max(0, pos - 2), min(len(blocks), pos + FILL_GAP + 1))
+            if j >= pos or (prices[j] and price_only(blocks[j].text, prices[j]))  # (v9)
             for t in prices[j]
         ]
         own = set(norm_tokens(row.variant))
