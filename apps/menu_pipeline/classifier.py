@@ -1,10 +1,13 @@
 """Stage [1] page classifier (ADR-0013 §1), used as discovery's page verifier (§7).
 
 A static embedding of :func:`~packages.helios_parsing.page_features.page_text`
-plus the seven layout features, scored by a logistic regression whose
-standardization, coefficients and threshold are a checked-in weights file
-(``config/page_classifier_v2.json``). Scoring is plain Python: scikit-learn is
-only needed to re-train (``apps.menu_pipeline.train_page_classifier``).
+plus the plain features its weights file names, scored by a logistic regression
+whose standardization, coefficients and threshold are a checked-in weights file.
+``classifier-v2`` (``config/page_classifier_v2.json``, the live verifier) names
+the seven layout features; ``classifier-v3`` (``config/page_classifier_v3.json``,
+ADR-0013 Amendment 24: built, not shipped, loaded only by path) adds the eleven
+generic page signals. Scoring is plain Python: scikit-learn is only needed to
+re-train (``apps.menu_pipeline.train_page_classifier``).
 
 The embedding runs through ``fastembed`` (the ``menu`` extra) on model files
 verified against ``config/models.yaml``. :class:`PageClassifier` takes the
@@ -21,7 +24,13 @@ from typing import TYPE_CHECKING
 
 from apps.discovery.menu_url import page_menu_signal
 from apps.menu_pipeline.models import DEFAULT_ROOT, load_manifest, verified_model_dir
-from packages.helios_parsing.page_features import FEATURE_NAMES, layout_features, page_text
+from packages.helios_parsing.page_features import (
+    FEATURE_NAMES,
+    PAGE_SIGNAL_NAMES,
+    layout_features,
+    page_signals,
+    page_text,
+)
 from packages.helios_parsing.segment import segment
 
 if TYPE_CHECKING:
@@ -43,12 +52,16 @@ class ClassifierWeights:
     coef: tuple[float, ...]
     intercept: float
     threshold: float
+    features: tuple[str, ...] = FEATURE_NAMES  # the plain features after the embedding
 
     @classmethod
     def load(cls, path: Path = WEIGHTS_PATH) -> ClassifierWeights:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if tuple(raw["layout_features"]) != FEATURE_NAMES:
             raise ValueError(f"{path}: layout features differ from this code's")
+        signals = tuple(raw.get("page_signals", ()))
+        if signals not in ((), PAGE_SIGNAL_NAMES):
+            raise ValueError(f"{path}: page signals differ from this code's")
         weights = cls(
             version=str(raw["version"]),
             model=str(raw["model"]),
@@ -57,19 +70,29 @@ class ClassifierWeights:
             coef=tuple(float(v) for v in raw["coef"]),
             intercept=float(raw["intercept"]),
             threshold=float(raw["threshold"]),
+            features=FEATURE_NAMES + signals,
         )
         if not len(weights.mean) == len(weights.scale) == len(weights.coef):
             raise ValueError(f"{path}: mean, scale and coef differ in length")
         return weights
 
 
-def page_vector_inputs(html: str, url: str) -> tuple[str, list[float]]:
-    """The text to embed and the layout features, exactly as the weights were trained."""
+def page_vector_inputs(
+    html: str, url: str, features: tuple[str, ...] = FEATURE_NAMES
+) -> tuple[str, list[float]]:
+    """The text to embed and the named plain features, exactly as the weights were trained."""
     blocks = segment(html)
     # The S4 signal is a feature as trained: URL path included (trust_path=True).
-    return page_text(html, url, blocks), layout_features(
-        blocks, heuristic_signal=page_menu_signal(html, url)
+    values = dict(
+        zip(
+            FEATURE_NAMES,
+            layout_features(blocks, heuristic_signal=page_menu_signal(html, url)),
+            strict=True,
+        )
     )
+    if not set(features) <= values.keys():
+        values.update(zip(PAGE_SIGNAL_NAMES, page_signals(html, url, blocks), strict=True))
+    return page_text(html, url, blocks), [values[name] for name in features]
 
 
 class PageClassifier:
@@ -90,10 +113,10 @@ class PageClassifier:
         return self._weights.threshold
 
     def probability(self, html: str, url: str) -> float:
-        text, layout = page_vector_inputs(html, url)
-        (embedding,) = self._embed([text])
-        features = [*embedding, *layout]
         weights = self._weights
+        text, plain = page_vector_inputs(html, url, weights.features)
+        (embedding,) = self._embed([text])
+        features = [*embedding, *plain]
         if len(features) != len(weights.coef):
             raise ValueError(
                 f"{len(features)} features for {len(weights.coef)} weights: wrong embedding model"
