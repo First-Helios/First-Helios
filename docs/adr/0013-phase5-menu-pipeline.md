@@ -1668,3 +1668,108 @@ Record:
    rejected later stays in the due queue (gap audit finding 2). The gap audit's R4 is built
    together with the classifier fix: a rejected or withdrawn page leaves the queue, and its
    Menu rows are retracted. Cleanup then covers the whole pass, not only the sampled pages.
+
+## Amendment 24 (2026-10-20, accepted 2026-10-20): `classifier-v3` candidate, fresh-sample plan, R4
+
+**Status: Accepted 2026-10-20 by the owner (session P5-28), with the rulings below.** Record:
+[2026-10-20-p5-28-classifier-survey.md](../reviews/2026-10-20-p5-28-classifier-survey.md).
+
+**Owner rulings (2026-10-20):**
+- **Q1, pass rule:** R1(a) passes on the stratified point estimate ≥ 0.95, with its Wilson
+  interval recorded, as the extraction bars are judged.
+- **Q2, frame:** R1(a) labels all 361 remaining sites. Page-level classifier labels don't
+  exclude a venue from later extraction held-out draws: for those draws, "labelled" means
+  item-labelled. Later classifier samples exclude classifier-labelled venues and sites.
+- **Q3, candidate:** (b), `classifier-v3` with the generic page signals.
+- **Q4, R1(b):** a record-only discovery re-crawl on the laptop, about 150 venues (about 100
+  `no_menu_found` and 50 resolved). Every v2/v3 disagreement is labelled, plus about 100 pages
+  both reject.
+- **Q5, order:** verify first. Build `classifier-v3` unshipped (verifier unchanged), with the
+  re-crawl script; label R1(a) and R1(b) against it; reach the verdict. Then, only on a pass,
+  one pipeline-version bump ships v3 with R4. Until then v2 stays the verifier and the laptop
+  pass's rows stay (Amendment 23 items 2 and 5).
+
+1. **The survey (Amendment 23 item 3).** Leave-one-set-out over nine labelled sets: the spike's
+   188 static pages, S6f's 57 rendered pages, and the seven held-out draws (450 pages, each its
+   own set). Pages sharing a venue or site with the held-out set leave the training pool, and
+   inner folds group by venue and site. Thresholds come from the precision-0.95 rule inside
+   each fold. Pooled over the draws:
+
+   | Candidate | Precision [Wilson 95 %] | Stratified | Small pages | Labelled menus lost (of 413) |
+   |---|---|---|---|---|
+   | `classifier-v2` | 0.918 [0.889, 0.940] | 0.915 | 0.855 | — |
+   | Threshold only | 0.936 [0.909, 0.956] | 0.931 | 0.881 | 17 |
+   | v2 inputs retrained | 0.961 [0.937, 0.976] | 0.957 | 0.922 | 22 |
+   | **v2 inputs + generic page signals** | **0.957 [0.932, 0.972]** | **0.953** | 0.913 | **17** |
+
+   Retraining with the new negatives removes 19 of the 37 drawn non-menus, including 72 of the
+   92 wrong prices. A threshold change alone does not reach the bar.
+2. **Proposed candidate: `classifier-v3`.**
+   - **Inputs:** `classifier-v2`'s inputs, the `potion-base-8M` embedding of `page_text` plus the
+     7 layout features. Added to them, 11 generic page signals computed with the standard
+     library's `html.parser`:
+     - link-text share, the anchor count, and anchors per block;
+     - the share of blocks that are chrome;
+     - money tokens per 100 words;
+     - the share and count of same-host child links;
+     - add-to-cart markup;
+     - product markup;
+     - article markup;
+     - the count of `<article>` and `<time>` elements.
+
+     No site, platform or brand rule.
+   - **Model:** logistic regression `C = 0.5`, trained on all 695 labelled pages.
+   - **Threshold:** the existing rule, the lowest threshold whose venue- and site-grouped
+     out-of-fold precision reaches 0.95. On this pool it is **0.674**; the build reproduces it
+     with the same rule.
+   - **Runtime:** the plain-Python scorer and the pinned embedding are unchanged, with no new
+     dependency. scikit-learn stays ephemeral. The signals live beside `layout_features` in
+     `packages/helios_parsing/page_features.py`. The weights file already names its feature
+     list; the build keys the inputs on it, so `classifier-v2`'s file keeps loading.
+3. **Known risks, carried into verification:**
+   - Precision's lower bound (0.932) is below 0.95.
+   - The candidate drops 4.1 % of v2's accepted menus, which it must win back among pages v2
+     rejects to meet §8's recall bar.
+   - Inside the spike's candidate pages, it admits 7 of 131 non-menus against 5 for v2's
+     configuration. The draws can't see such admissions.
+4. **Fresh samples, verified against a built but unshipped `classifier-v3`:**
+   - **(a) R1(a) precision.** Due pages of `helios_laptop`, one per site, excluding the spike's
+     venues and sites and `next-draw-exclusions-p5-27.json`'s 450 venues and sites. 361 sites
+     remain (small 192, medium 161, large 8); all 361 are labelled (Q2). Stratified
+     by the fixed cutoffs, fresh seed, page-level labels only. Score `classifier-v2`,
+     `classifier-v3` and S4 on every page.
+   - **(b) R1(b) recall and admissions.**
+     - **Sources:** the laptop pass's one skipped `not_menu` Capture, plus discovery's candidate
+       pages re-collected by a record-only re-crawl on the laptop. The re-crawl writes no Bronze
+       or Menu rows, and it obeys robots.txt, the rate limit and the Helios User-Agent. Its
+       venues are about 150: roughly 100 `no_menu_found` venues and 50 resolved ones, outside
+       the excluded venues and sites.
+     - **Labels:** every page where v2 and v3 disagree, plus about 100 pages that both reject.
+     - **Recall bar:** met when, weighted by population over R1(a) and R1(b), the menus v3 adds
+       are at least the menus it drops.
+     - **Precision:** combines R1(a)'s kept pages with R1(b)'s new admissions.
+   - **Pass rule** for precision (Q1): the stratified point estimate ≥ 0.95, with its Wilson
+     interval recorded, as the extraction bars are judged.
+5. **R4 is built with `classifier-v3`, in the same pipeline-version bump.**
+   - **Leaving the queue.** A `menu-page` record leaves `due_pages` when either:
+     - its latest fetch is a classifier rejection (a skipped `not_menu` / `js_only` Capture,
+       after the §4 render where it applies); or
+     - its menu URL was withdrawn (ADR-0015, `needs_review`).
+   - **Retraction.** Each of the record's Menu streams (`llm`, `jsonld`) gets an appended
+     `withdrawal` page: the Menu domain's existing tombstone, `state = 'withdrawn'`. No schema
+     change and no deletion; Gold reads the tombstone as withdrawn.
+   - **Re-checking existing pages.** Bumping the verifier makes ADR-0015 re-verify every saved
+     URL. The pipeline-version bump re-scores every stored bundle with `classifier-v3`. Pages it
+     rejects are withdrawn the same way, so the cleanup covers the whole laptop pass, not only
+     sampled pages.
+   - **Restoration.** A page that is accepted again gets a `restoration`.
+6. **Deferred: render when accepted but empty** (Amendment 23 item 4). An accepted static page
+   with no menu text takes the render path. This is built with the Pi rendering switch-on, not
+   here. The survey's two accepted 0-block bundles are its cases.
+7. **Not proposed:**
+   - a threshold change on `classifier-v2`;
+   - a new model or runtime dependency;
+   - any per-site, per-platform or hand-entered rule.
+
+   Retraining `classifier-v2`'s inputs alone, without the signals, is the smaller-build
+   alternative (Q3).
