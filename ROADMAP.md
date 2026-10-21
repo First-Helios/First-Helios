@@ -657,6 +657,13 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   fresh precision and recall samples. Render accepted-but-empty static pages with the Pi
   rendering rollout. Build R4 with the classifier fix, so the non-menu rows retract
   automatically.
+- *Surveyed (2026-10-20, [replacement survey](./docs/reviews/2026-10-20-p5-28-classifier-survey.md)):*
+  in a leave-one-set-out over the spike, S6f rendered pages and the seven draws, retraining v2's
+  inputs with the new negatives plus 11 generic page signals reads 0.957 [0.932, 0.972] pooled
+  (threshold-only 0.936), losing 17 of 413 labelled menus. Proposed as `classifier-v3`
+  ([Amendment 24](./docs/adr/0013-phase5-menu-pipeline.md), Proposed). Fresh R1(a)/R1(b)
+  samples verify it before it ships with R4. Owner questions pending: the pass rule, the
+  361-site frame, the R1(b) re-crawl.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
