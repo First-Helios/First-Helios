@@ -30,6 +30,20 @@ like the second export, against ``classifier-v1`` too::
         --data var/spikes/menu-model --labels var/spikes/menu_model/labels/pages \\
         --rendered var/render-measure/laptop \\
         --out config/page_classifier_v2.json --report var/classifier-v2-report.json
+
+``classifier-v3`` (ADR-0013 Amendment 24) adds the generic page signals
+(``--signals``) and the held-out draws' labelled pages: ``--draw`` names a draw
+directory (``draw.jsonl`` plus frozen ``labels-blind/``; ``empty`` counts as not
+a menu), read from its bundles under ``--bundle-root`` exactly as extraction
+scores them. Draw pages join only the shipped fit. Cross-validation groups join
+pages that share a venue or a site::
+
+    uv run --extra menu --with scikit-learn==1.9.1 \\
+        python -m apps.menu_pipeline.train_page_classifier --version classifier-v3 --signals \\
+        --data var/spikes/menu-model --labels var/spikes/menu_model/labels/pages \\
+        --rendered var/render-measure/laptop --bundle-root . \\
+        --draw var/menu-eval/p5-5 --draw var/menu-eval/p5-8 ... \\
+        --out config/page_classifier_v3.json --report var/classifier-v3-report.json
 """
 
 from __future__ import annotations
@@ -40,6 +54,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -48,20 +63,23 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from apps.discovery.menu_url import page_menu_signal
+from apps.menu_pipeline.bundle import BundleStore
 from apps.menu_pipeline.classifier import (
     ClassifierWeights,
     PageClassifier,
     load_embedding,
     page_vector_inputs,
 )
+from apps.menu_pipeline.extraction import page_html
 from apps.menu_pipeline.models import DEFAULT_ROOT
-from packages.helios_parsing.page_features import FEATURE_NAMES
+from packages.helios_parsing.page_features import FEATURE_NAMES, PAGE_SIGNAL_NAMES
 
 VERSION = "classifier-v1"
 MODEL = "potion-base-8M"
 FOLDS = 5
 TARGET_PRECISION = 0.95
 C = 0.5
+SCORER_TOLERANCE = 1e-6
 
 
 def _lr() -> Any:  # noqa: ANN401 - an sklearn Pipeline
@@ -106,7 +124,7 @@ def _nested_cv(x: Any, y: Any, groups: Any) -> dict[str, float]:  # noqa: ANN401
     return _scores(y, predicted)
 
 
-def _weights(model: Any, threshold: float, version: str) -> dict[str, Any]:  # noqa: ANN401
+def _weights(model: Any, threshold: float, version: str, *, signals: bool) -> dict[str, Any]:  # noqa: ANN401
     scaler, regression = (
         model.named_steps["standardscaler"],
         model.named_steps["logisticregression"],
@@ -116,6 +134,7 @@ def _weights(model: Any, threshold: float, version: str) -> dict[str, Any]:  # n
         "model": MODEL,
         "text": "page_text",
         "layout_features": list(FEATURE_NAMES),
+        **({"page_signals": list(PAGE_SIGNAL_NAMES)} if signals else {}),
         "mean": scaler.mean_.tolist(),
         "scale": scaler.scale_.tolist(),
         "coef": regression.coef_[0].tolist(),
@@ -136,6 +155,53 @@ def _rendered_pages(directory: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _draw_pages(directory: Path, store: BundleStore) -> dict[str, dict[str, Any]]:
+    """A held-out draw's blind-labelled pages, keyed ``d:<draw>:<page_id>``, read from bundles."""
+    rows = {
+        str(row["page_id"]): row
+        for row in (json.loads(line) for line in (directory / "draw.jsonl").open())
+    }
+    out: dict[str, dict[str, Any]] = {}
+    for path in sorted((directory / "labels-blind").glob("*.json")):
+        label = json.loads(path.read_text(encoding="utf-8"))
+        row = rows[str(label["page_id"])]
+        bundle = store.read(str(row["bundle_path"]))
+        out[f"d:{directory.name}:{label['page_id']}"] = {
+            "gers_id": row["gers"],
+            "site": row["site"],
+            "final_url": bundle.url,
+            "html": page_html(bundle),
+            "label": str(label["page_label"]),
+        }
+    return out
+
+
+def _site(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower().removeprefix("www.")
+
+
+def _groups(members: dict[str, tuple[str, str]]) -> dict[str, str]:
+    """Page → group: pages sharing a venue or a site, transitively, share a group.
+
+    A group is named by its smallest venue or site key, so it doesn't depend on page order.
+    """
+    parent: dict[str, str] = {}
+
+    def find(key: str) -> str:
+        parent.setdefault(key, key)
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    for venue, site in members.values():
+        parent[find(f"v:{venue}")] = find(f"s:{site}")
+    name: dict[str, str] = {}
+    for key in sorted(parent):
+        name.setdefault(find(key), key)
+    return {page_id: name[find(f"v:{venue}")] for page_id, (venue, _site) in members.items()}
+
+
 def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
     parser = argparse.ArgumentParser(prog="python -m apps.menu_pipeline.train_page_classifier")
     parser.add_argument("--data", type=Path, required=True)
@@ -145,6 +211,15 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--version", default=VERSION)
     parser.add_argument("--rendered", type=Path, default=None, help="measure_render dir (S6f)")
+    parser.add_argument(
+        "--draw", type=Path, action="append", default=[], help="held-out draw dir (P5-28)"
+    )
+    parser.add_argument(
+        "--bundle-root", type=Path, default=Path(), help="where draw bundle paths resolve"
+    )
+    parser.add_argument(
+        "--signals", action="store_true", help="add the generic page signals (classifier-v3)"
+    )
     parser.add_argument(
         "--previous",
         type=Path,
@@ -165,13 +240,23 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
     }
     rendered = _rendered_pages(args.rendered) if args.rendered else {}
     labels.update({page_id: str(row["label"]) for page_id, row in rendered.items()})
+    store = BundleStore(args.bundle_root)
+    drawn = {
+        page_id: row
+        for directory in args.draw
+        for page_id, row in _draw_pages(directory, store).items()
+    }
+    labels.update({page_id: str(row["label"]) for page_id, row in drawn.items()})
+    features = FEATURE_NAMES + (PAGE_SIGNAL_NAMES if args.signals else ())
 
     def url(page_id: str) -> str:
-        if page_id in rendered:
-            return str(rendered[page_id]["final_url"])
+        if page_id in rendered or page_id in drawn:
+            return str((rendered.get(page_id) or drawn[page_id])["final_url"])
         return str(pages[page_id]["final_url"] or pages[page_id]["url"])
 
     def html(page_id: str) -> str:
+        if page_id in drawn:
+            return str(drawn[page_id]["html"])
         if page_id in rendered:
             return str((args.rendered / "rendered" / rendered[page_id]["html"]).read_text("utf-8"))
         return str((args.data / "pages" / f"{page_id}.html").read_text(encoding="utf-8"))
@@ -182,6 +267,7 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
             for page_id, label in labels.items()
             if label in {"menu", "not_menu"}
             and page_id not in rendered
+            and page_id not in drawn
             and (pages[page_id]["gers_id"] in second_export) == second
         )
 
@@ -190,6 +276,17 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
 
     first, second = labelled(False) + rendered_set("probe"), labelled(True)
     heldout = rendered_set("heldout")
+    # The shipped fit's pool, in the P5-28 survey's order: static, rendered, then draws.
+    every = sorted(labelled(False) + second) + list(rendered) + list(drawn)
+    group_of = _groups(
+        {
+            page_id: (
+                str((rendered.get(page_id) or drawn.get(page_id) or pages[page_id])["gers_id"]),
+                str(drawn[page_id]["site"]) if page_id in drawn else _site(url(page_id)),
+            )
+            for page_id in every
+        }
+    )
     unlabelled = sorted(
         page_id
         for page_id, row in pages.items()
@@ -202,7 +299,7 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
 
     def vectors(ids: list[str]) -> Any:  # noqa: ANN401 - numpy array
         todo = [page_id for page_id in ids if page_id not in cache]
-        inputs = [page_vector_inputs(html(page_id), url(page_id)) for page_id in todo]
+        inputs = [page_vector_inputs(html(page_id), url(page_id), features) for page_id in todo]
         for page_id, (_text, layout), embedding in zip(
             todo, inputs, embed([text for text, _ in inputs]), strict=True
         ):
@@ -212,12 +309,10 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
     def target(ids: list[str]) -> Any:  # noqa: ANN401 - numpy array
         return np.array([1 if labels[page_id] == "menu" else 0 for page_id in ids])
 
-    def venue(ids: list[str]) -> Any:  # noqa: ANN401 - numpy array
-        return np.array(
-            [str((rendered.get(page_id) or pages[page_id])["gers_id"]) for page_id in ids]
-        )
+    def group(ids: list[str]) -> Any:  # noqa: ANN401 - numpy array
+        return np.array([group_of[page_id] for page_id in ids])
 
-    x1, y1, g1 = vectors(first), target(first), venue(first)
+    x1, y1, g1 = vectors(first), target(first), group(first)
     heuristic = np.array([int(page_menu_signal(html(p), url(p))) for p in first])
     report: dict[str, Any] = {
         "version": args.version,
@@ -270,22 +365,32 @@ def main() -> None:  # noqa: PLR0915 - one linear training + evaluation script
             ),
         }
 
-    every = first + second + heldout
-    x, y, g = vectors(every), target(every), venue(every)
+    x, y, g = vectors(every), target(every), group(every)
     final = _lr().fit(x, y)
-    weights = _weights(final, _threshold_for_precision(y, _oof(x, y, g)), args.version)
+    weights = _weights(
+        final, _threshold_for_precision(y, _oof(x, y, g)), args.version, signals=args.signals
+    )
     report["shipped"] = {
         "pages": len(every),
         "menus": int(y.sum()),
+        "groups": len(set(g.tolist())),
+        "draws": {
+            directory.name: sum(page_id.startswith(f"d:{directory.name}:") for page_id in drawn)
+            for directory in args.draw
+        },
         "threshold": weights["threshold"],
     }
 
-    # The plain-Python scorer must reproduce scikit-learn's probabilities.
+    # The plain-Python scorer must reproduce scikit-learn's probabilities on every page.
     args.out.write_text(json.dumps(weights, indent=1) + "\n", encoding="utf-8")
     scorer = PageClassifier(ClassifierWeights.load(args.out), embed)
-    for page_id, expected in zip(every[:20], final.predict_proba(x[:20])[:, 1], strict=True):
-        if abs(scorer.probability(html(page_id), url(page_id)) - expected) > 1e-6:  # noqa: PLR2004
-            raise RuntimeError(f"scorer disagrees with scikit-learn on {page_id}")
+    gap = max(
+        abs(scorer.probability(html(page_id), url(page_id)) - expected)
+        for page_id, expected in zip(every, final.predict_proba(x)[:, 1], strict=True)
+    )
+    report["shipped"]["scorer_max_abs_difference"] = gap
+    if gap > SCORER_TOLERANCE:
+        raise RuntimeError(f"scorer disagrees with scikit-learn by {gap}")
     args.report.write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
     print(json.dumps({k: v for k, v in report.items() if k != "second_export_unlabelled"}))  # noqa: T201
 

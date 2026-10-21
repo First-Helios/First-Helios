@@ -5,7 +5,13 @@ from __future__ import annotations
 import math
 from decimal import Decimal
 
-from packages.helios_parsing.page_features import FEATURE_NAMES, layout_features, page_text
+from packages.helios_parsing.page_features import (
+    FEATURE_NAMES,
+    PAGE_SIGNAL_NAMES,
+    layout_features,
+    page_signals,
+    page_text,
+)
 from packages.helios_parsing.prices import price_tokens, price_tokens_v4, read_amount, read_money
 from packages.helios_parsing.segment import SEGMENTER_VERSION, segment, text_hash
 
@@ -103,6 +109,55 @@ def test_layout_features_are_the_seven_named_values() -> None:
     assert values["log_priced_blocks"] == math.log1p(4)
     assert values["heuristic_menu_signal"] == 1.0
     assert layout_features([], heuristic_signal=False) == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+_SHOP = """<html><head><title>Menu</title>
+<meta property="og:type" content="product.item">
+<script type="application/ld+json">{"@type": ["BlogPosting", "Thing"]}</script></head>
+<body><nav><a href="/menu/lunch">Lunch</a> <a href="/menu/dinner/">Dinner</a></nav>
+<h1>Our Menu</h1>
+<p>Taco $3.50 and queso $7.00</p>
+<p><a href="https://other.com/menu/x">Elsewhere</a> plain text here</p>
+<button class="btn add-to-cart">Order</button>
+<article><time>Today</time></article></body></html>"""
+
+
+def test_page_signals_read_links_markup_and_prices() -> None:
+    blocks = segment(_SHOP)
+    body = [block for block in blocks if not block.in_chrome]
+    words = sum(len(block.text.split()) for block in body)
+    values = dict(
+        zip(PAGE_SIGNAL_NAMES, page_signals(_SHOP, "https://k.com/menu", blocks), strict=True)
+    )
+    assert len(values) == 11  # noqa: PLR2004
+    # Visible text only (no title, no JSON-LD): 79 characters, 20 of them in links.
+    assert values["link_text_share"] == 20 / 79
+    assert values["log_anchors"] == math.log1p(3)
+    assert values["anchors_per_block"] == 3 / len(body)
+    assert values["chrome_block_share"] == (len(blocks) - len(body)) / len(blocks)
+    assert values["money_per_100_words"] == 100 * 2 / words  # $3.50 and $7.00
+    # Two same-host links below /menu; the off-site /menu/x link doesn't count.
+    assert values["child_link_share"] == 2 / 3
+    assert values["log_child_links"] == math.log1p(2)
+    assert values["cart_markup"] == values["product_markup"] == values["article_markup"] == 1.0
+    assert values["log_article_tags"] == math.log1p(2)
+
+
+def test_page_signals_caps_and_other_markup() -> None:
+    links = "".join(f'<a href="/p{i}">x</a> ' for i in range(20))
+    html = (
+        f'<body><p>{links}</p><a rel="author" href="/me">me</a>'
+        '<div itemtype="https://schema.org/Product/"><span>Add to bag</span></div></body>'
+    )
+    values = dict(
+        zip(PAGE_SIGNAL_NAMES, page_signals(html, "https://k.com/", segment(html)), strict=True)
+    )
+    assert values["anchors_per_block"] == 3.0  # noqa: PLR2004 - capped
+    prices = "<p>$1.00 $2.00 $3.00</p>"
+    money = page_signals(prices, "https://k.com/", segment(prices))
+    assert money[PAGE_SIGNAL_NAMES.index("money_per_100_words")] == 20.0  # noqa: PLR2004 - capped
+    assert values["cart_markup"] == values["product_markup"] == values["article_markup"] == 1.0
+    assert page_signals("", "https://k.com/", []) == [0.0] * 11
 
 
 def test_segment_skips_dialogs_but_not_other_hidden_content() -> None:

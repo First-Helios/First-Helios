@@ -25,7 +25,8 @@ from apps.menu_pipeline.models import (
     load_manifest,
     verified_model_dir,
 )
-from packages.helios_parsing.page_features import FEATURE_NAMES
+from packages.helios_parsing.page_features import FEATURE_NAMES, PAGE_SIGNAL_NAMES, page_signals
+from packages.helios_parsing.segment import segment
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -70,6 +71,48 @@ def test_weights_with_other_layout_features_are_refused(tmp_path: Path) -> None:
     path.write_text(json.dumps(raw))
     with pytest.raises(ValueError, match="layout features"):
         ClassifierWeights.load(path)
+
+
+def test_v3_weights_name_the_page_signals_and_v2_stays_the_live_verifier() -> None:
+    """ADR-0013 Amendment 24: classifier-v3 is built but loaded only by path."""
+    from apps.menu_pipeline.classifier import WEIGHTS_PATH
+
+    assert WEIGHTS_PATH.name == "page_classifier_v2.json"
+    v3 = ClassifierWeights.load(WEIGHTS_PATH.with_name("page_classifier_v3.json"))
+    assert (v3.version, v3.model) == ("classifier-v3", "potion-base-8M")
+    assert v3.features == FEATURE_NAMES + PAGE_SIGNAL_NAMES
+    assert len(v3.coef) == 256 + len(FEATURE_NAMES) + len(PAGE_SIGNAL_NAMES)
+    assert round(v3.threshold, 3) == 0.674  # noqa: PLR2004 - the P5-28 survey's value
+    assert ClassifierWeights.load().features == FEATURE_NAMES
+
+
+def test_weights_with_other_page_signals_are_refused(tmp_path: Path) -> None:
+    from apps.menu_pipeline.classifier import WEIGHTS_PATH
+
+    raw = json.loads(WEIGHTS_PATH.with_name("page_classifier_v3.json").read_text())
+    raw["page_signals"] = raw["page_signals"][::-1]
+    path = tmp_path / "weights.json"
+    path.write_text(json.dumps(raw))
+    with pytest.raises(ValueError, match="page signals"):
+        ClassifierWeights.load(path)
+
+
+def test_scorer_inputs_follow_the_weights_feature_list() -> None:
+    names = FEATURE_NAMES + PAGE_SIGNAL_NAMES
+    text, plain = page_vector_inputs(_MENU, "https://k.com/dinner", names)
+    _, layout = page_vector_inputs(_MENU, "https://k.com/dinner")
+    assert plain == [*layout, *page_signals(_MENU, "https://k.com/dinner", segment(_MENU))]
+    assert text.startswith("Menu\n/dinner")
+    size = 2 + len(names)
+    cart = [0.0] * size
+    cart[2 + names.index("cart_markup")] = 4.0
+    weights = replace(
+        _weights(), mean=(0.0,) * size, scale=(1.0,) * size, coef=tuple(cart), features=names
+    )
+    classifier = PageClassifier(weights, _embed)
+    shop = _MENU + '<button class="add-to-cart">Add</button>'
+    assert classifier.probability(_MENU, "https://k.com/") == pytest.approx(1 / (1 + math.exp(1)))
+    assert classifier.probability(shop, "https://k.com/") == pytest.approx(1 / (1 + math.exp(-3)))
 
 
 def test_classifier_scores_a_standardized_logistic_regression() -> None:
