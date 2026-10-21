@@ -9,7 +9,7 @@ Measured and proposed only:
 - no pipeline, schema, dependency or `infra/` change;
 - no Pi access, and nothing deleted.
 
-The proposal is [ADR-0013 Amendment 24](../adr/0013-phase5-menu-pipeline.md) (Proposed).
+The proposal is [ADR-0013 Amendment 24](../adr/0013-phase5-menu-pipeline.md), accepted by the owner (see Owner decisions).
 
 **Result: retraining with the new negatives clears 0.95 as a point estimate; a threshold change
 alone does not.** Pooled over the seven held-out draws (450 pages, each scored by a model that
@@ -355,6 +355,18 @@ Each question has the context needed to answer it here; the amendment repeats th
 
   The alternative ships v3 and R4 first and verifies afterwards. That retracts rows before the
   bar is known.
+
+## Owner decisions (2026-10-20)
+
+Recorded as [ADR-0013 Amendment 24](../adr/0013-phase5-menu-pipeline.md) (accepted).
+
+| | Answer |
+|---|---|
+| Q1 | **Point estimate.** R1(a) passes on the stratified point estimate ≥ 0.95, with its Wilson interval recorded. |
+| Q2 | **All 361 sites.** Page-level classifier labels don't exclude a venue from later extraction draws. Classifier samples exclude classifier-labelled venues. |
+| Q3 | **(b)**, `classifier-v3` with the generic page signals. |
+| Q4 | **Record-only re-crawl**, about 150 venues (about 100 `no_menu_found`, 50 resolved). Every v2/v3 disagreement is labelled, plus about 100 pages both reject. |
+| Q5 | **Verify first.** Build v3 unshipped with the re-crawl script, label R1(a) and R1(b), reach the verdict, then ship v3 with R4 in one pipeline-version bump. |
 
 ## Reproduce
 

@@ -1669,11 +1669,25 @@ Record:
    together with the classifier fix: a rejected or withdrawn page leaves the queue, and its
    Menu rows are retracted. Cleanup then covers the whole pass, not only the sampled pages.
 
-## Amendment 24 (2026-10-20, proposed): `classifier-v3` candidate, fresh-sample plan, R4
+## Amendment 24 (2026-10-20, accepted 2026-10-20): `classifier-v3` candidate, fresh-sample plan, R4
 
-**Status: Proposed 2026-10-20 (session P5-28). Nothing below is built until the owner accepts
-it.** Record:
+**Status: Accepted 2026-10-20 by the owner (session P5-28), with the rulings below.** Record:
 [2026-10-20-p5-28-classifier-survey.md](../reviews/2026-10-20-p5-28-classifier-survey.md).
+
+**Owner rulings (2026-10-20):**
+- **Q1, pass rule:** R1(a) passes on the stratified point estimate ≥ 0.95, with its Wilson
+  interval recorded, as the extraction bars are judged.
+- **Q2, frame:** R1(a) labels all 361 remaining sites. Page-level classifier labels don't
+  exclude a venue from later extraction held-out draws: for those draws, "labelled" means
+  item-labelled. Later classifier samples exclude classifier-labelled venues and sites.
+- **Q3, candidate:** (b), `classifier-v3` with the generic page signals.
+- **Q4, R1(b):** a record-only discovery re-crawl on the laptop, about 150 venues (about 100
+  `no_menu_found` and 50 resolved). Every v2/v3 disagreement is labelled, plus about 100 pages
+  both reject.
+- **Q5, order:** verify first. Build `classifier-v3` unshipped (verifier unchanged), with the
+  re-crawl script; label R1(a) and R1(b) against it; reach the verdict. Then, only on a pass,
+  one pipeline-version bump ships v3 with R4. Until then v2 stays the verifier and the laptop
+  pass's rows stay (Amendment 23 items 2 and 5).
 
 1. **The survey (Amendment 23 item 3).** Leave-one-set-out over nine labelled sets: the spike's
    188 static pages, S6f's 57 rendered pages, and the seven held-out draws (450 pages, each its
@@ -1721,7 +1735,7 @@ it.** Record:
 4. **Fresh samples, verified against a built but unshipped `classifier-v3`:**
    - **(a) R1(a) precision.** Due pages of `helios_laptop`, one per site, excluding the spike's
      venues and sites and `next-draw-exclusions-p5-27.json`'s 450 venues and sites. 361 sites
-     remain (small 192, medium 161, large 8), so about 260 pages, or all 361 (Q2). Stratified
+     remain (small 192, medium 161, large 8); all 361 are labelled (Q2). Stratified
      by the fixed cutoffs, fresh seed, page-level labels only. Score `classifier-v2`,
      `classifier-v3` and S4 on every page.
    - **(b) R1(b) recall and admissions.**
@@ -1734,8 +1748,8 @@ it.** Record:
      - **Recall bar:** met when, weighted by population over R1(a) and R1(b), the menus v3 adds
        are at least the menus it drops.
      - **Precision:** combines R1(a)'s kept pages with R1(b)'s new admissions.
-   - **Pass rule** for precision: Q1. Proposed: the stratified point estimate ≥ 0.95, with its
-     Wilson interval recorded, as the extraction bars are judged.
+   - **Pass rule** for precision (Q1): the stratified point estimate ≥ 0.95, with its Wilson
+     interval recorded, as the extraction bars are judged.
 5. **R4 is built with `classifier-v3`, in the same pipeline-version bump.**
    - **Leaving the queue.** A `menu-page` record leaves `due_pages` when either:
      - its latest fetch is a classifier rejection (a skipped `not_menu` / `js_only` Capture,

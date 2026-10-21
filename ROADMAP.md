@@ -661,9 +661,11 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   in a leave-one-set-out over the spike, S6f rendered pages and the seven draws, retraining v2's
   inputs with the new negatives plus 11 generic page signals reads 0.957 [0.932, 0.972] pooled
   (threshold-only 0.936), losing 17 of 413 labelled menus. Proposed as `classifier-v3`
-  ([Amendment 24](./docs/adr/0013-phase5-menu-pipeline.md), Proposed). Fresh R1(a)/R1(b)
-  samples verify it before it ships with R4. Owner questions pending: the pass rule, the
-  361-site frame, the R1(b) re-crawl.
+  ([Amendment 24](./docs/adr/0013-phase5-menu-pipeline.md), accepted). Owner: verify first.
+  Build v3 unshipped with a record-only discovery re-crawl, then label R1(a) on all 361
+  remaining sites (page-level labels don't block extraction draws) and R1(b) on about 150
+  re-crawled venues. It passes on a stratified point estimate ≥ 0.95. Only then does one
+  pipeline-version bump ship v3 with R4.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).
