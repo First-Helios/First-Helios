@@ -404,3 +404,16 @@ Each question carries the context needed to answer it here.
     called `empty` and `menu_not_in_text` against hub. No reading turns on them: the closest
     candidate is 0.17 below the bar.
   - **Ask.** Do the labels stand without a hand check, as in P5-30 Q4?
+
+## Owner decisions (2026-10-21)
+
+- **Q1:** accepted. No candidate of the training-mix family passes, and Amendment 26 is accepted.
+  The owner's note: discovery is likely missing many websites and web pages, so finding new pages
+  and sources is a later upgrade, to be done after the pipeline is finished.
+- **Q2:** (a), two verifiers. A page must pass both `classifier-v2` and `classifier-v3`. This
+  rules that the recall loss (5 of R1(a)'s 336 menus, none gained) is acceptable for a verifier
+  that only tightens. A fresh due-page sample is still taken before any ship.
+- **Q3:** (a). Discovery is re-run on the venues whose last outcome was a failure, outside the
+  classifier exclusions. Due-page precision for v2 AND v3 is then sampled from whatever newly
+  resolves.
+- **Q4:** the census labels stand, with no hand check.

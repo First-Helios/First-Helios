@@ -1824,10 +1824,19 @@ Record:
 
    Still not proposed: a per-site, per-platform or hand-entered rule, or a new dependency.
 
-## Amendment 26 (2026-10-21, proposed): the training mix doesn't pass; next lever two verifiers
+## Amendment 26 (2026-10-21, accepted 2026-10-21): the training mix doesn't pass; next lever two verifiers
 
-**Status: Proposed 2026-10-21 (session P5-31), awaiting the owner.** Record:
+**Status: Accepted 2026-10-21 by the owner (session P5-31), with the rulings below.** Record:
 [2026-10-21-p5-31-training-mix-survey.md](../reviews/2026-10-21-p5-31-training-mix-survey.md).
+
+**Owner rulings (2026-10-21):**
+- **Q1, verdict:** accepted; no training-mix candidate passes. Finding more websites and pages
+  (discovery coverage) is a later upgrade, after the pipeline is finished.
+- **Q2, lever:** two verifiers, `classifier-v2` AND `classifier-v3`. The recall loss of a verifier
+  that only tightens (5 of R1(a)'s 336 menus) is accepted under §8's recall bar.
+- **Q3, fresh sample:** re-run discovery on the failed-outcome venues outside the classifier
+  exclusions, and sample due-page precision from what newly resolves.
+- **Q4, labels:** the census labels stand, with no hand check.
 
 1. **The candidate census (Amendment 25 item 5).** R1(b)'s 567 distinct candidate pages (352
    venues) are all labelled now: the 437 left after P5-29 and P5-30 were labelled blind under
