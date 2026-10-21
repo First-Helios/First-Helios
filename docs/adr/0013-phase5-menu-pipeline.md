@@ -1774,10 +1774,22 @@ Record:
    Retraining `classifier-v2`'s inputs alone, without the signals, is the smaller-build
    alternative (Q3).
 
-## Amendment 25 (2026-10-21, proposed): `classifier-v3` fails §8 precision; `classifier-v2` stays
+## Amendment 25 (2026-10-21, accepted 2026-10-21): `classifier-v3` fails §8 precision; `classifier-v2` stays
 
-**Status: Proposed 2026-10-21 (session P5-30); awaiting owner review.** Record:
+**Status: Accepted 2026-10-21 by the owner (session P5-30), with the rulings below.** Record:
 [2026-10-21-p5-30-classifier-v3-verdict.md](../reviews/2026-10-21-p5-30-classifier-v3-verdict.md).
+
+**Owner rulings (2026-10-21):**
+- **Q1, verdict:** the fail is accepted as written. `classifier-v2` stays, with no
+  pipeline-version bump, and R4 waits.
+- **Q2, lever:** the training mix. The labelled discovery candidates join the pool as a tenth
+  set; the survey's leave-one-set-out is re-run with the same candidates and threshold rule; and
+  admissions are measured on held-out candidate pages.
+- **Q3, fresh sample:**
+  - due-page precision comes from new venues (the Pi pass or new discovery runs), outside every
+    classifier-labelled venue and site;
+  - admissions come from the about 1,259 unlabelled `no_menu_found` sites.
+- **Q4, labels:** the frozen blind labels stand, with no hand check.
 
 1. **The samples (Amendment 24 item 4, owner rulings on the P5-29 record).**
    - R1(a): all 361 due pages, labelled blind.
@@ -1799,11 +1811,11 @@ Record:
    rest are off-domain shop, insurance and spam pages, press releases, a hub and app shells.
 3. **Recall passes.** Weighted adds against drops: page level 49.7 against 5.0; live replay
    20.8 against 5.0.
-4. **Decision (proposed): `classifier-v2` stays the verifier.**
+4. **Decision: `classifier-v2` stays the verifier.**
    - No pipeline-version bump.
    - R4 waits for a classifier that passes (Amendment 24 Q5).
    - The laptop pass's rows stay, under Amendment 23 items 2 and 5.
-5. **Next lever (proposed; the record's Q2 and Q3):** the training mix (survey §5 risk 4).
+5. **Next lever (owner Q2 and Q3):** the training mix (survey §5 risk 4).
    - Add discovery's labelled candidate pages to the pool as their own set.
    - Re-run leave-one-set-out with the same candidates and threshold rule.
    - Measure admissions on held-out candidate pages.

@@ -316,3 +316,13 @@ Each question carries the context needed to answer it here.
     doesn't turn on them (0.773 is far from 0.95).
   - **Ask.** Do you want a hand check of the 26 v3 admissions and the 16 v3 rejections before
     accepting? They are the pages that decide the result.
+
+## Owner decisions (2026-10-21)
+
+- **Q1:** (a). The fail is accepted. Amendment 25 is accepted: `classifier-v2` stays, and R4 waits.
+- **Q2:** (a), the training mix. The labelled discovery candidates join the pool as a tenth set,
+  and the survey's leave-one-set-out is re-run with the same candidates and threshold rule.
+- **Q3:** (a). Due-page precision comes from new venues (the Pi pass or new discovery runs),
+  outside every classifier-labelled venue and site. Admissions come from the remaining
+  unlabelled `no_menu_found` sites.
+- **Q4:** no hand check. The frozen blind labels stand.
