@@ -1823,3 +1823,54 @@ Record:
      site is now classifier-labelled.
 
    Still not proposed: a per-site, per-platform or hand-entered rule, or a new dependency.
+
+## Amendment 26 (2026-10-21, proposed): the training mix doesn't pass; next lever two verifiers
+
+**Status: Proposed 2026-10-21 (session P5-31), awaiting the owner.** Record:
+[2026-10-21-p5-31-training-mix-survey.md](../reviews/2026-10-21-p5-31-training-mix-survey.md).
+
+1. **The candidate census (Amendment 25 item 5).** R1(b)'s 567 distinct candidate pages (352
+   venues) are all labelled now: the 437 left after P5-29 and P5-30 were labelled blind under
+   the strict full-read prompt and frozen before scoring. Totals: menu 97, not_menu 246, empty
+   118, `js_only` 106. On `no_menu_found` sites, 18 of 443 candidate pages are menus. The census
+   leaves `classifier-v3`'s P5-30 verdict unchanged (0.773).
+2. **The survey.** Leave-one-set-out over 11 sets: the spike, S6f, the seven draws, R1(a) and the
+   R1(b) census. Groups join venue and site, and R1(a) and R1(b) share Q1's 50 venues. The
+   candidates are one family:
+   - v2's inputs and the v3 recipe, without and with the candidate set in training;
+   - the latter also with R1(b) weighted to its population.
+
+   Thresholds come from the existing precision-0.95 rule inside each fold.
+   - **No candidate passes.** The Amendment 24 combined estimate is 0.696–0.776 against the
+     0.95 bar, with every upper bound below 0.83. Per-venue and live-replay readings are also
+     below the bar.
+   - The candidates do lift due-page precision: draws 0.962–0.972, R1(a) 0.959–0.974.
+   - The best combined (`a+w`, 0.776) fails recall: it loses 35 R1(a) menus and adds 26.
+3. **Why.** Among pages `classifier-v2` rejects on `no_menu_found` sites, every candidate admits
+   20–33, and only 5–6 are menus. They are off-domain shop, insurance and spam pages, press posts,
+   ordering pages with no menu text, and app shells, all scored 0.93–1.00. At these weights one
+   false admission costs about 1.4 points. Oracle removal of every off-domain and every unpriced
+   admission still leaves 0.90–0.94, so a further mix of the same page features is not proposed.
+4. **Fresh-sample feasibility (owner Q3).**
+   - The exclusion list is 1,463 venues and 1,452 sites
+     (`var/menu-eval/p5-31/classifier-exclusions.json`).
+   - **No resolved `helios_laptop` venue or due page is left outside it.** Due-page precision
+     needs new resolved venues: a discovery re-run of the venues whose last outcome was a
+     failure (about 2,650 outside the exclusions; yield unmeasured), or a venue-discovery
+     refresh.
+   - The admissions frame is 1,259 `no_menu_found` sites, ordered with seed 20261025; the first
+     630 are proposed for the next admissions sample.
+5. **Proposed next lever: two verifiers, `classifier-v2` AND `classifier-v3`** (owner Q2).
+   - It is generic and already built, with no new model or dependency.
+   - Precision on R1(a), held out from v3's training, is 0.959 [0.933, 0.976]. It admits nothing
+     v2 rejects.
+   - It drops 5 of R1(a)'s 336 menus and gains none. So it meets §8's recall bar only with an
+     owner ruling: either that this loss is accepted, or a restated recall bar for a verifier that
+     only tightens.
+   - Before any ship, it is verified on a fresh due-page sample from new venues (item 4). R4 is
+     built with it in the same pipeline-version bump (Amendment 24 item 5).
+   - The alternative is venue-context signals: whether the page is about this venue. That needs
+     the venue as a verifier input, and item 3's bound says it alone won't reach the bar.
+6. **Unchanged.** `classifier-v2` stays the verifier, R4 waits, and the laptop pass's rows stay
+   (Amendment 23 items 2 and 5). Still not proposed: a per-site, per-platform or hand-entered
+   rule, or a new dependency.
