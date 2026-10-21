@@ -322,3 +322,10 @@ Each question carries the context needed to answer it here.
       `select_venues.py`, about 65 minutes). Label only their v2/v3 disagreements; the
       both-reject sample is already 100 pages. (Recommended.)
     - (b) Keep 100 venues and judge on what they show.
+
+## Owner decisions (2026-10-21)
+
+| | Answer |
+|---|---|
+| Q1 | **50 R1(a) venues.** Re-crawl a seeded random 50 of R1(a)'s 361 venues, record-only, as R1(b)'s resolved stratum. Label their v2/v3 disagreements plus a both-reject sample. A page already labelled in R1(a) is not labelled again. |
+| Q2 | **+200 `no_menu_found` venues.** Continue `select_venues.py`'s seed-20261022 order for about 200 more venues and label only their v2/v3 disagreements. The 100-page both-reject sample stays as it is. |
