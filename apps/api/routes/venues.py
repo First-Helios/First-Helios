@@ -325,8 +325,11 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
     Groups by the full native path (a pinned-base prefix included), so equal keys
     under different parents never merge; the wire ``key`` is the node's own
     native key. Nested sections are listed flat, each under its innermost key.
-    Names come only from a node's own Gold row (first one in row order), and
-    so does ``id``: a node with no row of its own has none.
+    A section or item takes its name from its rows' ``section_name`` /
+    ``item_name`` (ADR-0006 Amendment 1), which every row on its path carries,
+    else from its own row's ``content_name``; first non-null in row order.
+    ``id`` comes only from a node's own Gold row: a node with no row of its own
+    has none.
     """
     sections: dict[_Path, MenuSectionResponse] = {}
     items: dict[_Path, MenuItemResponse] = {}
@@ -340,6 +343,7 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
             section = sections[section_path] = MenuSectionResponse(
                 id=None, key=section_path[-1][1], name=None, prices=[], items=[], modifiers=[]
             )
+        section.name = section.name or row.section_name
         rest = path[last_section + 1 :]
         price = _price(row, now)
         if not rest:  # a section-level price
@@ -365,6 +369,7 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
                 modifiers=[],
             )
             section.items.append(item)
+        item.name = item.name or row.item_name
         if len(rest) == 1:  # the item's own price
             item.id = item.id or _item_id(row)
             item.name = item.name or row.content_name
