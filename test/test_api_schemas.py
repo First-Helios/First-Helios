@@ -16,6 +16,7 @@ def _venue(valid_from: datetime, valid_to: datetime | None) -> VenueResponse:
     return VenueResponse(
         id=1,
         name="Test Venue",
+        organization_id=2,
         organization_kind="brand",
         address=None,
         latitude=None,

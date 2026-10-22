@@ -1,8 +1,8 @@
 # ADR-0018: Venue filters and item price history (Phase 7 API remainder)
 
 **Status:** Accepted 2026-10-21 by the owner (Q1–Q9, all as recommended; see
-[Owner decision](#owner-decision)). Proposed 2026-10-21 (session P7-1). Not implemented yet;
-implementation is a separate session.
+[Owner decision](#owner-decision)). Proposed 2026-10-21 (session P7-1). Implemented 2026-10-21
+(session P7-2; see [Implementation notes](#implementation-notes-2026-10-21-p7-2)).
 **Date:** 2026-10-21
 **Phase:** 7 (API surface)
 **Extends:** [ADR-0008](./0008-read-api-conventions.md) (read-API conventions; amends Decision point 9,
@@ -245,6 +245,39 @@ the recommended option, so the Decision section above stands as written:
 
 This acceptance covers the design. It does not cover unseen code: the Place-index migration
 SQL stays a CLAUDE.md read-twice path, and the owner reviews it in the implementation PR.
+
+## Implementation notes (2026-10-21, P7-2)
+
+Built as decided. Where the Decision left a detail open, the code does this. The owner
+confirmed every choice below as built on 2026-10-21 (PR #103 owner questions 1–7, all as
+recommended), including the plain `CREATE INDEX`, READ COMMITTED for the history read, and an
+empty `points: []` trail for a context whose window never contains its acceptance instant.
+
+- **Place index.** Alembic revision `68146a4c5fc5` creates
+  `ix_place_latitude_longitude` on `identity.place (latitude, longitude)` and nothing else; the
+  same `Index` is declared on the `Place` model so `alembic check` stays clean. The `area`
+  EXPLAIN test also asserts the plan uses this index: without it the planner reads the whole
+  `place_pkey` instead, which is not a `Seq Scan` node and would pass a seq-scan-only check.
+- **`has_menu`.** "The Organization's one current venue" is `NOT EXISTS` another current venue
+  of the same Organization, the same current-venue rule the menu endpoint counts with. The
+  served-row semi-join is `gold.menu_read.has_served_menu`, beside `current_menu_rows`.
+- **`area`.** A key is canonical when `grid_cell` of its parsed corner prints the same key, so
+  `"30.260,-97.75"`, `"-0.00,0.00"` and exponent forms are `422`.
+- **`item_id`.** Unpadded base64url over compact JSON
+  `[subject_kind, subject_id, source_record_id, root_key, [[kind, key], ...]]`; only the
+  canonical encoding decodes, so each target has one id. The target kind is the path's last
+  node kind. On the menu wire `id` is on every variant and modifier, and on an item or section
+  only when it has a price row of its own (`null` otherwise: no target to follow).
+- **Trail contexts** come from the scope's own pages only (point 7), not every page of the
+  family: a context only another subject priced would yield an empty or foreign trail.
+- **Trail start.** A trail's candidate instants start at the acceptance of the scope's first
+  page that prices the target in that context. Earlier family pages would otherwise open every
+  trail of a newer Version's target with an `absent` point for a target that did not exist yet.
+- **Own claims for derived states.** A point with a page is the scope's when that page's
+  subject is the scope. A derived point (`absent`, `withdrawn`, `unresolved_base`) is the
+  scope's only when every family stream head at `K` is the scope's own page.
+- **Query cost.** One extra page of a family adds a constant number of statements (16 in the
+  synthetic test; the test bounds it at 20).
 
 ## References
 

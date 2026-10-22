@@ -34,7 +34,7 @@
         "type": "object"
       },
       "MenuItemResponse": {
-        "description": "A dish. ``name`` is null when Gold holds no row for the item itself\n(only its variants are priced).",
+        "description": "A dish. ``name`` is null when Gold holds no row for the item itself\n(only its variants are priced). ``id`` is the node's ``item_id`` for\n``GET /v1/items/{item_id}/price-history``; null when it has no prices.",
         "properties": {
           "description": {
             "anyOf": [
@@ -46,6 +46,17 @@
               }
             ],
             "title": "Description"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
           },
           "key": {
             "title": "Key",
@@ -85,6 +96,7 @@
           }
         },
         "required": [
+          "id",
           "key",
           "name",
           "description",
@@ -96,8 +108,12 @@
         "type": "object"
       },
       "MenuOptionResponse": {
-        "description": "A variant (e.g. a size) or a modifier (an add-on) and its prices.",
+        "description": "A variant (e.g. a size) or a modifier (an add-on) and its prices.\n\n``id`` is the node's ``item_id`` for ``GET /v1/items/{item_id}/price-history``.",
         "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -122,6 +138,7 @@
           }
         },
         "required": [
+          "id",
           "key",
           "name",
           "prices"
@@ -295,8 +312,19 @@
         "type": "object"
       },
       "MenuSectionResponse": {
-        "description": "A named section of a menu. ``name`` is null unless the section itself is\npriced: Gold carries no section names yet.",
+        "description": "A named section of a menu. ``name`` is null unless the section itself is\npriced: Gold carries no section names yet. ``id`` is the section's\n``item_id`` for its price history; null unless the section is priced.",
         "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/MenuItemResponse"
@@ -335,6 +363,7 @@
           }
         },
         "required": [
+          "id",
           "key",
           "name",
           "prices",
@@ -342,6 +371,117 @@
           "modifiers"
         ],
         "title": "MenuSectionResponse",
+        "type": "object"
+      },
+      "PriceHistoryPointResponse": {
+        "description": "The accepted answer from ``known_from`` until the next point.\n\n``known_from`` is the acceptance instant of the page that made this the\nanswer. ``amount_minor`` is null unless ``state`` is ``priced``;\n``observed_at``, ``source_kind`` and ``confidence`` are null for a derived\nstate (``absent``, ``withdrawn``, ``unresolved_base``).",
+        "properties": {
+          "amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "known_from": {
+            "format": "date-time",
+            "title": "Known From",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "jsonld",
+                  "dom",
+                  "pdf",
+                  "llm"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Kind"
+          },
+          "state": {
+            "enum": [
+              "priced",
+              "unknown",
+              "unavailable",
+              "absent",
+              "withdrawn",
+              "unresolved_base"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "known_from",
+          "state",
+          "amount_minor",
+          "observed_at",
+          "source_kind",
+          "confidence"
+        ],
+        "title": "PriceHistoryPointResponse",
+        "type": "object"
+      },
+      "PriceHistoryResponse": {
+        "description": "The accepted observation trail behind one menu node's prices.\n\nComputed live from committed Menu, so ``as_of`` is the request instant.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "trails": {
+            "items": {
+              "$ref": "#/components/schemas/PriceTrailResponse"
+            },
+            "title": "Trails",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item_id",
+          "as_of",
+          "trails"
+        ],
+        "title": "PriceHistoryResponse",
         "type": "object"
       },
       "PriceIndexGroupResponse": {
@@ -551,6 +691,76 @@
         "title": "PriceIndexResponse",
         "type": "object"
       },
+      "PriceTrailResponse": {
+        "description": "The points of one effective context and currency, oldest first.",
+        "properties": {
+          "channel": {
+            "enum": [
+              "unspecified",
+              "dine_in",
+              "takeaway"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "currency_code": {
+            "title": "Currency Code",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PriceHistoryPointResponse"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "service_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Period"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "required": [
+          "channel",
+          "service_period",
+          "valid_from",
+          "valid_to",
+          "currency_code",
+          "points"
+        ],
+        "title": "PriceTrailResponse",
+        "type": "object"
+      },
       "VenueList": {
         "description": "A cursor-paginated page of venues; ``next_cursor`` is null on the last.",
         "properties": {
@@ -616,7 +826,7 @@
         "type": "object"
       },
       "VenueResponse": {
-        "description": "A venue: one Organization operating at one Place (an Establishment).",
+        "description": "A venue: one Organization operating at one Place (an Establishment).\n\n``organization_id`` is the operating Organization's id, the value the\nlist's ``organization`` filter takes.",
         "properties": {
           "address": {
             "anyOf": [
@@ -670,6 +880,10 @@
             "title": "Operating Status",
             "type": "string"
           },
+          "organization_id": {
+            "title": "Organization Id",
+            "type": "integer"
+          },
           "organization_kind": {
             "title": "Organization Kind",
             "type": "string"
@@ -695,6 +909,7 @@
         "required": [
           "id",
           "name",
+          "organization_id",
           "organization_kind",
           "address",
           "latitude",
@@ -762,6 +977,61 @@
           }
         },
         "summary": "Readyz"
+      }
+    },
+    "/v1/items/{item_id}/price-history": {
+      "get": {
+        "description": "Return one trail per effective context and currency, oldest point first.\n\n``item_id`` is the ``id`` of a node in ``GET /v1/venues/{id}/menu``. A point\nis emitted each time a newly accepted page changed the node's accepted local\nanswer: its state, amount and the page it came from. A trail usually ends\n``absent`` once a newer capture of the menu is accepted: each capture's\nnodes are their own targets, so the trail shows when a price was accepted,\ncorrected, withdrawn or superseded, not the dish's price across captures.\nComputed live from committed Menu, so ``as_of`` is the request instant and\nthe item keeps its history after it leaves the current menu.",
+        "operationId": "get_price_history_v1_items__item_id__price_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The item_id names no target its scope ever priced."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "item_id is malformed."
+          }
+        },
+        "summary": "Get the accepted price trail behind a menu node",
+        "tags": [
+          "items"
+        ]
       }
     },
     "/v1/price-index": {
@@ -860,7 +1130,7 @@
     },
     "/v1/venues": {
       "get": {
-        "description": "Return one page of current venues ordered by id, with an opaque cursor.",
+        "description": "Return one page of current venues ordered by id, with an opaque cursor.\n\nFilters are ANDed. The cursor does not carry them: send the same filters\nwith every page. A filter that matches nothing is ``200`` with ``items: []``.",
         "operationId": "list_venues_v1_venues_get",
         "parameters": [
           {
@@ -889,6 +1159,63 @@
                 }
               ],
               "title": "Cursor"
+            }
+          },
+          {
+            "description": "Only venues whose menu endpoint would (true) or would not (false) return a menu, as of the last Gold refresh.",
+            "in": "query",
+            "name": "has_menu",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only venues whose menu endpoint would (true) or would not (false) return a menu, as of the last Gold refresh.",
+              "title": "Has Menu"
+            }
+          },
+          {
+            "description": "Only venues of this organization_id.",
+            "in": "query",
+            "name": "organization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9223372036854775807,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only venues of this organization_id.",
+              "title": "Organization"
+            }
+          },
+          {
+            "description": "Only venues whose point lies in this price-index area_key (the 0.01\u00b0 cell named by its south-west corner, e.g. \"30.26,-97.75\").",
+            "in": "query",
+            "name": "area",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only venues whose point lies in this price-index area_key (the 0.01\u00b0 cell named by its south-west corner, e.g. \"30.26,-97.75\").",
+              "title": "Area"
             }
           }
         ],
@@ -921,7 +1248,7 @@
                 }
               }
             },
-            "description": "A query parameter failed validation."
+            "description": "A query parameter failed validation, or area is not a canonical area_key."
           }
         },
         "summary": "List venues (cursor-paginated)",

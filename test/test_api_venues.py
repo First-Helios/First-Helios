@@ -130,6 +130,7 @@ def test_list_returns_seeded_venues(client: TestClient, session: Session) -> Non
     assert set(first) == {
         "id",
         "name",
+        "organization_id",
         "organization_kind",
         "address",
         "latitude",

@@ -132,6 +132,8 @@ class Place(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("subject_id", "subject_kind", name="uq_place_subject_kind"),
+        # The venue list's ``area`` filter (a 0.01° cell range, ADR-0018 §A3).
+        Index("ix_place_latitude_longitude", "latitude", "longitude"),
         {"schema": SCHEMA_IDENTITY},
     )
 

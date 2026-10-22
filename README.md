@@ -38,12 +38,22 @@ This section is the single current-status page. Other docs link here.
   - `GET /healthz`: liveness, no database.
   - `GET /readyz`: readiness, checks the database.
   - `GET /v1/venues`: current venues, cursor-paginated (`limit`, `cursor`).
+    Optional filters, ANDed: `has_menu` (the menu endpoint would return a
+    menu), `organization` (an `organization_id`, now on every venue) and
+    `area` (a price-index `area_key`, the 0.01° cell). Each is index-backed
+    (ADR-0018).
   - `GET /v1/venues/{venue_id}`: one current venue.
   - `GET /v1/venues/{venue_id}/menu`: the venue's current menu from
     `gold.current_menu`. Each price carries `observed_at`, its age at request
     time and its source kind. The menu nests sections → items →
     variants/modifiers. It also includes the Organization's menu when this
-    venue is the Organization's only current venue.
+    venue is the Organization's only current venue. Every priced node carries
+    an `id` for its price history.
+  - `GET /v1/items/{item_id}/price-history`: the accepted trail behind a menu
+    node's prices, one trail per context and currency, read from committed
+    Menu through the selector's history mode (ADR-0018, ADR-0008 Amendment 3).
+    A trail covers one Bronze Version: accepted, corrected, then superseded
+    (`absent`) or `withdrawn`.
   - `GET /v1/price-index?lat=&lon=`: the `gold.price_index` rows of the 0.01°
     cell containing the point, with venue counts, `low_sample`, the observed
     range and `as_of`. Optional `category_kind` and `currency` filters; a cell
@@ -230,9 +240,10 @@ This section is the single current-status page. Other docs link here.
   slice 1a (labelling guide and comparison harness) is built; slice 1b (labels,
   the course projection, then its rows in `GET /v1/price-index`) waits for the
   first real extraction.
-- The rest of the Phase 7 API: venue filters (area, organization, has-menu) and
-  `GET /v1/items/{id}/price-history`, designed in
-  [ADR-0018](./docs/adr/0018-venue-filters-and-item-price-history.md) (Accepted).
+- Price history across captures: a trail ends `absent` at the next Bronze
+  Version, because native keys are version-local (ADR-0013 N1). Cross-Version
+  correspondence is a separate ADR-0005/ADR-0013 question
+  ([ADR-0018](./docs/adr/0018-venue-filters-and-item-price-history.md) Q8).
 - The staging deploy (ADR-0008 Unit B), production, and the deals layer.
 
 ## Gates
@@ -622,7 +633,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1) |
 | [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
 | [0017](./docs/adr/0017-extraction-harness-generalization.md) | Extraction harness generalization: invariance, multi-model acceptance, per-model configuration | Accepted (items 1–2; items 3–4 deferred) |
-| [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Accepted (not built) |
+| [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Accepted (built, P7-2) |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the

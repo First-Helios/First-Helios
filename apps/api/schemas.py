@@ -45,10 +45,15 @@ def _utc_iso(value: datetime) -> str:
 
 
 class VenueResponse(BaseModel):
-    """A venue: one Organization operating at one Place (an Establishment)."""
+    """A venue: one Organization operating at one Place (an Establishment).
+
+    ``organization_id`` is the operating Organization's id, the value the
+    list's ``organization`` filter takes.
+    """
 
     id: int
     name: str | None
+    organization_id: int
     organization_kind: str
     address: str | None
     latitude: float | None
@@ -108,8 +113,12 @@ class MenuPriceResponse(BaseModel):
 
 
 class MenuOptionResponse(BaseModel):
-    """A variant (e.g. a size) or a modifier (an add-on) and its prices."""
+    """A variant (e.g. a size) or a modifier (an add-on) and its prices.
 
+    ``id`` is the node's ``item_id`` for ``GET /v1/items/{item_id}/price-history``.
+    """
+
+    id: str
     key: str
     name: str | None
     prices: list[MenuPriceResponse]
@@ -117,8 +126,10 @@ class MenuOptionResponse(BaseModel):
 
 class MenuItemResponse(BaseModel):
     """A dish. ``name`` is null when Gold holds no row for the item itself
-    (only its variants are priced)."""
+    (only its variants are priced). ``id`` is the node's ``item_id`` for
+    ``GET /v1/items/{item_id}/price-history``; null when it has no prices."""
 
+    id: str | None
     key: str
     name: str | None
     description: str | None
@@ -129,8 +140,10 @@ class MenuItemResponse(BaseModel):
 
 class MenuSectionResponse(BaseModel):
     """A named section of a menu. ``name`` is null unless the section itself is
-    priced: Gold carries no section names yet."""
+    priced: Gold carries no section names yet. ``id`` is the section's
+    ``item_id`` for its price history; null unless the section is priced."""
 
+    id: str | None
     key: str
     name: str | None
     prices: list[MenuPriceResponse]
@@ -222,6 +235,66 @@ class PriceIndexResponse(BaseModel):
     @field_serializer("as_of")
     def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:
         return _utc_iso(value) if value is not None else None
+
+
+#: Accepted history states (ADR-0018 §B6): the served states plus the derived
+#: no-value reasons history mode can return.
+HistoryState = Literal["priced", "unknown", "unavailable", "absent", "withdrawn", "unresolved_base"]
+
+
+class PriceHistoryPointResponse(BaseModel):
+    """The accepted answer from ``known_from`` until the next point.
+
+    ``known_from`` is the acceptance instant of the page that made this the
+    answer. ``amount_minor`` is null unless ``state`` is ``priced``;
+    ``observed_at``, ``source_kind`` and ``confidence`` are null for a derived
+    state (``absent``, ``withdrawn``, ``unresolved_base``).
+    """
+
+    known_from: datetime
+    state: HistoryState
+    amount_minor: int | None
+    observed_at: datetime | None
+    source_kind: SourceKind | None
+    confidence: float | None
+
+    @field_serializer("known_from")
+    def _serialize_known_from(self, value: datetime) -> _DateTimeStr:
+        return _utc_iso(value)
+
+    @field_serializer("observed_at")
+    def _serialize_observed_at(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
+class PriceTrailResponse(BaseModel):
+    """The points of one effective context and currency, oldest first."""
+
+    channel: Channel
+    service_period: str | None
+    valid_from: datetime | None
+    valid_to: datetime | None
+    currency_code: str
+    points: list[PriceHistoryPointResponse]
+
+    @field_serializer("valid_from", "valid_to")
+    def _serialize_times(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
+class PriceHistoryResponse(BaseModel):
+    """The accepted observation trail behind one menu node's prices.
+
+    Computed live from committed Menu, so ``as_of`` is the request instant.
+    """
+
+    item_id: str
+    as_of: datetime
+    trails: list[PriceTrailResponse]
+
+    @field_serializer("as_of")
+    def _serialize_as_of(self, value: datetime) -> _DateTimeStr:
+        return _utc_iso(value)
 
 
 class ErrorResponse(BaseModel):

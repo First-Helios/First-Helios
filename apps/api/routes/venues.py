@@ -6,22 +6,29 @@ closed/expired venues and venues with non-current parents are hidden (ADR-0012).
 Reads Identity models directly (``apps`` is the composition root, ADR-0004); it
 never mutates them. A venue's menu is read from ``gold.current_menu`` through
 :mod:`packages.helios_core.gold.menu_read` (ADR-0008 §9).
+
+The list's filters (ADR-0018 §A) are each one index-backed predicate:
+``has_menu`` a semi-join on ``ix_gold_current_menu_scope``, ``organization``
+``ix_establishment_organization_subject_id``, and ``area`` a price-index cell
+range on ``ix_place_latitude_longitude``.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, Path, Query
-from sqlalchemy import func, or_, select
+from fastapi import APIRouter, Depends, Path, Query, status
+from sqlalchemy import and_, exists, func, not_, or_, select
 from sqlalchemy.orm import (
     Session,  # noqa: TC002 - FastAPI resolves this at runtime for Depends
     aliased,
 )
 
 from apps.api.db import get_session
-from apps.api.errors import NotFoundError
+from apps.api.errors import ApiError, NotFoundError
+from apps.api.item_ids import ItemId, encode_item_id
 from apps.api.pagination import BIGINT_MAX, DEFAULT_LIMIT, MAX_LIMIT, decode_cursor, encode_cursor
 from apps.api.schemas import (
     ErrorResponse,
@@ -34,7 +41,12 @@ from apps.api.schemas import (
     VenueMenuResponse,
     VenueResponse,
 )
-from packages.helios_core.gold.menu_read import CurrentMenuRow, current_menu_rows
+from packages.helios_core.gold.menu_read import (
+    CurrentMenuRow,
+    current_menu_rows,
+    has_served_menu,
+)
+from packages.helios_core.gold.price_index import GRID_STEP, grid_cell
 from packages.helios_core.identity.models import (
     Establishment,
     Organization,
@@ -45,7 +57,8 @@ from packages.helios_core.identity.models import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from sqlalchemy import Select
+    from sqlalchemy import ColumnElement, Select
+    from sqlalchemy.orm.util import AliasedClass
 
     from apps.api.schemas import Channel, MenuScope, PriceState, SourceKind
 
@@ -55,7 +68,10 @@ router = APIRouter(prefix="/venues", tags=["venues"])
 # ``cursor`` maps to 400, and both routes' query/path validation maps to 422.
 _LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {"model": ErrorResponse, "description": "The cursor is malformed."},
-    422: {"model": ErrorResponse, "description": "A query parameter failed validation."},
+    422: {
+        "model": ErrorResponse,
+        "description": "A query parameter failed validation, or area is not a canonical area_key.",
+    },
 }
 _GET_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorResponse, "description": "No current venue has this id."},
@@ -69,6 +85,7 @@ def _to_venue(
     return VenueResponse(
         id=establishment.subject_id,
         name=organization.canonical_name,
+        organization_id=organization.subject_id,
         organization_kind=organization.organization_kind,
         address=place.address,
         latitude=float(place.latitude) if place.latitude is not None else None,
@@ -79,23 +96,95 @@ def _to_venue(
     )
 
 
-def _current_venue_select() -> Select[tuple[Establishment, Organization, Place]]:
+def _current_venue_select(
+    establishment: type[Establishment] | AliasedClass[Establishment] = Establishment,
+    organization: type[Organization] | AliasedClass[Organization] = Organization,
+    place: type[Place] | AliasedClass[Place] = Place,
+) -> Select[tuple[Establishment, Organization, Place]]:
+    """Current venues; pass aliases to correlate a second copy as a subquery."""
+    current = aliased(SubjectCurrentness)
     org_current = aliased(SubjectCurrentness)
     place_current = aliased(SubjectCurrentness)
     return (
-        select(Establishment, Organization, Place)
-        .join(Organization, Organization.subject_id == Establishment.organization_subject_id)
-        .join(Place, Place.subject_id == Establishment.place_subject_id)
-        .join(SubjectCurrentness, SubjectCurrentness.subject_id == Establishment.subject_id)
-        .join(org_current, org_current.subject_id == Organization.subject_id)
-        .join(place_current, place_current.subject_id == Place.subject_id)
+        select(establishment, organization, place)
+        .join(organization, organization.subject_id == establishment.organization_subject_id)
+        .join(place, place.subject_id == establishment.place_subject_id)
+        .join(current, current.subject_id == establishment.subject_id)
+        .join(org_current, org_current.subject_id == organization.subject_id)
+        .join(place_current, place_current.subject_id == place.subject_id)
         .where(
-            SubjectCurrentness.is_current.is_(True),
+            current.is_current.is_(True),
             org_current.is_current.is_(True),
             place_current.is_current.is_(True),
-            Establishment.operating_status != "closed",
-            or_(Establishment.valid_to.is_(None), Establishment.valid_to > func.now()),
+            establishment.operating_status != "closed",
+            or_(establishment.valid_to.is_(None), establishment.valid_to > func.now()),
         )
+    )
+
+
+def _sole_current_venue() -> ColumnElement[bool]:
+    """The listed venue is its Organization's one current venue (ADR-0005 §11)."""
+    peer = aliased(Establishment)
+    peer_select = (
+        _current_venue_select(peer, aliased(Organization), aliased(Place))
+        .with_only_columns(peer.subject_id)
+        .where(
+            peer.organization_subject_id == Establishment.organization_subject_id,
+            peer.subject_id != Establishment.subject_id,
+        )
+    )
+    return not_(exists(peer_select))
+
+
+def _has_menu() -> ColumnElement[bool]:
+    """``GET /v1/venues/{id}/menu`` would return a menu (ADR-0018 §A1)."""
+    return or_(
+        has_served_menu(Establishment.subject_id, "establishment"),
+        and_(
+            has_served_menu(Establishment.organization_subject_id, "organization"),
+            _sole_current_venue(),
+        ),
+    )
+
+
+class InvalidAreaError(ApiError):
+    """An ``area`` that is not a canonical price-index ``area_key``."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "validation_error",
+            "area is not a canonical area_key",
+        )
+
+
+def _area_cell(area: str) -> tuple[Decimal, Decimal]:
+    """The south-west corner of a canonical ``area_key`` ("30.26,-97.75")."""
+    parts = area.split(",")
+    if len(parts) != 2:
+        raise InvalidAreaError
+    try:
+        latitude, longitude = Decimal(parts[0]), Decimal(parts[1])
+    except InvalidOperation as exc:
+        raise InvalidAreaError from exc
+    if not (latitude.is_finite() and longitude.is_finite()):
+        raise InvalidAreaError
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        raise InvalidAreaError
+    key, cell_lat, cell_lon = grid_cell(latitude, longitude)
+    if key != area:
+        raise InvalidAreaError
+    return cell_lat, cell_lon
+
+
+def _in_area(area: str) -> ColumnElement[bool]:
+    """The venue's Place point lies in the cell, the rule ``grid_cell`` applies."""
+    cell_lat, cell_lon = _area_cell(area)
+    return and_(
+        Place.latitude >= cell_lat,
+        Place.latitude < cell_lat + GRID_STEP,
+        Place.longitude >= cell_lon,
+        Place.longitude < cell_lon + GRID_STEP,
     )
 
 
@@ -109,10 +198,39 @@ def list_venues(
     session: Annotated[Session, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
+    has_menu: Annotated[
+        bool | None,
+        Query(
+            description="Only venues whose menu endpoint would (true) or would not (false) "
+            "return a menu, as of the last Gold refresh."
+        ),
+    ] = None,
+    organization: Annotated[
+        int | None,
+        Query(ge=0, le=BIGINT_MAX, description="Only venues of this organization_id."),
+    ] = None,
+    area: Annotated[
+        str | None,
+        Query(
+            max_length=64,
+            description="Only venues whose point lies in this price-index area_key "
+            '(the 0.01° cell named by its south-west corner, e.g. "30.26,-97.75").',
+        ),
+    ] = None,
 ) -> VenueList:
-    """Return one page of current venues ordered by id, with an opaque cursor."""
+    """Return one page of current venues ordered by id, with an opaque cursor.
+
+    Filters are ANDed. The cursor does not carry them: send the same filters
+    with every page. A filter that matches nothing is ``200`` with ``items: []``.
+    """
     after = decode_cursor(cursor) if cursor is not None else None
     statement = _current_venue_select()
+    if has_menu is not None:
+        statement = statement.where(_has_menu() if has_menu else not_(_has_menu()))
+    if organization is not None:
+        statement = statement.where(Establishment.organization_subject_id == organization)
+    if area is not None:
+        statement = statement.where(_in_area(area))
     if after is not None:
         statement = statement.where(Establishment.subject_id > after)
     statement = statement.order_by(Establishment.subject_id).limit(limit + 1)
@@ -172,13 +290,31 @@ def _price(row: CurrentMenuRow, now: datetime) -> MenuPriceResponse:
     )
 
 
+def _item_id(row: CurrentMenuRow) -> str:
+    """The ``item_id`` of the target a Gold row prices (ADR-0018 §B4)."""
+    return encode_item_id(
+        ItemId(
+            subject_kind=cast("MenuScope", row.subject_kind),
+            subject_id=row.subject_id,
+            source_record_id=row.source_record_id,
+            root_key=row.root_key,
+            target_path=row.target_path,
+        )
+    )
+
+
 def _option(
-    options: dict[_Path, MenuOptionResponse], path: _Path, parent: list[MenuOptionResponse]
+    options: dict[_Path, MenuOptionResponse],
+    row: CurrentMenuRow,
+    parent: list[MenuOptionResponse],
 ) -> MenuOptionResponse:
-    """The variant/modifier at ``path``, created under ``parent`` on first sight."""
+    """The variant/modifier ``row`` prices, created under ``parent`` on first sight."""
+    path = row.target_path
     option = options.get(path)
     if option is None:
-        option = options[path] = MenuOptionResponse(key=path[-1][1], name=None, prices=[])
+        option = options[path] = MenuOptionResponse(
+            id=_item_id(row), key=path[-1][1], name=None, prices=[]
+        )
         parent.append(option)
     return option
 
@@ -189,7 +325,8 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
     Groups by the full native path (a pinned-base prefix included), so equal keys
     under different parents never merge; the wire ``key`` is the node's own
     native key. Nested sections are listed flat, each under its innermost key.
-    Names come only from a node's own Gold row (first one in row order).
+    Names come only from a node's own Gold row (first one in row order), and
+    so does ``id``: a node with no row of its own has none.
     """
     sections: dict[_Path, MenuSectionResponse] = {}
     items: dict[_Path, MenuItemResponse] = {}
@@ -201,16 +338,17 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
         section = sections.get(section_path)
         if section is None:
             section = sections[section_path] = MenuSectionResponse(
-                key=section_path[-1][1], name=None, prices=[], items=[], modifiers=[]
+                id=None, key=section_path[-1][1], name=None, prices=[], items=[], modifiers=[]
             )
         rest = path[last_section + 1 :]
         price = _price(row, now)
         if not rest:  # a section-level price
+            section.id = section.id or _item_id(row)
             section.name = section.name or row.content_name
             section.prices.append(price)
             continue
         if rest[0][0] == "modifier":  # a section-level modifier
-            option = _option(options, path, section.modifiers)
+            option = _option(options, row, section.modifiers)
             option.name = option.name or row.content_name
             option.prices.append(price)
             continue
@@ -218,6 +356,7 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
         item = items.get(item_path)
         if item is None:
             item = items[item_path] = MenuItemResponse(
+                id=None,
                 key=item_path[-1][1],
                 name=None,
                 description=None,
@@ -227,12 +366,13 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
             )
             section.items.append(item)
         if len(rest) == 1:  # the item's own price
+            item.id = item.id or _item_id(row)
             item.name = item.name or row.content_name
             item.description = item.description or row.content_description
             item.prices.append(price)
             continue
         parent = item.variants if rest[1][0] == "variant" else item.modifiers
-        option = _option(options, path, parent)
+        option = _option(options, row, parent)
         option.name = option.name or row.content_name
         option.prices.append(price)
     return list(sections.values())
