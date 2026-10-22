@@ -360,8 +360,8 @@ This section is the single current-status page. Other docs link here.
     ([RUN-A-01](./docs/reviews/2026-10-03-menu-write-commit-cost.md#owner-run-checklist-run-a-01-after-the-migration-merges))
     ran 2026-10-14 on a disposable clone: the page that took at least 1 h 25 min commits
     in 24.5 s ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md#run-a-01-q7a-the-menu-write-commit-re-timed)).
-- **Classifier ship (ADR-0013 Amendment 27): built, not yet applied.** P5-33 builds one
-  pipeline-version bump. The live verifier becomes `classifier-v2+v3` (a page must pass
+- **Classifier ship (ADR-0013 Amendment 27): shipped (#102) and applied to `helios_laptop`
+  2026-10-22.** P5-33 built one pipeline-version bump. The live verifier becomes `classifier-v2+v3` (a page must pass
   both). R4 (Amendment 24 item 5) adds two things:
   - `due_pages` drops a record whose menu URL was withdrawn or whose latest page-reading
     fetch the classifier rejected;
@@ -370,11 +370,17 @@ This section is the single current-status page. Other docs link here.
 
   The bump re-scores every stored bundle (`python -m apps.menu_pipeline.rescore`, or at the
   start of each extraction). Open items:
-  - [ ] the owner approves the build, then the laptop step: `resolve_urls`
-    re-verification and the re-score against `helios_laptop` (pg_dump first, no
-    extraction before it). Report withdrawals, retractions and restorations, and confirm
-    the P5-32 false accept (`petfriendlyrestaurants.com/help/how-to-add-a-menu/`) is
-    withdrawn and out of the due queue;
+  - [x] the laptop step (owner-approved; results in the
+    [#102 comment](https://github.com/First-Helios/First-Helios/pull/102#issuecomment-6333193087),
+    dumps and logs in `var/laptop-run/`). It ran re-verification only, with `--render`, and no
+    extraction:
+    - 74 menu URLs withdrawn, 1,364 re-verified, 119 replaced, 46 new, 67 deferred;
+    - the re-score then withdrew 149 records (73 for a withdrawn URL, 76 re-scored),
+      retracting 2,664 items and 628 prices (0.93 % of the laptop pass), with no
+      restorations;
+    - the P5-32 false accept's URL is withdrawn and out of the due queue.
+
+    1,494 pages are due for the next extraction;
   - [ ] **post-ship check (Amendment 27 item 5).** The first ~100 new due pages from the
     next venue source (an Overture refresh or the discovery-coverage upgrade), outside the
     classifier exclusions (`var/menu-eval/p5-31/classifier-exclusions.json` plus every
