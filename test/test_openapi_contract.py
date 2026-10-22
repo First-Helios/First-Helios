@@ -34,6 +34,7 @@ def test_expected_paths_present() -> None:
         "/v1/venues/{venue_id}",
         "/v1/venues/{venue_id}/menu",
         "/v1/price-index",
+        "/v1/items/{item_id}/price-history",
     } <= paths
 
 
@@ -70,6 +71,11 @@ def test_error_responses_document_the_real_envelope_not_fastapis_default() -> No
     assert price_index_get["422"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "ErrorResponse"
     )
+    history_get = schema["paths"]["/v1/items/{item_id}/price-history"]["get"]["responses"]
+    for status in ("404", "422"):
+        assert history_get[status]["content"]["application/json"]["schema"]["$ref"].endswith(
+            "ErrorResponse"
+        )
     readyz_responses = schema["paths"]["/readyz"]["get"]["responses"]
     assert readyz_responses["503"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "ErrorResponse"

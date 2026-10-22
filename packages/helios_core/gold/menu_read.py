@@ -18,7 +18,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, exists, or_, select
 
 from packages.helios_core.gold.models import CurrentMenu
 
@@ -27,7 +27,8 @@ if TYPE_CHECKING:
     from datetime import datetime
     from decimal import Decimal
 
-    from sqlalchemy.orm import Session
+    from sqlalchemy import ColumnElement
+    from sqlalchemy.orm import InstrumentedAttribute, Session
 
 SERVED_PRICE_STATES = ("priced", "unknown", "unavailable")
 
@@ -36,6 +37,7 @@ SERVED_PRICE_STATES = ("priced", "unknown", "unavailable")
 class CurrentMenuRow:
     """One served ``gold.current_menu`` row, with its target path decoded."""
 
+    subject_id: int
     subject_kind: str
     source_record_id: int
     root_key: str
@@ -61,6 +63,22 @@ def _decode_path(encoded: str) -> tuple[tuple[str, str], ...]:
     return tuple((kind, key) for kind, key in json.loads(encoded))
 
 
+def has_served_menu(
+    subject_id: ColumnElement[int] | InstrumentedAttribute[int], subject_kind: str
+) -> ColumnElement[bool]:
+    """``EXISTS`` a served row for the scope ``(subject_id, subject_kind)``.
+
+    The same rows :func:`current_menu_rows` returns, as a semi-join a caller can
+    correlate to its own subject column. Index-backed by
+    ``ix_gold_current_menu_scope``.
+    """
+    return exists().where(
+        CurrentMenu.subject_id == subject_id,
+        CurrentMenu.subject_kind == subject_kind,
+        CurrentMenu.price_state.in_(SERVED_PRICE_STATES),
+    )
+
+
 def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> list[CurrentMenuRow]:
     """Served rows of the given ``(subject id, subject kind)`` scopes.
 
@@ -73,6 +91,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
         return []
     statement = (
         select(
+            CurrentMenu.subject_id,
             CurrentMenu.subject_kind,
             CurrentMenu.source_record_id,
             CurrentMenu.root_key,
@@ -115,6 +134,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
     )
     return [
         CurrentMenuRow(
+            subject_id=row.subject_id,
             subject_kind=row.subject_kind,
             source_record_id=row.source_record_id,
             root_key=row.root_key,

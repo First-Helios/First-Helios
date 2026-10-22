@@ -21,6 +21,7 @@ from sqlalchemy import event, insert, text
 from sqlalchemy.orm import sessionmaker
 
 from apps.api.db import get_session
+from apps.api.item_ids import decode_item_id
 from apps.api.main import app
 from apps.api.routes.venues import _shape_menu
 from packages.helios_core.domains.menu.commands import persist_menu
@@ -205,6 +206,7 @@ def _plain(
     observed_at: datetime | None = OBSERVED,
 ) -> CurrentMenuRow:
     return CurrentMenuRow(
+        subject_id=1,
         subject_kind="establishment",
         source_record_id=1,
         root_key="page",
@@ -327,8 +329,20 @@ def test_menu_shape_staleness_and_source(client: TestClient, session: Session) -
     assert lowest <= price["age_seconds"] <= int((after - OBSERVED).total_seconds()) + 1
     assert [(m["key"], m["name"]) for m in bean["modifiers"]] == [("cheese", "Cheese")]
 
+    # Every priced node links to its history; an unpriced node has no id.
+    assert section["id"] is None
+    bean_id = decode_item_id(bean["id"])
+    assert (bean_id.subject_kind, bean_id.subject_id, bean_id.root_key) == (
+        "establishment",
+        venue,
+        "page",
+    )
+    assert bean_id.target_path == (TACOS, ("item", "13:bean"))
+    assert decode_item_id(bean["modifiers"][0]["id"]).target_kind == "modifier"
+    assert decode_item_id(pastor["variants"][0]["id"]).target_path == (TACOS, PASTOR, LARGE)
+
     # Only the variant is priced: Gold holds no name for the item itself.
-    assert (pastor["name"], pastor["prices"]) == (None, [])
+    assert (pastor["name"], pastor["prices"], pastor["id"]) == (None, [], None)
     assert [(v["key"], v["name"], v["prices"][0]["amount_minor"]) for v in pastor["variants"]] == [
         ("large", "Large", 1200)
     ]
