@@ -32,8 +32,11 @@ This section is the single current-status page. Other docs link here.
   `current_menu`, with venue counts and a `low_sample` flag below 5 venues. One
   category so far, `all`; `course` waits for a course label. Single-location
   Organizations' own-site prices are placed at their venue; shared menus are left
-  out. `python -m apps.gold.refresh` rebuilds both tables at one instant. Not yet
-  run on real data. Served by `GET /v1/price-index` (Amendment 2).
+  out. `python -m apps.gold.refresh` rebuilds both tables at one instant. First
+  run on real data on `helios_laptop` 2026-10-22 (ADR-0019 step 1,
+  [record](./docs/reviews/2026-10-22-p8-1-gold-fill.md)): 52,651 `current_menu` rows,
+  900 venues with a menu, 452 placed in 259 cells, 97.3% of them `low_sample`. Section
+  names are all null until ADR-0006 Amendment 1. Served by `GET /v1/price-index` (Amendment 2).
 - **Read API**: `apps/api/`. FastAPI, conventions per ADR-0008:
   - `GET /healthz`: liveness, no database.
   - `GET /readyz`: readiness, checks the database.
