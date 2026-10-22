@@ -451,3 +451,11 @@ recommended.
       Menu pages → candidates JSONL; its Menu read path is decided then), the
       lexicon, the training script and weights, the labelling, the evaluation
       and its `docs/reviews/` write-up.
+
+## Implementation notes (2026-10-21)
+
+- Slice 1a is built (labelling guide, `apps/menu_pipeline/course_eval.py`,
+  `packages/helios_parsing/course_eval.py`). Slice 1b and slices 2–3 (Silver label table,
+  labeller, Gold `course`/`course_labeller` columns, the `course` category) are not:
+  `CATEGORY_KINDS` is still `("all",)` in `packages/helios_core/gold/models.py` and no
+  migration adds them.

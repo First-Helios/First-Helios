@@ -167,6 +167,7 @@ apps/
   api/                 # FastAPI service; routes/, committed openapi_snapshot.json
   discovery/           # Overture seeding, website/menu-URL resolution, lifecycle, audit CLIs
   gold/                # Gold refresh CLI (python -m apps.gold.refresh)
+  menu_pipeline/       # page classifier, menu-page Bronze, extraction + Menu writes, batch CLIs
 packages/
   helios_core/
     db/                # Base, schema names, model registry, session
@@ -175,6 +176,7 @@ packages/
     domains/menu/      # Menu Silver (schema `menu`)
     gold/              # Gold read models (schema `gold`)
     config.py, geo.py  # settings; Nominatim client
+  helios_parsing/      # pure menu-pipeline stages, no DB/HTTP (ADR-0013 §2)
 alembic/versions/      # hand-reviewed migrations
 config/                # sources.yaml registry, models.yaml manifest, classifier weights, location overrides, identity corrections
 infra/                 # Dockerfile, docker-compose.yml, docker-compose.pi.yml
@@ -255,7 +257,9 @@ The Orange Pi is the **staging** environment, not production.
   `/v1`, cursor-based pagination, the uniform error shape
   `{detail, code, trace_id}`, response models separate from ORM models.
 - Resources: venues (`/v1/venues`, `/v1/venues/{venue_id}`) from Phase 2;
-  menus, price history and the price index in Phase 7; deals in Phase 10.
+  menus, venue filters, price history and the price index in Phase 7 (filters
+  and price history: [ADR-0018](./docs/adr/0018-venue-filters-and-item-price-history.md));
+  deals in Phase 10.
 - OpenAPI at `/openapi.json` and `/docs`; a committed snapshot
   (`apps/api/openapi_snapshot.json`, checked by `test/test_openapi_contract.py`)
   makes breaking changes fail CI.
@@ -754,6 +758,7 @@ and no extraction; and freshness is measured on every run.
   - *Built (G-4):* nested `menus[]` (labelled `scope`: the venue's own Establishment menus, then its Organization's only when the venue is that Organization's one current venue — a chain's menu is never fanned out) → `sections[]` → `items[]` → `variants[]`/`modifiers[]`, each with `prices[]` per context. Only source-asserted states are served (`priced`/`unknown`/`unavailable`). `age_seconds` is the observation's age at request time, and `as_of` is the oldest refresh instant behind the rows. 404 for a venue that isn't current; 200 `menus: []` for a venue with no menu; no pagination. Read through `packages/helios_core/gold/menu_read.py`, backed by `ix_gold_current_menu_scope`, with a no-seq-scan test. Gold has no section names yet, and no item name when only an item's variants are priced, so those are `null` until a Gold ancestor-name column lands. Unpriced and `Unsectioned` items never reach Gold.
 - Venue filters (area, organization, has-menu), cursor-paginated.
 - `GET /v1/items/{id}/price-history` — the observation trail behind a single price. This is the endpoint that makes "trustworthy" checkable by a user rather than asserted by us.
+  - *Designed, not built (P7-1, [ADR-0018](./docs/adr/0018-venue-filters-and-item-price-history.md), accepted 2026-10-21):* the venue filters above (`has_menu`, `organization`, `area` as a price-index `area_key`, with a new `identity.place (latitude, longitude)` index) and this endpoint (an opaque target `item_id`, one trail per context from the selector's history mode, per [ADR-0008 Amendment 3](./docs/adr/0008-read-api-conventions.md#amendment-3-2026-10-21-history-reads-through-the-menu-selector)). Under ADR-0013 N1's version-local keys a trail covers one Bronze Version: accepted, corrected, then superseded or withdrawn.
 - `GET /v1/price-index` — median / p25 / p75 by lat/lon grid cell and course, with the sample size ([ADR-0007](./docs/adr/0007-gold-price-index-projection.md)), because an aggregate over four venues is not an index and the response should admit that.
   - *Built (G-1, [ADR-0007 Amendment 1](./docs/adr/0007-gold-price-index-projection.md#amendment-1-2026-09-30-first-slice-built-before-the-course-axis)):* the `gold.price_index` table it reads — venue-weighted percentiles per 0.01° cell, category and currency, with `venue_count` and a `low_sample` flag below 5 venues — and `python -m apps.gold.refresh`, which rebuilds `current_menu` and the index at one instant. Category `all` only.
   - *Built (G-3, [ADR-0016 Amendment 1](./docs/adr/0016-course-labels-for-the-price-index.md#amendment-1-2026-09-30-accepted-slice-1a-decisions), slice 1a):* the [course labelling guide](./docs/course-labelling-guide.md) and the comparison harness (`python -m apps.menu_pipeline.course_eval`: seeded venue-split label sets that refuse excluded venues, owner review of disagreements, item-weighted per-course precision, coverage, winner rule). No labels or labellers yet.
