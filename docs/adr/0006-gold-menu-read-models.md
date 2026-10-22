@@ -272,7 +272,14 @@ Silver has the names. Read-only on `helios_laptop` (2026-10-22, before the P5-33
 | Nested sections (`parent_section_id` set) | 0 of 18,139 | | The extractor writes no nesting today. |
 
 So after this amendment every section and every item the menu endpoint serves would carry a
-name, as far as these counts go. The Phase B record of P8-1 measures it on real Gold rows.
+name, as far as these counts go.
+
+**On real Gold rows** (P8-1 record
+[2026-10-22-p8-1-gold-fill.md](../reviews/2026-10-22-p8-1-gold-fill.md) §5.4, after the P5-33
+rescore and the first refresh): all 900 `has_menu` menus, fetched through the API, serve 9,286
+sections, **every one `name: null`**, and 50,836 items, of which **1,866 are `name: null`**:
+exactly the items priced only through variants. Gold holds 52,651 rows and no row has a null
+`content_name`. Those 9,286 section names and 1,866 item names are what this amendment fills.
 
 ### Proposed shape
 
@@ -305,8 +312,9 @@ Two nullable columns on `gold.current_menu`, filled by the refresh:
   and the item prefix of `request.target.native_path`, and look up each name through
   `select_price` for that prefix, cached per `(subject, record, root key, prefix)` within one
   refresh. Current-mode content selection reads no context, so the cache key leaves context out.
-  On `helios_laptop` this adds about 9,800 section lookups and 2,200 item lookups to roughly
-  65,000 target selections, about +20% refresh time, before the R4 withdrawals shrink both.
+  On `helios_laptop` after the P5-33 rescore, this adds 9,286 section lookups and 1,866 item
+  lookups to 52,651 target selections, about +21%. The first refresh took 6 min 46 s, so
+  expect about 8 min 15 s.
 - `packages/helios_core/gold/menu_read.py`: `CurrentMenuRow` gains `section_name` and
   `item_name`.
 - No change to `enumeration.py`, `selection.py`, `catalog.py` or `price_index.py`.
