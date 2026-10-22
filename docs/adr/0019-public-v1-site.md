@@ -2,8 +2,11 @@
 
 **Status:** Accepted in part, 2026-10-21 by the owner (session P8-0; see
 [Owner decision](#owner-decision)): Q1–Q3, Q6c, Q7 and Q9 as recommended. The public deploy
-(§4; Q4, Q5, Q6a, Q6b, Q8) is **deferred**: v1 runs locally first. Proposed 2026-10-21. Nothing in
-this ADR is built yet.
+(§4; Q4, Q5, Q6a, Q6b, Q8) is **deferred**: v1 runs locally first. Proposed 2026-10-21.
+Build progress (§5): step 1 done 2026-10-22 (P8-1,
+[record](../reviews/2026-10-22-p8-1-gold-fill.md)); step 2 built 2026-10-22 (P8-3,
+[ADR-0006 Amendment 1](./0006-gold-menu-read-models.md#amendment-1-2026-10-22-section-names-and-variant-only-item-names)).
+Steps 3–8 are not built.
 **Date:** 2026-10-21
 **Phase:** 8 (operations), plus the frontend that ROADMAP §2 keeps in a separate repo
 **Extends:** [ADR-0008](./0008-read-api-conventions.md) (read API; its Unit B staging deploy and
