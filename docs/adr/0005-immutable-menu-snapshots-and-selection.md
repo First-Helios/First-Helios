@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-09-17
 **Accepted:** 2026-09-17 by project owner Fortune, in this session: “Accept ADR-0005 design”.
+**Amended:** 2026-10-08 — commit-time integrity check cost, see [Amendment 1](#amendment-1-2026-10-03-accepted-2026-10-08-commit-time-integrity-check-cost)
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md)
 **Implements:** [Plan 0002 Step 5](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-5---featdb-add-menu-graph-against-identity-contracts)
 

@@ -96,6 +96,9 @@ an ADR (next free number) in Phase 8, when there's actually a registry and a cho
 
 - Required checks: the Consequences say `Docker image` is not yet a required status check;
   [CLAUDE.md](../../CLAUDE.md) lists it among the five required checks (branch protection is not in the repo).
+- One image (2026-10-21): `infra/Dockerfile` now builds two targets, `runtime` (the API) and `worker`
+  (adds the `menu` extra), and `infra/docker-compose.yml` adds `worker`, `llama-model-check` and
+  `llama-server` services beside `postgres` → `migrate` → `api`.
 
 ## References
 

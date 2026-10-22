@@ -28,7 +28,7 @@ repeat. Setup and current status are in [README.md](./README.md).
 | `make install` | `uv sync`, then installs the pre-commit and commit-msg hooks |
 | `make lint` | `pre-commit run --all-files`: whitespace/EOF/line-ending fixers, YAML/TOML checks, large-file (500 KB) and merge-conflict checks, stray-debugger check, `ruff --fix`, `ruff-format`, and `mypy .` |
 | `make typecheck` | `mypy .` with `strict = True` over the whole repo ([mypy.ini](./mypy.ini); tests get a relaxed decorator rule) |
-| `make test` | `pytest --cov=.` |
+| `make test` | `pytest --cov=. --cov-report=term-missing` |
 | `make ci` | `uv lock --check`, then lint, typecheck, test |
 
 `make lint` rewrites files (ruff and the fixers); re-stage after it runs.

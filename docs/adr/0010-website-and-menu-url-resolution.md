@@ -6,6 +6,8 @@
 **Amended:** 2026-09-23 — §3 etiquette, see [Amendment 1](#amendment-1-2026-09-23-crawler-etiquette) (review session S2; owner decisions D2)
 **Amended:** 2026-09-23 — record grain and re-run rules, see [Amendment 2](#amendment-2-2026-09-23-record-grain-and-re-run-rules) (review session S3; owner decisions D3)
 **Amended:** 2026-09-23 — menu-page verification and platform sites, see [Amendment 3](#amendment-3-2026-09-23-menu-page-verification-and-platform-sites) (review session S4; owner decisions D3.4-D3.5)
+**Amended:** 2026-09-27 — provenance pointer, see [Amendment — ADR-0011](#amendment--adr-0011-accepted-2026-09-27)
+**Amended:** 2026-09-29 — menu-URL re-verification, see [Amendment — ADR-0015](#amendment--adr-0015-accepted-2026-09-29)
 **Phase:** 4 (Venue Discovery, Identity & Geocoding)
 
 ## Context

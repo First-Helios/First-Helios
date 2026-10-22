@@ -455,3 +455,19 @@ PostgreSQL 16 cluster: 121 passed, zero skipped; `alembic check` found no
 schema/model drift. This verifies the existing foundation, not Menu, and
 does not cover the proposed Menu concurrency cases. See the reassessment
 for the separately reproduced database-URL portability defect.
+
+## 12. Implementation notes (2026-10-21)
+
+Section 9 names triggers from the proposal. Migration `d83f0a21c592` built fewer, broader
+ones, and the proposal's names survive as the constraint names their errors raise:
+
+- `trg_menu_stamp` and `trg_menu_stream_admit` → `trg_menu_admit` on `menu.menu_page`
+  (`menu.admit_page`, raising `ck_menu_stamp` / `ck_menu_lifecycle`).
+- `trg_menu_member_transaction` → `trg_menu_admit` on member tables (`menu.admit_member`,
+  raising `ck_menu_member_transaction`).
+- `ct_menu_support`, `ct_menu_graph`, `ct_menu_lifecycle`, `ct_menu_context` → one deferred
+  `ct_menu_integrity` (`menu.check_integrity` → `menu.check_aggregate`, raising
+  `ck_menu_support` / `ck_menu_graph` / `ck_menu_lifecycle` / `ck_menu_context_intersection`).
+- Also `trg_menu_immutable`, `trg_menu_no_truncate` and `trg_menu_currency_insert`, as named.
+  [ADR-0005 Amendment 1](../adr/0005-immutable-menu-snapshots-and-selection.md#amendment-1-2026-10-03-accepted-2026-10-08-commit-time-integrity-check-cost)
+  changed how often the integrity check runs (migration `db40e9424cba`).

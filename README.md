@@ -551,6 +551,7 @@ docs/
   rfc/  plans/          proposals and build plans
   reviews/              review and evaluation records, migration SQL artifacts
   spikes/menu-model/    menu-model spike (ADR-0013 evidence)
+  course-labelling-guide.md  course-label guide (ADR-0016)
   diagrams/             ERD and context diagrams
 infra/                  Dockerfile, docker-compose.yml, docker-compose.pi.yml (Pi core pinning)
 packages/helios_core/
@@ -563,8 +564,9 @@ packages/helios_core/
   geo.py                Nominatim client
 packages/helios_parsing/  pure page parsing: segmentation + text hash, price tokens,
                           classifier features, JSON-LD reader, chunking, prompt and
-                          grammar, output parsing, repairs, validator, menu shape,
-                          evaluation
+                          grammar, output parsing, repairs, validator, [5b] price
+                          resolution, menu shape, invariance checks, evaluation,
+                          course-label evaluation
 test/                   pytest suite
 ```
 
@@ -574,7 +576,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 
 | ADR | Title | Status |
 |---|---|---|
-| [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack choices | Accepted |
+| [0001](./docs/adr/0001-stack-choice.md) | Language, framework, and data stack choices | Accepted (web-framework deferral closed by ADR-0008) |
 | [0002](./docs/adr/0002-containerization.md) | Containerization, and pulling it forward from Phase 8 | Accepted |
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 |
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
@@ -590,6 +592,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1) |
 | [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
+| [0017](./docs/adr/0017-extraction-harness-generalization.md) | Extraction harness generalization: invariance, multi-model acceptance, per-model configuration | Accepted (items 1–2; items 3–4 deferred) |
 | [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Accepted (not built) |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first

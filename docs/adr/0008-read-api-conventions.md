@@ -14,6 +14,8 @@ request-id hardening, see [Amendment 1](#amendment-1-2026-09-23-api-polish)
 **Amended:** 2026-10-21 — accepted history is read through the Menu selector's
 history mode, see [Amendment 3](#amendment-3-2026-10-21-history-reads-through-the-menu-selector)
 (session P7-1; [ADR-0018](./0018-venue-filters-and-item-price-history.md) Q9)
+**Amended:** 2026-09-28 — venue lifecycle filtering, see
+[S13 section](#s13-venue-lifecycle-filtering-2026-09-28) ([ADR-0012](./0012-venue-lifecycle.md) §3–§4)
 **Closes:** the web-framework deferral in
 [ADR-0001](./0001-stack-choice.md) ("Web framework (Phase 7+): not yet chosen in
 code … reaffirmed or revised in a dedicated ADR once `apps/api/` exists").
@@ -342,6 +344,8 @@ Q9 on 2026-10-21, and this amendment records it:
 - Owner decision 4 and its disposition call `httpx2` bogus and `httpx` a dev dependency. `httpx` is a
   runtime dependency (`pyproject.toml`; used by `packages/helios_core/geo.py` and `apps/discovery/web_client.py`),
   and Starlette's `TestClient` now warns to install `httpx2` (review R47).
+- Decision point 5 (2026-10-21): the response models are one module, `apps/api/schemas.py`, not an
+  `apps/api/schemas/` package.
 
 ## References
 
