@@ -380,7 +380,15 @@ This section is the single current-status page. Other docs link here.
       restorations;
     - the P5-32 false accept's URL is withdrawn and out of the due queue.
 
-    1,494 pages are due for the next extraction;
+    The follow-up overnight run (2026-10-22, owner-approved) did two things, and nothing is
+    due afterwards:
+    - it fetched only the new and re-saved URLs: 70 fetched, 38 new and 73 changed Versions;
+    - it extracted all 1,597 due pages on the laptop GPU (1,533 reused saved answers),
+      writing 68,795 current prices and 65 restorations.
+
+    All 65 restorations are on URLs that re-verification replaced. 3 of their 19 URLs are
+    clear non-menus that the AND verifier accepted (a blog post, an equipment shop, an old
+    menu). They wrote 8 prices, and they are evidence for the post-ship check below;
   - [ ] **post-ship check (Amendment 27 item 5).** The first ~100 new due pages from the
     next venue source (an Overture refresh or the discovery-coverage upgrade), outside the
     classifier exclusions (`var/menu-eval/p5-31/classifier-exclusions.json` plus every
