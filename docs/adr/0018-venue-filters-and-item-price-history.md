@@ -248,7 +248,10 @@ SQL stays a CLAUDE.md read-twice path, and the owner reviews it in the implement
 
 ## Implementation notes (2026-10-21, P7-2)
 
-Built as decided. Where the Decision left a detail open, the code does this:
+Built as decided. Where the Decision left a detail open, the code does this. The owner
+confirmed every choice below as built on 2026-10-21 (PR #103 owner questions 1–7, all as
+recommended), including the plain `CREATE INDEX`, READ COMMITTED for the history read, and an
+empty `points: []` trail for a context whose window never contains its acceptance instant.
 
 - **Place index.** Alembic revision `68146a4c5fc5` creates
   `ix_place_latitude_longitude` on `identity.place (latitude, longitude)` and nothing else; the
