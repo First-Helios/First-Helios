@@ -5,6 +5,8 @@
 **Accepted:** 2026-09-19 by project owner Fortune. Proposed defaults accepted;
 the first unit materializes a **bounded input set**. The full-catalog refresh
 follow-up was accepted on 2026-09-20. See [Owner decision](#owner-decision).
+[Amendment 1](#amendment-1-2026-10-22-proposed-section-names-and-variant-only-item-names)
+(section and item names) is proposed 2026-10-22.
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md),
 [ADR-0005](./0005-immutable-menu-snapshots-and-selection.md)
 **Implements:** [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
@@ -242,6 +244,135 @@ not per family; a scope that no longer yields any request is named through
 observation cutoff are rejected: `gold.current_menu` holds current answers only.
 In current mode only the requested subject's own stream heads count, and every
 one of them must still be live.
+
+## Amendment 1 (2026-10-22, proposed): section names and variant-only item names
+
+**Status: Proposed 2026-10-22 (session P8-1), for owner review. Nothing is built.** It is
+[ADR-0019](./0019-public-v1-site.md) §5 build step 2. It touches `gold/models.py` and adds a
+migration, so it stops for review (CLAUDE.md).
+
+### The gap
+
+`gold.current_menu` has one row per priced target, and each row carries the selected content of
+that target only (`content_name`, point 4). The menu endpoint names a node only from the node's
+own row (`apps/api/routes/venues.py` `_shape_menu`). Two kinds of node never have a row of their
+own:
+
+- **Sections.** No section carries a section-level price on `helios_laptop`, so every wire
+  section serves `name: null` (ADR-0019 F2).
+- **Items priced only through their variants.** The item has no row, only its variants do, so
+  the item serves `name: null`.
+
+Silver has the names. Read-only on `helios_laptop` (2026-10-22, before the P5-33 rescore):
+
+| Node | In Silver | Named in Silver | Note |
+|---|---:|---:|---|
+| Innermost sections of priced item/variant rows | 10,376 | 10,376 | 571 of them are the structural `Unsectioned` grouping, which never reaches Gold (ADR-0007 Amendment 1 §7). The other 9,805 are `direct`. |
+| Items priced only through variants | 2,181 of 61,214 priced items | 2,181 | All `direct`. |
+| Nested sections (`parent_section_id` set) | 0 of 18,139 | | The extractor writes no nesting today. |
+
+So after this amendment every section and every item the menu endpoint serves would carry a
+name, as far as these counts go.
+
+**On real Gold rows** (P8-1 record
+[2026-10-22-p8-1-gold-fill.md](../reviews/2026-10-22-p8-1-gold-fill.md) §5.4, after the P5-33
+rescore and the first refresh): all 900 `has_menu` menus, fetched through the API, serve 9,286
+sections, **every one `name: null`**, and 50,836 items, of which **1,866 are `name: null`**:
+exactly the items priced only through variants. Gold holds 52,651 rows and no row has a null
+`content_name`. Those 9,286 section names and 1,866 item names are what this amendment fills.
+
+### Proposed shape
+
+Two nullable columns on `gold.current_menu`, filled by the refresh:
+
+| Column | Type | Value |
+|---|---|---|
+| `section_name` | `varchar(512)`, nullable | The selected content name of the innermost `section` node on the row's `target_path`. |
+| `item_name` | `varchar(512)`, nullable | The selected content name of the `item` node on the row's `target_path`; null when the path has no item (a section-level price or a section modifier). |
+
+- **Same rule on every row.** An item row's `item_name` equals its own `content_name`, and a
+  section row's `section_name` equals its own `content_name`. The redundancy keeps the rule
+  simple ("the name of the path's section and item"), and the wire reads one column per node
+  kind.
+- **Selected, not read raw.** Each name is `select_price(...).content.name` for the ancestor
+  target: the same scope Subject, source record and root key, with `TargetRef(kind, prefix)` the
+  path prefix up to that node. Inherit references, pinned bases and suppression therefore follow
+  ADR-0005's rules exactly as they do for `content_name` (point 5: no second definition). A
+  structural or suppressed node selects no content, so its name is null.
+- **Grain unchanged.** No new row, no change to `uq_gold_current_menu`, `price_state` or any
+  CHECK. `has_menu`, the price index and `_place` read nothing new.
+- **Business columns.** Both columns are deterministic functions of committed Menu and join the
+  rebuild-equality comparison (point 6).
+- **No provenance columns for the names.** The wire carries no content provenance today, and the
+  ancestor's Evidence is reachable by re-running the selector for that target. See Q3.
+
+### The refresh change
+
+- `packages/helios_core/gold/refresh.py`: for each request, compute the innermost section prefix
+  and the item prefix of `request.target.native_path`, and look up each name through
+  `select_price` for that prefix, cached per `(subject, record, root key, prefix)` within one
+  refresh. Current-mode content selection reads no context, so the cache key leaves context out.
+  On `helios_laptop` after the P5-33 rescore, this adds 9,286 section lookups and 1,866 item
+  lookups to 52,651 target selections, about +21%. The first refresh took 6 min 46 s, so
+  expect about 8 min 15 s.
+- `packages/helios_core/gold/menu_read.py`: `CurrentMenuRow` gains `section_name` and
+  `item_name`.
+- No change to `enumeration.py`, `selection.py`, `catalog.py` or `price_index.py`.
+
+### The wire change
+
+No new field and no type change. `MenuSectionResponse.name` and `MenuItemResponse.name` are
+already `str | None`:
+
+- `_shape_menu` takes a section's name from `row.section_name` when the section has no row of
+  its own, and an item's name from `row.item_name` when only its variants or modifiers are
+  priced. A node's own row still wins, as today.
+- The two docstrings that say "null ... Gold carries no section names yet" change to "null when
+  the source names no section". The OpenAPI snapshot changes only in those descriptions.
+  `test/test_openapi_contract.py` sees no breaking change.
+- ROADMAP Phase 7 G-4's "until a Gold ancestor-name column lands" sentence is updated with the
+  build.
+
+### Migration
+
+One revision after `68146a4c5fc5`: `ADD COLUMN section_name varchar(512)` and
+`ADD COLUMN item_name varchar(512)` on `gold.current_menu`, both nullable with no default. That
+is a catalog-only change in PostgreSQL: no table rewrite, no row touched. Existing rows read
+null until the next `python -m apps.gold.refresh`. The downgrade drops both columns. The table
+is a rebuildable projection (ADR-0004 §1), so a downgrade loses nothing that a refresh can't
+rebuild. An upgrade of `helios_laptop` needs `68146a4c5fc5` first (P8-1 owner question).
+
+### Tests and done-when
+
+- Refresh: a section and a variant-only item get their names; an inherited name follows its
+  base; a suppressed ancestor gives null; rebuild equality covers the new columns.
+- Read and wire: `test_api_venue_menu.py` asserts the section and item names; the no-seq-scan
+  test still holds; the snapshot is regenerated.
+- Migration round trip (`test_gold_migration.py` pattern) and `alembic check`.
+- *Done when* (ADR-0019 step 2): after a refresh on `helios_laptop`, the menu endpoint serves a
+  non-null section `name` wherever Silver has one, and a non-null item `name` for every
+  variant-only item.
+
+### Alternatives
+
+| Option | Why not proposed |
+|---|---|
+| `ancestor_names text[]`, parallel to `target_path` | General (nested sections, the `base` element), but the wire flattens nested sections and reads only two names. Silver has no nesting today. An array the API must index by path position is harder to read and test. |
+| A node table `gold.current_menu_node` (one row per section/item, with content provenance) | The cleanest grain, but a second table, a second read query per menu and a second rebuild to keep in step, for two strings. Worth it only if node-level provenance reaches the wire. |
+| Name-only rows in `current_menu` (`price_state = 'absent'`) | Changes the grain: `_place` and the index's `unpriced_count` would count them, and `has_menu` semantics would need a new filter. |
+| Read names from Silver in the API | ADR-0008 §9: the menu endpoint reads Gold only. It would also skip inherit and suppression rules. |
+
+### Owner questions
+
+- **Q1. Shape.** Two columns, `section_name` and `item_name`, as above (recommended)? Or the
+  `ancestor_names` array, or a node table?
+- **Q2. Redundant on own rows.** Fill each column on every row, including the node's own row
+  (recommended, one rule)? Or only where the node has no row of its own?
+- **Q3. Name provenance.** No Evidence columns for the names (recommended; the wire has no
+  content provenance)? Or add `section_content_page_id` / `item_content_page_id`?
+- **Q4. Migration order.** This revision follows `68146a4c5fc5`, so `helios_laptop` (at
+  `db40e9424cba`) needs that index migration applied first. Approve both upgrades on
+  `helios_laptop` when step 2 is built?
 
 ## Implementation notes (2026-09-28)
 
