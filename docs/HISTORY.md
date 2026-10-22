@@ -1,6 +1,6 @@
 # Removed historical docs
 
-Sessions S16 (2026-09-28) and S17 (2026-09-29) deleted these finished records once
+Sessions S16 (2026-09-28), S17 (2026-09-29) and P7-1 (2026-10-21) deleted these finished records once
 their lasting decisions lived in an ADR, [README.md](../README.md), [ROADMAP.md](../ROADMAP.md) or the code.
 Git keeps them: open one at its last commit with the link, or run
 `git show <sha>:<path>`.
@@ -31,3 +31,4 @@ Git keeps them: open one at its last commit with the link, or run
 | [docs/reviews/2026-09-28-s13-venue-lifecycle.md](https://github.com/First-Helios/First-Helios/blob/ddb5579dbd439005468581fde99f254a64a2d824/docs/reviews/2026-09-28-s13-venue-lifecycle.md) | S13 venue-lifecycle implementation review (schema contract, acceptance matrix, validation) | `ddb5579` |
 | [docs/reviews/2026-09-22-remediation-checklist.md](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-remediation-checklist.md) | Remediation tracker for the 2026-09-22 review: owner decisions D1–D9 and G, sessions S1–S16 with their R-IDs and PRs, Pi gate 1a/1b criteria (now in README) and the session log; closed by S17 (close-out record in the review) | `b11cf3d` |
 | [docs/reviews/2026-09-22-session-handoff.md](https://github.com/First-Helios/First-Helios/blob/b11cf3d084eb9a3ea7c53dfe1fd35cbd32cf5978/docs/reviews/2026-09-22-session-handoff.md) | Hand-off protocol for the remediation sessions: per-session model and effort, start/end-of-session steps, next-session prompt block | `b11cf3d` |
+| [docs/reviews/2026-10-12-doc-drift-review.md](https://github.com/First-Helios/First-Helios/blob/355e0a47a5ee4b4e9791a9fc0f8974e60a62055e/docs/reviews/2026-10-12-doc-drift-review.md) | 2026-10-12 doc-drift review (PR #81): findings A/B fixed, C-01 and C-02 applied, C-03 left as the historical record by the owner | `355e0a4` |

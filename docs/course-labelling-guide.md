@@ -135,6 +135,9 @@ during the test split, label it `other` and note it for the write-up.
 
 ## 4. Procedure
 
+Each `course_eval <subcommand>` below runs as
+`uv run python -m apps.menu_pipeline.course_eval <subcommand> ...`.
+
 1. **Exclusions.** Build the exclusion file: one GERS id per line, `#` for
    comments. It holds the venues of the P5-5 held-out pages, plus every venue
    in an earlier label set when this is a later version's fresh sample. Never

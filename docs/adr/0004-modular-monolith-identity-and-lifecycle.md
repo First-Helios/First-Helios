@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-09-12
 **Accepted:** 2026-09-12 by project owner Fortune
+**Amended:** 2026-09-27 — provenance endpoints and Capture outcomes, see [Amendment — ADR-0011](#amendment--adr-0011-accepted-2026-09-27)
 **Supersedes:** [ADR-0003](./0003-three-layer-schema.md)
 
 ## Context

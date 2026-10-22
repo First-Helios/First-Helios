@@ -4,6 +4,7 @@
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune
 **Amended:** 2026-09-24 — name fingerprint keeps every script's letters, see [Amendment 1](#amendment-1-2026-09-24-name-fingerprint-normalization) (review session S12; owner decision D6.2)
+**Amended:** 2026-09-27 — provenance pointer, see [Amendment — ADR-0011](#amendment--adr-0011-accepted-2026-09-27); 2026-09-28 — lifecycle, see [S13 lifecycle implementation](#s13-lifecycle-implementation-2026-09-28) and [ADR-0012](./0012-venue-lifecycle.md)
 **Phase:** 4 (Venue Discovery, Identity & Geocoding)
 
 ## Context
