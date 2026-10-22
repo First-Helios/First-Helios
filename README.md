@@ -589,6 +589,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1) |
 | [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
+| [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Proposed |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the
