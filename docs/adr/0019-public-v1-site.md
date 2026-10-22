@@ -1,7 +1,9 @@
 # ADR-0019: The path to a public v1 site (frontend, page set, area UX, public deploy)
 
-**Status:** Proposed 2026-10-21 (session P8-0). Docs only: nothing in this ADR is built, and
-nothing is to be built until the owner answers the [owner questions](#owner-questions).
+**Status:** Accepted in part, 2026-10-21 by the owner (session P8-0; see
+[Owner decision](#owner-decision)): Q1–Q3, Q6c, Q7 and Q9 as recommended. The public deploy
+(§4; Q4, Q5, Q6a, Q6b, Q8) is **deferred**: v1 runs locally first. Proposed 2026-10-21. Nothing in
+this ADR is built yet.
 **Date:** 2026-10-21
 **Phase:** 8 (operations), plus the frontend that ROADMAP §2 keeps in a separate repo
 **Extends:** [ADR-0008](./0008-read-api-conventions.md) (read API; its Unit B staging deploy and
@@ -410,6 +412,39 @@ Each has a recommendation. Nothing is built until these are answered.
 - **Q9. Order.** Build steps 2–4 (API and Gold) before 5–6 (client), as written? Or the client
   first against today's API, accepting null section names and the per-point map lookup until
   2–4 land?
+
+## Owner decision
+
+**Answered by the owner on 2026-10-21**, in session P8-0:
+
+1. **Q1 frontend:** a thin no-build client in `First-Helios_Frontend`. V1 is kept on a
+   `V1-Graveyard` branch there. Leaflet 1.9.4, vendored, is approved as the only library. The
+   repo stays MPL-2.0.
+2. **Q2 tiles:** OpenStreetMap standard tiles with attribution. Revisit if traffic grows.
+3. **Q3 area grain:** a citywide `all` row plus a 0.05° grid, keeping the 0.01° rows. A
+   `low_sample` cell shows its venue count and no median. The Gold `area_kind` migration and
+   `GET /v1/price-index/cells` still go through their own reviewed unit (ADR-0007
+   Amendment 3); this answer approves the direction, not unseen migration SQL.
+4. **Q4 hosting: deferred.** v1 runs locally first. The owner expects ARM64 or a cloud
+   provider later, so the §4 VPS proposal stays on the table as a proposal only. The same
+   goes for the decisions that only matter in public: **Q5** (rate limits and
+   `rate_limited`), **Q6a** (launching with stale prices), **Q6b** (location corrections
+   before a public launch) and **Q8** (uptime monitoring). All are deferred to the hosting
+   decision.
+5. **Q6c laptop writes: approved.** The next session may take a fresh `pg_dump` of
+   `helios_laptop`, run the pending P5-33 rescore (R4 withdrawals), then run
+   `python -m apps.gold.refresh` there, and record the real `low_sample` share (build step 1).
+6. **Q7 venue search:** later. Not in v1.
+7. **Q9 order:** API fixes first: build steps 2–4 before the client pages (5–6).
+
+**What this changes in §5.** The plan splits into two milestones:
+
+- **Local v1 (now): steps 1–6.** It is done when the step-6 click path (map → cell →
+  venues → menu with section headings, source link and observation dates → price trail)
+  works in a browser against the API running locally over `helios_laptop`, with the
+  contract check passing.
+- **Public v1 (later): steps 7–8.** They follow the hosting decision. Step 4 ships only
+  `source_url`; `rate_limited` moves to step 7 with the rest of Q5.
 
 ## Appendix: the low-sample proxy
 
