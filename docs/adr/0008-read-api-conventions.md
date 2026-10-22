@@ -11,6 +11,9 @@ request-id hardening, see [Amendment 1](#amendment-1-2026-09-23-api-polish)
 **Amended:** 2026-09-28 — the API may read Identity ORM models directly, see
 [Amendment 2](#amendment-2-2026-09-28-api-reads-identity-models-directly)
 (review session S16; owner decision D6.5)
+**Amended:** 2026-10-21 — accepted history is read through the Menu selector's
+history mode, see [Amendment 3](#amendment-3-2026-10-21-history-reads-through-the-menu-selector)
+(session P7-1; [ADR-0018](./0018-venue-filters-and-item-price-history.md) Q9)
 **Closes:** the web-framework deferral in
 [ADR-0001](./0001-stack-choice.md) ("Web framework (Phase 7+): not yet chosen in
 code … reaffirmed or revised in a dedicated ADR once `apps/api/` exists").
@@ -314,6 +317,25 @@ decision D6.5 (remediation checklist) settles it in ADR-0004's favour:
   [ADR-0012 §1](./0012-venue-lifecycle.md) require.
 - Pydantic response models stay separate from the ORM (Decision point 5): no
   SQLAlchemy object reaches the wire.
+
+## Amendment 3 (2026-10-21): history reads through the Menu selector
+
+Decision point 9 says a read of current menu content uses `gold.current_menu`,
+never the Menu selector. It says nothing about history, and Gold holds current
+answers only ([ADR-0006](./0006-gold-menu-read-models.md) owner decision D5.3).
+The owner accepted [ADR-0018](./0018-venue-filters-and-item-price-history.md)
+Q9 on 2026-10-21, and this amendment records it:
+
+- Current menu content is still read from Gold only. Nothing changes for
+  `GET /v1/venues/{id}/menu` or `GET /v1/price-index`.
+- Accepted price history (`GET /v1/items/{item_id}/price-history`) is read from
+  Menu through the selector's history mode (`select_price` with a knowledge
+  cutoff, ADR-0005 §9). The read is a pure function in
+  `packages/helios_core/domains/menu/`, beside `enumeration.py`. It reuses the
+  selector's correspondence helpers and re-implements no precedence. The route
+  calls that function. It does not loop over `select_price` itself, and it runs
+  no raw Menu SQL.
+- The read path stays read-only, as Amendment 2 already requires.
 
 ## Implementation notes (2026-09-28)
 
