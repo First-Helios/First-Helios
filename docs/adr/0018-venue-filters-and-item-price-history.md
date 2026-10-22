@@ -1,11 +1,12 @@
 # ADR-0018: Venue filters and item price history (Phase 7 API remainder)
 
-**Status:** Proposed 2026-10-21 (session P7-1). Nothing is implemented; the owner
-questions are at the end.
+**Status:** Accepted 2026-10-21 by the owner (Q1–Q9, all as recommended; see
+[Owner decision](#owner-decision)). Proposed 2026-10-21 (session P7-1). Not implemented yet;
+implementation is a separate session.
 **Date:** 2026-10-21
 **Phase:** 7 (API surface)
-**Extends:** [ADR-0008](./0008-read-api-conventions.md) (read-API conventions; proposes an
-amendment to Decision point 9), [ADR-0006](./0006-gold-menu-read-models.md) (Gold
+**Extends:** [ADR-0008](./0008-read-api-conventions.md) (read-API conventions; amends Decision point 9,
+[ADR-0008 Amendment 3](./0008-read-api-conventions.md#amendment-3-2026-10-21-history-reads-through-the-menu-selector)), [ADR-0006](./0006-gold-menu-read-models.md) (Gold
 current menu), [ADR-0007](./0007-gold-price-index-projection.md) (the grid cell as an area)
 **Depends on:** [ADR-0005](./0005-immutable-menu-snapshots-and-selection.md) §9–§10 (history
 mode, correspondence), [ADR-0013](./0013-phase5-menu-pipeline.md) N1 (version-local native
@@ -68,7 +69,7 @@ The task brief for this session (P7-1) says to write an ADR and stop if either e
 shape or semantics is not settled. Facts 1–6 show they are not. CLAUDE.md also requires a stop
 for the index migration that point 3 needs.
 
-## Decision (proposed)
+## Decision
 
 ### A. Venue filters on `GET /v1/venues`
 
@@ -199,7 +200,7 @@ Each filter combination gets an `EXPLAIN` test that fails on a sequential scan o
 - The opaque token puts version-local keys in URLs. If N1 changes, old tokens still decode;
   they keep naming the old targets.
 
-## Owner questions
+## Owner questions (answered 2026-10-21)
 
 - **Q1. `area` form.** The price-index `area_key` (recommended), a `lat`/`lon` point, or both?
 - **Q2. Place index migration.** Approve a btree on `identity.place (latitude, longitude)`
@@ -219,6 +220,31 @@ Each filter combination gets an `EXPLAIN` test that fails on a sequential scan o
   cross-Version correspondence as its own ADR-0005/ADR-0013 question? Or defer the endpoint?
 - **Q9. ADR-0008 §9 amendment.** The API reads history through a Menu-domain function over
   the selector's history mode (point 8)?
+
+## Owner decision
+
+**Accepted by the owner on 2026-10-21**, answering Q1–Q9 in session P7-1. Every answer took
+the recommended option, so the Decision section above stands as written:
+
+1. **Q1 `area` form:** the price-index `area_key`. No `lat`/`lon` form.
+2. **Q2 Place index:** approved. One hand-reviewed Alembic revision adds a btree on
+   `identity.place (latitude, longitude)`. It adds an index only; no column changes and no
+   data is rewritten. The `area` filter gets a no-seq-scan test.
+3. **Q3 `organization_id`:** approved as an additive field on `VenueResponse`.
+4. **Q4 `has_menu`:** defined as "the menu endpoint would return a menu", including a
+   single-venue Organization's menu. The venue list gets no `as_of`.
+5. **Q5 `item_id` encoding:** the opaque base64url token over the Gold target grain. No Gold
+   column.
+6. **Q6 granularity:** one id per target, with one trail per context and currency.
+7. **Q7 history semantics:** as points 6–7 propose. Points carry no Bronze Version or
+   Evidence ids until an endpoint can resolve them.
+8. **Q8 trail scope:** ship the within-Version trail now. Cross-Version correspondence is a
+   separate ADR-0005/ADR-0013 question, not opened here.
+9. **Q9 boundary:** ADR-0008 §9 is amended (Amendment 3). History is read through a pure
+   Menu-domain function over the selector's history mode.
+
+This acceptance covers the design. It does not cover unseen code: the Place-index migration
+SQL stays a CLAUDE.md read-twice path, and the owner reviews it in the implementation PR.
 
 ## References
 
