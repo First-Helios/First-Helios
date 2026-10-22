@@ -39,7 +39,7 @@ from pathlib import Path
 from apps.discovery.registry import load_registry
 from apps.discovery.url_pipeline import resolve_urls
 from apps.discovery.web_client import SiteFetcher
-from apps.menu_pipeline.classifier import load_page_classifier
+from apps.menu_pipeline.classifier import load_verifier
 from apps.menu_pipeline.models import DEFAULT_ROOT
 from apps.menu_pipeline.render import BrowserRenderer
 from packages.helios_core.db.session import get_sessionmaker
@@ -80,7 +80,7 @@ def main() -> None:
     args = _parse_args()
     registry = load_registry(args.config or _DEFAULT_CONFIG, missing_ok=args.config is None)
     try:
-        page_check = load_page_classifier(model_root=args.model_root)
+        page_check = load_verifier(model_root=args.model_root)
     except ModuleNotFoundError as error:
         raise SystemExit(
             f"the page classifier needs the `menu` extra (worker image): {error}"

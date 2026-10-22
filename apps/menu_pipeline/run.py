@@ -30,7 +30,7 @@ from pathlib import Path
 
 from apps.discovery.web_client import SiteFetcher
 from apps.menu_pipeline.bundle import BundleStore
-from apps.menu_pipeline.classifier import load_page_classifier
+from apps.menu_pipeline.classifier import load_verifier
 from apps.menu_pipeline.models import DEFAULT_ROOT
 from apps.menu_pipeline.page_bronze import run_menu_pages
 from apps.menu_pipeline.render import BrowserRenderer
@@ -66,7 +66,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     try:
-        verifier = load_page_classifier(model_root=args.model_root)
+        verifier = load_verifier(model_root=args.model_root)
     except ModuleNotFoundError as error:
         raise SystemExit(
             f"the page classifier needs the `menu` extra (worker image): {error}"

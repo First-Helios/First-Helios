@@ -25,6 +25,14 @@ ADR-0013 implementation slice 5 (session P5-4). For each due Version
    page whose scope is not eligible yet is counted ``scope_not_eligible`` and
    stays due (Amendment 3).
 
+**R4** (Amendment 24 item 5, Amendment 27). A run first withdraws the
+published Menu streams of records whose menu URL was withdrawn or whose latest
+fetch the classifier rejected (:func:`~.menu_writes.retract_rejected`); those
+records are not due. Each due page's bundle is then scored with the verifier
+before any model call (:func:`rejects`), so a pipeline-version bump re-scores
+every stored page: a page it rejects is withdrawn the same way and not
+extracted. ``apps.menu_pipeline.rescore`` runs both without the model.
+
 A chunk that still fails after its retry fails its page: nothing is written,
 the page stays due and is retried next run; after
 :data:`MAX_CONSECUTIVE_FAILURES` failed pages in a row the run stops (the
@@ -59,9 +67,12 @@ from typing import TYPE_CHECKING, Protocol
 
 from apps.menu_pipeline.llama_client import SLOTS, ChunkFailed, ChunkResult
 from apps.menu_pipeline.menu_writes import (
+    Withdrawals,
     due_pages,
     head_has_items,
     record_span_evidence,
+    retract_rejected,
+    withdraw,
     write_page,
 )
 from packages.helios_core.identity.contracts import SubjectNotEligibleError
@@ -97,6 +108,7 @@ TUNING_DOWNGRADED_SHARE_MAX = 0.47
 TUNING_RESOLVED_SHARE_MAX = 0.23
 TUNING_MIN_ROWS = 5
 _METHOD_VERSION_MAX = 128  # menu_page.method_version
+RESCORED = "rescored"  # (R4) a withdrawal because the verifier rejects the stored page
 
 
 class ChunkExtractor(Protocol):
@@ -106,12 +118,15 @@ class ChunkExtractor(Protocol):
 
 
 class PageScorer(Protocol):
-    """The page classifier: its name (a pipeline-version part) and its probability."""
+    """The page verifier: its name (a pipeline-version part), its probability (page
+    confidence) and its verdict."""
 
     @property
     def name(self) -> str: ...
 
     def probability(self, html: str, url: str) -> float: ...
+
+    def is_menu(self, html: str, url: str, *, trust_path: bool) -> bool: ...
 
 
 def model_tag(spec: ModelSpec) -> str:
@@ -144,6 +159,11 @@ class PipelineVersion:
         return _checked(
             f"{JSONLD_VERSION};{VALIDATOR_VERSION};{SEGMENTER_VERSION};{self.classifier}"
         )
+
+    @property
+    def streams(self) -> dict[SourceKind, str]:
+        """Each Menu stream's ``method_version``."""
+        return {"llm": self.llm, "jsonld": self.jsonld}
 
 
 def _checked(version: str) -> str:
@@ -268,10 +288,17 @@ class ExtractionReport:
 
     method_version: str = ""
     due: int = 0
-    due_by_reason: Counter[str] = field(default_factory=Counter)  # new / changed / reinterpret
+    due_by_reason: Counter[str] = field(default_factory=Counter)  # new / changed / restore / ...
     up_to_date: int = 0
     needs_review: int = 0  # records not resolved to a scope
     no_bundle: int = 0
+    # (R4) records out of the queue: menu URL withdrawn, latest fetch rejected, withdrawn
+    menu_url_withdrawn: int = 0
+    fetch_rejected: int = 0
+    withdrawn: int = 0
+    rejected: int = 0  # due pages whose bundle the verifier rejects: not extracted
+    rejected_unwritten: int = 0  # of those, with no published stream to withdraw (stay due)
+    withdrawals: Withdrawals = field(default_factory=Withdrawals)
     attempted: int = 0  # pages taken this run (``--limit`` counts these)
     extracted: int = 0  # pages written (an llm page, maybe a jsonld one)
     reused_outputs: int = 0  # pages validated from saved answers, no model call
@@ -301,6 +328,7 @@ class ExtractionReport:
                 continue
             value = getattr(self, name)
             out[name] = dict(sorted(value.items())) if isinstance(value, Counter) else value
+        out["withdrawals"] = self.withdrawals.summary()
         out["pages_with_resolved_rows"] = sum(p.resolved > 0 for p in self.pages)
         out["outside_tuning_range"] = [
             {
@@ -324,6 +352,7 @@ class _Pending:
     due: DuePage
     bundle: Bundle | None = None
     failure: str | None = None
+    rejected: bool = False  # the verifier rejects the bundle (R4): nothing is extracted
     saved: list[str] | None = None
     futures: list[Future[ChunkResult]] = field(default_factory=list)
 
@@ -342,6 +371,21 @@ def page_html(bundle: Bundle) -> str:
         return body.decode(_charset(bundle.content_type), errors="replace")
     except LookupError:  # an unknown charset in the Content-Type header
         return body.decode("utf-8", errors="replace")
+
+
+def count_skipped(report: ExtractionReport, skipped: dict[str, int]) -> None:
+    """Copy :func:`due_pages`'s not-due counts into the report."""
+    report.up_to_date = skipped["up_to_date"]
+    report.needs_review = skipped["needs_review"]
+    report.no_bundle = skipped["no_bundle"]
+    report.menu_url_withdrawn = skipped["menu_url_withdrawn"]
+    report.fetch_rejected = skipped["fetch_rejected"]
+    report.withdrawn = skipped["withdrawn"]
+
+
+def rejects(scorer: PageScorer, bundle: Bundle) -> bool:
+    """Whether the verifier rejects a stored page (R4's re-score, Amendment 24 item 5)."""
+    return not scorer.is_menu(page_html(bundle), bundle.url, trust_path=False)
 
 
 def _confidence(probability: float) -> Decimal:
@@ -392,6 +436,9 @@ class _Run:
         if text_hash(blocks) != due.text_hash:
             pending.failure = "bundle_mismatch"  # the bundle isn't the Version's text
             return pending
+        if rejects(self._scorer, pending.bundle):
+            pending.rejected = True
+            return pending
         pending.saved = self._outputs.read(self._version.extractor, due.text_hash)
         if pending.saved is None:
             pending.futures = [
@@ -403,6 +450,17 @@ class _Run:
         report = self._report
         if pending.failure is not None or pending.bundle is None:
             report.failed[pending.failure or "bundle_unreadable"] += 1
+            return
+        if pending.rejected:
+            report.rejected += 1
+            report.rejected_unwritten += not withdraw(
+                self._session,
+                pending.due,
+                RESCORED,
+                method_versions=self._version.streams,
+                withdrawals=report.withdrawals,
+                commit=self._on_commit,
+            )
             return
         due, bundle = pending.due, pending.bundle
         if pending.saved is not None:
@@ -507,12 +565,13 @@ def run_extraction(  # noqa: PLR0913 - the run's collaborators, injected for tes
     started = time.monotonic()
     version = PipelineVersion(model=model, classifier=scorer.name)
     report = ExtractionReport(method_version=version.llm)
+    retract_rejected(
+        session, method_versions=version.streams, withdrawals=report.withdrawals, commit=commit
+    )
     due, skipped = due_pages(session, version.llm)
     report.due = len(due)
     report.due_by_reason.update(page.reason for page in due)
-    report.up_to_date = skipped["up_to_date"]
-    report.needs_review = skipped["needs_review"]
-    report.no_bundle = skipped["no_bundle"]
+    count_skipped(report, skipped)
     todo = due if limit is None else due[:limit]
     probe = soc or SocProbe()
     run = _Run(
