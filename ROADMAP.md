@@ -666,6 +666,11 @@ with one universal pipeline, run as an offline batch job on the staging Pi.
   remaining sites (page-level labels don't block extraction draws) and R1(b) on about 150
   re-crawled venues. It passes on a stratified point estimate ≥ 0.95. Only then does one
   pipeline-version bump ship v3 with R4.
+- *Shipped as two verifiers (2026-10-21, Amendments 25–27):* v3 alone failed (0.773, new
+  admissions on `no_menu_found` sites), and so did the training mix. The owner accepted
+  `classifier-v2` AND `classifier-v3` with R4 under a post-ship check, since no fresh sample
+  was reachable (12 venues resolved out of 2,650 re-run). P5-33 builds it; the laptop step
+  and the post-ship check plan are in the README's Gates.
 - Rendering for the menu pipeline reuses discovery's renderer. Switching it on
   for Pi runs waits for the owner-run Pi time/memory measurement and the §8 bars
   on rendered pages ([§4](./docs/adr/0013-phase5-menu-pipeline.md#4-javascript-only-pages-headless-render-q4)).

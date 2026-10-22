@@ -27,7 +27,9 @@ current venue has saved (resolved ``menu-url-discovery`` records), one run:
    and left alone.
 
 A verified menu URL that now fails the classifier is only counted: withdrawing
-it stays with discovery's ADR-0015 re-verification (owner decision S2).
+the URL stays with discovery's ADR-0015 re-verification (owner decision S2).
+The skipped Capture takes the page out of the extraction queue, and the next
+extraction or re-score withdraws its Menu streams (R4, :mod:`.menu_writes`).
 
 Resumable: a URL is not due while its last ``menu-page`` Capture is younger than
 :data:`REFETCH_WINDOW`, unless a record was saved after that fetch and has no

@@ -1955,3 +1955,32 @@ Record:
      - an ignore-robots mode or getting past bot blocking;
      - adopting redirect targets without a venue-identity check;
      - a new dependency.
+
+**Build (P5-33, 2026-10-21; owner questions in its PR).** One pipeline-version bump. Its only
+changed component is the classifier name, now `classifier-v2+v3`. No schema, model or Menu
+write-contract change.
+- **Verifier.** `AllOfClassifiers` accepts a page when both weights files' thresholds pass. It
+  segments and embeds the page once. It is discovery's verifier (`resolve_urls`), the
+  menu-page classifier (`menu_pipeline.run`) and extraction's scorer. A page's confidence is
+  the lower of the two probabilities.
+- **Out of `due_pages`:**
+  - `menu_url_withdrawn`: the menu-URL record with the same key is in `needs_review`;
+  - `fetch_rejected`: the latest Capture that read the page, on its Version's endpoint, its
+    URL or the URL saved now, is a skipped `not_menu` / `js_only`. Failed fetches and other
+    skips are passed over, as ADR-0015 Amendment 1 item 2 keeps a URL on them. A render is a
+    later Capture than its static fetch, so it decides;
+  - `withdrawn`: the `llm` head is a withdrawal on the latest Version, and no accepted
+    Capture was stored after it.
+- **Withdrawals.** Each published stream gets an appended `withdrawal`:
+  - on the record's latest Version, citing its Version Evidence;
+  - under its current scope, with `method_version` = the stream's pipeline version and
+    confidence 1.
+  They are written at the start of every extraction run, and by
+  `python -m apps.menu_pipeline.rescore` without the model.
+- **Re-score.** Every due page's bundle is scored before any model call. After the bump,
+  that is every stored page outside the queue rules. A rejected page is withdrawn
+  (`rescored`). A rejected page with no published stream (never extracted, or already
+  withdrawn) can't take a tombstone. It stays due and is skipped each run
+  (`rejected_unwritten`).
+- **Restoration.** A withdrawn page becomes due again after a new Version or an accepted
+  fetch. Its next pages are written as `restoration`s.

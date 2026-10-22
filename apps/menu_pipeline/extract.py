@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from apps.menu_pipeline.bundle import BundleStore
-from apps.menu_pipeline.classifier import load_page_classifier
+from apps.menu_pipeline.classifier import load_verifier
 from apps.menu_pipeline.extraction import OutputStore, model_tag, run_extraction
 from apps.menu_pipeline.llama_client import (
     DEFAULT_SERVER,
@@ -67,7 +67,7 @@ def main() -> None:
     args = _parse_args()
     spec = load_manifest()[EXTRACTION_MODEL]
     try:
-        scorer = load_page_classifier(model_root=args.model_root)
+        scorer = load_verifier(model_root=args.model_root)
     except ModuleNotFoundError as error:
         raise SystemExit(
             f"the page classifier needs the `menu` extra (worker image): {error}"

@@ -12,6 +12,9 @@ import httpx
 import pytest
 
 from apps.menu_pipeline.classifier import (
+    VERIFIER_NAME,
+    VERIFIER_WEIGHTS,
+    AllOfClassifiers,
     ClassifierWeights,
     PageClassifier,
     load_embedding,
@@ -73,8 +76,8 @@ def test_weights_with_other_layout_features_are_refused(tmp_path: Path) -> None:
         ClassifierWeights.load(path)
 
 
-def test_v3_weights_name_the_page_signals_and_v2_stays_the_live_verifier() -> None:
-    """ADR-0013 Amendment 24: classifier-v3 is built but loaded only by path."""
+def test_v3_weights_name_the_page_signals() -> None:
+    """ADR-0013 Amendment 24: classifier-v3 adds the generic page signals."""
     from apps.menu_pipeline.classifier import WEIGHTS_PATH
 
     assert WEIGHTS_PATH.name == "page_classifier_v2.json"
@@ -84,6 +87,66 @@ def test_v3_weights_name_the_page_signals_and_v2_stays_the_live_verifier() -> No
     assert len(v3.coef) == 256 + len(FEATURE_NAMES) + len(PAGE_SIGNAL_NAMES)
     assert round(v3.threshold, 3) == 0.674  # noqa: PLR2004 - the P5-28 survey's value
     assert ClassifierWeights.load().features == FEATURE_NAMES
+
+
+def test_the_live_verifier_is_classifier_v2_and_v3() -> None:
+    """Amendment 27: a page must pass both; the new name re-verifies every saved URL."""
+    assert VERIFIER_NAME == "classifier-v2+v3"
+    v2, v3 = (ClassifierWeights.load(path) for path in VERIFIER_WEIGHTS)
+    assert (v2.version, v3.version) == ("classifier-v2", "classifier-v3")
+    assert v2.model == v3.model
+
+
+def _signal_weights(threshold: float) -> ClassifierWeights:
+    """A v3-shaped classifier that reads one page signal: add-to-cart markup is a non-menu."""
+    names = FEATURE_NAMES + PAGE_SIGNAL_NAMES
+    size = 2 + len(names)
+    coef = [0.0] * size
+    coef[2 + names.index("cart_markup")] = -4.0
+    return ClassifierWeights(
+        version="classifier-signals",
+        model="potion-base-8M",
+        mean=(0.0,) * size,
+        scale=(1.0,) * size,
+        coef=tuple(coef),
+        intercept=1.0,
+        threshold=threshold,
+        features=names,
+    )
+
+
+def test_all_of_classifiers_accepts_a_page_only_when_both_do() -> None:
+    calls: list[int] = []
+
+    def embed(texts: Sequence[str]) -> list[list[float]]:
+        calls.append(len(texts))
+        return _embed(texts)
+
+    first, second = _weights(), _signal_weights(threshold=0.6)
+    both = AllOfClassifiers("classifier-a+b", [first, second], embed)
+    shop = _MENU + '<button class="add-to-cart">Add</button>'
+    alone = [PageClassifier(w, _embed) for w in (first, second)]
+
+    assert both.name == "classifier-a+b"
+    for html in (_MENU, shop, _HOME):
+        expected = tuple(c.probability(html, "https://k.com/dinner") for c in alone)
+        assert both.probabilities(html, "https://k.com/dinner") == pytest.approx(expected)
+        assert both.probability(html, "https://k.com/dinner") == pytest.approx(min(expected))
+        assert both.is_menu(html, "https://k.com/dinner", trust_path=True) == all(
+            c.is_menu(html, "https://k.com/dinner", trust_path=False) for c in alone
+        )
+    # each classifier alone: the menu passes both, the shop only the first, home neither
+    assert both.is_menu(_MENU, "https://k.com/dinner", trust_path=False)
+    assert alone[0].is_menu(shop, "https://k.com/dinner", trust_path=False)
+    assert not both.is_menu(shop, "https://k.com/dinner", trust_path=False)
+    assert not both.is_menu(_HOME, "https://k.com/about", trust_path=False)
+    assert set(calls) == {1}  # one embedding per page, shared by both classifiers
+
+
+def test_all_of_classifiers_needs_one_embedding_model() -> None:
+    other = replace(_signal_weights(0.5), model="another-embedding")
+    with pytest.raises(ValueError, match="one embedding model"):
+        AllOfClassifiers("x", [_weights(), other], _embed)
 
 
 def test_weights_with_other_page_signals_are_refused(tmp_path: Path) -> None:

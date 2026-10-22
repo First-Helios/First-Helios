@@ -26,6 +26,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+import apps.discovery.url_pipeline as url_pipeline
 import apps.menu_pipeline.evaluate as evaluate
 import apps.menu_pipeline.extraction as extraction
 import apps.menu_pipeline.menu_writes as menu_writes
@@ -369,12 +370,20 @@ def committed(disposable_database_engine: Engine) -> Iterator[sessionmaker[Sessi
 
 @dataclass
 class _Scorer:
+    """A fixed probability; 0 for a page whose HTML has ``reject`` (R4 re-score)."""
+
     name: str = "word-v1"
     value: float = 0.9123456
+    threshold: float = 0.5
+    reject: str | None = None
 
     def probability(self, html: str, url: str) -> float:
-        del html, url
-        return self.value
+        del url
+        return 0.0 if self.reject is not None and self.reject in html else self.value
+
+    def is_menu(self, html: str, url: str, *, trust_path: bool) -> bool:
+        del trust_path
+        return self.probability(html, url) >= self.threshold
 
 
 class _Venues:
@@ -389,17 +398,26 @@ class _Venues:
         self.sites: dict[str, _FakeResolver] = {}
         self.menus: dict[str, str] = {}  # gers -> menu URL
         original_saved = page_bronze._saved_menu_urls  # noqa: SLF001 - test isolation
-        original_due = menu_writes.due_pages
+        original_states = menu_writes.page_states
 
         def saved(session: Session) -> list[tuple[str, int, str, Any]]:
             return [row for row in original_saved(session) if self.token in row[0]]
 
-        def due(session: Session, method_version: str) -> tuple[list[Any], dict[str, int]]:
-            pages, skipped = original_due(session, method_version)
-            return [p for p in pages if self.token in p.key], skipped
+        def states(session: Session) -> list[menu_writes.PageState]:
+            return [s for s in original_states(session) if self.token in s.key]
+
+        original_venues = url_pipeline.iter_venues_to_resolve
+
+        def mine(session: Session, *, page_size: int = 100) -> Iterator[Any]:
+            for venue in original_venues(session, page_size=page_size):
+                if self.token in venue.gers_id:
+                    yield venue
 
         monkeypatch.setattr(page_bronze, "_saved_menu_urls", saved)
-        monkeypatch.setattr("apps.menu_pipeline.extraction.due_pages", due)
+        # due_pages and R4's retraction both read page_states
+        monkeypatch.setattr(menu_writes, "page_states", states)
+        # discovery re-verifies saved URLs: other tests' venues keep theirs
+        monkeypatch.setattr(url_pipeline, "iter_venues_to_resolve", mine)
 
     def add(self, name: str) -> str:
         gers = f"{self.token}-{len(self.menus)}"

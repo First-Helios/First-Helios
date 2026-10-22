@@ -59,9 +59,11 @@ This section is the single current-status page. Other docs link here.
   re-verified when it changes or after 90 days; one that fails is re-discovered
   or withdrawn to `needs_review`. Platform pages pass the same page check, and a
   chain homepage's platform links are kept only for the location whose address
-  the page shows (ADR-0015). The verifier is the ADR-0013 page classifier
-  `classifier-v2` (`apps/menu_pipeline/classifier.py`, weights
-  `config/page_classifier_v2.json`, model files pinned in `config/models.yaml`;
+  the page shows (ADR-0015). The verifier is `classifier-v2+v3`, the ADR-0013 page
+  classifiers `classifier-v2` AND `classifier-v3`, so a page must pass both
+  (Amendment 27; `apps/menu_pipeline/classifier.py`, weights
+  `config/page_classifier_v2.json` and `config/page_classifier_v3.json`, model files
+  pinned in `config/models.yaml`;
   evaluations: [v1](./docs/reviews/2026-09-29-classifier-v1-evaluation.md),
   [v2 and rendering](./docs/reviews/2026-09-29-s6f-render-measurement.md)); it runs
   in the `worker` image target. `--render` renders platform pages the static fetch
@@ -346,6 +348,32 @@ This section is the single current-status page. Other docs link here.
     ([RUN-A-01](./docs/reviews/2026-10-03-menu-write-commit-cost.md#owner-run-checklist-run-a-01-after-the-migration-merges))
     ran 2026-10-14 on a disposable clone: the page that took at least 1 h 25 min commits
     in 24.5 s ([record](./docs/reviews/2026-10-14-p5-pipeline-v7-tuning.md#run-a-01-q7a-the-menu-write-commit-re-timed)).
+- **Classifier ship (ADR-0013 Amendment 27): built, not yet applied.** P5-33 builds one
+  pipeline-version bump. The live verifier becomes `classifier-v2+v3` (a page must pass
+  both). R4 (Amendment 24 item 5) adds two things:
+  - `due_pages` drops a record whose menu URL was withdrawn or whose latest page-reading
+    fetch the classifier rejected;
+  - its `llm` and `jsonld` streams get appended `withdrawal` tombstones. A page that is
+    accepted again gets a `restoration`.
+
+  The bump re-scores every stored bundle (`python -m apps.menu_pipeline.rescore`, or at the
+  start of each extraction). Open items:
+  - [ ] the owner approves the build, then the laptop step: `resolve_urls`
+    re-verification and the re-score against `helios_laptop` (pg_dump first, no
+    extraction before it). Report withdrawals, retractions and restorations, and confirm
+    the P5-32 false accept (`petfriendlyrestaurants.com/help/how-to-add-a-menu/`) is
+    withdrawn and out of the due queue;
+  - [ ] **post-ship check (Amendment 27 item 5).** The first ~100 new due pages from the
+    next venue source (an Overture refresh or the discovery-coverage upgrade), outside the
+    classifier exclusions (`var/menu-eval/p5-31/classifier-exclusions.json` plus every
+    venue and site labelled since), get the R1(a) check:
+    - blind page-level labels (strict full-read prompt), frozen before scoring;
+    - one page per site, stratified by the fixed size cutoffs;
+    - pass rule: stratified point estimate ≥ 0.95, Wilson interval recorded.
+
+    Below 0.95, a replacement opens through the amendment path. Until it runs,
+    `classifier-v2+v3`'s §8 precision rests on R1(a) (0.959 [0.933, 0.976]) and the P5-32
+    side evidence.
 - **Phase 5 model/harness findings (P5-19 to P5-21): tuning evidence only; no gate
   opened, nothing built.** Model screen
   ([record](./docs/reviews/2026-10-15-p5-model-screen.md)), harness-free bracket screen
@@ -543,7 +571,8 @@ config/sources.yaml     manual website / menu-URL registry
 config/models.yaml      pinned model files (sha256, size, licence)
 config/location_overrides.yaml    reviewed coordinate/address corrections (ADR-0014)
 config/identity_corrections.yaml  reviewed duplicate merges and retirements (S6e)
-config/page_classifier_v2.json  page classifier weights (classifier-v2, the menu-URL verifier)
+config/page_classifier_v2.json  classifier-v2 weights (with v3, the menu-URL verifier classifier-v2+v3)
+config/page_classifier_v3.json  classifier-v3 weights (with v2, the menu-URL verifier classifier-v2+v3)
 config/page_classifier_v1.json  classifier-v1 weights (superseded, kept with its evaluation)
 docs/
   adr/                  architecture decisions (index below)
