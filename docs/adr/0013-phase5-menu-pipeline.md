@@ -1884,10 +1884,21 @@ Record:
    (Amendment 23 items 2 and 5). Still not proposed: a per-site, per-platform or hand-entered
    rule, or a new dependency.
 
-## Amendment 27 (2026-10-21, proposed): no fresh sample is reachable; ship v2 AND v3 with R4 under a post-ship check
+## Amendment 27 (2026-10-21, accepted 2026-10-21): no fresh sample is reachable; ship v2 AND v3 with R4 under a post-ship check
 
-**Status: Proposed 2026-10-21 (session P5-32), awaiting the owner.** Record:
+**Status: Accepted 2026-10-21 by the owner (session P5-32), with the rulings below.** Record:
 [2026-10-21-p5-32-two-verifier-verification.md](../reviews/2026-10-21-p5-32-two-verifier-verification.md).
+
+**Owner rulings (2026-10-21):**
+- **Q1, ship:** (a). The stage closes on the evidence in hand. Next is one pipeline-version bump
+  with the AND verifier, R4 and re-verification of every stored bundle and saved menu URL, then
+  the post-ship check (item 5).
+- **Q2, redirects:** parked for the discovery-coverage upgrade; adopting a redirect target needs a
+  venue-identity check (an ADR-0010 change).
+- **Q3, labels:** the 7 labels stand, with no hand check.
+- **Q4, new menu URLs:** the 12 stay, except the v2 false accept (a directory's help article),
+  which is dropped through the ship's own re-verification and R4, not by hand. No extraction pass
+  runs on `helios_laptop` before the ship.
 
 1. **The fresh sample (Amendment 26 Q3).** Discovery was re-run, through its normal write path,
    on the 2,650 venues outside the classifier exclusions whose last outcome was a failure. The
@@ -1936,7 +1947,7 @@ Record:
    the next venue source (an Overture refresh or the coverage upgrade), outside the classifier
    exclusions, get the R1(a) blind page-level check. A stratified point estimate below 0.95 opens
    a replacement through the amendment path.
-6. **Unchanged until accepted.**
+6. **Unchanged until the ship lands.**
    - `classifier-v2` stays the verifier, and R4 is not built.
    - The laptop pass's rows stay (Amendment 23 items 2 and 5), and the 12 new menu URLs stay.
    - Still not proposed:

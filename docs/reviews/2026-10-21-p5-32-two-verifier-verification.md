@@ -365,3 +365,20 @@ Each question carries the context needed to answer it here.
   Do they stand without a hand check, as in P5-30 and P5-31?
 - **Q4. The 12 new menu URLs stay in `helios_laptop`** (normal discovery writes, 1 false accept
   among them, as with any v2 run). They will be re-verified under the AND at the ship. Agreed?
+
+## Owner decisions (2026-10-21)
+
+- **Q1:** (a). The fresh-sample stage is closed on the evidence in hand, and Amendment 27 is
+  accepted. Next, one pipeline-version bump ships `classifier-v2` AND `classifier-v3` with R4 and
+  re-verification of every stored bundle and saved menu URL. The post-ship blind check of about 100
+  new due pages from the next venue source replaces the pre-ship sample.
+- **Q2:** (a). The cross-host redirect lever is parked for the discovery-coverage upgrade; adopting a
+  redirect target needs a venue-identity check (an ADR-0010 change). The measurement stays in
+  `var/`.
+- **Q3:** the 7 labels stand, with no hand check.
+- **Q4:** the 12 new menu URLs stay, **except the v2 false accept**
+  (`petfriendlyrestaurants.com/help/how-to-add-a-menu/`), which is dropped. It is dropped by the
+  ship's own path, not by hand: the verifier change makes ADR-0015 re-verify every saved URL, v3
+  rejects this page (0.287 against 0.674), so it is withdrawn to `needs_review` and R4 takes it out
+  of the due queue. It has no Menu rows. Until the ship, no extraction pass runs on
+  `helios_laptop`, so it is never extracted.
