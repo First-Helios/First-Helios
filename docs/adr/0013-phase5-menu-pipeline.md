@@ -1883,3 +1883,75 @@ Record:
 6. **Unchanged.** `classifier-v2` stays the verifier, R4 waits, and the laptop pass's rows stay
    (Amendment 23 items 2 and 5). Still not proposed: a per-site, per-platform or hand-entered
    rule, or a new dependency.
+
+## Amendment 27 (2026-10-21, accepted 2026-10-21): no fresh sample is reachable; ship v2 AND v3 with R4 under a post-ship check
+
+**Status: Accepted 2026-10-21 by the owner (session P5-32), with the rulings below.** Record:
+[2026-10-21-p5-32-two-verifier-verification.md](../reviews/2026-10-21-p5-32-two-verifier-verification.md).
+
+**Owner rulings (2026-10-21):**
+- **Q1, ship:** (a). The stage closes on the evidence in hand. Next is one pipeline-version bump
+  with the AND verifier, R4 and re-verification of every stored bundle and saved menu URL, then
+  the post-ship check (item 5).
+- **Q2, redirects:** parked for the discovery-coverage upgrade; adopting a redirect target needs a
+  venue-identity check (an ADR-0010 change).
+- **Q3, labels:** the 7 labels stand, with no hand check.
+- **Q4, new menu URLs:** the 12 stay, except the v2 false accept (a directory's help article),
+  which is dropped through the ship's own re-verification and R4, not by hand. No extraction pass
+  runs on `helios_laptop` before the ship.
+
+1. **The fresh sample (Amendment 26 Q3).** Discovery was re-run, through its normal write path,
+   on the 2,650 venues outside the classifier exclusions whose last outcome was a failure. The
+   owner ruled that dev mode may skip the 20-day retry cooldown. **12 venues resolved, on 7 sites.**
+   The other 2,638 failed again:
+   - dead domains: `non_public_host` is mostly DNS failure;
+   - bot blocking (`http_403`);
+   - robots.txt that redirects to another host or doesn't answer;
+   - redirects to other hosts.
+
+   Resolved menu-URL records went from 1,635 to 1,647. The fresh due-page sample is therefore
+   **7 pages** (one per site), against the about 100 the plan needs.
+2. **Side evidence, not a verdict.** Labelled blind (strict prompt, every line read) and frozen
+   before scoring:
+   - `classifier-v2` keeps 7, of which 5 are menus;
+   - v2 AND v3 keeps 5, all menus. It removes both v2 false accepts (a directory's help article,
+     a menu hub) and loses no menu.
+
+   This agrees with R1(a) (0.959 [0.933, 0.976]), but the Wilson lower bound of 0.566 settles
+   nothing.
+3. **Other sources measured.**
+   - **Following cross-host redirects** (record only, robots.txt redirects followed as RFC 9309
+     allows): 434 origins give 56 pages v2 accepts, 39 outside the exclusions. Many are another
+     business (a lapsed domain sold on, another city, a new restaurant at the address).
+     Adopting a redirect target needs a venue-identity check, which is a later ADR-0010 change.
+   - **An ignore-robots mode** would reach about 28 sites. The owner dropped it.
+   - **Overture lists a second website** for only 11 of the 2,638.
+
+   A fresh sample of about 100 needs a new website source, which is the discovery-coverage
+   upgrade set for after the pipeline (Amendment 26 Q1).
+4. **Proposed: close the stage on the evidence in hand.**
+   - **Ship v2 AND v3 with R4** in one pipeline-version bump, as in Amendment 24 items 2 and 5:
+     - the AND verifier;
+     - `due_pages` exclusion and tombstone retraction of rejected and withdrawn pages;
+     - restoration of a page that is accepted again;
+     - re-verification of every stored bundle and saved menu URL.
+   - **The evidence:**
+     - R1(a), held out from v3's training: 0.959, small 0.944;
+     - P5-31's held-out readings for the v3 recipe;
+     - item 2.
+   - **Why the residual risk is small:**
+     - the AND admits nothing v2 rejects;
+     - its recall loss is accepted (Amendment 26 Q2);
+     - R4 is reversible by a later version bump.
+5. **Post-ship check (replaces the pre-ship fresh sample).** The first about 100 new due pages from
+   the next venue source (an Overture refresh or the coverage upgrade), outside the classifier
+   exclusions, get the R1(a) blind page-level check. A stratified point estimate below 0.95 opens
+   a replacement through the amendment path.
+6. **Unchanged until the ship lands.**
+   - `classifier-v2` stays the verifier, and R4 is not built.
+   - The laptop pass's rows stay (Amendment 23 items 2 and 5), and the 12 new menu URLs stay.
+   - Still not proposed:
+     - a per-site, per-platform or hand-entered rule;
+     - an ignore-robots mode or getting past bot blocking;
+     - adopting redirect targets without a venue-identity check;
+     - a new dependency.
