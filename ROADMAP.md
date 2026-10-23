@@ -786,6 +786,18 @@ staging deploy.
 
 **Deliverables**
 
+- **A v1 site ([ADR-0019](./docs/adr/0019-public-v1-site.md), accepted in part).** Local v1
+  first (steps 1–6), public v1 after the hosting decision (steps 7–8).
+  - *Built (P8-1 to P8-6, steps 1–4):* Gold filled on `helios_laptop`, section/item names,
+    area kinds and the cell list, `source_url` (see Phase 7 above).
+  - *Built (P8-7, steps 5–6, 2026-10-23; frontend repo PRs
+    [#1](https://github.com/4Fortune8/First-Helios_Frontend/pull/1)–[#3](https://github.com/4Fortune8/First-Helios_Frontend/pull/3)
+    awaiting merge):* the no-build client: map with the citywide headline and the 0.05° cells
+    (low-sample hatched, count only), venue list, venue menu with dated prices and source links,
+    price trail, About. The click path map → cell → venues → menu → trail works against the API
+    over `helios_laptop` at 375 px and desktop; a contract check guards the client's use of the
+    OpenAPI snapshot.
+  - *Next:* steps 7–8 (prod host, first data publish) once hosting is decided.
 - **Prod hosting ADR (next free number)** — compare Hetzner CAX / Fly.io /
   Railway / DO by cost, ergonomics, and ARM64 availability, and settle Postgres
   topology. Decide with numbers. If prod is x86, decide multi-arch buildx vs.
