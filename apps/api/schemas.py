@@ -125,9 +125,9 @@ class MenuOptionResponse(BaseModel):
 
 
 class MenuItemResponse(BaseModel):
-    """A dish. ``name`` is null when Gold holds no row for the item itself
-    (only its variants are priced). ``id`` is the node's ``item_id`` for
-    ``GET /v1/items/{item_id}/price-history``; null when it has no prices."""
+    """A dish. ``name`` is null when the source names no item. ``id`` is the
+    node's ``item_id`` for ``GET /v1/items/{item_id}/price-history``; null when
+    the item has no prices of its own (only its variants or modifiers are)."""
 
     id: str | None
     key: str
@@ -139,9 +139,9 @@ class MenuItemResponse(BaseModel):
 
 
 class MenuSectionResponse(BaseModel):
-    """A named section of a menu. ``name`` is null unless the section itself is
-    priced: Gold carries no section names yet. ``id`` is the section's
-    ``item_id`` for its price history; null unless the section is priced."""
+    """A named section of a menu. ``name`` is null when the source names no
+    section. ``id`` is the section's ``item_id`` for its price history; null
+    unless the section is priced."""
 
     id: str | None
     key: str
