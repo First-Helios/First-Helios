@@ -10,6 +10,7 @@ refresh on committed rows in the disposable ``*_test`` database.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
@@ -26,8 +27,8 @@ from apps.api.main import app
 from apps.api.routes.venues import _shape_menu
 from packages.helios_core.domains.menu.commands import persist_menu
 from packages.helios_core.domains.menu.selection import ContextRef, SelectionRequest, TargetRef
-from packages.helios_core.gold import refresh_current_menu
-from packages.helios_core.gold.menu_read import CurrentMenuRow
+from packages.helios_core.gold import menu_read, refresh_current_menu
+from packages.helios_core.gold.menu_read import CurrentMenuRow, menu_source_urls
 from packages.helios_core.gold.models import CurrentMenu
 from packages.helios_core.identity import (
     admit_source_record,
@@ -40,6 +41,7 @@ from packages.helios_core.identity import (
 from packages.helios_core.identity.contracts import ResolvedScopeRequest
 from packages.helios_core.provenance.contracts import (
     BronzeObservation,
+    CaptureReference,
     PersistedBronzeObservation,
     persist_source_record_observation,
     source_endpoint_for_evidence,
@@ -256,6 +258,7 @@ def _plain(
         price_source_kind="jsonld",
         price_observed_at=observed_at,
         price_confidence=None,
+        price_page_id=None,
         price_evidence_ids=(),
         content_name=name,
         content_description=None,
@@ -739,6 +742,63 @@ def test_source_url_resolves_in_one_query_however_many_prices(
     # The venue, its Organization's peers, the Gold rows, then one provenance read.
     assert len(few) == len(many) == 4
     assert [statement for statement in many if "bronze.evidence" in statement] == [many[-1]]
+
+
+class _FakeEndpoints:
+    """Stands in for ``source_endpoints_for_evidence``; records the ids each call asks for."""
+
+    def __init__(self, urls: dict[int, str]) -> None:
+        self.urls = urls
+        self.calls: list[list[int]] = []
+
+    def __call__(self, _session: object, evidence_ids: Any) -> dict[int, CaptureReference]:
+        ids = sorted(set(evidence_ids))
+        self.calls.append(ids)
+        return {
+            eid: CaptureReference(eid, self.urls[eid], "https", E, None, "succeeded", None)
+            for eid in ids
+            if eid in self.urls
+        }
+
+
+def _page_rows(page: int, ids: range, observed_at: datetime) -> list[CurrentMenuRow]:
+    return [
+        replace(
+            _plain("item", TACOS, ("item", f"{page}-{eid}")),
+            price_page_id=page,
+            price_evidence_ids=(eid,),
+            price_observed_at=observed_at,
+        )
+        for eid in ids
+    ]
+
+
+def test_source_url_resolves_one_leader_per_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    old, new = range(1, 51), range(100, 103)
+    urls = dict.fromkeys(old, "https://old.example.test/")
+    urls |= dict.fromkeys(new, "https://new.example.test/")
+    fake = _FakeEndpoints(urls)
+    monkeypatch.setattr(menu_read, "source_endpoints_for_evidence", fake)
+    rows = _page_rows(10, old, OBSERVED) + _page_rows(11, new, OBSERVED + timedelta(days=1))
+
+    assert menu_source_urls(cast("Session", None), rows) == {
+        ("establishment", 1, 1, "page"): "https://new.example.test/"
+    }
+    assert fake.calls == [[50, 102]]  # each page's latest-observed, greatest Evidence id
+
+
+def test_source_url_resolves_a_page_whose_leader_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urls = dict.fromkeys(range(1, 50), "https://page.example.test/")  # 50 reaches no Capture
+    fake = _FakeEndpoints(urls)
+    monkeypatch.setattr(menu_read, "source_endpoints_for_evidence", fake)
+
+    rows = _page_rows(10, range(1, 51), OBSERVED)
+    assert menu_source_urls(cast("Session", None), rows) == {
+        ("establishment", 1, 1, "page"): "https://page.example.test/"
+    }
+    assert fake.calls == [[50], list(range(1, 51))]
 
 
 def test_source_url_query_never_seq_scans_provenance(client: TestClient, session: Session) -> None:

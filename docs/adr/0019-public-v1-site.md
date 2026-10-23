@@ -315,7 +315,7 @@ Each step is its own PR or owner action. Steps 2–4 and 7 are expensive-to-reve
    *Built 2026-10-22 (P8-6, `source_url` only; `rate_limited` moved to step 7 by the owner
    decision below):* on `helios_laptop` all 946 menus of the 941 `has_menu` venues carry a
    `source_url` (0 nulls; 613 distinct URLs); five venues spot-checked against Bronze; menu p50/p95
-   10.2/24.9 → 13.3/32.5 ms; snapshot regenerated (additive).
+   9.95/22.0 → 11.45/25.1 ms, resolving one Evidence per page; snapshot regenerated (additive).
 5. **Client skeleton (frontend repo).** The V1 archive branch, the new `main` tree, `api.js`,
    the map page against a local API serving a restore of `helios_laptop`, and the contract
    check.

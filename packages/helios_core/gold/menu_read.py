@@ -64,6 +64,7 @@ class CurrentMenuRow:
     price_source_kind: str | None
     price_observed_at: datetime | None
     price_confidence: Decimal | None
+    price_page_id: int | None
     price_evidence_ids: tuple[int, ...]
     content_name: str | None
     content_description: str | None
@@ -121,6 +122,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             CurrentMenu.price_source_kind,
             CurrentMenu.price_observed_at,
             CurrentMenu.price_confidence,
+            CurrentMenu.price_page_id,
             CurrentMenu.price_evidence_ids,
             CurrentMenu.content_name,
             CurrentMenu.content_description,
@@ -167,6 +169,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             price_source_kind=row.price_source_kind,
             price_observed_at=row.price_observed_at,
             price_confidence=row.price_confidence,
+            price_page_id=row.price_page_id,
             price_evidence_ids=tuple(row.price_evidence_ids),
             content_name=row.content_name,
             content_description=row.content_description,
@@ -190,23 +193,42 @@ def menu_source_urls(
     The URL is the Source Endpoint of the family's most recent price Evidence
     (ADR-0008 Amendment 4): the greatest ``(price_observed_at, Capture
     fetched_at, Evidence id)`` over the Evidence of the family's rows that
-    reaches a Capture, a null ``price_observed_at`` lowest. One provenance query
-    for all the rows, however many families or prices they hold.
+    reaches a Capture, a null ``price_observed_at`` lowest.
+
+    Every price Evidence of one Menu page cites that page's own Capture, so
+    only each page's leader -- its greatest ``(price_observed_at, Evidence id)``
+    -- is resolved: one provenance query for one or two ids per family, however
+    many prices it holds. A page whose leader does not resolve has all its
+    Evidence resolved in a second query. A row with no page is its own group
+    per Evidence.
     """
-    rows = list(rows)
-    endpoints = source_endpoints_for_evidence(
-        session, (evidence_id for row in rows for evidence_id in row.price_evidence_ids)
-    )
+    groups: dict[tuple[MenuFamily, int | None, int | None], list[tuple[datetime, int]]] = {}
+    for row in rows:
+        family, observed = menu_family(row), row.price_observed_at or _NEVER
+        for evidence_id in row.price_evidence_ids:
+            group = (
+                family,
+                row.price_page_id,
+                None if row.price_page_id is not None else evidence_id,
+            )
+            groups.setdefault(group, []).append((observed, evidence_id))
+        groups.setdefault((family, None, None), [])  # every family gets a URL entry
+    leaders = {group: max(candidates) for group, candidates in groups.items() if candidates}
+    endpoints = source_endpoints_for_evidence(session, (eid for _, eid in leaders.values()))
+    unresolved = [group for group, (_, eid) in leaders.items() if eid not in endpoints]
+    if unresolved:
+        endpoints |= source_endpoints_for_evidence(
+            session, (eid for group in unresolved for _, eid in groups[group])
+        )
     best: dict[MenuFamily, tuple[datetime, datetime, int]] = {}
     urls: dict[MenuFamily, str | None] = {}
-    for row in rows:
-        family = menu_family(row)
+    for (family, _, _), candidates in groups.items():
         urls.setdefault(family, None)
-        for evidence_id in row.price_evidence_ids:
+        for observed, evidence_id in candidates:
             endpoint = endpoints.get(evidence_id)
             if endpoint is None:
                 continue
-            key = (row.price_observed_at or _NEVER, endpoint.fetched_at, evidence_id)
+            key = (observed, endpoint.fetched_at, evidence_id)
             if family not in best or key > best[family]:
                 best[family] = key
                 urls[family] = endpoint.source_url

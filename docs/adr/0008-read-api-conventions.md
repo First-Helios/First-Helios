@@ -384,9 +384,18 @@ Endpoint is the fetched page. Gold stores no URL, and the API never reads Bronze
   the Gold read. So `apps/api` still reads through `identity` and `gold` only (Decision
   point 9); the Gold read module calls the published provenance contract, as
   `gold/price_index.py` already does.
+- **One Evidence per page.** Every price Evidence of one Menu page cites that page's own
+  Capture. So `menu_source_urls` groups a family's rows by `price_page_id` and resolves only
+  each page's leader, its greatest `(price_observed_at, Evidence id)`. That is one or two ids
+  per family instead of every price's Evidence. The result is the rule above exactly, as long as
+  that invariant holds: within one Capture, the fetch time is the same for every Evidence. A page
+  whose leader does not resolve has all its Evidence resolved in a second query, so the
+  skip-unresolved rule still holds. A row with no `price_page_id` is resolved Evidence by
+  Evidence.
 - **Query count.** One more statement per menu request, whatever the number of families or
   prices: the current venue, its Organization's current peers, the Gold rows, then one
-  provenance read. A venue with no rows makes no provenance read.
+  provenance read. A second provenance read happens only when some page's leader does not
+  resolve. A venue with no rows makes no provenance read.
 
 ### Tests and done-when
 
@@ -397,8 +406,10 @@ Endpoint is the fetched page. Gold stores no URL, and the API never reads Bronze
   request makes four statements whether it serves one price or eighty over two families, and
   only the last reads `bronze.evidence`; the provenance read has an index path on every table it
   joins (planned with sequential scans priced out); the batched contract equals the single
-  lookup for Version- and Capture-targeted Evidence and omits ids the single lookup rejects. The
-  OpenAPI snapshot is regenerated (additive).
+  lookup for Version- and Capture-targeted Evidence and omits ids the single lookup rejects;
+  with a fake lookup, two pages of 50 and 3 prices send exactly their two leaders, and a page
+  whose leader does not resolve sends its other Evidence in a second call. The OpenAPI snapshot
+  is regenerated (additive).
 - *Done when,* through a local read-only API over `helios_laptop`: every `has_menu` venue's
   menus carry `source_url`, with each null counted and explained; five URLs are spot-checked
   against Bronze; and the menu endpoint's p50/p95 latency on those venues is reported before and
@@ -434,7 +445,10 @@ each over a `default_transaction_read_only` session:
   have two Establishment menus each. 18 menus are `establishment` scope and 928 are
   `organization`. **Every menu carries a `source_url`: 0 nulls.** Before the build, all 54,318
   Gold rows cited one or two price Evidence ids. Every one of those 108,593 citations resolves
-  to a Capture, and no family cites more than one endpoint. There are 613 distinct URLs: 136 URLs serve more than one
+  to a Capture, and no family cites more than one endpoint. The 946 families come from 1,015
+  family pages, at most two per family. On every one of those pages, all price Evidence reaches
+  a single Capture, and it is the page Version's own Capture: the one-Evidence-per-page
+  invariant holds on all of this data. There are 613 distinct URLs: 136 URLs serve more than one
   menu (469 menus), for example a chain site shared by single-venue Organizations (47 menus on
   one URL). The URL is still right for each of those menus. Excluding those from the price index
   is ADR-0007's `shared_menu_url` rule, not this endpoint's concern.
@@ -447,14 +461,22 @@ each over a `default_transaction_read_only` session:
   endpoint, and every cited Capture is `succeeded`, has a bundle, and is the target of its
   Evidence.
 - **Latency** (all 941 venues, interleaved before/after, two measured passes after one warm-up
-  pass, n = 1,882 each): p50 **10.2 → 13.3 ms**, p95 **24.9 → 32.5 ms**, max 58 → 75 ms. The
-  largest family (687 rows, 873 distinct Evidence) spends about 18 ms in `menu_source_urls`, of
-  which about 10 ms is SQL. At this table size (about 23k Versions and 26k Captures) the planner
-  chooses a hash join with a sequential scan of `source_record_version` over 873 index probes.
-  Two other query shapes (`UNION ALL`, `LATERAL`) return identical rows in 9–15 ms, so none is
-  a clear win. The index path exists, and the strict test asserts it with sequential scans
-  priced out. Selecting columns instead of ORM entities did not help (within noise). Judged
-  acceptable for a local v1: a few milliseconds per menu click. This is reported, not hidden.
+  pass, n = 1,882 each):
+
+  | Build | p50 | p95 | max |
+  |---|---:|---:|---:|
+  | First build: every Evidence resolved (runs 1 and 2: `main` → branch) | 10.2 → 13.3 ms | 24.9 → 32.5 ms | 58 → 75 ms |
+  | One Evidence per page (run 3: `main` → branch) | 9.95 → 11.45 ms | 22.0 → 25.1 ms | 51 → 57 ms |
+
+  In the first build, the largest family (687 rows, 873 distinct Evidence) spent about 18 ms in
+  `menu_source_urls`, about 10 ms of it in SQL. At this table size (about 23k Versions and 26k
+  Captures) the planner chose a hash join with a sequential scan of `source_record_version`
+  over 873 index probes. `UNION ALL` and `LATERAL` rewrites ran in 9–15 ms, and selecting
+  columns instead of ORM entities did not help. The owner chose the one-Evidence-per-page
+  read (2026-10-23, option 1 of four: the others were resolving through the Menu page's
+  Version, a Gold URL column, and an in-process cache). With it, the same family takes
+  **1.4 ms** in `menu_source_urls` (median of 20). All 946 `source_url` values are identical to
+  the first build's.
 
 ## Implementation notes (2026-09-28)
 
