@@ -484,6 +484,246 @@
         "title": "PriceHistoryResponse",
         "type": "object"
       },
+      "PriceIndexCellList": {
+        "description": "A cursor-paginated page of every price-index row of one area kind.\n\nItems are ordered by ``(area_key, category_kind, category_key,\ncurrency_code)``: text order, not map order. Every cell of the kind spans\n``cell_size_degrees`` north and east of its corner; null for ``all``.\n``as_of`` is the earliest refresh instant on the page; null when ``items``\nis empty. ``next_cursor`` is null on the last page.",
+        "properties": {
+          "area_kind": {
+            "title": "Area Kind",
+            "type": "string"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "cell_size_degrees": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell Size Degrees"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PriceIndexCellResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "area_kind",
+          "cell_size_degrees",
+          "as_of",
+          "items",
+          "next_cursor"
+        ],
+        "title": "PriceIndexCellList",
+        "type": "object"
+      },
+      "PriceIndexCellResponse": {
+        "description": "One price-index row of the listed area kind: its area and its group.\n\n``area_key`` is the value ``GET /v1/venues`` takes as ``area`` with the same\n``area_kind``. ``cell_lat``/``cell_lon`` are the cell's south-west corner;\nnull for the citywide ``all`` row.",
+        "properties": {
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "area_key": {
+            "title": "Area Key",
+            "type": "string"
+          },
+          "category_key": {
+            "title": "Category Key",
+            "type": "string"
+          },
+          "category_kind": {
+            "title": "Category Kind",
+            "type": "string"
+          },
+          "cell_lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell Lat"
+          },
+          "cell_lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell Lon"
+          },
+          "currency_code": {
+            "title": "Currency Code",
+            "type": "string"
+          },
+          "low_sample": {
+            "title": "Low Sample",
+            "type": "boolean"
+          },
+          "max_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Minor"
+          },
+          "median_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Minor"
+          },
+          "min_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Minor"
+          },
+          "min_venues": {
+            "title": "Min Venues",
+            "type": "integer"
+          },
+          "newest_observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Observed At"
+          },
+          "oldest_observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Observed At"
+          },
+          "organization_venue_count": {
+            "title": "Organization Venue Count",
+            "type": "integer"
+          },
+          "p25_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P25 Minor"
+          },
+          "p75_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P75 Minor"
+          },
+          "priced_count": {
+            "title": "Priced Count",
+            "type": "integer"
+          },
+          "unpriced_count": {
+            "title": "Unpriced Count",
+            "type": "integer"
+          },
+          "venue_count": {
+            "title": "Venue Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category_kind",
+          "category_key",
+          "currency_code",
+          "venue_count",
+          "organization_venue_count",
+          "priced_count",
+          "unpriced_count",
+          "min_venues",
+          "low_sample",
+          "p25_minor",
+          "median_minor",
+          "p75_minor",
+          "min_minor",
+          "max_minor",
+          "oldest_observed_at",
+          "newest_observed_at",
+          "age_seconds",
+          "area_key",
+          "cell_lat",
+          "cell_lon"
+        ],
+        "title": "PriceIndexCellResponse",
+        "type": "object"
+      },
       "PriceIndexGroupResponse": {
         "description": "Venue-weighted price statistics for one category and currency of a cell.\n\nEach venue weighs one: its sample is the median of its priced rows, and the\nstatistics are over those venue medians, in integer currency minor units.\n``low_sample`` is true when ``venue_count`` is below ``min_venues``; the\nstatistics are null when ``venue_count`` is 0. ``organization_venue_count``\nvenues were placed through their Organization's own menu. ``priced_count``\nand ``unpriced_count`` count the item/variant rows behind the group.\n``age_seconds`` is the oldest observation's age at request time, never\nnegative; null when nothing is priced.",
         "properties": {
@@ -1036,7 +1276,7 @@
     },
     "/v1/price-index": {
       "get": {
-        "description": "Return the venue-weighted price statistics of the 0.01\u00b0 cell containing ``lat``/``lon``.\n\nOne item per category and currency the index holds for the cell, narrowed\nby ``category_kind`` and ``currency`` when given. Groups below ``min_venues``\nvenues are served with ``low_sample: true``. A cell the index has no row for\nis ``200`` with ``items: []`` and ``as_of: null``.",
+        "description": "Return the venue-weighted price statistics of the cell containing ``lat``/``lon``.\n\nThe cell is the ``area_kind`` grid's (0.01\u00b0 by default). One item per\ncategory and currency the index holds for the cell, narrowed by\n``category_kind`` and ``currency`` when given. Groups below ``min_venues``\nvenues are served with ``low_sample: true``. A cell the index has no row for\nis ``200`` with ``items: []`` and ``as_of: null``.",
         "operationId": "get_price_index_v1_price_index_get",
         "parameters": [
           {
@@ -1063,6 +1303,22 @@
               "minimum": -180,
               "title": "Lon",
               "type": "number"
+            }
+          },
+          {
+            "description": "The grid the point is floored on. The citywide row is read from /v1/price-index/cells?area_kind=all.",
+            "in": "query",
+            "name": "area_kind",
+            "required": false,
+            "schema": {
+              "default": "latlon_grid_0p01",
+              "description": "The grid the point is floored on. The citywide row is read from /v1/price-index/cells?area_kind=all.",
+              "enum": [
+                "latlon_grid_0p01",
+                "latlon_grid_0p05"
+              ],
+              "title": "Area Kind",
+              "type": "string"
             }
           },
           {
@@ -1128,9 +1384,132 @@
         ]
       }
     },
+    "/v1/price-index/cells": {
+      "get": {
+        "description": "Return one page of the ``area_kind`` rows, ordered by area key, category, currency.\n\nThe order is text order, not map order. The cursor does not carry the\nfilters: send the same ones with every page. It names the last row's key, not\na row id, so it survives a refresh; each page's ``as_of`` says which\nsnapshot it came from. A filter that matches nothing is ``200`` with\n``items: []``.",
+        "operationId": "list_price_index_cells_v1_price_index_cells_get",
+        "parameters": [
+          {
+            "description": "The grid to list (0.01\u00b0 or 0.05\u00b0 cells), or the citywide all row.",
+            "in": "query",
+            "name": "area_kind",
+            "required": false,
+            "schema": {
+              "default": "latlon_grid_0p01",
+              "description": "The grid to list (0.01\u00b0 or 0.05\u00b0 cells), or the citywide all row.",
+              "enum": [
+                "latlon_grid_0p01",
+                "latlon_grid_0p05",
+                "all"
+              ],
+              "title": "Area Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "all",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "USD",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Currency"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceIndexCellList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The cursor is malformed."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "limit is out of range, or a filter value is unknown."
+          }
+        },
+        "summary": "List every price-index row of one area kind (cursor-paginated)",
+        "tags": [
+          "price-index"
+        ]
+      }
+    },
     "/v1/venues": {
       "get": {
-        "description": "Return one page of current venues ordered by id, with an opaque cursor.\n\nFilters are ANDed. The cursor does not carry them: send the same filters\nwith every page. A filter that matches nothing is ``200`` with ``items: []``.",
+        "description": "Return one page of current venues ordered by id, with an opaque cursor.\n\nFilters are ANDed. The cursor does not carry them: send the same filters\nwith every page. A filter that matches nothing is ``200`` with ``items: []``.\nThe ``area`` list is geographic: every current venue whose point is in the\narea, not only the price index's contributors.",
         "operationId": "list_venues_v1_venues_get",
         "parameters": [
           {
@@ -1200,7 +1579,7 @@
             }
           },
           {
-            "description": "Only venues whose point lies in this price-index area_key (the 0.01\u00b0 cell named by its south-west corner, e.g. \"30.26,-97.75\").",
+            "description": "Only venues whose point lies in this price-index area_key of area_kind (a cell named by its south-west corner, e.g. \"30.26,-97.75\"; \"all\" with area_kind=all, every venue with a point).",
             "in": "query",
             "name": "area",
             "required": false,
@@ -1214,8 +1593,31 @@
                   "type": "null"
                 }
               ],
-              "description": "Only venues whose point lies in this price-index area_key (the 0.01\u00b0 cell named by its south-west corner, e.g. \"30.26,-97.75\").",
+              "description": "Only venues whose point lies in this price-index area_key of area_kind (a cell named by its south-west corner, e.g. \"30.26,-97.75\"; \"all\" with area_kind=all, every venue with a point).",
               "title": "Area"
+            }
+          },
+          {
+            "description": "The price-index area kind area is a key of (default latlon_grid_0p01). Requires area.",
+            "in": "query",
+            "name": "area_kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "latlon_grid_0p01",
+                    "latlon_grid_0p05",
+                    "all"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The price-index area kind area is a key of (default latlon_grid_0p01). Requires area.",
+              "title": "Area Kind"
             }
           }
         ],
@@ -1248,7 +1650,7 @@
                 }
               }
             },
-            "description": "A query parameter failed validation, or area is not a canonical area_key."
+            "description": "A query parameter failed validation, area is not a canonical area_key of area_kind, or area_kind is given without area."
           }
         },
         "summary": "List venues (cursor-paginated)",

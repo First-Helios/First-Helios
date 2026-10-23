@@ -31,6 +31,7 @@ from apps.api.errors import ApiError, NotFoundError
 from apps.api.item_ids import ItemId, encode_item_id
 from apps.api.pagination import BIGINT_MAX, DEFAULT_LIMIT, MAX_LIMIT, decode_cursor, encode_cursor
 from apps.api.schemas import (
+    AreaKind,
     ErrorResponse,
     MenuItemResponse,
     MenuOptionResponse,
@@ -46,7 +47,7 @@ from packages.helios_core.gold.menu_read import (
     current_menu_rows,
     has_served_menu,
 )
-from packages.helios_core.gold.price_index import GRID_STEP, grid_cell
+from packages.helios_core.gold.price_index import ALL_AREA, AREA_KIND, GRID_STEPS, grid_cell
 from packages.helios_core.identity.models import (
     Establishment,
     Organization,
@@ -70,7 +71,8 @@ _LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {"model": ErrorResponse, "description": "The cursor is malformed."},
     422: {
         "model": ErrorResponse,
-        "description": "A query parameter failed validation, or area is not a canonical area_key.",
+        "description": "A query parameter failed validation, area is not a canonical "
+        "area_key of area_kind, or area_kind is given without area.",
     },
 }
 _GET_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -148,18 +150,14 @@ def _has_menu() -> ColumnElement[bool]:
 
 
 class InvalidAreaError(ApiError):
-    """An ``area`` that is not a canonical price-index ``area_key``."""
+    """An ``area`` that is not a canonical price-index ``area_key`` of its ``area_kind``."""
 
-    def __init__(self) -> None:
-        super().__init__(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "validation_error",
-            "area is not a canonical area_key",
-        )
+    def __init__(self, detail: str = "area is not a canonical area_key of area_kind") -> None:
+        super().__init__(status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", detail)
 
 
-def _area_cell(area: str) -> tuple[Decimal, Decimal]:
-    """The south-west corner of a canonical ``area_key`` ("30.26,-97.75")."""
+def _area_cell(area: str, step: Decimal) -> tuple[Decimal, Decimal]:
+    """The south-west corner of a canonical ``area_key`` ("30.26,-97.75") at ``step``."""
     parts = area.split(",")
     if len(parts) != 2:
         raise InvalidAreaError
@@ -171,20 +169,29 @@ def _area_cell(area: str) -> tuple[Decimal, Decimal]:
         raise InvalidAreaError
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
         raise InvalidAreaError
-    key, cell_lat, cell_lon = grid_cell(latitude, longitude)
+    key, cell_lat, cell_lon = grid_cell(latitude, longitude, step)
     if key != area:
         raise InvalidAreaError
     return cell_lat, cell_lon
 
 
-def _in_area(area: str) -> ColumnElement[bool]:
-    """The venue's Place point lies in the cell, the rule ``grid_cell`` applies."""
-    cell_lat, cell_lon = _area_cell(area)
+def _in_area(area_kind: str, area: str) -> ColumnElement[bool]:
+    """The venue's Place point lies in the area, the rule the refresh places by.
+
+    A grid cell is the half-open range ``grid_cell`` floors into; ``all`` is
+    every Place with a point (ADR-0007 Amendment 3, OQ2).
+    """
+    if area_kind == ALL_AREA:
+        if area != ALL_AREA:
+            raise InvalidAreaError
+        return and_(Place.latitude.is_not(None), Place.longitude.is_not(None))
+    step = GRID_STEPS[area_kind]
+    cell_lat, cell_lon = _area_cell(area, step)
     return and_(
         Place.latitude >= cell_lat,
-        Place.latitude < cell_lat + GRID_STEP,
+        Place.latitude < cell_lat + step,
         Place.longitude >= cell_lon,
-        Place.longitude < cell_lon + GRID_STEP,
+        Place.longitude < cell_lon + step,
     )
 
 
@@ -213,8 +220,16 @@ def list_venues(
         str | None,
         Query(
             max_length=64,
-            description="Only venues whose point lies in this price-index area_key "
-            '(the 0.01° cell named by its south-west corner, e.g. "30.26,-97.75").',
+            description="Only venues whose point lies in this price-index area_key of "
+            'area_kind (a cell named by its south-west corner, e.g. "30.26,-97.75"; '
+            '"all" with area_kind=all, every venue with a point).',
+        ),
+    ] = None,
+    area_kind: Annotated[
+        AreaKind | None,
+        Query(
+            description="The price-index area kind area is a key of (default "
+            "latlon_grid_0p01). Requires area."
         ),
     ] = None,
 ) -> VenueList:
@@ -222,7 +237,11 @@ def list_venues(
 
     Filters are ANDed. The cursor does not carry them: send the same filters
     with every page. A filter that matches nothing is ``200`` with ``items: []``.
+    The ``area`` list is geographic: every current venue whose point is in the
+    area, not only the price index's contributors.
     """
+    if area_kind is not None and area is None:
+        raise InvalidAreaError("area_kind requires area")
     after = decode_cursor(cursor) if cursor is not None else None
     statement = _current_venue_select()
     if has_menu is not None:
@@ -230,7 +249,7 @@ def list_venues(
     if organization is not None:
         statement = statement.where(Establishment.organization_subject_id == organization)
     if area is not None:
-        statement = statement.where(_in_area(area))
+        statement = statement.where(_in_area(area_kind or AREA_KIND, area))
     if after is not None:
         statement = statement.where(Establishment.subject_id > after)
     statement = statement.order_by(Establishment.subject_id).limit(limit + 1)

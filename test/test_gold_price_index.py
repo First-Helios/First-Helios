@@ -24,7 +24,9 @@ from apps.gold.refresh import main
 from packages.helios_core.domains.menu.commands import persist_menu
 from packages.helios_core.gold.models import CurrentMenu, PriceIndex
 from packages.helios_core.gold.price_index import (
+    ALL_AREA,
     AREA_KIND,
+    GRID_STEPS,
     MIN_VENUES,
     grid_cell,
     refresh_price_index,
@@ -68,6 +70,28 @@ def test_grid_cell_floors_to_the_south_west_corner() -> None:
     key, cell_lat, cell_lon = grid_cell(Decimal("-0.000001"), Decimal("0.009999"))
     assert (key, cell_lat, cell_lon) == ("-0.01,0.00", Decimal("-0.01"), Decimal("0.00"))
     assert grid_cell(Decimal("-0.0"), Decimal("-0"))[0] == "0.00,0.00"
+
+
+def test_grid_cell_at_0p05() -> None:
+    step = GRID_STEPS["latlon_grid_0p05"]
+    assert grid_cell(Decimal("30.267153"), Decimal("-97.743057"), step)[0] == "30.25,-97.75"
+    # Boundaries: a corner is inside its cell, a hair below it is in the cell below.
+    assert grid_cell(Decimal("30.25"), Decimal("-97.75"), step)[0] == "30.25,-97.75"
+    assert grid_cell(Decimal("30.299999"), Decimal("-97.700001"), step)[0] == "30.25,-97.75"
+    assert grid_cell(Decimal("30.30"), Decimal("-97.70"), step)[0] == "30.30,-97.70"
+    assert grid_cell(Decimal("30.249999"), Decimal("-97.750001"), step)[0] == "30.20,-97.80"
+    # Whole degrees print with two decimals, and -0 is 0.
+    assert grid_cell(Decimal("22"), Decimal("-97"), step) == (
+        "22.00,-97.00",
+        Decimal("22.00"),
+        Decimal("-97.00"),
+    )
+    assert grid_cell(Decimal("-0.0"), Decimal("-0"), step)[0] == "0.00,0.00"
+    assert grid_cell(Decimal("-0.000001"), Decimal("0.049999"), step)[0] == "-0.05,0.00"
+    # Each 0.01° cell lies in one 0.05° cell: flooring its corner gives the point's.
+    for point in [(Decimal("30.2649"), Decimal("-97.7351")), (Decimal("-0.0001"), Decimal("-180"))]:
+        corner = grid_cell(*point)[1:]
+        assert grid_cell(*corner, step) == grid_cell(*point, step)
 
 
 def test_cli_rejects_an_instant_without_offset() -> None:
@@ -180,8 +204,12 @@ def _menu(
 
 
 def _index(session: Session, points: list[Point]) -> dict[str, PriceIndex]:
+    """The 0.01° rows of these points' cells (a 0.05° key can spell the same)."""
     rows = session.scalars(
-        select(PriceIndex).where(PriceIndex.area_key.in_([_key(p) for p in points]))
+        select(PriceIndex).where(
+            PriceIndex.area_kind == AREA_KIND,
+            PriceIndex.area_key.in_([_key(p) for p in points]),
+        )
     ).all()
     return {row.area_key: row for row in rows}
 
@@ -438,3 +466,106 @@ def test_cli_rebuilds_current_menu_then_the_index(
     assert (row.venue_count, row.median_minor, row.low_sample) == (1, 1050, True)
     assert row.effective_instant == menu_row.effective_instant == E
     assert row.refreshed_at == menu_row.refreshed_at
+
+
+# --------------------------------------------------------------------------- #
+# Area kinds (ADR-0007 Amendment 3), in a database of their own: the ``all`` row
+# aggregates every placed venue, so it is exact only without other suites' rows.
+# --------------------------------------------------------------------------- #
+
+# One 0.05° cell (30.25,-97.75) holding two 0.01° cells, and a venue elsewhere.
+CELL_A = (Decimal("30.2650"), Decimal("-97.7350"))  # 0.01° 30.26,-97.74
+CELL_B = (Decimal("30.2850"), Decimal("-97.7150"))  # 0.01° 30.28,-97.72
+CELL_D = (Decimal("30.3550"), Decimal("-97.6550"))  # 0.01° 30.35,-97.66; 0.05° 30.35,-97.70
+_COUNTS = ("venue_count", "organization_venue_count", "priced_count", "unpriced_count")
+
+
+@pytest.fixture
+def isolated(historical_database_engine: Engine) -> sessionmaker[Session]:
+    migrate("upgrade", "head")
+    return sessionmaker(historical_database_engine, expire_on_commit=False)
+
+
+def _by_kind(session: Session) -> dict[str, dict[str, PriceIndex]]:
+    found: dict[str, dict[str, PriceIndex]] = {}
+    for row in session.scalars(select(PriceIndex)):
+        found.setdefault(row.area_kind, {})[row.area_key] = row
+    return found
+
+
+def _sums(rows: list[PriceIndex]) -> tuple[int, ...]:
+    return tuple(sum(getattr(row, column) for row in rows) for column in _COUNTS)
+
+
+def _every_business_row(session: Session) -> dict[tuple[str, str], dict[str, object]]:
+    return {
+        (row.area_kind, row.area_key): {
+            column.key: getattr(row, column.key)
+            for column in PriceIndex.__table__.columns
+            if column.key not in _BUSINESS_EXCLUDE
+        }
+        for row in session.scalars(select(PriceIndex))
+    }
+
+
+def test_each_kind_aggregates_the_same_placements(isolated: sessionmaker[Session]) -> None:
+    shared_url = f"https://{uuid4().hex}.example.test/menu"
+    with isolated.begin() as session:
+        for amount in (100, 200, 300, 400):  # four venues in A
+            _shop(session, CELL_A, [amount])
+        _shop(session, CELL_B, [500, None])  # one in B, with an unpriced row
+        org, _ = _venue(session, CELL_D)  # one elsewhere, placed via its Organization
+        _menu(session, (org, "organization"), _record(session), [600])
+        for point in (CELL_A, CELL_D):  # a chain menu: left out of every kind
+            org, _ = _venue(session, point)
+            _menu(session, (org, "organization"), _record(session, shared_url), [9999])
+    with isolated.begin() as session:
+        report = refresh_price_index(session, effective_instant=E, refreshed_at=E)
+    with isolated() as session:
+        rows = _by_kind(session)
+        first = _every_business_row(session)
+    assert report.summary() == {
+        "rows": 3 + 2 + 1,
+        "families": 8,
+        "placed": 6,
+        "organization_placed": 1,
+        "no_single_venue": 0,
+        "no_evidence": 0,
+        "shared_menu_url": 2,
+    }
+    fine, coarse, city = rows[AREA_KIND], rows["latlon_grid_0p05"], rows[ALL_AREA][ALL_AREA]
+    assert set(fine) == {"30.26,-97.74", "30.28,-97.72", "30.35,-97.66"}
+    assert set(coarse) == {"30.25,-97.75", "30.35,-97.70"}
+    assert set(rows) == {AREA_KIND, "latlon_grid_0p05", ALL_AREA}
+
+    # Counts compose: all = Σ cells of either grid; a 0.05° row = Σ its 0.01° rows.
+    nested = coarse["30.25,-97.75"]
+    assert _sums([nested]) == _sums([fine["30.26,-97.74"], fine["30.28,-97.72"]]) == (5, 0, 5, 1)
+    assert _sums([city]) == _sums(list(fine.values())) == _sums(list(coarse.values()))
+    assert _sums([city]) == (6, 1, 6, 1)  # the chain's two venues are in no kind
+
+    # low_sample is per row: 4 + 1 venues are two low 0.01° cells, one 0.05° cell at the bar.
+    assert [fine[k].low_sample for k in ("30.26,-97.74", "30.28,-97.72")] == [True, True]
+    assert (nested.venue_count, nested.low_sample) == (MIN_VENUES, False)
+    assert coarse["30.35,-97.70"].low_sample is True
+    assert city.low_sample is False
+
+    # Statistics are over each row's own venue medians, never sums.
+    stats = ("min_minor", "p25_minor", "median_minor", "p75_minor", "max_minor")
+    assert [getattr(nested, s) for s in stats] == [100, 200, 300, 400, 500]
+    assert [getattr(city, s) for s in stats] == [100, 200, 300, 500, 600]
+
+    # Coordinates: each grid's south-west corner; none for all.
+    assert (nested.cell_lat, nested.cell_lon) == (Decimal("30.25"), Decimal("-97.75"))
+    assert (city.cell_lat, city.cell_lon) == (None, None)
+    every = [row for kind in rows.values() for row in kind.values()]
+    assert {(row.effective_instant, row.refreshed_at) for row in every} == {(E, E)}
+
+    # Deterministic: a second rebuild changes only refreshed_at, one value for every row.
+    with isolated.begin() as session:
+        refresh_price_index(session, effective_instant=E)
+    with isolated() as session:
+        second = _every_business_row(session)
+        refreshed = set(session.scalars(select(PriceIndex.refreshed_at)))
+    assert second == first
+    assert len(refreshed) == 1
