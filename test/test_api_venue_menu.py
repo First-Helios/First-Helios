@@ -10,9 +10,10 @@ refresh on committed rows in the disposable ``*_test`` database.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 import pytest
@@ -26,8 +27,8 @@ from apps.api.main import app
 from apps.api.routes.venues import _shape_menu
 from packages.helios_core.domains.menu.commands import persist_menu
 from packages.helios_core.domains.menu.selection import ContextRef, SelectionRequest, TargetRef
-from packages.helios_core.gold import refresh_current_menu
-from packages.helios_core.gold.menu_read import CurrentMenuRow
+from packages.helios_core.gold import menu_read, refresh_current_menu
+from packages.helios_core.gold.menu_read import CurrentMenuRow, menu_source_urls
 from packages.helios_core.gold.models import CurrentMenu
 from packages.helios_core.identity import (
     admit_source_record,
@@ -40,8 +41,10 @@ from packages.helios_core.identity import (
 from packages.helios_core.identity.contracts import ResolvedScopeRequest
 from packages.helios_core.provenance.contracts import (
     BronzeObservation,
+    CaptureReference,
     PersistedBronzeObservation,
     persist_source_record_observation,
+    source_endpoint_for_evidence,
 )
 from test.menu_support import aggregate
 from test.provider_support import ScopeFixture, decision, migrate
@@ -132,6 +135,7 @@ def _row(
     observed_at: datetime | None = OBSERVED,
     source_kind: str | None = "llm",
     confidence: Decimal | None = Decimal("0.9000"),
+    evidence_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     return {
         "subject_id": subject[0],
@@ -148,7 +152,7 @@ def _row(
         "price_source_kind": source_kind,
         "price_observed_at": observed_at,
         "price_confidence": confidence,
-        "price_evidence_ids": [record.evidence_id],
+        "price_evidence_ids": [record.evidence_id] if evidence_ids is None else evidence_ids,
         "content_name": name,
         "content_evidence_ids": [],
         "section_name": section_name,
@@ -254,6 +258,8 @@ def _plain(
         price_source_kind="jsonld",
         price_observed_at=observed_at,
         price_confidence=None,
+        price_page_id=None,
+        price_evidence_ids=(),
         content_name=name,
         content_description=None,
         section_name=section_name,
@@ -355,7 +361,9 @@ def test_menu_shape_staleness_and_source(client: TestClient, session: Session) -
     assert body["venue_id"] == venue
     assert body["as_of"] == "2026-09-30T12:00:00Z"
     (menu,) = body["menus"]
+    assert set(menu) == {"scope", "source_url", "sections"}
     assert menu["scope"] == "establishment"
+    assert menu["source_url"].endswith(".example.test/menu")
     (section,) = menu["sections"]
     # Named from the rows under it: the section has no row of its own.
     assert (section["key"], section["name"]) == ("12:tacos", "Tacos")
@@ -443,6 +451,10 @@ def test_sole_venue_organization_menu_is_labelled_and_follows_local(
 
     body = client.get(f"/v1/venues/{venue}/menu").json()
     assert [menu["scope"] for menu in body["menus"]] == ["establishment", "organization"]
+    # Each family carries its own page: the Organization's record is not the venue's.
+    local_url, organization_url = (menu["source_url"] for menu in body["menus"])
+    assert local_url is not None and organization_url is not None
+    assert local_url != organization_url
 
 
 def test_chain_organization_menu_is_not_fanned_out(client: TestClient, session: Session) -> None:
@@ -527,6 +539,295 @@ def test_menu_query_never_seq_scans_current_menu(client: TestClient, session: Se
     finally:
         connection.execute(text("SET LOCAL enable_seqscan = on"))
     assert "current_menu" not in _seq_scans(plan["Plan"])
+
+
+# --------------------------------------------------------------------------- #
+# source_url (ADR-0008 Amendment 4).
+# --------------------------------------------------------------------------- #
+
+
+def _reobserve(
+    session: Session,
+    record: PersistedBronzeObservation,
+    url: str,
+    observed_at: datetime,
+    fetched_at: datetime | None = None,
+) -> int:
+    """A later page of ``record``'s stream, fetched from ``url``; returns its Evidence id."""
+    namespace, external_key = session.execute(
+        text(
+            "SELECT s.namespace, r.external_key FROM bronze.source_record r "
+            "JOIN bronze.source s ON s.id = r.source_id WHERE r.id = :id"
+        ),
+        {"id": record.source_record_id},
+    ).one()
+    token = uuid4().hex
+    return persist_source_record_observation(
+        session,
+        BronzeObservation(
+            source_namespace=namespace,
+            source_kind="fixture",
+            external_key=external_key,
+            observed_at=observed_at,
+            content_hash=f"sha256:{token}",
+            source_payload={"id": token},
+            evidence_locator="$.id",
+            source_url=url,
+            fetched_at=fetched_at,
+            capture_content_hash=f"sha256:cap:{token}",
+            bundle_path=f"fixture/{token}",
+        ),
+    ).evidence_id
+
+
+def _menu_source_url(client: TestClient, venue: int) -> str | None:
+    (menu,) = client.get(f"/v1/venues/{venue}/menu").json()["menus"]
+    return cast("str | None", menu["source_url"])
+
+
+def test_source_url_is_the_most_recent_page_of_a_multi_page_family(
+    client: TestClient, session: Session
+) -> None:
+    _, venue = _venue(session)
+    subject = (venue, "establishment")
+    record = _record(session)
+    newest_at, middle_at = OBSERVED + timedelta(days=3), OBSERVED + timedelta(days=1)
+    newest = _reobserve(session, record, "https://new.example.test/menu", newest_at)
+    middle = _reobserve(session, record, "https://middle.example.test/menu", middle_at)
+    _insert(
+        session,
+        [
+            _row(subject, record, "item", _path(TACOS, ("item", "a")), amount=1),
+            _row(
+                subject,
+                record,
+                "item",
+                _path(TACOS, ("item", "b")),
+                amount=2,
+                observed_at=newest_at,
+                evidence_ids=[newest],
+            ),
+            _row(
+                subject,
+                record,
+                "item",
+                _path(TACOS, ("item", "c")),
+                amount=3,
+                observed_at=middle_at,
+                evidence_ids=[middle],
+            ),
+        ],
+    )
+    assert _menu_source_url(client, venue) == "https://new.example.test/menu"
+
+
+def test_source_url_ties_break_on_fetch_time_then_evidence_id(
+    client: TestClient, session: Session
+) -> None:
+    _, by_fetch = _venue(session)
+    _, by_id = _venue(session)
+    record = _record(session)
+    # Every price has one instant. The latest fetch has the smallest Evidence id.
+    late = _reobserve(session, record, "https://late.example.test/menu", LATER, fetched_at=LATER)
+    first = _reobserve(session, record, "https://first.example.test/menu", LATER, fetched_at=E)
+    second = _reobserve(session, record, "https://second.example.test/menu", LATER, fetched_at=E)
+    assert late < first < second
+    _insert(
+        session,
+        [
+            _row(
+                (venue, "establishment"),
+                record,
+                "item",
+                _path(TACOS, ("item", key)),
+                amount=1,
+                observed_at=LATER,
+                evidence_ids=ids,
+            )
+            for venue, families in (
+                (by_fetch, [[first], [late, second]]),
+                (by_id, [[second], [first]]),
+            )
+            for key, ids in zip("ab", families, strict=True)
+        ],
+    )
+    assert _menu_source_url(client, by_fetch) == "https://late.example.test/menu"
+    assert _menu_source_url(client, by_id) == "https://second.example.test/menu"
+
+
+def test_source_url_skips_unresolved_evidence_and_is_null_when_none_resolves(
+    client: TestClient, session: Session
+) -> None:
+    _, venue = _venue(session)
+    _, bare = _venue(session)
+    record = _record(session)
+    unknown = 2**62  # an Evidence id no row has: it reaches no Capture
+    local, other = (venue, "establishment"), (bare, "establishment")
+    _insert(
+        session,
+        [
+            # The newest price cites only unresolvable Evidence: the next one wins.
+            _row(
+                local,
+                record,
+                "item",
+                _path(TACOS, ("item", "a")),
+                amount=1,
+                observed_at=LATER,
+                evidence_ids=[unknown],
+            ),
+            _row(local, record, "item", _path(TACOS, ("item", "b")), amount=2),
+            # No price Evidence at all, or none that resolves: null.
+            _row(other, record, "item", _path(TACOS, ("item", "a")), amount=1, evidence_ids=[]),
+            _row(
+                other, record, "item", _path(TACOS, ("item", "b")), amount=2, evidence_ids=[unknown]
+            ),
+        ],
+    )
+    url = source_endpoint_for_evidence(session, record.evidence_id).source_url
+    assert _menu_source_url(client, venue) == url
+    assert _menu_source_url(client, bare) is None
+
+
+def test_source_url_resolves_in_one_query_however_many_prices(
+    client: TestClient, session: Session
+) -> None:
+    organization, venue = _venue(session)
+    statements: list[str] = []
+
+    def _capture(_conn: Any, _cursor: Any, statement: str, *_: Any) -> None:
+        statements.append(statement)
+
+    def _statements() -> list[str]:
+        statements.clear()
+        connection = session.connection()
+        event.listen(connection, "before_cursor_execute", _capture)
+        try:
+            assert client.get(f"/v1/venues/{venue}/menu").status_code == 200
+        finally:
+            event.remove(connection, "before_cursor_execute", _capture)
+        return list(statements)
+
+    local, shared = _record(session), _record(session)
+    _insert(
+        session,
+        [_row((venue, "establishment"), local, "item", _path(TACOS, ("item", "a")), amount=1)],
+    )
+    few = _statements()
+    rows = []
+    for subject, record in (
+        ((venue, "establishment"), local),
+        ((organization, "organization"), shared),
+    ):
+        for index in range(40):
+            evidence = _reobserve(
+                session,
+                record,
+                f"https://p{index}.example.test/menu",
+                OBSERVED + timedelta(minutes=index),
+            )
+            rows.append(
+                _row(
+                    subject,
+                    record,
+                    "item",
+                    _path(TACOS, ("item", f"n{index}")),
+                    amount=index + 1,
+                    evidence_ids=[evidence],
+                )
+            )
+    _insert(session, rows)
+    many = _statements()
+
+    # The venue, its Organization's peers, the Gold rows, then one provenance read.
+    assert len(few) == len(many) == 4
+    assert [statement for statement in many if "bronze.evidence" in statement] == [many[-1]]
+
+
+class _FakeEndpoints:
+    """Stands in for ``source_endpoints_for_evidence``; records the ids each call asks for."""
+
+    def __init__(self, urls: dict[int, str]) -> None:
+        self.urls = urls
+        self.calls: list[list[int]] = []
+
+    def __call__(self, _session: object, evidence_ids: Any) -> dict[int, CaptureReference]:
+        ids = sorted(set(evidence_ids))
+        self.calls.append(ids)
+        return {
+            eid: CaptureReference(eid, self.urls[eid], "https", E, None, "succeeded", None)
+            for eid in ids
+            if eid in self.urls
+        }
+
+
+def _page_rows(page: int, ids: range, observed_at: datetime) -> list[CurrentMenuRow]:
+    return [
+        replace(
+            _plain("item", TACOS, ("item", f"{page}-{eid}")),
+            price_page_id=page,
+            price_evidence_ids=(eid,),
+            price_observed_at=observed_at,
+        )
+        for eid in ids
+    ]
+
+
+def test_source_url_resolves_one_leader_per_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    old, new = range(1, 51), range(100, 103)
+    urls = dict.fromkeys(old, "https://old.example.test/")
+    urls |= dict.fromkeys(new, "https://new.example.test/")
+    fake = _FakeEndpoints(urls)
+    monkeypatch.setattr(menu_read, "source_endpoints_for_evidence", fake)
+    rows = _page_rows(10, old, OBSERVED) + _page_rows(11, new, OBSERVED + timedelta(days=1))
+
+    assert menu_source_urls(cast("Session", None), rows) == {
+        ("establishment", 1, 1, "page"): "https://new.example.test/"
+    }
+    assert fake.calls == [[50, 102]]  # each page's latest-observed, greatest Evidence id
+
+
+def test_source_url_resolves_a_page_whose_leader_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urls = dict.fromkeys(range(1, 50), "https://page.example.test/")  # 50 reaches no Capture
+    fake = _FakeEndpoints(urls)
+    monkeypatch.setattr(menu_read, "source_endpoints_for_evidence", fake)
+
+    rows = _page_rows(10, range(1, 51), OBSERVED)
+    assert menu_source_urls(cast("Session", None), rows) == {
+        ("establishment", 1, 1, "page"): "https://page.example.test/"
+    }
+    assert fake.calls == [[50], list(range(1, 51))]
+
+
+def test_source_url_query_never_seq_scans_provenance(client: TestClient, session: Session) -> None:
+    organization, venue = _venue(session)
+    _seed_tacos(session, (organization, "organization"))
+    _seed_tacos(session, (venue, "establishment"))
+    statements: list[tuple[str, Any]] = []
+
+    def _capture(_conn: Any, _cursor: Any, statement: str, parameters: Any, *_: Any) -> None:
+        if "bronze.evidence" in statement:
+            statements.append((statement, parameters))
+
+    connection = session.connection()
+    event.listen(connection, "before_cursor_execute", _capture)
+    try:
+        assert client.get(f"/v1/venues/{venue}/menu").status_code == 200
+    finally:
+        event.remove(connection, "before_cursor_execute", _capture)
+
+    ((statement, parameters),) = statements
+    connection.execute(text("SET LOCAL enable_seqscan = off"))
+    try:
+        (plan,) = connection.exec_driver_sql(
+            f"EXPLAIN (FORMAT JSON) {statement}", parameters
+        ).scalar_one()
+    finally:
+        connection.execute(text("SET LOCAL enable_seqscan = on"))
+    provenance = {"evidence", "source_record_version", "capture", "source_endpoint"}
+    assert not set(_seq_scans(plan["Plan"])) & provenance
 
 
 # --------------------------------------------------------------------------- #
@@ -646,3 +947,4 @@ def test_end_to_end_from_menu_through_refresh(disposable_database_engine: Engine
     )
     assert (price["source_kind"], price["confidence"]) == ("dom", 1.0)
     assert price["observed_at"] == "2026-09-01T12:00:00Z"
+    assert menu["source_url"] == f"https://{token}-l.example.test/menu"

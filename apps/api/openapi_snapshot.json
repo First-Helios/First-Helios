@@ -286,7 +286,7 @@
         "type": "object"
       },
       "MenuResponse": {
-        "description": "One source menu (a source record's page stream) and the scope it was\nclaimed for. ``organization`` prices are the operator's shared claims,\nnever merged into this venue's own (ADR-0005 \u00a711).",
+        "description": "One source menu (a source record's page stream) and the scope it was\nclaimed for. ``organization`` prices are the operator's shared claims,\nnever merged into this venue's own (ADR-0005 \u00a711). ``source_url`` is the\npage its most recent price was read from (ADR-0008 Amendment 4); null when\nno price's provenance reaches a fetched page.",
         "properties": {
           "scope": {
             "enum": [
@@ -302,10 +302,22 @@
             },
             "title": "Sections",
             "type": "array"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           }
         },
         "required": [
           "scope",
+          "source_url",
           "sections"
         ],
         "title": "MenuResponse",
@@ -1716,7 +1728,7 @@
     },
     "/v1/venues/{venue_id}/menu": {
       "get": {
-        "description": "Return the venue's current menu from Gold, or 404 if no such current venue.\n\nThe venue's own (Establishment) menus come first. Its Organization's menus\nfollow, labelled ``organization``, only when this venue is the\nOrganization's one current venue: a chain's shared menu is never fanned out\nto its locations (ADR-0005 \u00a711). Every price carries ``observed_at``, its\nage at request time and its source kind; ``as_of`` is the oldest Gold\nrefresh instant behind the served rows. A current venue with no menu in\nGold is ``200`` with ``menus: []``.",
+        "description": "Return the venue's current menu from Gold, or 404 if no such current venue.\n\nThe venue's own (Establishment) menus come first. Its Organization's menus\nfollow, labelled ``organization``, only when this venue is the\nOrganization's one current venue: a chain's shared menu is never fanned out\nto its locations (ADR-0005 \u00a711). Every price carries ``observed_at``, its\nage at request time and its source kind; ``as_of`` is the oldest Gold\nrefresh instant behind the served rows. Each menu's ``source_url`` is the\npage its most recent price was read from, resolved at request time in one\nprovenance read for the whole request (ADR-0008 Amendment 4). A current\nvenue with no menu in Gold is ``200`` with ``menus: []``.",
         "operationId": "get_venue_menu_v1_venues__venue_id__menu_get",
         "parameters": [
           {
