@@ -1,4 +1,4 @@
-"""The ``gold.current_menu`` read model (ADR-0006) and ``gold.price_index`` (ADR-0007).
+"""``gold.current_menu`` (ADR-0006), ``gold.price_index`` (ADR-0007) and its placements (ADR-0020).
 
 One row per projected ``(scope subject, source record, root key, target native
 path, effective context, currency)`` (``uq_gold_current_menu``): the
@@ -298,5 +298,61 @@ class PriceIndex(Base):
     max_minor: Mapped[int | None] = mapped_column(BigInteger)
     oldest_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     newest_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Refresh-run metadata: excluded from rebuild-equality comparison.
+    refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PriceIndexPlacement(Base):
+    """``gold.price_index_placement``: the families the price index counts, and where (ADR-0020).
+
+    One row per kept ``(scope subject, source record)`` family
+    (``uq_gold_price_index_placement``; ADR-0007 Amendment 1 §5): the venue it is
+    placed at and that venue's Place point at ``effective_instant``. Shared
+    chain or platform menus and multi-venue Organizations are absent, as from
+    every index row. Written by the price-index refresh in the same
+    transaction and at the same instant as ``gold.price_index`` and rebuilt in
+    full each time, so a drawn area is aggregated from exactly the placements
+    behind the stored rows. Nothing references it.
+    """
+
+    __tablename__ = "price_index_placement"
+    __table_args__: Any = (
+        UniqueConstraint(
+            "subject_id", "subject_kind", "source_record_id", name="uq_gold_price_index_placement"
+        ),
+        Index("ix_gold_price_index_placement_point", "latitude", "longitude"),
+        CheckConstraint(
+            "subject_kind IN ('organization', 'establishment')",
+            name="ck_gold_price_index_placement_scope",
+        ),
+        # An Establishment family counts at that Establishment; an Organization
+        # family at its one current venue, flagged via_organization.
+        CheckConstraint(
+            "via_organization = (subject_kind = 'organization') "
+            "AND (via_organization OR venue_id = subject_id)",
+            name="ck_gold_price_index_placement_venue",
+        ),
+        CheckConstraint(
+            "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180",
+            name="ck_gold_price_index_placement_point",
+        ),
+        CheckConstraint(
+            "isfinite(effective_instant) AND isfinite(refreshed_at)",
+            name="ck_gold_price_index_placement_times",
+        ),
+        {"schema": SCHEMA_GOLD},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # The family, as in gold.current_menu.
+    subject_id: Mapped[int] = mapped_column(BigInteger)
+    subject_kind: Mapped[str] = mapped_column(String(32))
+    source_record_id: Mapped[int] = mapped_column(BigInteger)
+    # Where it counts: the Establishment and its Place point at effective_instant.
+    venue_id: Mapped[int] = mapped_column(BigInteger)
+    latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    via_organization: Mapped[bool] = mapped_column()
+    effective_instant: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # Refresh-run metadata: excluded from rebuild-equality comparison.
     refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

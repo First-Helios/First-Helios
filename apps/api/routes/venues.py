@@ -10,7 +10,8 @@ never mutates them. A venue's menu is read from ``gold.current_menu`` through
 The list's filters (ADR-0018 §A) are each one index-backed predicate:
 ``has_menu`` a semi-join on ``ix_gold_current_menu_scope``, ``organization``
 ``ix_establishment_organization_subject_id``, and ``area`` a price-index cell
-range on ``ix_place_latitude_longitude``.
+range on ``ix_place_latitude_longitude``. ``boundary`` (ADR-0020 owner
+decision 7) is a bbox range on that index, then exact ray casting in Python.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from sqlalchemy.orm import (
     aliased,
 )
 
+from apps.api.boundaries import BOUNDARY_DESCRIPTION, InvalidBoundaryError, boundary_param
 from apps.api.db import get_session
 from apps.api.errors import ApiError, NotFoundError
 from apps.api.item_ids import ItemId, encode_item_id
@@ -65,6 +67,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm.util import AliasedClass
 
     from apps.api.schemas import Channel, MenuScope, PriceState, SourceKind
+    from packages.helios_core.gold.price_index import Boundary
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
@@ -75,7 +78,8 @@ _LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": ErrorResponse,
         "description": "A query parameter failed validation, area is not a canonical "
-        "area_key of area_kind, or area_kind is given without area.",
+        "area_key of area_kind, area_kind is given without area, boundary breaks a rule "
+        "(the detail names it), or boundary is given with area or area_kind.",
     },
 }
 _GET_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -198,6 +202,48 @@ def _in_area(area_kind: str, area: str) -> ColumnElement[bool]:
     )
 
 
+# Bbox candidates read per round trip while a boundary page fills.
+_BOUNDARY_BATCH = 1000
+
+
+def _ids_inside(
+    session: Session,
+    statement: Select[tuple[Establishment, Organization, Place]],
+    boundary: Boundary,
+    after: int | None,
+    wanted: int,
+) -> list[int]:
+    """The first ``wanted`` venue ids after ``after`` whose point is inside ``boundary``.
+
+    Candidates come from ``statement`` (the other filters) in id order within
+    the boundary's bbox, a range on ``ix_place_latitude_longitude``; exact ray
+    casting keeps those inside (ADR-0020 owner decision 7). The page fills
+    batch by batch until ``wanted`` pass or the candidates run out.
+    """
+    candidates = (
+        statement.with_only_columns(Establishment.subject_id, Place.latitude, Place.longitude)
+        .where(
+            Place.latitude.between(boundary.south, boundary.north),
+            Place.longitude.between(boundary.west, boundary.east),
+        )
+        .order_by(Establishment.subject_id)
+        .limit(_BOUNDARY_BATCH)
+    )
+    ids: list[int] = []
+    while True:
+        batch = session.execute(
+            candidates if after is None else candidates.where(Establishment.subject_id > after)
+        ).all()
+        for subject_id, latitude, longitude in batch:
+            if boundary.contains(latitude, longitude):
+                ids.append(subject_id)
+                if len(ids) == wanted:
+                    return ids
+        if len(batch) < _BOUNDARY_BATCH:
+            return ids
+        after = batch[-1][0]
+
+
 @router.get(
     "",
     response_model=VenueList,
@@ -235,16 +281,29 @@ def list_venues(
             "latlon_grid_0p01). Requires area."
         ),
     ] = None,
+    boundary: Annotated[
+        str | None,
+        Query(
+            description="Only venues whose point lies inside this drawn area. "
+            + BOUNDARY_DESCRIPTION
+            + " Not with area or area_kind."
+        ),
+    ] = None,
 ) -> VenueList:
     """Return one page of current venues ordered by id, with an opaque cursor.
 
     Filters are ANDed. The cursor does not carry them: send the same filters
     with every page. A filter that matches nothing is ``200`` with ``items: []``.
-    The ``area`` list is geographic: every current venue whose point is in the
-    area, not only the price index's contributors.
+    The ``area`` and ``boundary`` lists are geographic: every current venue
+    whose point is in the area, not only the price index's contributors. One
+    geographic filter at a time: ``boundary`` with ``area`` or ``area_kind`` is
+    ``422``.
     """
+    if boundary is not None and (area is not None or area_kind is not None):
+        raise InvalidBoundaryError("boundary cannot be combined with area or area_kind")
     if area_kind is not None and area is None:
         raise InvalidAreaError("area_kind requires area")
+    shape = boundary_param(boundary) if boundary is not None else None
     after = decode_cursor(cursor) if cursor is not None else None
     statement = _current_venue_select()
     if has_menu is not None:
@@ -253,7 +312,10 @@ def list_venues(
         statement = statement.where(Establishment.organization_subject_id == organization)
     if area is not None:
         statement = statement.where(_in_area(area_kind or AREA_KIND, area))
-    if after is not None:
+    if shape is not None:
+        ids = _ids_inside(session, statement, shape, after, limit + 1)
+        statement = statement.where(Establishment.subject_id.in_(ids))
+    elif after is not None:
         statement = statement.where(Establishment.subject_id > after)
     statement = statement.order_by(Establishment.subject_id).limit(limit + 1)
     rows = session.execute(statement).tuples().all()

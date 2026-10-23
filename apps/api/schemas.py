@@ -278,6 +278,73 @@ class PriceIndexCellList(BaseModel):
         return _utc_iso(value) if value is not None else None
 
 
+class PriceIndexAreaResponse(BaseModel):
+    """The price index of the placed venues inside a drawn boundary (ADR-0020 §3).
+
+    ``boundary`` is the normalized corners as ``[lat, lon]`` pairs, without a
+    closing repeat. Each item is computed exactly as a stored price-index row
+    is, over the venues the index places inside the boundary: shared chain
+    menus and multi-venue organizations are left out, so ``venue_count`` can
+    be lower than the number of venues with a menu there. ``as_of`` is the
+    refresh instant of those placements; null, with ``items: []``, when the
+    boundary holds no placed venue.
+    """
+
+    boundary: list[tuple[float, float]]
+    as_of: datetime | None
+    items: list[PriceIndexGroupResponse]
+
+    @field_serializer("as_of")
+    def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
+class AreaItemResponse(BaseModel):
+    """One priced item or variant row behind a drawn area's price index.
+
+    ``item_id`` is the node's id for ``GET /v1/items/{item_id}/price-history``.
+    ``item_name`` is the item's name; ``variant_name`` the variant's (e.g. a
+    size), null on an item's own price. ``age_seconds`` is the observation's age
+    at request time, never negative; null when there is no observation time.
+    """
+
+    venue_id: int
+    venue_name: str | None
+    item_id: str
+    section_name: str | None
+    item_name: str | None
+    variant_name: str | None
+    amount_minor: int
+    currency_code: str
+    channel: Channel
+    service_period: str | None
+    observed_at: datetime | None
+    age_seconds: int | None
+    source_kind: SourceKind | None
+
+    @field_serializer("observed_at")
+    def _serialize_observed_at(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
+class AreaItemList(BaseModel):
+    """A cursor-paginated page of the priced rows behind a drawn area's price index.
+
+    Items are ordered by ``amount_minor`` (cheapest first), then by the row's
+    business key, so the order is total. ``as_of`` is the earliest refresh
+    instant on the page; null when ``items`` is empty. ``next_cursor`` is null
+    on the last page.
+    """
+
+    as_of: datetime | None
+    items: list[AreaItemResponse]
+    next_cursor: str | None
+
+    @field_serializer("as_of")
+    def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
 #: Accepted history states (ADR-0018 §B6): the served states plus the derived
 #: no-value reasons history mode can return.
 HistoryState = Literal["priced", "unknown", "unavailable", "absent", "withdrawn", "unresolved_base"]
