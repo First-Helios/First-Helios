@@ -78,6 +78,15 @@ This section is the single current-status page. Other docs link here.
     `area_kind` (`latlon_grid_0p01` default, `latlon_grid_0p05`, or `all`),
     cursor-paginated in key order on `uq_gold_price_index`, with
     `cell_size_degrees` and `as_of` (ADR-0007 Amendment 3).
+- **Web client** (separate repo,
+  [First-Helios_Frontend](https://github.com/4Fortune8/First-Helios_Frontend); ADR-0019 steps
+  5–6, built 2026-10-23, PRs #1–#3 there awaiting merge): a no-build client (native ES modules,
+  Leaflet 1.9.4 vendored, OSM tiles) with the citywide headline and 0.05° map, the venues in a
+  cell, a venue's menu with dated prices and source links, a price's trail, and an About page.
+  It runs locally only: `python3 dev_server.py --api http://127.0.0.1:8000` there serves it on
+  `127.0.0.1:8080` and proxies `/v1`. Its `tools/contract_check.py` fails if this repo's
+  `apps/api/openapi_snapshot.json` lacks a path or parameter it uses. V1 is on that repo's
+  `V1-Graveyard` branch.
 - **Overture discovery**: `apps/discovery/` (`__main__.py`, `overture.py`,
   `pipeline.py`). Seeds food venues from Overture Places into Bronze and
   Identity, with conservative dedupe and Nominatim gap-fill
@@ -668,7 +677,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
 | [0017](./docs/adr/0017-extraction-harness-generalization.md) | Extraction harness generalization: invariance, multi-model acceptance, per-model configuration | Accepted (items 1–2; items 3–4 deferred) |
 | [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Accepted (built, P7-2) |
-| [0019](./docs/adr/0019-public-v1-site.md) | The path to a public v1 site: frontend, page set, area UX, public deploy | Accepted in part (Q1–Q3, Q6c, Q7, Q9; public deploy deferred) |
+| [0019](./docs/adr/0019-public-v1-site.md) | The path to a public v1 site: frontend, page set, area UX, public deploy | Accepted in part (Q1–Q3, Q6c, Q7, Q9; public deploy deferred); steps 1–6 (local v1) built, the frontend PRs awaiting merge |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the

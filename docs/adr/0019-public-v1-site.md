@@ -11,7 +11,12 @@ step 3 built 2026-10-22 (P8-5,
 revision `d978bedc2523`; [build notes](./0007-gold-price-index-projection.md#build-notes-amendment-3));
 step 4 built 2026-10-22 (P8-6,
 [ADR-0008 Amendment 4](./0008-read-api-conventions.md#amendment-4-2026-10-22-source_url-on-each-menu),
-`source_url` only, no migration). Steps 5–8 are not built.
+`source_url` only, no migration). Steps 5–6 built 2026-10-23 (P8-7) in the frontend repo,
+awaiting the owner's merge: [#1](https://github.com/4Fortune8/First-Helios_Frontend/pull/1)
+(V1 archived on `V1-Graveyard`), [#2](https://github.com/4Fortune8/First-Helios_Frontend/pull/2)
+(skeleton and map), [#3](https://github.com/4Fortune8/First-Helios_Frontend/pull/3) (the other
+pages); see the build notes under §5. With them, local v1 is complete. Steps 7–8 are not built
+(deferred with hosting).
 **Date:** 2026-10-21
 **Phase:** 8 (operations), plus the frontend that ROADMAP §2 keeps in a separate repo
 **Extends:** [ADR-0008](./0008-read-api-conventions.md) (read API; its Unit B staging deploy and
@@ -321,9 +326,30 @@ Each step is its own PR or owner action. Steps 2–4 and 7 are expensive-to-reve
    check.
    *Done when:* the map renders the citywide headline and every cell from the local API, with
    low-sample cells hatched, at 375 px and desktop widths, and the contract check passes.
+   *Built 2026-10-23 (P8-7,
+   [frontend #1](https://github.com/4Fortune8/First-Helios_Frontend/pull/1) and
+   [#2](https://github.com/4Fortune8/First-Helios_Frontend/pull/2)):* V1 kept on `V1-Graveyard`
+   at `909e6e0`; `main` replaced by a no-build client (hash routes, native ES modules, one CSS
+   file with tokens and a dark mode, a strict CSP meta); Leaflet 1.9.4 vendored byte for byte
+   from the npm tarball (`dist.integrity` matched); `api.js`, a stdlib `dev_server.py` on
+   `127.0.0.1` that proxies `/v1`, `/healthz` and `/readyz`, and `tools/contract_check.py`
+   (fails on a path or parameter missing from `apps/api/openapi_snapshot.json`). Against the API
+   over `helios_laptop` (read-only), the map shows the `all` headline (median USD 11.00,
+   7.00–14.25, 472 venues) and all 83 cells (59 hatched with their venue count, 24 shaded) at
+   375 and 1440 px, light and dark, with no console errors.
 6. **The other pages.** Venue list, venue menu, price trail, About.
    *Done when:* clicking a cell → its venues → a menu → a price trail works against real data;
    errors show their `trace_id`; every price shows its observation date.
+   *Built 2026-10-23 (P8-7, [frontend #3](https://github.com/4Fortune8/First-Helios_Frontend/pull/3)):*
+   venue list (`has_menu=true` default, the cell's `area`/`area_kind`, the cell's own index row,
+   load more by cursor), venue menu (menus → sections → items → sizes/add-ons; every price with
+   amount, observation date, age and source kind; a source-page link per menu), price trail (a
+   table, with a client-derived "what changed" column), About/method. The click path ran with
+   real mouse events in headless Chrome at 375 and 1440 px: map → cell `30.35,-97.75` → venue
+   12315 → menu (6 prices, all dated, source link `rel="noopener noreferrer nofollow"`) → trail
+   (2 points) → Back; a superseded route never mounts; no console errors. Screenshots cover venues
+   1398 (two menus), 18 (Organization scope) and 20325 (687 prices, 46 sections), a 404 venue and
+   a malformed `item_id`, both showing their `trace_id`. No API gap needed a backend change.
 7. **Prod host (owner provisioning + one `infra/` PR).** The owner creates the VM, the domain and
    SSH access. A PR adds a prod Compose overlay (no published ports beyond loopback), the nginx
    site config (static files, proxy, `limit_req`, 429 body) and `docs/runbooks/prod.md`.
