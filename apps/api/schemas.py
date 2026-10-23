@@ -177,6 +177,10 @@ class VenueMenuResponse(BaseModel):
 #: ``course`` joins ``CategoryKind`` additively (ADR-0016 §6).
 CategoryKind = Literal["all"]
 CurrencyCode = Literal["USD"]
+#: Price-index area kinds (ADR-0007 Amendment 3): two lat/lon grids and the
+#: citywide ``all`` row. A point names a cell only on a grid.
+AreaKind = Literal["latlon_grid_0p01", "latlon_grid_0p05", "all"]
+GridAreaKind = Literal["latlon_grid_0p01", "latlon_grid_0p05"]
 
 
 class PriceIndexGroupResponse(BaseModel):
@@ -231,6 +235,40 @@ class PriceIndexResponse(BaseModel):
     cell_size_degrees: float
     as_of: datetime | None
     items: list[PriceIndexGroupResponse]
+
+    @field_serializer("as_of")
+    def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
+class PriceIndexCellResponse(PriceIndexGroupResponse):
+    """One price-index row of the listed area kind: its area and its group.
+
+    ``area_key`` is the value ``GET /v1/venues`` takes as ``area`` with the same
+    ``area_kind``. ``cell_lat``/``cell_lon`` are the cell's south-west corner;
+    null for the citywide ``all`` row.
+    """
+
+    area_key: str
+    cell_lat: float | None
+    cell_lon: float | None
+
+
+class PriceIndexCellList(BaseModel):
+    """A cursor-paginated page of every price-index row of one area kind.
+
+    Items are ordered by ``(area_key, category_kind, category_key,
+    currency_code)``: text order, not map order. Every cell of the kind spans
+    ``cell_size_degrees`` north and east of its corner; null for ``all``.
+    ``as_of`` is the earliest refresh instant on the page; null when ``items``
+    is empty. ``next_cursor`` is null on the last page.
+    """
+
+    area_kind: str
+    cell_size_degrees: float | None
+    as_of: datetime | None
+    items: list[PriceIndexCellResponse]
+    next_cursor: str | None
 
     @field_serializer("as_of")
     def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:

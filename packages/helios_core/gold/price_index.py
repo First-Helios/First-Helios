@@ -5,7 +5,7 @@ defined once, by the Menu selector. Item and variant rows count; modifiers (add-
 amounts) and section-level prices do not. Rules (ADR-0007 Amendment 1):
 
 * **Placement.** Each ``(scope subject, source record)`` family is placed at one
-  venue's lat/lon grid cell or left out. An Establishment-scoped family is placed
+  venue's point or left out. An Establishment-scoped family is placed
   at that Establishment. An Organization-scoped family (own-site pages, and
   platform pages several venues share) is placed at its Organization's only
   current operating Establishment, unless the menu URL its prices were read from
@@ -19,8 +19,13 @@ amounts) and section-level prices do not. Rules (ADR-0007 Amendment 1):
   ``category_kind`` once a course label exists (ADR-0007 Amendment 1).
 * **Honesty.** Groups below :data:`MIN_VENUES` venues are kept and flagged
   ``low_sample``. Non-priced rows are counted, never in a percentile.
+* **Area kinds** (ADR-0007 Amendment 3). Each kept placement counts once per
+  kind: in its 0.01° cell, its 0.05° cell and the citywide ``all`` row. The
+  aggregate is the same for every kind, so ``all``'s counts are the sums over
+  either grid's rows and a 0.05° row's counts the sums over the 0.01° rows
+  inside it; the percentiles are over each row's own venue medians.
 
-The rebuild replaces the whole table. Business columns are a deterministic
+The rebuild replaces the whole table, every kind at one instant. Business columns are a deterministic
 function of ``current_menu`` and Identity at ``effective_instant``;
 ``refreshed_at`` is run metadata. Nothing outside ``gold.price_index`` is
 written; the caller owns the commit.
@@ -42,8 +47,12 @@ from packages.helios_core.provenance.contracts import source_endpoint_for_eviden
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-AREA_KIND = "latlon_grid_0p01"
+AREA_KIND = "latlon_grid_0p01"  # the default kind of the point and area reads
 GRID_STEP = Decimal("0.01")  # ~1.1 km north-south, ~1.0 km east-west in Austin
+# Grid kinds and their steps. 0.05 is a multiple of 0.01 and both floor from 0,
+# so each 0.01° cell lies in exactly one 0.05° cell.
+GRID_STEPS = {AREA_KIND: GRID_STEP, "latlon_grid_0p05": Decimal("0.05")}
+ALL_AREA = "all"  # the citywide kind, and its one area_key
 MIN_VENUES = 5
 INDEXED_TARGET_KINDS = ("item", "variant")
 
@@ -77,24 +86,22 @@ class _Placement:
     subject_id: int
     source_record_id: int
     venue_id: int
-    area_key: str
-    cell_lat: Decimal
-    cell_lon: Decimal
+    latitude: Decimal
+    longitude: Decimal
     via_organization: bool
 
 
-def grid_cell(latitude: Decimal, longitude: Decimal) -> tuple[str, Decimal, Decimal]:
-    """The 0.01° cell containing a point, keyed by its south-west corner."""
+def grid_cell(
+    latitude: Decimal, longitude: Decimal, step: Decimal = GRID_STEP
+) -> tuple[str, Decimal, Decimal]:
+    """The ``step``° cell containing a point, keyed by its south-west corner."""
     # + 0 turns a -0 input (a float query parameter) into 0: Postgres numeric has
     # no negative zero, so the refresh never keys a "-0.00" cell.
     latitude, longitude = latitude + 0, longitude + 0
-    # quantize: a whole-degree input would otherwise print as "2.2E+1", not "22.00"
-    cell_lat = ((latitude / GRID_STEP).to_integral_value(ROUND_FLOOR) * GRID_STEP).quantize(
-        GRID_STEP
-    )
-    cell_lon = ((longitude / GRID_STEP).to_integral_value(ROUND_FLOOR) * GRID_STEP).quantize(
-        GRID_STEP
-    )
+    # quantize: a whole-degree input would otherwise print as "2.2E+1", not "22.00".
+    # Both steps have two decimals, so every key prints with two.
+    cell_lat = ((latitude / step).to_integral_value(ROUND_FLOOR) * step).quantize(step)
+    cell_lon = ((longitude / step).to_integral_value(ROUND_FLOOR) * step).quantize(step)
     return f"{cell_lat},{cell_lon}", cell_lat, cell_lon
 
 
@@ -131,15 +138,13 @@ def _place(
             org_urls[subject_id, source_record_id] = source_endpoint_for_evidence(
                 session, evidence_id
             ).source_url
-        area_key, cell_lat, cell_lon = grid_cell(location.latitude, location.longitude)
         placements.append(
             _Placement(
                 subject_id,
                 source_record_id,
                 location.establishment_subject_id,
-                area_key,
-                cell_lat,
-                cell_lon,
+                location.latitude,
+                location.longitude,
                 via_organization,
             )
         )
@@ -161,7 +166,8 @@ def _place(
 
 
 # Venue medians first, then percentiles across venues, per (area, category,
-# currency). ``groups`` also yields rows whose only item/variant rows are
+# currency) of one area kind; ``:area_keys`` and the cell arrays carry each
+# placement's area of that kind. ``groups`` also yields rows whose only item/variant rows are
 # non-priced (venue_count 0, statistics NULL), so coverage gaps stay visible.
 _INSERT_SQL = text("""
     WITH placed AS (
@@ -251,21 +257,27 @@ def refresh_price_index(
     report = PriceIndexReport()
     placements = _place(session, effective_instant, report)
     session.execute(delete(PriceIndex))
-    if placements:
+    refreshed_at = refreshed_at if refreshed_at is not None else datetime.now(UTC)
+    for area_kind in (*GRID_STEPS, ALL_AREA) if placements else ():
+        step = GRID_STEPS.get(area_kind)
+        areas = [
+            (ALL_AREA, None, None) if step is None else grid_cell(p.latitude, p.longitude, step)
+            for p in placements
+        ]
         session.execute(
             _INSERT_SQL,
             {
                 "subjects": [p.subject_id for p in placements],
                 "records": [p.source_record_id for p in placements],
                 "venues": [p.venue_id for p in placements],
-                "area_keys": [p.area_key for p in placements],
-                "cell_lats": [p.cell_lat for p in placements],
-                "cell_lons": [p.cell_lon for p in placements],
+                "area_keys": [area[0] for area in areas],
+                "cell_lats": [area[1] for area in areas],
+                "cell_lons": [area[2] for area in areas],
                 "via_organization": [p.via_organization for p in placements],
-                "area_kind": AREA_KIND,
+                "area_kind": area_kind,
                 "effective_instant": effective_instant,
                 "min_venues": MIN_VENUES,
-                "refreshed_at": refreshed_at if refreshed_at is not None else datetime.now(UTC),
+                "refreshed_at": refreshed_at,
             },
         )
     session.flush()

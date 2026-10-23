@@ -39,18 +39,22 @@ This section is the single current-status page. Other docs link here.
   with a menu, 472 placed in 267 cells, 97.0% of them `low_sample`. Section and item
   names (ADR-0006 Amendment 1, revision `c95d883737db`): `section_name` and `item_name` on
   every row, filled by the refresh; after the P8-3 refresh all 9,527 served sections and all
-  52,396 items have a name. Served by `GET /v1/price-index` (Amendment 2). Accepted, not
-  built yet: a citywide `all` row, a 0.05° grid and `GET /v1/price-index/cells` (ADR-0007
+  52,396 items have a name. Served by `GET /v1/price-index` (Amendment 2). Area kinds
+  (ADR-0007
   [Amendment 3](./docs/adr/0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
-  ADR-0019 step 3).
+  revision `d978bedc2523`, ADR-0019 step 3): each placed venue also counts in a 0.05° cell and
+  a citywide `all` row (NULL coordinates), rebuilt in the same refresh. After the P8-5 refresh
+  on `helios_laptop`: 267 cells at 0.01°, 83 at 0.05° (71.1% `low_sample`, 357 of 472 venues
+  in cells with ≥ 5), and `all` over 472 venues, median 1100 (USD 11.00).
 - **Read API**: `apps/api/`. FastAPI, conventions per ADR-0008:
   - `GET /healthz`: liveness, no database.
   - `GET /readyz`: readiness, checks the database.
   - `GET /v1/venues`: current venues, cursor-paginated (`limit`, `cursor`).
     Optional filters, ANDed: `has_menu` (the menu endpoint would return a
     menu), `organization` (an `organization_id`, now on every venue) and
-    `area` (a price-index `area_key`, the 0.01° cell). Each is index-backed
-    (ADR-0018).
+    `area` (a price-index `area_key`, the 0.01° cell; with `area_kind` a 0.05°
+    cell, or `area_kind=all&area=all` for every venue with a point). Each is
+    index-backed (ADR-0018, ADR-0007 Amendment 3).
   - `GET /v1/venues/{venue_id}`: one current venue.
   - `GET /v1/venues/{venue_id}/menu`: the venue's current menu from
     `gold.current_menu`. Each price carries `observed_at`, its age at request
@@ -65,8 +69,13 @@ This section is the single current-status page. Other docs link here.
     (`absent`) or `withdrawn`.
   - `GET /v1/price-index?lat=&lon=`: the `gold.price_index` rows of the 0.01°
     cell containing the point, with venue counts, `low_sample`, the observed
-    range and `as_of`. Optional `category_kind` and `currency` filters; a cell
-    with no row is `200` with `items: []`.
+    range and `as_of`. Optional `area_kind` (`latlon_grid_0p01` default or
+    `latlon_grid_0p05`), `category_kind` and `currency` filters; a cell with no
+    row is `200` with `items: []`.
+  - `GET /v1/price-index/cells`: every `gold.price_index` row of one
+    `area_kind` (`latlon_grid_0p01` default, `latlon_grid_0p05`, or `all`),
+    cursor-paginated in key order on `uq_gold_price_index`, with
+    `cell_size_degrees` and `as_of` (ADR-0007 Amendment 3).
 - **Overture discovery**: `apps/discovery/` (`__main__.py`, `overture.py`,
   `pipeline.py`). Seeds food venues from Overture Places into Bronze and
   Identity, with conservative dedupe and Nominatim gap-fill
@@ -645,7 +654,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
 | [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted (commit check cost, Amendment 1) |
 | [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted (Amendment 1 accepted and built 2026-10-22) |
-| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2); Amendment 3 (area kinds, cell list) Accepted, not built |
+| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2; area kinds and cell list built, Amendment 3) |
 | [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted (Unit A; Unit B, the staging deploy, not built; history reads, Amendment 3) |
 | [0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) | Venue discovery: source, ingestion, dedupe/minting, and schedule | Accepted |
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |

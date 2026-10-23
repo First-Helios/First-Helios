@@ -261,6 +261,69 @@ def test_canonical_area_matching_nothing_is_200_empty(client: TestClient) -> Non
 
 
 # --------------------------------------------------------------------------- #
+# area_kind (ADR-0007 Amendment 3): which price-index grid area is a key of.
+# --------------------------------------------------------------------------- #
+
+
+def test_area_is_the_0p05_cell_half_open(client: TestClient, session: Session) -> None:
+    organization = _organization(session)
+    inside = [
+        _venue(session, organization, point=("30.2500", "-97.7500")),  # the south-west corner
+        _venue(session, organization, point=("30.2650", "-97.7350")),  # another 0.01° cell
+        _venue(session, organization, point=("30.299999", "-97.700001")),
+    ]
+    _venue(session, organization, point=("30.3000", "-97.7250"))  # the next cell north
+    _venue(session, organization, point=("30.2750", "-97.7000"))  # the next cell east
+    _venue(session, organization, point=("30.2499", "-97.7250"))  # the cell south
+    _venue(session, organization, point=None)
+
+    params = {"organization": organization, "area": "30.25,-97.75"}
+    coarse = client.get("/v1/venues", params={**params, "area_kind": "latlon_grid_0p05"})
+    assert [item["id"] for item in coarse.json()["items"]] == inside
+    # The same key under the default 0.01° kind is the one 0.01° cell at that corner.
+    fine = client.get("/v1/venues", params=params).json()["items"]
+    explicit = client.get("/v1/venues", params={**params, "area_kind": "latlon_grid_0p01"})
+    assert [item["id"] for item in fine] == [inside[0]]
+    assert explicit.json()["items"] == fine
+
+
+def test_area_kind_all_lists_every_venue_with_a_point(client: TestClient, session: Session) -> None:
+    organization = _organization(session)
+    located = [
+        _venue(session, organization, point=("30.2650", "-97.7450")),
+        _venue(session, organization, point=("-45.0000", "170.0000")),
+    ]
+    _venue(session, organization, point=None)  # no point: not placed, not listed
+
+    params = {"organization": organization, "area_kind": "all", "area": "all"}
+    assert [item["id"] for item in client.get("/v1/venues", params=params).json()["items"]] == (
+        located
+    )
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"area_kind": "latlon_grid_0p05", "area": "30.26,-97.75"},  # a 0.01°-only key
+        {"area_kind": "latlon_grid_0p05", "area": "30.250,-97.75"},
+        {"area_kind": "latlon_grid_0p05", "area": "all"},
+        {"area_kind": "all", "area": "30.25,-97.75"},
+        {"area_kind": "all", "area": "ALL"},
+        {"area": "all"},  # all is not a 0.01° key
+        {"area_kind": "all"},  # a kind alone names no area
+        {"area_kind": "latlon_grid_0p05"},
+        {"area_kind": "latlon_grid_0p10", "area": "30.25,-97.75"},
+    ],
+)
+def test_area_kind_and_area_must_name_an_area(client: TestClient, params: dict[str, str]) -> None:
+    response = client.get("/v1/venues", params=params)
+    assert response.status_code == 422, params
+    body = response.json()
+    assert body["code"] == "validation_error"
+    assert set(body) == {"detail", "code", "trace_id"}
+
+
+# --------------------------------------------------------------------------- #
 # Index use (ROADMAP Phase 7: every filter combination is index-backed).
 # --------------------------------------------------------------------------- #
 
@@ -288,10 +351,17 @@ _COMBINATIONS = [
     {"has_menu": "false", "area": "30.26,-97.75"},
     {"organization": "1", "area": "30.26,-97.75"},
     {"has_menu": "true", "organization": "1", "area": "30.26,-97.75"},
+    {"area_kind": "latlon_grid_0p05", "area": "30.25,-97.75"},
+    {"has_menu": "true", "area_kind": "latlon_grid_0p05", "area": "30.25,-97.75"},
+    {"organization": "1", "area_kind": "latlon_grid_0p05", "area": "30.25,-97.75"},
+    {"area_kind": "all", "area": "all"},
+    {"has_menu": "false", "area_kind": "all", "area": "all"},
 ]
 
 
-@pytest.mark.parametrize("params", _COMBINATIONS, ids=lambda p: "&".join(sorted(p)))
+@pytest.mark.parametrize(
+    "params", _COMBINATIONS, ids=lambda p: "&".join(f"{k}={v}" for k, v in sorted(p.items()))
+)
 def test_filtered_list_never_seq_scans(
     client: TestClient, session: Session, params: dict[str, str]
 ) -> None:
@@ -326,6 +396,7 @@ def test_filtered_list_never_seq_scans(
     scans = _seq_scans(plan["Plan"])
     assert "current_menu" not in scans
     assert "place" not in scans
-    if "area" in params and "organization" not in params:
+    if "area" in params and "organization" not in params and params["area"] != "all":
         # With no other selective predicate, the cell range drives the Place read.
+        # "Has a point" (area_kind=all) is not selective, so no index is pinned for it.
         assert "ix_place_latitude_longitude" in _indexes(plan["Plan"])

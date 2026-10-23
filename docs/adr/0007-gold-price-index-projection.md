@@ -6,7 +6,8 @@ the first slice (table, migration, refresh, CLI) is built with an `all` category
 only; the `course` axis follows. The API is authorized by
 [Amendment 2](#amendment-2-2026-10-01-the-price-index-api).
 [Amendment 3](#amendment-3-2026-10-22-area-kinds-and-the-cell-list) (the `all` and 0.05°
-area kinds, `GET /v1/price-index/cells`) is **Accepted** (2026-10-22, P8-4), not built yet.
+area kinds, `GET /v1/price-index/cells`) is **Accepted** (2026-10-22, P8-4) and **built**
+(2026-10-22, P8-5, revision `d978bedc2523`).
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune — adopt the shape below
 (lat/lon grid geospatial axis), defer the build.
@@ -413,7 +414,8 @@ dependency. Code: `packages/helios_core/gold/price_index_read.py`,
 ## Amendment 3 (2026-10-22): area kinds and the cell list
 
 **Status: Accepted 2026-10-22 by the owner, OQ1–OQ5 as recommended (see
-[Owner decision](#owner-decision-amendment-3)); not built yet.** Proposed 2026-10-22 (session
+[Owner decision](#owner-decision-amendment-3)); built 2026-10-22, session P8-5, revision
+`d978bedc2523` (see [Build notes](#build-notes-amendment-3)).** Proposed 2026-10-22 (session
 P8-4). It is [ADR-0019](./0019-public-v1-site.md) §5 build step 3, which the owner's ADR-0019 Q3
 answer approved in direction only ("this answer approves the direction, not unseen migration
 SQL"); OQ5 now approves the SQL below.
@@ -702,3 +704,80 @@ the migration probes (disposable database only).
         helios_laptop var/p8-4/expected.py --out var/p8-4/expected.json
     … with_db.py helios_laptop var/p8-4/venues_check.py
     … with_db.py helios_laptop var/p8-4/cells_plan.py
+
+### Build notes (Amendment 3)
+
+Built 2026-10-22, session P8-5, as proposed (points 1–9, OQ1–OQ5):
+
+- **Migration `d978bedc2523`** (after `c95d883737db`): the upgrade and downgrade SQL above,
+  verbatim. The reviewed SQL is in
+  `docs/reviews/sql/2026-10-22-p8-5-area-kinds-{upgrade,downgrade}.sql` (named for the build
+  session, not the `p8-4` the Tests section above wrote; no `CASCADE`, one `TABLE gold.` each), pinned by `test/test_gold_area_kinds_migration.py`. Its populated round
+  trip (one row of each kind) leaves only the 0.01° row after the downgrade, every other table's
+  count unchanged and both columns NOT NULL with the old CHECK; one test per CHECK rejection listed
+  above. The model declares the same CHECK, so `alembic check` is clean.
+- **Refresh** (`gold/price_index.py`): `_Placement` now carries the venue's point;
+  `grid_cell(lat, lon, step=GRID_STEP)`; `GRID_STEPS` maps the two grid kinds to 0.01 and 0.05 and
+  `ALL_AREA = "all"`. `_place` runs once; `_INSERT_SQL` (unchanged) runs once per kind with that
+  kind's keys and coordinates (NULL for `all`), after one `DELETE`, with one `effective_instant`
+  and one `refreshed_at`.
+- **Read contract** (`gold/price_index_read.py`): `price_index_cell(..., area_kind=)` floors at
+  the kind's step; `price_index_cells(session, area_kind, *, category_kind, currency_code, after,
+  limit)` returns `PriceIndexCellRow`s (area key, coordinates, the `PriceIndexRow` group) by a
+  row comparison on `uq_gold_price_index`. The route asks for `limit + 1` rows, as `/v1/venues`
+  does.
+- **API:** `GET /v1/price-index/cells` (`PriceIndexCellList`, `PriceIndexCellResponse`). The
+  cursor codec is `encode_cell_cursor`/`decode_cell_cursor` in `apps/api/pagination.py`:
+  canonical-only, each string within its column length (`CELL_KEY_LENGTHS`, pinned to the model
+  by a test), no NUL, and a lone surrogate escape is `400` rather than an encode error.
+  `area_kind` on `/v1/price-index` is `GridAreaKind` (`all` is `422`, OQ1); on `/v1/venues` it is
+  `AreaKind | None`, `area_kind` without `area` is `422`, and `all` takes only `area=all` (OQ2).
+  The OpenAPI snapshot adds the path, the two schemas and the two params; no existing field or
+  param is removed or narrowed (only descriptions change).
+- **Tests:** count sums (`all` = Σ either grid, 0.05° = Σ nested 0.01°), per-kind `low_sample`
+  (4 + 1 venues), `all`'s percentiles over every venue median, the shared-menu exclusion on every
+  kind, determinism and one instant, all in a database of their own (the `all` row aggregates
+  every placed venue); `grid_cell` at 0.05° (negative coordinates, `-0`, whole degrees,
+  boundaries, nesting); `/cells` shape per kind, full walks at `limit` 1, 2 and 200 against the
+  database's own key order (`en_US.UTF-8` collation), a cursor that survives a rebuild, 16
+  malformed cursors (`400`), `422`s; `/v1/price-index?area_kind=latlon_grid_0p05`; `/v1/venues`
+  half-open at 0.05°, `all&all`, nine `422`s. No-seq-scan: `/cells` for each kind × filters ×
+  cursor uses `uq_gold_price_index` (the cursor in its Index Cond); `/v1/venues` at 0.05° uses
+  `ix_place_latitude_longitude` on fixtures; `all` has no Seq Scan on `identity.place`.
+  `menu.currency` is immutable and the CHECK allows only `category_kind = 'all'`, so the filter
+  test can show only that matching rows are kept.
+- **Verification:** strict `make ci` on a new `helios_p85_test`: 1,558 passed; the one failure
+  is `test_menu_commit_check` (`SET track_functions` needs a superuser locally) and the one error
+  a teardown `DROP DATABASE … WITH (FORCE)` lacking permission to terminate a backend in
+  `test_location_overrides` (its file passes 26/26 on a re-run). `alembic check`: no new
+  operations.
+- **`helios_laptop`** (owner Q6): nothing else connected. `pg_dump` 03:26:29Z–03:26:31Z
+  (2026-10-23 UTC; `var/laptop-run/helios_laptop-2026-10-22-pre-p8-5.dump`, main checkout,
+  29,406,812 bytes, sha256 `d96666d08ece7c8480e666eecc9aef3a729347af564ab30dcb3ffa940bd08e06`),
+  `alembic upgrade head` to `d978bedc2523` (03:26:37Z), then `python -m apps.gold.refresh`
+  (03:26:41Z–03:34:17Z, **7 min 36 s**, about 2% under P8-3's 7 min 46 s; the two added
+  aggregates cost no visible time). Report: 54,318 `current_menu` rows, 946 families, 477 placed
+  (459 via Organization), 469 shared-menu, 0 `no_single_venue`, 0 `no_evidence`, **351 rows**
+  (267 + 83 + 1); `effective_instant` 2026-10-23T03:26:42Z.
+- **Done-when, met** (local API over `helios_laptop`, `default_transaction_read_only=on`):
+  - `/cells?area_kind=latlon_grid_0p05` pages through **83 cells** (one page at `limit=200`; 83
+    pages at `limit=1`, same order), 59 `low_sample` (71.1%), 357 venues in cells with ≥ 5,
+    largest 95 at `30.25,-97.75`. `latlon_grid_0p01` still **267 rows** (2 pages), 259 low.
+  - **The `all` row:** `venue_count` **472** (F3's 475 within its stated error, −0.6%),
+    `organization_venue_count` 459, `priced_count` 24,879, `unpriced_count` 0, p25/median/p75
+    **700/1100/1425**, min/max 50/46800, observed 2026-10-02T08:41:41Z to 2026-10-22T05:36:04Z.
+  - The four counts sum to the same totals over each kind. All 351 rows equal P8-4's read-only
+    recompute (`expected.json`) field by field: Menu and Identity did not change in between.
+  - `/v1/price-index?lat=30.27&lon=-97.74&area_kind=latlon_grid_0p05` → `30.25,-97.75`,
+    `cell_size_degrees` 0.05, 95 venues, 649/1040/1400. `area_kind=all` there is `422`.
+  - `/v1/venues?area_kind=latlon_grid_0p05&area=30.25,-97.75` lists **1,660** (175 with
+    `has_menu=true`); `area_kind=all&area=all` lists 9,996, the unfiltered count (every venue has a
+    point); `area_kind` alone and a 0.01°-only key under 0.05° are `422`.
+  - EXPLAIN (read-only, sequential scans on and off): each `/cells` query is an Index Scan on
+    `uq_gold_price_index` with the row comparison in the Index Cond. The venue lists at 0.05° and
+    `all` walk `establishment_pkey` in order with `LIMIT` and join `place` by `place_pkey`, as
+    measured in P8-4; no Seq Scan in any plan.
+- **Scripts** (untracked, this session's worktree `var/p8-5/`): `db.sh`/`run.py` (strict tests
+  against `helios_p85_test`), `snapshots.py`, `api.sh` (read-only API on 127.0.0.1:8781),
+  `done_when.py` (`done_when.json`), `explain_built.py` (`explain_built.out`), `ro.sh` with
+  `measure.sql`/`activity.sql`.

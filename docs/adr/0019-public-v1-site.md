@@ -6,9 +6,10 @@
 Build progress (§5): step 1 done 2026-10-22 (P8-1,
 [record](../reviews/2026-10-22-p8-1-gold-fill.md)); step 2 built 2026-10-22 (P8-3,
 [ADR-0006 Amendment 1](./0006-gold-menu-read-models.md#amendment-1-2026-10-22-section-names-and-variant-only-item-names));
-step 3 accepted 2026-10-22 (P8-4,
-[ADR-0007 Amendment 3](./0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list)),
-build next. Steps 3–8 are not built.
+step 3 built 2026-10-22 (P8-5,
+[ADR-0007 Amendment 3](./0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
+revision `d978bedc2523`; [build notes](./0007-gold-price-index-projection.md#build-notes-amendment-3)).
+Steps 4–8 are not built.
 **Date:** 2026-10-21
 **Phase:** 8 (operations), plus the frontend that ROADMAP §2 keeps in a separate repo
 **Extends:** [ADR-0008](./0008-read-api-conventions.md) (read API; its Unit B staging deploy and
@@ -303,6 +304,9 @@ Each step is its own PR or owner action. Steps 2–4 and 7 are expensive-to-reve
    *Done when:* `curl /v1/price-index/cells?area_kind=latlon_grid_0p05` pages through every
    cell; the `all` row matches F3's venue count within the stated error; there are no-seq-scan
    tests; and the snapshot is regenerated.
+   *Built 2026-10-22 (P8-5, revision `d978bedc2523`):* on `helios_laptop`, 83 cells at 0.05°
+   (59 `low_sample`), the `all` row over 472 venues (F3 475, −0.6%; p25/median/p75
+   700/1100/1425), 267 rows at 0.01° unchanged; no-seq-scan tests pass; snapshot regenerated.
 4. **Small wire additions (ADR-0008 Amendment 4).** `source_url` on each `MenuResponse`, read
    through the provenance contract, and `rate_limited` in `ErrorCode`.
    *Done when:* the menu wire carries the page URL, and the snapshot is regenerated.

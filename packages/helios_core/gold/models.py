@@ -183,9 +183,10 @@ class CurrentMenu(Base):
     refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-# Policy vocabularies (ADR-0007 Amendment 1). A new grid resolution or category
-# scheme (e.g. ``course``) is a new value here, not a new table or grain.
-AREA_KINDS = ("latlon_grid_0p01",)
+# Policy vocabularies (ADR-0007 Amendments 1 and 3). A new grid resolution or
+# category scheme (e.g. ``course``) is a new value here, not a new table or grain.
+# ``all`` is the citywide row: every placed venue, with no cell coordinates.
+AREA_KINDS = ("latlon_grid_0p01", "latlon_grid_0p05", "all")
 CATEGORY_KINDS = ("all",)
 
 _STATS = (
@@ -242,6 +243,11 @@ class PriceIndex(Base):
             "cell_lat BETWEEN -90 AND 90 AND cell_lon BETWEEN -180 AND 180",
             name="ck_gold_price_index_cell",
         ),
+        CheckConstraint(
+            "(area_kind = 'all' AND area_key = 'all' AND cell_lat IS NULL AND cell_lon IS NULL) "
+            "OR (area_kind <> 'all' AND cell_lat IS NOT NULL AND cell_lon IS NOT NULL)",
+            name="ck_gold_price_index_area",
+        ),
         CheckConstraint("currency_code ~ '^[A-Z]{3}$'", name="ck_gold_price_index_currency"),
         CheckConstraint(
             "venue_count >= 0 AND organization_venue_count BETWEEN 0 AND venue_count "
@@ -270,9 +276,9 @@ class PriceIndex(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     # Grain: area x category x currency.
     area_kind: Mapped[str] = mapped_column(String(32))
-    area_key: Mapped[str] = mapped_column(String(64))  # "<cell_lat>,<cell_lon>"
-    cell_lat: Mapped[Decimal] = mapped_column(Numeric(9, 6))  # south-west corner
-    cell_lon: Mapped[Decimal] = mapped_column(Numeric(9, 6))
+    area_key: Mapped[str] = mapped_column(String(64))  # "<cell_lat>,<cell_lon>", or "all"
+    cell_lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))  # south-west corner
+    cell_lon: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))  # NULL for ``all``
     category_kind: Mapped[str] = mapped_column(String(32))
     category_key: Mapped[str] = mapped_column(String(128))
     currency_code: Mapped[str] = mapped_column(String(3))
