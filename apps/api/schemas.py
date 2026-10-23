@@ -154,9 +154,12 @@ class MenuSectionResponse(BaseModel):
 class MenuResponse(BaseModel):
     """One source menu (a source record's page stream) and the scope it was
     claimed for. ``organization`` prices are the operator's shared claims,
-    never merged into this venue's own (ADR-0005 §11)."""
+    never merged into this venue's own (ADR-0005 §11). ``source_url`` is the
+    page its most recent price was read from (ADR-0008 Amendment 4); null when
+    no price's provenance reaches a fetched page."""
 
     scope: MenuScope
+    source_url: str | None
     sections: list[MenuSectionResponse]
 
 

@@ -11,7 +11,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from packages.helios_core.provenance.models import (
@@ -35,7 +35,7 @@ from packages.helios_core.provenance.validation import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
     from datetime import datetime
 
     from sqlalchemy.orm import Session
@@ -484,6 +484,34 @@ def source_endpoint_for_evidence(session: Session, evidence_id: int) -> CaptureR
     if endpoint is None:
         raise ValueError("Capture has no endpoint")
     return _capture_reference(capture, endpoint)
+
+
+def source_endpoints_for_evidence(
+    session: Session, evidence_ids: Iterable[int]
+) -> dict[int, CaptureReference]:
+    """:func:`source_endpoint_for_evidence` for many Evidence IDs in one query.
+
+    The same Capture rule: a Version-targeted Evidence reaches its Version's
+    Capture, a Capture-targeted one its own. An ID that is unknown or reaches no
+    Capture is absent from the result instead of raising.
+    """
+    ids = sorted(set(evidence_ids))
+    if not ids:
+        return {}
+    rows = session.execute(
+        select(Evidence.id, Capture, SourceEndpoint)
+        .outerjoin(SourceRecordVersion, SourceRecordVersion.id == Evidence.source_record_version_id)
+        .join(
+            Capture,
+            Capture.id == func.coalesce(SourceRecordVersion.capture_id, Evidence.capture_id),
+        )
+        .join(SourceEndpoint, SourceEndpoint.id == Capture.source_endpoint_id)
+        .where(Evidence.id.in_(ids))
+    ).all()
+    return {
+        evidence_id: _capture_reference(capture, endpoint)
+        for evidence_id, capture, endpoint in rows
+    }
 
 
 def source_record_is_rejected_only(session: Session, source_record_id: int) -> bool:

@@ -61,7 +61,9 @@ This section is the single current-status page. Other docs link here.
     time and its source kind. The menu nests sections → items →
     variants/modifiers. It also includes the Organization's menu when this
     venue is the Organization's only current venue. Every priced node carries
-    an `id` for its price history.
+    an `id` for its price history. Each menu carries `source_url`, the page its
+    most recent price was read from, resolved at request time through the
+    provenance contract (ADR-0008 Amendment 4).
   - `GET /v1/items/{item_id}/price-history`: the accepted trail behind a menu
     node's prices, one trail per context and currency, read from committed
     Menu through the selector's history mode (ADR-0018, ADR-0008 Amendment 3).

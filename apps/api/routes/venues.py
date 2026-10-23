@@ -44,8 +44,11 @@ from apps.api.schemas import (
 )
 from packages.helios_core.gold.menu_read import (
     CurrentMenuRow,
+    MenuFamily,
     current_menu_rows,
     has_served_menu,
+    menu_family,
+    menu_source_urls,
 )
 from packages.helios_core.gold.price_index import ALL_AREA, AREA_KIND, GRID_STEPS, grid_cell
 from packages.helios_core.identity.models import (
@@ -419,8 +422,10 @@ def get_venue_menu(
     Organization's one current venue: a chain's shared menu is never fanned out
     to its locations (ADR-0005 §11). Every price carries ``observed_at``, its
     age at request time and its source kind; ``as_of`` is the oldest Gold
-    refresh instant behind the served rows. A current venue with no menu in
-    Gold is ``200`` with ``menus: []``.
+    refresh instant behind the served rows. Each menu's ``source_url`` is the
+    page its most recent price was read from, resolved at request time in one
+    provenance read for the whole request (ADR-0008 Amendment 4). A current
+    venue with no menu in Gold is ``200`` with ``menus: []``.
     """
     venue = session.execute(
         _current_venue_select()
@@ -444,12 +449,17 @@ def get_venue_menu(
 
     rows = current_menu_rows(session, scopes)
     now = datetime.now(UTC)
-    families: dict[tuple[str, int, str], list[CurrentMenuRow]] = {}
+    families: dict[MenuFamily, list[CurrentMenuRow]] = {}
     for row in rows:
-        families.setdefault((row.subject_kind, row.source_record_id, row.root_key), []).append(row)
+        families.setdefault(menu_family(row), []).append(row)
+    source_urls = menu_source_urls(session, rows)
     menus = [
-        MenuResponse(scope=cast("MenuScope", kind), sections=_shape_menu(family, now))
-        for (kind, _, _), family in families.items()
+        MenuResponse(
+            scope=cast("MenuScope", family[0]),
+            source_url=source_urls[family],
+            sections=_shape_menu(family_rows, now),
+        )
+        for family, family_rows in families.items()
     ]
     as_of = min((row.effective_instant for row in rows), default=None)
     return VenueMenuResponse(venue_id=venue_id, as_of=as_of, menus=menus)

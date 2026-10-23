@@ -14,6 +14,9 @@ request-id hardening, see [Amendment 1](#amendment-1-2026-09-23-api-polish)
 **Amended:** 2026-10-21 — accepted history is read through the Menu selector's
 history mode, see [Amendment 3](#amendment-3-2026-10-21-history-reads-through-the-menu-selector)
 (session P7-1; [ADR-0018](./0018-venue-filters-and-item-price-history.md) Q9)
+**Amended:** 2026-10-22 — `source_url` on each menu, read at request time through the
+provenance contract, see [Amendment 4](#amendment-4-2026-10-22-source_url-on-each-menu)
+(session P8-6; [ADR-0019](./0019-public-v1-site.md) §5 step 4)
 **Amended:** 2026-09-28 — venue lifecycle filtering, see
 [S13 section](#s13-venue-lifecycle-filtering-2026-09-28) ([ADR-0012](./0012-venue-lifecycle.md) §3–§4)
 **Closes:** the web-framework deferral in
@@ -338,6 +341,142 @@ Q9 on 2026-10-21, and this amendment records it:
   calls that function. It does not loop over `select_price` itself, and it runs
   no raw Menu SQL.
 - The read path stays read-only, as Amendment 2 already requires.
+
+## Amendment 4 (2026-10-22): `source_url` on each menu
+
+**Status: Accepted 2026-10-22 by the owner (see
+[Owner decision](#owner-decision-amendment-4)); built 2026-10-22, session P8-6, no migration (see
+[Build notes](#build-notes-amendment-4)).** It is [ADR-0019](./0019-public-v1-site.md) §5 build
+step 4, minus `rate_limited`, which ADR-0019's owner decision moved to step 7.
+
+### The gap
+
+ADR-0019's v1 is done when a reader can "read a venue's menu with section headings, prices,
+observation dates and a link to the source page". `GET /v1/venues/{id}/menu` serves no link.
+The URL exists only in Bronze: each `gold.current_menu` row carries `price_evidence_ids`, the
+Bronze Evidence behind its selected price, and each Evidence reaches a Capture whose Source
+Endpoint is the fetched page. Gold stores no URL, and the API never reads Bronze.
+
+### Shape
+
+- **Wire.** `MenuResponse` gains `source_url: str | None`: one URL per menu (per family:
+  subject kind, subject, source record, root key). Not per price, and not a list. Additive:
+  no other field changes.
+- **Value.** The canonical URI of the Source Endpoint of the family's **most recent price
+  Evidence**, resolved through the provenance contract's Evidence → Capture → endpoint rule
+  (`source_endpoint_for_evidence`: a Version-targeted Evidence reaches its Version's Capture,
+  a Capture-targeted one its own).
+- **"Most recent", precisely.** Over every served row of the family and every id in its
+  `price_evidence_ids` that reaches a Capture, the greatest key
+  `(price_observed_at, Capture fetched_at, Evidence id)`. A null `price_observed_at` sorts
+  lowest. Ties on the observation instant go to the later fetch, then to the greater Evidence
+  id. That last step is arbitrary, but it is deterministic and stable across a `pg_dump`
+  restore, which preserves ids.
+- **Null cases.** `source_url` is null when no Evidence id of any of the family's rows reaches
+  a Capture: the rows cite no price Evidence, or only ids that are unknown or belong to a legacy
+  Version with no Capture. An unresolvable id is skipped rather than failing the request, so the
+  next most recent Evidence wins.
+- **Where it is read.** At request time, with no migration and no Gold column. The batched
+  contract `source_endpoints_for_evidence` (`packages/helios_core/provenance/contracts.py`) is
+  the single-id lookup's rule for many ids in one query. An id that does not resolve is left out
+  of its result instead of raising. `menu_source_urls`
+  (`packages/helios_core/gold/menu_read.py`) applies the "most recent" rule. The route calls
+  the Gold read. So `apps/api` still reads through `identity` and `gold` only (Decision
+  point 9); the Gold read module calls the published provenance contract, as
+  `gold/price_index.py` already does.
+- **One Evidence per page.** Every price Evidence of one Menu page cites that page's own
+  Capture. So `menu_source_urls` groups a family's rows by `price_page_id` and resolves only
+  each page's leader, its greatest `(price_observed_at, Evidence id)`. That is one or two ids
+  per family instead of every price's Evidence. The result is the rule above exactly, as long as
+  that invariant holds: within one Capture, the fetch time is the same for every Evidence. A page
+  whose leader does not resolve has all its Evidence resolved in a second query, so the
+  skip-unresolved rule still holds. A row with no `price_page_id` is resolved Evidence by
+  Evidence.
+- **Query count.** One more statement per menu request, whatever the number of families or
+  prices: the current venue, its Organization's current peers, the Gold rows, then one
+  provenance read. A second provenance read happens only when some page's leader does not
+  resolve. A venue with no rows makes no provenance read.
+
+### Tests and done-when
+
+- *Tests* (`test/test_api_venue_menu.py`, `test/test_evidence_endpoints.py`, synthetic, no
+  network): a multi-page family serves its most recent page's URL; the fetch-time and Evidence-id
+  tie-breaks each decide a case; an unresolvable newest Evidence is skipped; a family with no
+  resolvable Evidence serves null; an Organization-scope menu carries its own record's URL; the
+  request makes four statements whether it serves one price or eighty over two families, and
+  only the last reads `bronze.evidence`; the provenance read has an index path on every table it
+  joins (planned with sequential scans priced out); the batched contract equals the single
+  lookup for Version- and Capture-targeted Evidence and omits ids the single lookup rejects;
+  with a fake lookup, two pages of 50 and 3 prices send exactly their two leaders, and a page
+  whose leader does not resolve sends its other Evidence in a second call. The OpenAPI snapshot
+  is regenerated (additive).
+- *Done when,* through a local read-only API over `helios_laptop`: every `has_menu` venue's
+  menus carry `source_url`, with each null counted and explained; five URLs are spot-checked
+  against Bronze; and the menu endpoint's p50/p95 latency on those venues is reported before and
+  after.
+
+### Owner decision (Amendment 4)
+
+Answered by the owner on 2026-10-22, at the end of session P8-5, before this amendment was
+drafted:
+
+> - Draft ADR-0008 Amendment 4 and build it in the same PR. Stop for review only if a real
+>   design choice comes up (a migration, a Gold column, a new dependency, a change to Menu,
+>   Identity or Provenance models).
+> - Shape: `source_url: str | None` on each MenuResponse = the endpoint URL of the family's
+>   most recent price Evidence, through the provenance contract (source_endpoint_for_evidence).
+>   Null if nothing resolves. One URL per menu; not per price, not a list.
+> - Read at request time, batched per menu request, no migration. If the menu endpoint's
+>   EXPLAIN or latency on helios_laptop looks bad, stop and ask.
+> - rate_limited stays deferred to step 7 (ADR-0019 Q5/Q4); do not add it.
+
+None of the stop conditions arose. There is no migration, no Gold column, no new dependency,
+and no model change: the batched lookup is a new contract function over the existing
+provenance models. The tie-break order and the skip-unresolved rule are this amendment's own
+precision of "most recent". They are not separate owner answers.
+
+### Build notes (Amendment 4)
+
+Built 2026-10-22, session P8-6, as above. Measured read-only on `helios_laptop` (Gold as
+refreshed in P8-5), through two local APIs side by side: `main` before and this branch after,
+each over a `default_transaction_read_only` session:
+
+- **Coverage.** `has_menu=true` pages to 941 venues. They serve **946 menus**: five venues
+  have two Establishment menus each. 18 menus are `establishment` scope and 928 are
+  `organization`. **Every menu carries a `source_url`: 0 nulls.** Before the build, all 54,318
+  Gold rows cited one or two price Evidence ids. Every one of those 108,593 citations resolves
+  to a Capture, and no family cites more than one endpoint. The 946 families come from 1,015
+  family pages, at most two per family. On every one of those pages, all price Evidence reaches
+  a single Capture, and it is the page Version's own Capture: the one-Evidence-per-page
+  invariant holds on all of this data. There are 613 distinct URLs: 136 URLs serve more than one
+  menu (469 menus), for example a chain site shared by single-venue Organizations (47 menus on
+  one URL). The URL is still right for each of those menus. Excluding those from the price index
+  is ADR-0007's `shared_menu_url` rule, not this endpoint's concern.
+- **Body.** Apart from `source_url` and the clock-driven `age_seconds`, every one of the 941
+  bodies equals `main`'s.
+- **Spot check against Bronze** (five venues, six menus: venue 1398's two delivery-platform
+  menus, and the Organization menus of 474, 10710, 17523 and 20757). For each menu, three
+  values agree: the served URL, the rule's winner recomputed independently in SQL, and the
+  `menu_url` in the latest Version payload of the record. Each family cites exactly one
+  endpoint, and every cited Capture is `succeeded`, has a bundle, and is the target of its
+  Evidence.
+- **Latency** (all 941 venues, interleaved before/after, two measured passes after one warm-up
+  pass, n = 1,882 each):
+
+  | Build | p50 | p95 | max |
+  |---|---:|---:|---:|
+  | First build: every Evidence resolved (runs 1 and 2: `main` → branch) | 10.2 → 13.3 ms | 24.9 → 32.5 ms | 58 → 75 ms |
+  | One Evidence per page (run 3: `main` → branch) | 9.95 → 11.45 ms | 22.0 → 25.1 ms | 51 → 57 ms |
+
+  In the first build, the largest family (687 rows, 873 distinct Evidence) spent about 18 ms in
+  `menu_source_urls`, about 10 ms of it in SQL. At this table size (about 23k Versions and 26k
+  Captures) the planner chose a hash join with a sequential scan of `source_record_version`
+  over 873 index probes. `UNION ALL` and `LATERAL` rewrites ran in 9–15 ms, and selecting
+  columns instead of ORM entities did not help. The owner chose the one-Evidence-per-page
+  read (2026-10-23, option 1 of four: the others were resolving through the Menu page's
+  Version, a Gold URL column, and an in-process cache). With it, the same family takes
+  **1.4 ms** in `menu_source_urls` (median of 20). All 946 `source_url` values are identical to
+  the first build's.
 
 ## Implementation notes (2026-09-28)
 
