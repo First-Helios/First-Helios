@@ -5,6 +5,8 @@
 the first slice (table, migration, refresh, CLI) is built with an `all` category
 only; the `course` axis follows. The API is authorized by
 [Amendment 2](#amendment-2-2026-10-01-the-price-index-api).
+[Amendment 3](#amendment-3-2026-10-22-area-kinds-and-the-cell-list) (the `all` and 0.05°
+area kinds, `GET /v1/price-index/cells`) is **Accepted** (2026-10-22, P8-4), not built yet.
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune — adopt the shape below
 (lat/lon grid geospatial axis), defer the build.
@@ -407,3 +409,296 @@ dependency. Code: `packages/helios_core/gold/price_index_read.py`,
 6. **Negative zero.** `grid_cell` now maps a `-0` input to `0`. A float query
    parameter can be `-0.0`, and Postgres `numeric` has no negative zero, so the
    API never looks up a `-0.00` key the refresh cannot write.
+
+## Amendment 3 (2026-10-22): area kinds and the cell list
+
+**Status: Accepted 2026-10-22 by the owner, OQ1–OQ5 as recommended (see
+[Owner decision](#owner-decision-amendment-3)); not built yet.** Proposed 2026-10-22 (session
+P8-4). It is [ADR-0019](./0019-public-v1-site.md) §5 build step 3, which the owner's ADR-0019 Q3
+answer approved in direction only ("this answer approves the direction, not unseen migration
+SQL"); OQ5 now approves the SQL below.
+
+**Answered before drafting** (owner, 2026-10-22, P8-4 prompt, all as recommended):
+
+- **Q1** `all` row storage: nullable `cell_lat`/`cell_lon`, with a CHECK that they are null if
+  and only if `area_kind = 'all'`.
+- **Q2** `all` venue set: the same placement as the cells, so the `all` row is the sum of the
+  cells.
+- **Q3** default `area_kind` on the existing endpoints: `latlon_grid_0p01`, unchanged.
+- **Q4** `/v1/venues` with `area_kind=all`: every placed venue.
+- **Q5** session scope: this proposal only, then stop for review.
+- **Q6** `helios_laptop`: upgrade and refresh in the build session (a `pg_dump` first).
+
+### The gap
+
+`gold.price_index` holds one `area_kind`, `latlon_grid_0p01` (Amendment 1 §4). On
+`helios_laptop` 97.0% of its 267 cells are `low_sample`, and only 79 of 472 placed venues sit in
+a cell with at least 5 venues (P8-1 record, addendum A.1). The API reads one cell at a time, by
+point (Amendment 2 §1). It has no citywide figure and no way to list cells. ADR-0019 §3 (owner
+Q3) settles the direction: a citywide `all` row and a 0.05° grid next to the 0.01° rows, a
+cell-listing endpoint, and an optional `area_kind` on `/v1/price-index` and `/v1/venues`.
+
+### Proposed shape
+
+1. **Three area kinds.** `AREA_KINDS = ("latlon_grid_0p01", "latlon_grid_0p05", "all")`.
+   Each grid kind has a step: 0.01° and 0.05°. `all` has none. The policy stays as Amendment 1
+   §4 set it: a grid key is the cell's south-west corner, floored, printed with two decimals
+   (`"30.25,-97.75"` at 0.05°). Because 0.05 is a multiple of 0.01 and both grids are floored
+   from 0, each 0.01° cell sits inside exactly one 0.05° cell. A key such as `30.25,-97.75` is
+   valid at both steps; `30.26,-97.75` is valid only at 0.01°. `area_kind` always says which
+   grid a key means.
+2. **The `all` row (Q1).** `area_key = 'all'`; `cell_lat` and `cell_lon` are NULL. Both columns
+   become nullable. A new CHECK, `ck_gold_price_index_area`, requires null coordinates and the
+   `all` key for `all`, and both coordinates for a grid kind. The existing
+   `ck_gold_price_index_cell` (coordinate range) stays as it is; a NULL passes it.
+3. **Placement and `min_venues` (Q2).** The refresh runs `_place` once, as today. Each kept
+   placement counts in three rows: its 0.01° cell, its 0.05° cell and `all`. Venue weighting,
+   `percentile_disc`, the item/variant filter and the shared-menu exclusion (Amendment 1 §2, §3,
+   §5) are the same for every kind. `min_venues = 5` (`MIN_VENUES`) for every kind, stored per
+   row as now. A venue has one location, so it sits in exactly one cell per grid. For each
+   category and currency, `venue_count`, `organization_venue_count`, `priced_count` and
+   `unpriced_count` of the `all` row equal the sums over either grid's rows, and each 0.05° row's
+   counts equal the sums over the 0.01° rows inside it. The statistics are not sums: each row's
+   percentiles are over the venue medians of its own venue set. Shared chain menus stay out of
+   `all` too (469 families on `helios_laptop`), so `all` is "every placed venue", not every
+   priced menu.
+4. **One rebuild.** `refresh_price_index` deletes the table and inserts the three kinds in one
+   transaction, with one `effective_instant` and one `refreshed_at` (Amendment 1 §6). The
+   aggregate SQL runs once per kind over the same placements; only the key, coordinates and
+   `area_kind` parameters differ. `grid_cell` takes the step (default 0.01°, so current callers
+   are unchanged). `PriceIndexReport.rows` counts the rows of all three kinds.
+5. **Read contract.** `price_index_cell` takes an `area_kind` (grid kinds only; default
+   0.01°) and floors the point at that kind's step. A new `price_index_cells(session, area_kind,
+   *, category_kind, currency_code, after, limit)` returns one page of rows of one kind, each
+   with `area_key`, `cell_lat`, `cell_lon` and the group fields of `PriceIndexRow`. No ORM
+   object leaves the module, as now.
+6. **`GET /v1/price-index/cells`.** It lists every row of one `area_kind`.
+   - Params: `area_kind` (`latlon_grid_0p01` default, `latlon_grid_0p05`, `all`),
+     `category_kind`, `currency` (as on `/v1/price-index`), `limit` (default 50, cap 200, ADR-0008
+     §3) and `cursor`.
+   - Order: `(area_key, category_kind, category_key, currency_code)` ascending. Under a fixed
+     `area_kind` that is the unique grain, so the order is total. It is text order, not map
+     order, and clients must not read geography into it.
+   - Cursor: unpadded base64url over compact JSON `[area_key, category_kind, category_key,
+     currency_code]` of the page's last row. Only the canonical encoding decodes (as with
+     `item_id`, ADR-0018), and each string must fit its column. Anything else is
+     `400 invalid_cursor`. The cursor does not carry the filters; a client sends the same
+     filters with every page, as on `/v1/venues`. It is a business key, not a row id, so it
+     survives a refresh: the next page continues after that key in the new snapshot, and each
+     page's `as_of` says which snapshot it came from.
+   - Query: `WHERE area_kind = :k AND (area_key, category_kind, category_key, currency_code) >
+     (:cursor) [AND category_kind = :c] [AND currency_code = :u] ORDER BY … LIMIT :limit + 1`.
+     It is a range scan on `uq_gold_price_index`, whose leading columns are exactly these. On
+     `helios_laptop` today, `EXPLAIN` gives an Index Only Scan on `uq_gold_price_index` with the
+     row comparison in the Index Cond, with sequential scans on or off. No new index.
+   - Response (`PriceIndexCellList`): `area_kind`, `cell_size_degrees` (0.01, 0.05, or null for
+     `all`), `as_of` (the earliest `effective_instant` on the page; null when `items` is empty),
+     `items` and `next_cursor` (null on the last page). Each item is a `PriceIndexCellResponse`:
+     `area_key`, `cell_lat`, `cell_lon` (null for `all`) and every `PriceIndexGroupResponse`
+     field, `age_seconds` included. An empty result is `200` with `items: []`. Unknown
+     `area_kind`, `category_kind` or `currency`, and `limit` outside 1–200, are
+     `422 validation_error`.
+   - ADR-0019 §3 put the cell size on each item. It is the same for every item of a page, so it
+     moves to the top level next to `area_kind` (open question OQ3).
+   - Size today: 267 rows at 0.01° (2 pages at `limit=200`), 83 at 0.05° (1 page), 1 for `all`.
+7. **`area_kind` on `GET /v1/price-index` (Q3).** Optional, default `latlon_grid_0p01`, so
+   current clients see no change. `latlon_grid_0p05` floors the point at 0.05°, and the response
+   carries that kind, key and `cell_size_degrees: 0.05`. `all` is `422` (OQ1): the citywide row
+   is read from `/cells?area_kind=all`, and `PriceIndexResponse` keeps non-null cell fields.
+8. **`area_kind` on `GET /v1/venues` (Q3, Q4).** Optional, default `latlon_grid_0p01`; it
+   says which grid `area` is a key of.
+   - A grid kind: `area` must be canonical at that kind's step (it round-trips through
+     `grid_cell` at that step); otherwise `422`. `30.26,-97.75` is `422` under
+     `latlon_grid_0p05`. The predicate is the half-open cell range at that step on
+     `ix_place_latitude_longitude`, as ADR-0018 built it for 0.01°.
+   - `all` (Q4): `area` must be `all` (OQ2), and the predicate is "the Place has a point"
+     (`latitude` and `longitude` not null). On `helios_laptop` every one of the 9,996 current
+     venues has a point, so today this equals the unfiltered list.
+   - `area_kind` without `area` is `422` (OQ2): a kind alone names no area.
+   - The list is geographic: every current venue whose point is in the area, not the index's
+     contributors. The 0.05° cell `30.25,-97.75` lists 1,660 venues (175 with `has_menu`)
+     against `venue_count` 95. ADR-0018 already has the same gap at 0.01° (`30.26,-97.75`: 356
+     listed, 45 with a menu, 24 in the index).
+9. **OpenAPI.** New path, two new schemas, a new `AreaKind` enum (and `GridAreaKind` for
+   `/v1/price-index`), and one new optional param on each existing path. Nothing existing is
+   removed or narrowed. The snapshot is regenerated.
+
+### Migration
+
+One revision after `c95d883737db`; `gold.price_index` only. No row is rewritten. The upgrade
+checks the existing rows (all `latlon_grid_0p01` with coordinates) against the new CHECKs in
+one `ACCESS EXCLUSIVE` statement over 267 rows. Hand-written SQL:
+
+```sql
+-- upgrade
+ALTER TABLE gold.price_index
+    DROP CONSTRAINT ck_gold_price_index_area_kind,
+    ALTER COLUMN cell_lat DROP NOT NULL,
+    ALTER COLUMN cell_lon DROP NOT NULL,
+    ADD CONSTRAINT ck_gold_price_index_area_kind
+        CHECK (area_kind IN ('latlon_grid_0p01', 'latlon_grid_0p05', 'all')),
+    ADD CONSTRAINT ck_gold_price_index_area CHECK (
+        (area_kind = 'all' AND area_key = 'all' AND cell_lat IS NULL AND cell_lon IS NULL)
+        OR (area_kind <> 'all' AND cell_lat IS NOT NULL AND cell_lon IS NOT NULL)
+    );
+
+-- downgrade
+DELETE FROM gold.price_index WHERE area_kind <> 'latlon_grid_0p01';
+ALTER TABLE gold.price_index
+    DROP CONSTRAINT ck_gold_price_index_area,
+    DROP CONSTRAINT ck_gold_price_index_area_kind,
+    ALTER COLUMN cell_lat SET NOT NULL,
+    ALTER COLUMN cell_lon SET NOT NULL,
+    ADD CONSTRAINT ck_gold_price_index_area_kind CHECK (area_kind IN ('latlon_grid_0p01'));
+```
+
+The downgrade deletes the 0.05° and `all` rows. They are Gold rows that the old code can neither
+store nor read, and a refresh under the old code rebuilds the table (ADR-0004 §1; OQ4). The 0.01°
+rows stay valid. No `CASCADE`; nothing references `gold.price_index`.
+
+Checked on a disposable `helios_p84_test` (migrated to `c95d883737db`, then dropped). Dropping
+and re-adding the same-named constraint in one `ALTER TABLE` works. The new CHECKs accept one
+row of each kind, and reject `all` with coordinates, `all` with one coordinate, `all` with key
+`x`, a 0.05° row without coordinates, a 0.01° row with one, and an unknown kind
+(`latlon_grid_0p10`). After the downgrade, the 0.01° row remains, both columns are NOT NULL again,
+and the CHECK reads `area_kind = 'latlon_grid_0p01'`. The model changes to match:
+`cell_lat`/`cell_lon` become `Mapped[Decimal | None]`, `AREA_KINDS` widens, and the new
+`CheckConstraint` is declared, so `alembic check` stays clean.
+
+### Expected figures (measured read-only, 2026-10-22)
+
+From `helios_laptop` at `c95d883737db`, Gold as of the P8-3 refresh (`effective_instant`
+2026-10-22T16:06:20Z; 54,318 `current_menu` rows; 267 `price_index` rows, all 0.01°, `all`, USD,
+none all-unpriced). The session ran with `default_transaction_read_only=on` (also in
+`PGOPTIONS`), inside `BEGIN READ ONLY`. It ran the refresh's own `_place` at that instant and the
+SELECT half of its aggregate SQL, with no INSERT, once per kind. The recomputed 0.01° rows equal
+the stored 267 rows field by field, which checks the method. Placement: 946 families, 477
+placed (459 via Organization), 469 shared-menu, 0 `no_single_venue`, 0 `no_evidence`.
+
+| Kind | Rows (cells) | `low_sample` | Share low | Venues | Venues in cells with ≥ 5 | Largest cell |
+|---|---:|---:|---:|---:|---:|---:|
+| `latlon_grid_0p01` (built) | 267 | 259 | 97.0% | 472 | 79 (16.7%) | 24 (`30.26,-97.75`) |
+| `latlon_grid_0p05` | 83 | 59 | 71.1% | 472 | 357 (75.6%) | 95 (`30.25,-97.75`) |
+| `all` | 1 | 0 | 0% | 472 | 472 (100%) | 472 |
+
+- 0.05° cell sizes: 27 cells hold 1 venue, 13 hold 2, 14 hold 3, 5 hold 4, and 24 clear the bar.
+  The next largest after 95 are 37 (`30.30,-97.75`), 20, 20 and 18.
+- The densest 0.05° cell, `30.25,-97.75` (18 of its 0.01° cells have a row): 95 venues (92 via
+  Organization), 3,641 priced rows; p25/median/p75 649/1040/1400, min/max 100/4500 (USD minor
+  units).
+- **The `all` row:** `venue_count` 472, `organization_venue_count` 459, `priced_count` 24,879,
+  `unpriced_count` 0; p25/median/p75 **700/1100/1425**, min/max 50/46800; observed
+  2026-10-02T08:41:41Z to 2026-10-22T05:36:04Z. Min and max are venue medians. The 46,800
+  (USD 468.00) is one venue's median and is served as is; the site shows the median only.
+- **Against ADR-0019 F3:** F3's proxy had 475 placed venues citywide and 84 cells / 59 low /
+  363 venues in OK cells at 0.05°. The `all` row's 472 is 0.6% below 475, inside F3's "±a few
+  percent". P8-1 §5.1's earlier Gold gave 82 / 58 / 344 at 0.05°.
+
+A build-session refresh at a later instant should give these numbers unless Menu or Identity
+changed on `helios_laptop` in between.
+
+### Tests and done-when
+
+- **Migration:** reviewed SQL snapshots (`docs/reviews/sql/…-p8-4-area-kinds-{upgrade,downgrade}.sql`,
+  no `CASCADE`, one `TABLE gold.` each), compared against `alembic upgrade --sql`, as
+  `test_gold_price_index_migration.py` does. A populated round trip: one row of each kind at
+  head, downgrade → only the 0.01° row is left, every other table's count is unchanged and the
+  columns are NOT NULL; upgrade again. One test per CHECK rejection listed above.
+- **Refresh** (synthetic fixtures, no network): venues in two 0.01° cells of one 0.05° cell and
+  one venue elsewhere. Each kind gets its rows. The count sums hold (`all` = Σ cells, 0.05° =
+  Σ nested 0.01°). `all`'s percentiles are over every venue median, not sums. `low_sample`
+  differs by kind (e.g. 4 + 1 venues: two low 0.01° cells, one 0.05° cell at the bar). The
+  shared-menu exclusion applies to every kind alike. The rebuild is deterministic except for
+  `refreshed_at`. `grid_cell` at 0.05°: negative longitudes, `-0`, whole degrees and keys on a
+  0.05 boundary.
+- **Read and API:** `price_index_cell` at 0.05°. `/cells` shape for each kind (`all` with null
+  coordinates and `cell_size_degrees`). A full walk at `limit=1` and `limit=200` visits every row
+  once, in order, with `next_cursor` null only at the end. Filters narrow. An empty result is 200.
+  A malformed, non-canonical or oversize cursor is 400. An unknown `area_kind` and `limit` 0 or
+  201 are 422. `/v1/price-index?area_kind=latlon_grid_0p05` floors at 0.05°; `area_kind=all`
+  is 422. `/v1/venues` with `area_kind=latlon_grid_0p05` is half-open at 0.05°; a 0.01°-only key
+  under it is 422; `area_kind=all&area=all` lists every current venue with a point (and leaves
+  out one without); `area_kind` without `area` is 422.
+- **No-seq-scan (`EXPLAIN`, sequential scans priced out, as the existing tests do):** the
+  `/cells` query for each kind, with and without filters and a cursor: no Seq Scan on
+  `gold.price_index`, and the plan uses `uq_gold_price_index`. `/v1/venues` with a 0.05° `area`:
+  no Seq Scan on `identity.place`, and the plan uses `ix_place_latitude_longitude` on the
+  synthetic fixtures. With `all`: no Seq Scan on `identity.place`, with no index assertion,
+  because "has a point" is not selective. On `helios_laptop` (EXPLAIN only, read-only) the
+  densest 0.05° cell plans as an ordered `establishment_pkey` walk with `LIMIT`, not
+  `ix_place_latitude_longitude`. 1,660 of 9,996 venues match there, so the walk stops early and
+  that plan is reasonable. The fixture test pins the index for a selective cell.
+- **OpenAPI** snapshot regenerated. `make ci`; strict DB tests on a new `*_test` database;
+  `alembic check`.
+- **Done when** (ADR-0019 step 3), on `helios_laptop` under Q6 after a `pg_dump` (sha256 recorded),
+  `alembic upgrade head` and `python -m apps.gold.refresh`:
+  `curl /v1/price-index/cells?area_kind=latlon_grid_0p05` pages through every cell (83
+  expected); the `all` row's `venue_count` matches F3's 475 within its stated error (472
+  expected); the no-seq-scan tests pass; and the snapshot is regenerated.
+
+### Alternatives
+
+| Alternative | Why not |
+|---|---|
+| `all` row with sentinel coordinates (0, 0) or the city centroid | A fake point that a map would draw. Q1 chose NULL. |
+| A separate `gold.price_index_citywide` table | A second table with the same grain and columns, and a second read path. `area_kind` was kept for exactly this (point 2, point 5). |
+| `all` from every priced family, chains included once | A different venue set from the cells, so `all` is no longer their sum; it also needs a rule for which chain location counts. Q2 chose the same placement. |
+| Compute 0.05° and `all` at read time from the 0.01° rows | Counts compose but percentiles don't. The statistics need the venue medians, which only the refresh has. |
+| A `bbox` filter on `/cells` | Deferred by ADR-0019 §3 until the cell count needs it. A whole 0.01° map is 2 pages today. |
+| Page by cell (each item a cell with its rows) | With one category and currency, the same as paging by row. Once courses land (about nine rows per cell) a cell can split across pages. OQ3 keeps rows, as ADR-0019 §3 wrote. |
+
+### Owner questions (Amendment 3)
+
+Each has a recommendation; the build waits for the answers.
+
+- **OQ1. `area_kind=all` on `GET /v1/price-index`.** (a) `422`; citywide is read from
+  `/cells?area_kind=all`, and `PriceIndexResponse` keeps non-null `cell_lat`, `cell_lon` and
+  `cell_size_degrees` (recommended). (b) Accept it with `lat`/`lon` omitted. `lat`/`lon` then
+  become optional, and the three cell fields become nullable in the response schema. That type
+  change would affect clients that assume a number.
+- **OQ2. `all` on `GET /v1/venues`.** (a) `area_kind=all&area=all`, the pair a `/cells` row
+  carries, with `area_kind` alone being `422` (recommended: one rule, "the pair names an area").
+  (b) `area_kind=all` alone, with no `area`. Either way the result is every current venue with a
+  point, which on `helios_laptop` is the unfiltered list (9,996).
+- **OQ3. `/cells` shape details.** Items are index rows, not cells grouped with their rows;
+  `cell_size_degrees` sits at the top level, not on each item; `area_kind` defaults to
+  `latlon_grid_0p01`, like the other two endpoints (recommended, all three). Or put the cell size
+  on each item as ADR-0019 §3 wrote, or make `area_kind` required on `/cells`.
+- **OQ4. Downgrade.** Delete the 0.05° and `all` rows, then restore NOT NULL and the old CHECK
+  (recommended; Gold rebuilds). Or refuse to downgrade while such rows exist, which forces a
+  manual delete first.
+- **OQ5. Migration authorization.** Approve the SQL above as written, for a revision after
+  `c95d883737db`? It drops NOT NULL on two columns and replaces one CHECK. ADR-0019 §3 described
+  only widening the CHECK; the NULL columns come from Q1.
+
+### Owner decision (Amendment 3)
+
+**Answered by the owner on 2026-10-22**, in session P8-4, all as recommended:
+
+- **OQ1:** `GET /v1/price-index?area_kind=all` is `422`; the citywide row is read from
+  `/cells?area_kind=all`. `PriceIndexResponse` keeps non-null cell fields.
+- **OQ2:** `/v1/venues` names the citywide area with the pair `area_kind=all&area=all`;
+  `area_kind` without `area` is `422`.
+- **OQ3:** `/cells` items are index rows; `cell_size_degrees` is at the top level; `area_kind`
+  defaults to `latlon_grid_0p01`.
+- **OQ4:** the downgrade deletes the 0.05° and `all` rows, then restores NOT NULL and the old
+  CHECK.
+- **OQ5:** the migration SQL above is approved as written, for one revision after
+  `c95d883737db`.
+
+The build (migration, refresh, read contract, `/cells`, `area_kind` params, tests, snapshot) and
+the `helios_laptop` upgrade and refresh (Q6, after a `pg_dump`) are the next session's own PR.
+
+### Reproduce
+
+Read-only scripts in this session's worktree under `var/p8-4/` (untracked; `ro.py` and `ro.sh`
+are copied from P8-3's `var/p8-3/`). `measure.sql` sums the coarser grids from the stored rows.
+`expected.py` recomputes each kind with the refresh's own code. `venues_check.py` counts the
+venue lists and EXPLAINs them. `cells_plan.py` EXPLAINs the keyset page. `sql_probe.sql` holds
+the migration probes (disposable database only).
+
+    var/p8-4/ro.sh var/p8-4/measure.sql --out var/p8-4/measure.json
+    PYTHONPATH=. uv run -q --env-file <main>/.env python <main>/var/menu-eval/p5-26/with_db.py \
+        helios_laptop var/p8-4/expected.py --out var/p8-4/expected.json
+    … with_db.py helios_laptop var/p8-4/venues_check.py
+    … with_db.py helios_laptop var/p8-4/cells_plan.py
