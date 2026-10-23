@@ -20,7 +20,10 @@ from packages.helios_core.identity.models import ResolutionEvent
 from packages.helios_core.provenance.contracts import (
     persist_source_record_observation,
     record_capture_attempt,
+    record_capture_evidence,
+    record_unchanged_capture,
     source_endpoint_for_evidence,
+    source_endpoints_for_evidence,
     source_record_ids_for_identity_match_url,
 )
 from packages.helios_core.provenance.models import Evidence, Source, SourceRecordVersion
@@ -592,3 +595,58 @@ def test_uncaptured_version_keeps_existing_low_level_admission_contract(session:
         ).one()
         == "unresolved"
     )
+
+
+def test_batched_endpoint_lookup_matches_the_single_lookup(session: Session) -> None:
+    from packages.helios_core.provenance.models import SourceRecord
+
+    obs = observation()
+    version_targeted = persist_source_record_observation(session, obs)
+    capture = record_unchanged_capture(
+        session,
+        source_namespace=obs.source_namespace,
+        source_kind=obs.source_kind,
+        source_url="https://batched.example.test/menu",
+        fetched_at=obs.observed_at,
+        content_hash="sha256:batched",
+        bundle_path="fixture/batched",
+    )
+    capture_targeted = record_capture_evidence(
+        session, capture_id=capture.id, locator="blocks:v1:b0001[0:5]", block_text="Tacos"
+    )
+    # A legacy Version with no Capture: the single lookup raises, the batch omits it.
+    record = SourceRecord(source_id=version_targeted.source_id, external_key="uncaptured")
+    session.add(record)
+    session.flush()
+    version = SourceRecordVersion(
+        source_id=version_targeted.source_id,
+        source_record_id=record.id,
+        observed_at=obs.observed_at,
+        content_hash=obs.content_hash,
+        source_payload=dict(obs.source_payload),
+    )
+    session.add(version)
+    session.flush()
+    uncaptured = Evidence(
+        source_record_version_id=version.id,
+        locator="$.id",
+        excerpt_hash=excerpt_hash(dict(obs.source_payload), "$.id"),
+    )
+    session.add(uncaptured)
+    session.flush()
+    unknown = (session.scalar(select(func.max(Evidence.id))) or 0) + 1000
+
+    resolved = source_endpoints_for_evidence(
+        session, [capture_targeted, version_targeted.evidence_id, uncaptured.id, unknown]
+    )
+    assert resolved == {
+        version_targeted.evidence_id: source_endpoint_for_evidence(
+            session, version_targeted.evidence_id
+        ),
+        capture_targeted: source_endpoint_for_evidence(session, capture_targeted),
+    }
+    assert resolved[capture_targeted].source_url == "https://batched.example.test/menu"
+    for missing in (uncaptured.id, unknown):
+        with pytest.raises(ValueError):
+            source_endpoint_for_evidence(session, missing)
+    assert source_endpoints_for_evidence(session, []) == {}

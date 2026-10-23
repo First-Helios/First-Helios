@@ -10,27 +10,37 @@ Only source-asserted states are served (:data:`SERVED_PRICE_STATES`). The
 derived no-value states (``absent``, ``withdrawn``, ``unresolved_*``,
 ``not_operating``) mean "no current local value" and stay internal to the
 selector. The query is index-backed by ``ix_gold_current_menu_scope``.
+
+A menu's source page URL (:func:`menu_source_urls`) is read at request time
+from the rows' price Evidence through the provenance contract (ADR-0008
+Amendment 4); Gold stores no URL.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, exists, or_, select
 
 from packages.helios_core.gold.models import CurrentMenu
+from packages.helios_core.provenance.contracts import source_endpoints_for_evidence
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from datetime import datetime
     from decimal import Decimal
 
     from sqlalchemy import ColumnElement
     from sqlalchemy.orm import InstrumentedAttribute, Session
 
 SERVED_PRICE_STATES = ("priced", "unknown", "unavailable")
+
+#: One source menu: ``(subject kind, subject id, source record id, root key)``.
+type MenuFamily = tuple[str, int, int, str]
+
+_NEVER = datetime.min.replace(tzinfo=UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +64,7 @@ class CurrentMenuRow:
     price_source_kind: str | None
     price_observed_at: datetime | None
     price_confidence: Decimal | None
+    price_evidence_ids: tuple[int, ...]
     content_name: str | None
     content_description: str | None
     section_name: str | None
@@ -110,6 +121,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             CurrentMenu.price_source_kind,
             CurrentMenu.price_observed_at,
             CurrentMenu.price_confidence,
+            CurrentMenu.price_evidence_ids,
             CurrentMenu.content_name,
             CurrentMenu.content_description,
             CurrentMenu.section_name,
@@ -155,6 +167,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             price_source_kind=row.price_source_kind,
             price_observed_at=row.price_observed_at,
             price_confidence=row.price_confidence,
+            price_evidence_ids=tuple(row.price_evidence_ids),
             content_name=row.content_name,
             content_description=row.content_description,
             section_name=row.section_name,
@@ -162,3 +175,39 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
         )
         for row in session.execute(statement)
     ]
+
+
+def menu_family(row: CurrentMenuRow) -> MenuFamily:
+    """The source menu a served row belongs to."""
+    return (row.subject_kind, row.subject_id, row.source_record_id, row.root_key)
+
+
+def menu_source_urls(
+    session: Session, rows: Iterable[CurrentMenuRow]
+) -> dict[MenuFamily, str | None]:
+    """Each family's source page URL, ``None`` when none of its Evidence resolves.
+
+    The URL is the Source Endpoint of the family's most recent price Evidence
+    (ADR-0008 Amendment 4): the greatest ``(price_observed_at, Capture
+    fetched_at, Evidence id)`` over the Evidence of the family's rows that
+    reaches a Capture, a null ``price_observed_at`` lowest. One provenance query
+    for all the rows, however many families or prices they hold.
+    """
+    rows = list(rows)
+    endpoints = source_endpoints_for_evidence(
+        session, (evidence_id for row in rows for evidence_id in row.price_evidence_ids)
+    )
+    best: dict[MenuFamily, tuple[datetime, datetime, int]] = {}
+    urls: dict[MenuFamily, str | None] = {}
+    for row in rows:
+        family = menu_family(row)
+        urls.setdefault(family, None)
+        for evidence_id in row.price_evidence_ids:
+            endpoint = endpoints.get(evidence_id)
+            if endpoint is None:
+                continue
+            key = (row.price_observed_at or _NEVER, endpoint.fetched_at, evidence_id)
+            if family not in best or key > best[family]:
+                best[family] = key
+                urls[family] = endpoint.source_url
+    return urls
