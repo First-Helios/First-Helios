@@ -173,6 +173,10 @@ class CurrentMenu(Base):
     content_scope_subject_id: Mapped[int | None] = mapped_column(BigInteger)
     content_page_id: Mapped[int | None] = mapped_column(BigInteger)
     content_evidence_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger))
+    # Selected content names of the path's innermost section and its item
+    # (ADR-0006 Amendment 1); a node's own row carries its own name here too.
+    section_name: Mapped[str | None] = mapped_column(String(512))
+    item_name: Mapped[str | None] = mapped_column(String(512))
     # Shared Organization claims are acknowledged but never merged as local.
     organization_claim_count: Mapped[int] = mapped_column(Integer)
     # Refresh-run metadata: excluded from rebuild-equality comparison.

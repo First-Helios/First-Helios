@@ -34,7 +34,7 @@
         "type": "object"
       },
       "MenuItemResponse": {
-        "description": "A dish. ``name`` is null when Gold holds no row for the item itself\n(only its variants are priced). ``id`` is the node's ``item_id`` for\n``GET /v1/items/{item_id}/price-history``; null when it has no prices.",
+        "description": "A dish. ``name`` is null when the source names no item. ``id`` is the\nnode's ``item_id`` for ``GET /v1/items/{item_id}/price-history``; null when\nthe item has no prices of its own (only its variants or modifiers are).",
         "properties": {
           "description": {
             "anyOf": [
@@ -312,7 +312,7 @@
         "type": "object"
       },
       "MenuSectionResponse": {
-        "description": "A named section of a menu. ``name`` is null unless the section itself is\npriced: Gold carries no section names yet. ``id`` is the section's\n``item_id`` for its price history; null unless the section is priced.",
+        "description": "A named section of a menu. ``name`` is null when the source names no\nsection. ``id`` is the section's ``item_id`` for its price history; null\nunless the section is priced.",
         "properties": {
           "id": {
             "anyOf": [

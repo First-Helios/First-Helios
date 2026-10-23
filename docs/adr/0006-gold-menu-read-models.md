@@ -5,8 +5,8 @@
 **Accepted:** 2026-09-19 by project owner Fortune. Proposed defaults accepted;
 the first unit materializes a **bounded input set**. The full-catalog refresh
 follow-up was accepted on 2026-09-20. See [Owner decision](#owner-decision).
-[Amendment 1](#amendment-1-2026-10-22-proposed-section-names-and-variant-only-item-names)
-(section and item names) is proposed 2026-10-22.
+[Amendment 1](#amendment-1-2026-10-22-section-names-and-variant-only-item-names)
+(section and item names) was accepted 2026-10-22 and built in session P8-3.
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md),
 [ADR-0005](./0005-immutable-menu-snapshots-and-selection.md)
 **Implements:** [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
@@ -245,11 +245,12 @@ observation cutoff are rejected: `gold.current_menu` holds current answers only.
 In current mode only the requested subject's own stream heads count, and every
 one of them must still be live.
 
-## Amendment 1 (2026-10-22, proposed): section names and variant-only item names
+## Amendment 1 (2026-10-22): section names and variant-only item names
 
-**Status: Proposed 2026-10-22 (session P8-1), for owner review. Nothing is built.** It is
-[ADR-0019](./0019-public-v1-site.md) §5 build step 2. It touches `gold/models.py` and adds a
-migration, so it stops for review (CLAUDE.md).
+**Status: Accepted 2026-10-22 by the owner, all four questions as recommended, and built in
+session P8-3 (revision `c95d883737db`).** See
+[Owner decision](#owner-decision-amendment-1) and [Build notes](#build-notes-amendment-1).
+Proposed 2026-10-22 (session P8-1). It is [ADR-0019](./0019-public-v1-site.md) §5 build step 2.
 
 ### The gap
 
@@ -373,6 +374,54 @@ rebuild. An upgrade of `helios_laptop` needs `68146a4c5fc5` first (P8-1 owner qu
 - **Q4. Migration order.** This revision follows `68146a4c5fc5`, so `helios_laptop` (at
   `db40e9424cba`) needs that index migration applied first. Approve both upgrades on
   `helios_laptop` when step 2 is built?
+
+### Owner decision (Amendment 1)
+
+**Answered by the owner on 2026-10-22**, at the start of session P8-3:
+
+- **Q1 shape:** two columns, `section_name` and `item_name`.
+- **Q2:** fill every row, including the node's own row (one rule).
+- **Q3:** no Evidence columns for the names.
+- **Q4:** both `helios_laptop` upgrades approved (a `pg_dump` first, then `68146a4c5fc5`, then the
+  new revision, then `python -m apps.gold.refresh`).
+
+### Build notes (Amendment 1)
+
+Built 2026-10-22, session P8-3, as proposed:
+
+- **Migration `c95d883737db`** (after `68146a4c5fc5`): `ALTER TABLE gold.current_menu ADD COLUMN
+  section_name VARCHAR(512), ADD COLUMN item_name VARCHAR(512)`; the downgrade drops both. The
+  reviewed SQL is in `docs/reviews/sql/2026-10-22-p8-3-gold-names-{upgrade,downgrade}.sql`, pinned
+  by `test/test_gold_names_migration.py`, whose populated round trip shows that no row is lost
+  and that existing rows read null until the next refresh.
+- **Refresh** (`gold/refresh.py`): a row's own node takes its own selected content name; an
+  ancestor's name is `select_price(...).content.name` for `TargetRef(kind, path prefix)`,
+  cached per `(subject, subject kind, record, root key, instant, prefix)` within one refresh.
+  No change to `selection.py`, `enumeration.py`, `catalog.py` or `price_index.py`.
+- **Wire** (`apps/api/routes/venues.py` `_shape_menu`): a section or item takes the first
+  non-null `section_name` / `item_name` among its rows, else its own row's `content_name`. The
+  OpenAPI snapshot changes only in the two docstrings.
+- **Tests:** names on a section-level price, an item's own row and a variant-only item; names
+  that follow a pinned base; a withdrawn base names nothing. The plan's "suppressed ancestor"
+  case cannot occur: `menu.check_aggregate` rejects any child under a suppressed node.
+- **`helios_laptop`** (owner Q4): `pg_dump` at 16:06:06Z
+  (`var/laptop-run/helios_laptop-2026-10-22-pre-p8-3.dump`, main checkout, 29,100,799 bytes,
+  sha256 `2d62469985688f4f3ba4bc57b10a7fd016453017c70feaf7623eeab0a1bbedbb`), then
+  `alembic upgrade` to `68146a4c5fc5` and `c95d883737db` (16:06:14Z–16:06:15Z), then
+  `python -m apps.gold.refresh` (16:06:19Z–16:14:05Z, **7 min 46 s**, about 5% over the
+  15:30Z refresh's 7 min 22 s; the +21% estimate above counted lookups the cache saves).
+  Same report as 15:30Z: 54,318 rows, 946 families, 267 cells.
+- **Done-when, met.** In Gold, no row has a null `section_name` and no row with an item on its
+  path has a null `item_name`; every name equals the Silver node's name on the row's content
+  page (54,318 of 54,318 for both). Through the local API (read-only session), all 941
+  `has_menu` menus serve **9,527 sections, none `name: null`** (9,527 before), and **52,396
+  items, none `name: null`**, including all 1,984 variant-only items (1,984 null before).
+- **Not exercised by real data.** No `helios_laptop` page rides a pinned base (0 of 3,666 pages;
+  no inherit or suppress node). One base case is untested: a node with its own base link under
+  an independent local section gets a `("base", …)`-prefixed path, but the local section's own
+  canonical path has no such prefix, so the prefix lookup finds no node and `section_name` stays
+  null. The wire already lists that row under a separate base-prefixed section, which is null
+  today too. Raised in the P8-3 PR, not changed here.
 
 ## Implementation notes (2026-09-28)
 

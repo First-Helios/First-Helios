@@ -26,6 +26,12 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import sessionmaker
 
 from packages.helios_core.domains.menu.commands import persist_menu
+from packages.helios_core.domains.menu.contracts import (
+    ItemInput,
+    MenuAggregate,
+    Target,
+    VariantInput,
+)
 from packages.helios_core.domains.menu.enumeration import enumerate_current_requests
 from packages.helios_core.domains.menu.models import MenuPage, PriceObservation
 from packages.helios_core.domains.menu.selection import (
@@ -564,3 +570,142 @@ def test_selection_and_enumeration_take_no_write_locks(
         assert select_price(session, closed_request).local_price.state == "not_operating"
         assert held_write_locks(session) == []
     assert any(r.subject_id == open_request.subject_id for r in requests)
+
+
+# --------------------------------------------------------------------------- #
+# Section and item names (ADR-0006 Amendment 1).
+# --------------------------------------------------------------------------- #
+
+
+def _names(rows: list[dict[str, object]]) -> dict[object, tuple[object, object, object]]:
+    return {
+        row["target_path"]: (row["content_name"], row["section_name"], row["item_name"])
+        for row in rows
+    }
+
+
+def _with_pizza(value: MenuAggregate) -> MenuAggregate:
+    """Add a section-level price and an item priced only through its variant."""
+    evidence = value.page.evidence_ids
+    price = value.prices[0]
+    return replace(
+        value,
+        items=(
+            *value.items,
+            ItemInput(
+                item_key="pizza",
+                section_key="food",
+                name="Pizza",
+                position=1,
+                dietary_tags=(),
+                effect="replace",
+                support_kind="direct",
+                evidence_ids=evidence,
+                source_native_key="i-pizza",
+            ),
+        ),
+        variants=(
+            VariantInput(
+                variant_key="small",
+                item_key="pizza",
+                label="Small",
+                position=0,
+                effect="replace",
+                support_kind="direct",
+                evidence_ids=evidence,
+                source_native_key="v-small",
+            ),
+        ),
+        prices=(
+            *value.prices,
+            replace(
+                price,
+                observation_key="pizza-small",
+                target=Target(kind="variant", key="small", item_key="pizza"),
+                amount_minor=1400,
+            ),
+            replace(
+                price,
+                observation_key="food-cover",
+                target=Target(kind="section", key="food"),
+                amount_minor=200,
+            ),
+        ),
+    )
+
+
+def test_refresh_names_each_rows_section_and_item(factory: sessionmaker[Session]) -> None:
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    with factory.begin() as session:
+        persist_menu(session, _with_pizza(aggregate(scope)))
+    with factory.begin() as session:
+        refresh_full_catalog(session, effective_instant=E)
+    with factory() as session:
+        names = _names(_business(session, _request(scope)))
+    assert names == {
+        # A section's own row names it, and has no item on its path.
+        '[["section","s-food"]]': ("Food", "Food", None),
+        # An item's own row repeats its own name (one rule for every row).
+        '[["section","s-food"],["item","i-burger"]]': ("Burger", "Food", "Burger"),
+        # The pizza has no row of its own; its variant's row names it.
+        '[["section","s-food"],["item","i-pizza"],["variant","v-small"]]': (
+            "Small",
+            "Food",
+            "Pizza",
+        ),
+    }
+
+
+def _renamed_base(value: MenuAggregate) -> MenuAggregate:
+    return replace(
+        value,
+        sections=tuple(replace(s, name="Shared Food") for s in value.sections),
+        items=tuple(replace(i, name="Shared Burger") for i in value.items),
+    )
+
+
+def test_inherited_names_follow_the_pinned_base(factory: sessionmaker[Session]) -> None:
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    with factory.begin() as session:
+        base = persist_menu(session, _renamed_base(aggregate(scope, shared=True)))
+    with factory.begin() as session:
+        persist_menu(session, inherited(aggregate(scope), base))
+    with factory.begin() as session:
+        refresh_full_catalog(session, effective_instant=E)
+    with factory() as session:
+        names = _names(_business(session, _request(scope)))
+    path = f'[["base","{base.page_id}"],["section","s-food"],["item","i-burger"]]'
+    assert names == {path: ("Shared Burger", "Shared Food", "Shared Burger")}
+
+
+def test_an_unusable_base_names_nothing(factory: sessionmaker[Session]) -> None:
+    # The pinned base is withdrawn, so the inherited section and item select no
+    # content (ADR-0005 §4): no name is invented for either. (A suppressed node
+    # can have no children at all: menu.check_aggregate rejects them.)
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    shared = aggregate(scope, shared=True)
+    with factory.begin() as session:
+        base = persist_menu(session, shared)
+    with factory.begin() as session:
+        persist_menu(session, inherited(aggregate(scope), base))
+    withdrawal = MenuAggregate(
+        page=replace(
+            shared.page,
+            operation="withdrawal",
+            supersedes_page_id=base.page_id,
+            stream_revision=2,
+            interpretation_revision=2,
+        )
+    )
+    with factory.begin() as session:
+        persist_menu(session, withdrawal)
+    with factory.begin() as session:
+        refresh_full_catalog(session, effective_instant=E)
+    with factory() as session:
+        rows = _business(session, _request(scope))
+    path = f'[["base","{base.page_id}"],["section","s-food"],["item","i-burger"]]'
+    assert [(row["target_path"], row["price_state"]) for row in rows] == [(path, "unresolved_base")]
+    assert _names(rows) == {path: (None, None, None)}

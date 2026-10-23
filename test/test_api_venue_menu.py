@@ -125,6 +125,8 @@ def _row(
     amount: int | None = None,
     state: str = "priced",
     name: str | None = None,
+    section_name: str | None = None,
+    item_name: str | None = None,
     channel: str = "unspecified",
     effective_instant: datetime = E,
     observed_at: datetime | None = OBSERVED,
@@ -149,6 +151,8 @@ def _row(
         "price_evidence_ids": [record.evidence_id],
         "content_name": name,
         "content_evidence_ids": [],
+        "section_name": section_name,
+        "item_name": item_name,
         "organization_claim_count": 0,
         "refreshed_at": effective_instant,
     }
@@ -165,16 +169,34 @@ LARGE = ("variant", "large")
 
 
 def _seed_tacos(session: Session, subject: tuple[int, str]) -> None:
-    """A section with a named item, a size-only item and an add-on."""
+    """A section with a named item, a size-only item and an add-on.
+
+    No row is the section's own, and the size-only item has no row of its own:
+    their names arrive only as ``section_name`` / ``item_name`` on other rows.
+    """
     record = _record(session)
     _insert(
         session,
         [
             _row(
-                subject, record, "item", _path(TACOS, ("item", "13:bean")), amount=350, name="Bean"
+                subject,
+                record,
+                "item",
+                _path(TACOS, ("item", "13:bean")),
+                amount=350,
+                name="Bean",
+                item_name="Bean",
+                section_name="Tacos",
             ),
             _row(
-                subject, record, "variant", _path(TACOS, PASTOR, LARGE), amount=1200, name="Large"
+                subject,
+                record,
+                "variant",
+                _path(TACOS, PASTOR, LARGE),
+                amount=1200,
+                name="Large",
+                item_name="Al Pastor",
+                section_name="Tacos",
             ),
             _row(
                 subject,
@@ -183,9 +205,16 @@ def _seed_tacos(session: Session, subject: tuple[int, str]) -> None:
                 _path(TACOS, ("item", "13:bean"), ("modifier", "cheese")),
                 amount=100,
                 name="Cheese",
+                item_name="Bean",
+                section_name="Tacos",
             ),
             _row(
-                subject, record, "item", _path(TACOS, ("item", "15:market fish")), state="unknown"
+                subject,
+                record,
+                "item",
+                _path(TACOS, ("item", "15:market fish")),
+                state="unknown",
+                section_name="Tacos",
             ),
             # Derived no-value state: never served.
             _row(subject, record, "item", _path(TACOS, ("item", "16:gone")), state="absent"),
@@ -202,6 +231,8 @@ def _plain(
     target_kind: str,
     *path: tuple[str, str],
     name: str | None = None,
+    section_name: str | None = None,
+    item_name: str | None = None,
     channel: str = "unspecified",
     observed_at: datetime | None = OBSERVED,
 ) -> CurrentMenuRow:
@@ -225,6 +256,8 @@ def _plain(
         price_confidence=None,
         content_name=name,
         content_description=None,
+        section_name=section_name,
+        item_name=item_name,
     )
 
 
@@ -250,6 +283,31 @@ def test_shape_nests_by_native_path() -> None:
     assert [(v.key, v.name) for v in pastor.variants] == [("large", "Large")]
     assert [(m.key, m.name) for m in pastor.modifiers] == [("salsa", "Salsa")]
     assert sections[1].items[0].name == "Pastor Soda"
+
+
+def test_shape_names_nodes_without_rows_of_their_own() -> None:
+    # ADR-0006 Amendment 1: every row carries its path's section and item names.
+    rows = [
+        _plain(
+            "variant",
+            TACOS,
+            PASTOR,
+            LARGE,
+            name="Large",
+            section_name="Tacos",
+            item_name="Al Pastor",
+        ),
+        _plain("modifier", TACOS, ("modifier", "chips"), name="Chips", section_name="Tacos"),
+        # Rows refreshed before the columns existed: the own row still names its node.
+        _plain("item", ("section", "20:drinks"), ("item", "21:soda"), name="Soda"),
+    ]
+    tacos, drinks = _shape_menu(rows, LATER)
+    assert (tacos.name, tacos.id, tacos.prices) == ("Tacos", None, [])
+    (pastor,) = tacos.items
+    assert (pastor.name, pastor.id, pastor.prices) == ("Al Pastor", None, [])
+    assert [v.name for v in pastor.variants] == ["Large"]
+    assert [m.name for m in tacos.modifiers] == ["Chips"]
+    assert (drinks.name, drinks.items[0].name) == (None, "Soda")
 
 
 def test_shape_keeps_base_prefixed_and_nested_sections_apart() -> None:
@@ -299,7 +357,8 @@ def test_menu_shape_staleness_and_source(client: TestClient, session: Session) -
     (menu,) = body["menus"]
     assert menu["scope"] == "establishment"
     (section,) = menu["sections"]
-    assert (section["key"], section["name"]) == ("12:tacos", None)
+    # Named from the rows under it: the section has no row of its own.
+    assert (section["key"], section["name"]) == ("12:tacos", "Tacos")
     assert [item["key"] for item in section["items"]] == [
         "13:bean",
         "14:al pastor",
@@ -341,8 +400,8 @@ def test_menu_shape_staleness_and_source(client: TestClient, session: Session) -
     assert decode_item_id(bean["modifiers"][0]["id"]).target_kind == "modifier"
     assert decode_item_id(pastor["variants"][0]["id"]).target_path == (TACOS, PASTOR, LARGE)
 
-    # Only the variant is priced: Gold holds no name for the item itself.
-    assert (pastor["name"], pastor["prices"], pastor["id"]) == (None, [], None)
+    # Only the variant is priced: the item is named from the variant's row.
+    assert (pastor["name"], pastor["prices"], pastor["id"]) == ("Al Pastor", [], None)
     assert [(v["key"], v["name"], v["prices"][0]["amount_minor"]) for v in pastor["variants"]] == [
         ("large", "Large", 1200)
     ]
@@ -575,7 +634,9 @@ def test_end_to_end_from_menu_through_refresh(disposable_database_engine: Engine
     assert menu["scope"] == "establishment"
     (section,) = menu["sections"]
     (item,) = section["items"]
-    assert (section["key"], item["key"], item["name"]) == ("s-food", "i-burger", "Burger")
+    assert (section["key"], section["name"]) == ("s-food", "Food")
+    assert (section["id"], section["prices"]) == (None, [])
+    assert (item["key"], item["name"]) == ("i-burger", "Burger")
     assert item["description"] == "Grilled beef"
     (price,) = item["prices"]
     assert (price["amount_minor"], price["channel"], price["service_period"]) == (

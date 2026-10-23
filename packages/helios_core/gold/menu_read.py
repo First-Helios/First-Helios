@@ -56,6 +56,8 @@ class CurrentMenuRow:
     price_confidence: Decimal | None
     content_name: str | None
     content_description: str | None
+    section_name: str | None
+    item_name: str | None
 
 
 def _decode_path(encoded: str) -> tuple[tuple[str, str], ...]:
@@ -110,6 +112,8 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             CurrentMenu.price_confidence,
             CurrentMenu.content_name,
             CurrentMenu.content_description,
+            CurrentMenu.section_name,
+            CurrentMenu.item_name,
         )
         .where(
             or_(
@@ -153,6 +157,8 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             price_confidence=row.price_confidence,
             content_name=row.content_name,
             content_description=row.content_description,
+            section_name=row.section_name,
+            item_name=row.item_name,
         )
         for row in session.execute(statement)
     ]

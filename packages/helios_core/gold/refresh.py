@@ -10,6 +10,11 @@ provenance) without mutating them. The whole-catalog rebuild lives in
 applicability and no-inferred-price rules are never re-implemented here. The
 table holds current answers only, so history-mode requests are rejected.
 
+Each row also names its path's innermost section and its item
+(``section_name``, ``item_name``; ADR-0006 Amendment 1): the selected content
+name of that ancestor target, from ``select_price`` on the path prefix, so
+inherit, pin and suppression rules apply exactly as they do to ``content_name``.
+
 Business columns are a deterministic function of committed input and the
 request; ``refreshed_at`` is the only non-deterministic column and is excluded
 from rebuild-equality checks. The command flushes; the caller owns the commit.
@@ -18,14 +23,16 @@ from rebuild-equality checks. The command flushes; the caller owns the commit.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import delete, insert
 
 from packages.helios_core.domains.menu.selection import (
     Selection,
     SelectionRequest,
+    TargetRef,
     select_price,
 )
 from packages.helios_core.gold.models import CurrentMenu
@@ -41,8 +48,52 @@ def _encode_path(native_path: tuple[tuple[str, str], ...]) -> str:
     return json.dumps([[kind, key] for kind, key in native_path], separators=(",", ":"))
 
 
+# (subject, subject kind, record, root key, instant, ancestor target) -> name.
+# Current-mode content selection reads no context or currency, so they are not
+# part of the key.
+_NameKey = tuple[int, str, int, str, datetime, TargetRef]
+
+
+def _ancestor_name(
+    session: Session,
+    request: SelectionRequest,
+    selection: Selection,
+    kind: Literal["section", "item"],
+    cache: dict[_NameKey, str | None],
+) -> str | None:
+    """The selected content name of the innermost ``kind`` node on the target's path.
+
+    ``None`` when the path has no such node, or when that node selects no
+    content (structural, suppressed, or an unresolved base). The target's own
+    node is its own ancestor: its name is the row's own selected content name.
+    """
+    path = request.target.native_path
+    index = max((i for i, (node_kind, _) in enumerate(path) if node_kind == kind), default=None)
+    if index is None:
+        return None
+    if index == len(path) - 1:
+        return selection.content.name if selection.content is not None else None
+    target = TargetRef(kind, path[: index + 1])
+    key = (
+        request.subject_id,
+        request.subject_kind,
+        request.source_record_id,
+        request.root_key,
+        request.effective_instant,
+        target,
+    )
+    if key not in cache:
+        content = select_price(session, replace(request, target=target)).content
+        cache[key] = content.name if content is not None else None
+    return cache[key]
+
+
 def _row_values(
-    request: SelectionRequest, selection: Selection, refreshed_at: datetime
+    session: Session,
+    request: SelectionRequest,
+    selection: Selection,
+    refreshed_at: datetime,
+    names: dict[_NameKey, str | None],
 ) -> dict[str, Any]:
     price = selection.local_price
     content = selection.content
@@ -81,6 +132,8 @@ def _row_values(
         "content_scope_subject_id": content.scope_subject_id if content is not None else None,
         "content_page_id": content.page_id if content is not None else None,
         "content_evidence_ids": list(content.evidence_ids) if content is not None else [],
+        "section_name": _ancestor_name(session, request, selection, "section", names),
+        "item_name": _ancestor_name(session, request, selection, "item", names),
         "organization_claim_count": len(selection.organization),
         "refreshed_at": refreshed_at,
     }
@@ -115,7 +168,11 @@ def refresh_current_menu(
         session.execute(delete(CurrentMenu).where(CurrentMenu.subject_id.in_(scopes)))
     session.flush()
 
-    rows = [_row_values(request, select_price(session, request), stamp) for request in ordered]
+    names: dict[_NameKey, str | None] = {}
+    rows = [
+        _row_values(session, request, select_price(session, request), stamp, names)
+        for request in ordered
+    ]
     if rows:
         session.execute(insert(CurrentMenu), rows)
     session.flush()
