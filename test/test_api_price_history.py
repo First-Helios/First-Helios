@@ -109,6 +109,9 @@ def test_item_id_round_trips_and_is_url_safe() -> None:
         _token(["establishment", 1, 2, "main", [["base", "7"]]]),
         _token(["establishment", 1, 2, "main", [["item", 3]]]),
         _token(["establishment", 1, 2, "ma\x00in", [["item", "x"]]]),
+        # A "\ud800" JSON escape decodes to a lone surrogate, which has no UTF-8 form.
+        _token(["establishment", 1, 2, "main", [["item", "\ud800"]]]),
+        _token(["establishment", 1, 2, "\udfff", [["item", "x"]]]),
         # Padded and spaced encodings are aliases of a canonical id.
         _token(["establishment", 1, 2, "main", [["item", "x"]]]) + "==",
         base64.urlsafe_b64encode(b'["establishment", 1, 2, "main", [["item", "x"]]]').decode(),
@@ -526,7 +529,8 @@ def test_unknown_item_is_404_and_malformed_is_422(
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
 
-    for bad in ("not-an-id", "x" * 5000):
+    surrogate = _token(["establishment", world.venue, world.record, "main", [["item", "\ud800"]]])
+    for bad in ("not-an-id", "x" * 5000, surrogate):
         response = committed_client.get(f"/v1/items/{bad}/price-history")
         assert response.status_code == 422
         body = response.json()

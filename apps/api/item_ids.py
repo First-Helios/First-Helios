@@ -110,6 +110,10 @@ def decode_item_id(token: str) -> ItemId:
         root_key=_text(root_key),
         target_path=_path(path),
     )
-    if encode_item_id(item) != token:
+    try:
+        canonical = encode_item_id(item)
+    except UnicodeError as exc:  # a lone surrogate (a "\ud800" escape) has no UTF-8 form
+        raise InvalidItemIdError from exc
+    if canonical != token:
         raise InvalidItemIdError  # a non-canonical alias of some target
     return item
