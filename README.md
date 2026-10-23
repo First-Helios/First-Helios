@@ -39,8 +39,8 @@ This section is the single current-status page. Other docs link here.
   with a menu, 472 placed in 267 cells, 97.0% of them `low_sample`. Section and item
   names (ADR-0006 Amendment 1, revision `c95d883737db`): `section_name` and `item_name` on
   every row, filled by the refresh; after the P8-3 refresh all 9,527 served sections and all
-  52,396 items have a name. Served by `GET /v1/price-index` (Amendment 2). Proposed, not
-  built: a citywide `all` row, a 0.05° grid and `GET /v1/price-index/cells` (ADR-0007
+  52,396 items have a name. Served by `GET /v1/price-index` (Amendment 2). Accepted, not
+  built yet: a citywide `all` row, a 0.05° grid and `GET /v1/price-index/cells` (ADR-0007
   [Amendment 3](./docs/adr/0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
   ADR-0019 step 3).
 - **Read API**: `apps/api/`. FastAPI, conventions per ADR-0008:
@@ -645,7 +645,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
 | [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted (commit check cost, Amendment 1) |
 | [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted (Amendment 1 accepted and built 2026-10-22) |
-| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2); Amendment 3 (area kinds, cell list) Proposed |
+| [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2); Amendment 3 (area kinds, cell list) Accepted, not built |
 | [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted (Unit A; Unit B, the staging deploy, not built; history reads, Amendment 3) |
 | [0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) | Venue discovery: source, ingestion, dedupe/minting, and schedule | Accepted |
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |

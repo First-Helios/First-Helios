@@ -6,7 +6,7 @@ the first slice (table, migration, refresh, CLI) is built with an `all` category
 only; the `course` axis follows. The API is authorized by
 [Amendment 2](#amendment-2-2026-10-01-the-price-index-api).
 [Amendment 3](#amendment-3-2026-10-22-area-kinds-and-the-cell-list) (the `all` and 0.05°
-area kinds, `GET /v1/price-index/cells`) is **Proposed** (2026-10-22, P8-4), not built.
+area kinds, `GET /v1/price-index/cells`) is **Accepted** (2026-10-22, P8-4), not built yet.
 **Date:** 2026-09-20
 **Accepted:** 2026-09-20 by project owner Fortune — adopt the shape below
 (lat/lon grid geospatial axis), defer the build.
@@ -412,11 +412,11 @@ dependency. Code: `packages/helios_core/gold/price_index_read.py`,
 
 ## Amendment 3 (2026-10-22): area kinds and the cell list
 
-**Status: Proposed 2026-10-22 (session P8-4).** Not built: no model, migration or route has
-changed. It is [ADR-0019](./0019-public-v1-site.md) §5 build step 3, which the owner's
-ADR-0019 Q3 answer approved in direction only ("this answer approves the direction, not unseen
-migration SQL"). The [open questions](#owner-questions-amendment-3) below need answers before the
-build.
+**Status: Accepted 2026-10-22 by the owner, OQ1–OQ5 as recommended (see
+[Owner decision](#owner-decision-amendment-3)); not built yet.** Proposed 2026-10-22 (session
+P8-4). It is [ADR-0019](./0019-public-v1-site.md) §5 build step 3, which the owner's ADR-0019 Q3
+answer approved in direction only ("this answer approves the direction, not unseen migration
+SQL"); OQ5 now approves the SQL below.
 
 **Answered before drafting** (owner, 2026-10-22, P8-4 prompt, all as recommended):
 
@@ -670,6 +670,24 @@ Each has a recommendation; the build waits for the answers.
 - **OQ5. Migration authorization.** Approve the SQL above as written, for a revision after
   `c95d883737db`? It drops NOT NULL on two columns and replaces one CHECK. ADR-0019 §3 described
   only widening the CHECK; the NULL columns come from Q1.
+
+### Owner decision (Amendment 3)
+
+**Answered by the owner on 2026-10-22**, in session P8-4, all as recommended:
+
+- **OQ1:** `GET /v1/price-index?area_kind=all` is `422`; the citywide row is read from
+  `/cells?area_kind=all`. `PriceIndexResponse` keeps non-null cell fields.
+- **OQ2:** `/v1/venues` names the citywide area with the pair `area_kind=all&area=all`;
+  `area_kind` without `area` is `422`.
+- **OQ3:** `/cells` items are index rows; `cell_size_degrees` is at the top level; `area_kind`
+  defaults to `latlon_grid_0p01`.
+- **OQ4:** the downgrade deletes the 0.05° and `all` rows, then restores NOT NULL and the old
+  CHECK.
+- **OQ5:** the migration SQL above is approved as written, for one revision after
+  `c95d883737db`.
+
+The build (migration, refresh, read contract, `/cells`, `area_kind` params, tests, snapshot) and
+the `helios_laptop` upgrade and refresh (Q6, after a `pg_dump`) are the next session's own PR.
 
 ### Reproduce
 

@@ -6,9 +6,9 @@
 Build progress (§5): step 1 done 2026-10-22 (P8-1,
 [record](../reviews/2026-10-22-p8-1-gold-fill.md)); step 2 built 2026-10-22 (P8-3,
 [ADR-0006 Amendment 1](./0006-gold-menu-read-models.md#amendment-1-2026-10-22-section-names-and-variant-only-item-names));
-step 3 proposed 2026-10-22 (P8-4,
-[ADR-0007 Amendment 3](./0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
-awaiting owner review). Steps 3–8 are not built.
+step 3 accepted 2026-10-22 (P8-4,
+[ADR-0007 Amendment 3](./0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list)),
+build next. Steps 3–8 are not built.
 **Date:** 2026-10-21
 **Phase:** 8 (operations), plus the frontend that ROADMAP §2 keeps in a separate repo
 **Extends:** [ADR-0008](./0008-read-api-conventions.md) (read API; its Unit B staging deploy and
