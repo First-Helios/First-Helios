@@ -307,6 +307,27 @@ These sets tuned extraction versions, not sections, but they are now the dev set
 stage. Of the 863 production page texts, 149 are neither labelled nor audited; 57 of those
 are gated. That is the pool for the held-out draw (Amendment 28 item 6).
 
+### 6a. How headings are found: names vs hierarchy (owner Q4)
+
+The owner asked whether hierarchy can replace element names. The same 714 labelled pages
+(≥90 % gate, lenient; today 0.438) were scored under four ways of nominating heading
+candidates. In every variant the section-style rule, the wrap check and the page gate decide
+which candidates count.
+
+| Candidates nominated by | Applied accuracy | Gated pages worse | Items +/− |
+|---|---|---|---|
+| `h1`–`h6` + class words (chosen) | **0.704** | 7 | +5,512 / −84 |
+| `h1`–`h6` only | 0.682 | 9 | +5,138 / −173 |
+| `h1`–`h6` + container labels (first title line of an element holding ≥2 items, where no `h` tag heads it) | 0.644 | 18 | +4,492 / −302 |
+| any short title line, layout only (a non-`h` style must head ≥2 items per instance) | 0.531 | 18 | +2,122 / −230 |
+
+- **Why hierarchy alone loses.** Many builders render a flat run of siblings in one container
+  (title, item, item, title, item, …). Nesting then doesn't separate the sections. Container
+  labels find only the first title, and a gyro page files everything under "Plates".
+- **Why pure layout loses.** It also nominates notes and per-item lines, which makes pages
+  mixed, and the gate then drops them (245 gated pages vs 412).
+- `var/p8-11/labelled-{tag,tree,tree2,struct}.txt`.
+
 ## 7. Case 5 sizing: options left in an item's own text
 
 `var/p8-11/opts.py`. An item's *region* is its name block up to the next item, at most 6 blocks:

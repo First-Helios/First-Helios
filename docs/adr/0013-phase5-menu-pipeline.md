@@ -1987,10 +1987,34 @@ write-contract change.
 
 ## Amendment 28 (2026-10-24, proposed): stage [5c] section assignment from page structure
 
-**Status: Proposed (session P8-11), not built.** Record:
-[2026-10-24-p8-11-menu-structure.md](../reviews/2026-10-24-p8-11-menu-structure.md).
-Nothing here changes the pipeline, Bronze, Menu or Gold until the owner answers the questions
-below.
+**Status: Accepted 2026-10-24 by the owner (session P8-11), with the rulings below. Not built.**
+Record: [2026-10-24-p8-11-menu-structure.md](../reviews/2026-10-24-p8-11-menu-structure.md).
+
+**Owner rulings (2026-10-24):**
+- **Q1.** Build (b). Option (a) is dropped: the LLM side is near its limit and GPU
+  re-extraction is time-intensive. The classical, structural dimension is undeveloped.
+- **Q2.** Page gate: ≥90 % of items assigned, with no corroboration gate.
+- **Q3.** Fold [5c] into the post-validator component: `resolve-v2` becomes `resolve-v3`. No
+  migration.
+- **Q4.** Candidates come from `h1`–`h6` and class words, and layout decides which count. The
+  owner's principle: element names can't be trusted, and hierarchy should cluster child items
+  under their section.
+  - Class words only nominate a candidate. A candidate counts only if its layout signature
+    repeats, encloses items of another layout and wraps them, and the page passes the gate.
+  - Two name-free variants were measured and rejected (record section 6a):
+    - container labels: applied 0.644, 18 pages worse;
+    - pure layout: 0.531.
+  - Both fail on flat sibling layouts, where nesting doesn't separate sections.
+- **Q5.** Leaf sections only in this version.
+- **Q6.** The §8 plan and bars as proposed (items 3–4): 35 pages, seed 20261024, 25 gated / 10
+  ungated.
+- **Q7.** Queue four follow-ons, each with its own amendment and evaluation after [5c] ships:
+  - case 5 variants and modifiers;
+  - pseudo-item cleanup;
+  - outline parents and `service_period`;
+  - image-menu signals.
+
+  Barstool Bites' menu URL was not chosen and stays an open side finding.
 
 **Why.** The owner found six menu-structure misses on the local site. All six are traced to a
 stage (record section 2):
