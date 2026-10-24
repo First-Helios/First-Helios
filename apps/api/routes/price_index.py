@@ -1,40 +1,62 @@
-"""Price-index read endpoints (ADR-0007 Amendments 2 and 3; ROADMAP Phase 7).
+"""Price-index read endpoints (ADR-0007 Amendments 2 and 3, ADR-0020; ROADMAP Phase 7).
 
 Serves ``gold.price_index`` through
 :mod:`packages.helios_core.gold.price_index_read` (ADR-0008 §9): the grid cell
 containing a point, one bounded response with a row per category and currency;
-and every row of one area kind (0.01°, 0.05° or the citywide ``all``), a keyset
-page at a time. Every row carries its sample size and ``low_sample`` flag, so an
-aggregate over four venues is never served as though it were an index.
+every row of one area kind (0.01°, 0.05° or the citywide ``all``), a keyset
+page at a time; and a drawn boundary's statistics and the priced items behind
+them, computed from the stored placements. Every row carries its sample size
+and ``low_sample`` flag, so an aggregate over four venues is never served as
+though it were an index.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session  # noqa: TC002 - FastAPI resolves this at runtime for Depends
 
+from apps.api.boundaries import BoundaryQuery, boundary_param
 from apps.api.db import get_session
-from apps.api.pagination import DEFAULT_LIMIT, MAX_LIMIT, decode_cell_cursor, encode_cell_cursor
+from apps.api.item_ids import ItemId, encode_item_id
+from apps.api.pagination import (
+    DEFAULT_LIMIT,
+    MAX_LIMIT,
+    decode_area_item_cursor,
+    decode_cell_cursor,
+    encode_area_item_cursor,
+    encode_cell_cursor,
+)
 from apps.api.schemas import (
+    AreaItemList,
+    AreaItemResponse,
     AreaKind,
     CategoryKind,
     CurrencyCode,
     ErrorResponse,
     GridAreaKind,
+    PriceIndexAreaResponse,
     PriceIndexCellList,
     PriceIndexCellResponse,
     PriceIndexGroupResponse,
     PriceIndexResponse,
 )
 from packages.helios_core.gold.price_index import GRID_STEPS
-from packages.helios_core.gold.price_index_read import price_index_cell, price_index_cells
+from packages.helios_core.gold.price_index_read import (
+    price_index_area,
+    price_index_area_items,
+    price_index_cell,
+    price_index_cells,
+)
+from packages.helios_core.identity.models import Establishment, Organization
 
 if TYPE_CHECKING:
-    from packages.helios_core.gold.price_index_read import PriceIndexRow
+    from apps.api.schemas import Channel, MenuScope, SourceKind
+    from packages.helios_core.gold.price_index_read import AreaItemRow, PriceIndexRow
 
 router = APIRouter(prefix="/price-index", tags=["price-index"])
 
@@ -177,4 +199,140 @@ def list_price_index_cells(
             for row in page
         ],
         next_cursor=encode_cell_cursor(page[-1].key) if len(rows) > limit else None,
+    )
+
+
+_AREA_RESPONSES: dict[int | str, dict[str, Any]] = {
+    422: {
+        "model": ErrorResponse,
+        "description": "boundary is missing or breaks a rule (the detail names it), or a "
+        "filter value is unknown.",
+    },
+}
+_AREA_ITEMS_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"model": ErrorResponse, "description": "The cursor is malformed."},
+    422: {
+        "model": ErrorResponse,
+        "description": "boundary is missing or breaks a rule (the detail names it), q or "
+        "limit is out of range, or a filter value is unknown.",
+    },
+}
+
+
+@router.get(
+    "/area",
+    response_model=PriceIndexAreaResponse,
+    summary="Get the price index of the venues inside a drawn boundary",
+    responses=_AREA_RESPONSES,
+)
+def get_price_index_area(
+    session: Annotated[Session, Depends(get_session)],
+    boundary: BoundaryQuery,
+    category_kind: Annotated[CategoryKind | None, Query()] = None,
+    currency: Annotated[CurrencyCode | None, Query()] = None,
+) -> PriceIndexAreaResponse:
+    """Return the venue-weighted price statistics of the placed venues inside ``boundary``.
+
+    Computed as every price-index row is (ADR-0020 §3): each venue's median,
+    then percentiles over those medians; groups below ``min_venues`` venues are
+    served with ``low_sample: true``. Only the venues the index places count,
+    so shared chain menus are left out. One item per category and currency,
+    narrowed by ``category_kind`` and ``currency`` when given. A boundary with
+    no placed venue is ``200`` with ``items: []`` and ``as_of: null``.
+    """
+    shape = boundary_param(boundary)
+    area = price_index_area(session, shape, category_kind=category_kind, currency_code=currency)
+    now = datetime.now(UTC)
+    return PriceIndexAreaResponse(
+        boundary=[(float(lat), float(lon)) for lat, lon in shape.corners],
+        as_of=area.effective_instant,
+        items=[_group(row, now) for row in area.rows],
+    )
+
+
+def _venue_names(session: Session, venue_ids: set[int]) -> dict[int, str | None]:
+    """Each venue's name: its operating Organization's, as on ``GET /v1/venues``."""
+    if not venue_ids:
+        return {}
+    rows = session.execute(
+        select(Establishment.subject_id, Organization.canonical_name)
+        .join(Organization, Organization.subject_id == Establishment.organization_subject_id)
+        .where(Establishment.subject_id.in_(sorted(venue_ids)))
+    ).tuples()
+    return dict(rows.all())
+
+
+def _area_item(row: AreaItemRow, venue_name: str | None, now: datetime) -> AreaItemResponse:
+    observed = row.price_observed_at
+    variant = row.target_kind == "variant"
+    return AreaItemResponse(
+        venue_id=row.venue_id,
+        venue_name=venue_name,
+        item_id=encode_item_id(
+            ItemId(
+                subject_kind=cast("MenuScope", row.subject_kind),
+                subject_id=row.subject_id,
+                source_record_id=row.source_record_id,
+                root_key=row.root_key,
+                target_path=row.native_path,
+            )
+        ),
+        section_name=row.section_name,
+        item_name=row.item_name,
+        variant_name=row.content_name if variant else None,
+        amount_minor=row.amount_minor,
+        currency_code=row.currency_code,
+        channel=cast("Channel", row.channel),
+        service_period=row.service_period,
+        observed_at=observed,
+        # An age: an observation after the request instant is fresh, not negative.
+        age_seconds=max(0, int((now - observed).total_seconds())) if observed else None,
+        source_kind=cast("SourceKind | None", row.price_source_kind),
+    )
+
+
+@router.get(
+    "/area/items",
+    response_model=AreaItemList,
+    summary="List the priced items behind a drawn boundary's price index (cursor-paginated)",
+    responses=_AREA_ITEMS_RESPONSES,
+)
+def list_price_index_area_items(
+    session: Annotated[Session, Depends(get_session)],
+    boundary: BoundaryQuery,
+    currency: Annotated[CurrencyCode | None, Query()] = None,
+    q: Annotated[
+        str | None,
+        Query(
+            min_length=2,
+            max_length=100,
+            description="Only rows whose item or variant name contains this text, "
+            "case-insensitively (section names are not matched).",
+        ),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    cursor: Annotated[str | None, Query()] = None,
+) -> AreaItemList:
+    """Return one page of the priced item and variant rows behind ``/v1/price-index/area``.
+
+    The rows of the venues the index places inside ``boundary`` (shared chain
+    menus left out, as from the median), cheapest first (ADR-0020 §4). Without
+    ``q``, walking every page gives ``priced_count`` rows. The cursor names the
+    last row's price and business key, not a row id, so it survives a refresh;
+    it does not carry ``boundary`` or the filters: send the same ones with
+    every page. A boundary or ``q`` that matches nothing is ``200`` with
+    ``items: []``.
+    """
+    shape = boundary_param(boundary)
+    after = decode_area_item_cursor(cursor) if cursor is not None else None
+    rows = price_index_area_items(
+        session, shape, currency_code=currency, name=q, after=after, limit=limit + 1
+    )
+    page = rows[:limit]
+    names = _venue_names(session, {row.venue_id for row in page})
+    now = datetime.now(UTC)
+    return AreaItemList(
+        as_of=min((row.effective_instant for row in page), default=None),
+        items=[_area_item(row, names.get(row.venue_id), now) for row in page],
+        next_cursor=encode_area_item_cursor(page[-1].key) if len(rows) > limit else None,
     )

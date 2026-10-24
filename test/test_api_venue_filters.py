@@ -400,3 +400,165 @@ def test_filtered_list_never_seq_scans(
         # With no other selective predicate, the cell range drives the Place read.
         # "Has a point" (area_kind=all) is not selective, so no index is pinned for it.
         assert "ix_place_latitude_longitude" in _indexes(plan["Plan"])
+
+
+# --------------------------------------------------------------------------- #
+# boundary (ADR-0020 owner decision 7): a drawn area, bbox then exact ray casting.
+# --------------------------------------------------------------------------- #
+
+
+def _corner() -> tuple[Decimal, Decimal]:
+    """The south-west corner of a 0.1° square no other test uses (southern hemisphere)."""
+    n = uuid4().int
+    return Decimal(-60) + Decimal(n % 800) / 20, Decimal(20) + Decimal((n // 800) % 3000) / 20
+
+
+def _near(corner: tuple[Decimal, Decimal], north: str, east: str) -> tuple[str, str]:
+    return str(corner[0] + Decimal(north)), str(corner[1] + Decimal(east))
+
+
+def _l_shape(corner: tuple[Decimal, Decimal]) -> str:
+    """An L: the square's west and south strips, 0.02° wide; its north-east is out."""
+    s, w = corner
+    return ";".join(
+        f"{s + Decimal(lat)},{w + Decimal(lon)}"
+        for lat, lon in [
+            ("0", "0"),
+            ("0.1", "0"),
+            ("0.1", "0.02"),
+            ("0.02", "0.02"),
+            ("0.02", "0.1"),
+            ("0", "0.1"),
+        ]
+    )
+
+
+# Points of the L test: inside (the strips, the south-west corner, the inner
+# corner's west and south edges) and outside (the notch, the north and east edges).
+_L_INSIDE = [("0", "0"), ("0.05", "0.01"), ("0.01", "0.05"), ("0.019999", "0.0999"), ("0.05", "0")]
+_L_OUTSIDE = [
+    ("0.05", "0.05"),
+    ("0.1", "0.01"),
+    ("0.01", "0.1"),
+    ("0.02", "0.05"),
+    ("0.05", "0.02"),
+]
+
+
+def test_boundary_lists_every_venue_inside(client: TestClient, session: Session) -> None:
+    corner, organization = _corner(), _organization(session)
+    inside = [_venue(session, organization, point=_near(corner, *p)) for p in _L_INSIDE]
+    for point in _L_OUTSIDE:
+        _venue(session, organization, point=_near(corner, *point))
+    _venue(session, organization, point=None)
+
+    params = {"organization": organization, "boundary": _l_shape(corner)}
+    assert [item["id"] for item in client.get("/v1/venues", params=params).json()["items"]] == (
+        inside
+    )
+    # ANDed with has_menu, like every filter.
+    _menu(session, inside[1], "establishment", "priced")
+    with_menu = client.get("/v1/venues", params={**params, "has_menu": "true"}).json()["items"]
+    assert [item["id"] for item in with_menu] == [inside[1]]
+
+
+@pytest.mark.parametrize("batch", [1, 2, 1000])
+@pytest.mark.parametrize("limit", [1, 2, 200])
+def test_boundary_pages_fill_past_candidates_outside(
+    client: TestClient,
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    batch: int,
+    limit: int,
+) -> None:
+    monkeypatch.setattr("apps.api.routes.venues._BOUNDARY_BATCH", batch)
+    corner, organization = _corner(), _organization(session)
+    inside: list[int] = []
+    # Bbox candidates in id order: three outside, then an inside one, and so on.
+    for n in range(4):
+        for point in _L_OUTSIDE[:3]:
+            _venue(session, organization, point=_near(corner, *point))
+        inside.append(_venue(session, organization, point=_near(corner, *_L_INSIDE[n])))
+
+    params = {"organization": organization, "boundary": _l_shape(corner)}
+    seen: list[int] = []
+    cursor: str | None = None
+    while True:
+        page = {**params, "limit": limit, **({"cursor": cursor} if cursor else {})}
+        body = client.get("/v1/venues", params=page).json()
+        assert len(body["items"]) == min(limit, len(inside) - len(seen))  # pages fill
+        seen.extend(item["id"] for item in body["items"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+    assert seen == inside
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"boundary": "0,0;0,1;1,0", "area": "0.00,0.00"},
+        {"boundary": "0,0;0,1;1,0", "area_kind": "latlon_grid_0p05"},
+        {"boundary": "0,0;0,1;1,0", "area_kind": "all", "area": "all"},
+        {"boundary": "0,0;0,1"},
+        {"boundary": "0,0;0,3;1,0"},
+        {"boundary": ""},
+    ],
+)
+def test_bad_or_combined_boundary_is_422(client: TestClient, params: dict[str, str]) -> None:
+    response = client.get("/v1/venues", params=params)
+    assert response.status_code == 422, params
+    body = response.json()
+    assert body["code"] == "validation_error"
+    assert set(body) == {"detail", "code", "trace_id"}
+    if "area" in params or "area_kind" in params:
+        assert body["detail"] == "boundary cannot be combined with area or area_kind"
+
+
+def test_boundary_matching_nothing_is_200_empty(client: TestClient) -> None:
+    corner = _corner()
+    params = {"boundary": _l_shape(corner), "organization": 999_999_999_999}
+    assert client.get("/v1/venues", params=params).json() == {"items": [], "next_cursor": None}
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{}, {"has_menu": "true"}, {"has_menu": "false"}, {"organization": "1"}],
+    ids=["boundary", "has_menu=true", "has_menu=false", "organization"],
+)
+def test_boundary_list_never_seq_scans(
+    client: TestClient, session: Session, extra: dict[str, str]
+) -> None:
+    corner, organization = _corner(), _organization(session)
+    venue = _venue(session, organization, point=_near(corner, "0.01", "0.01"))
+    _menu(session, venue, "establishment", "priced")
+
+    statements: list[tuple[str, Any]] = []
+
+    def _capture(_conn: Any, _cursor: Any, statement: str, parameters: Any, *_: Any) -> None:
+        if "identity.establishment" in statement:
+            statements.append((statement, parameters))
+
+    connection = session.connection()
+    event.listen(connection, "before_cursor_execute", _capture)
+    try:
+        params = {"boundary": _l_shape(corner), **extra}
+        assert client.get("/v1/venues", params=params).status_code == 200
+    finally:
+        event.remove(connection, "before_cursor_execute", _capture)
+
+    candidates, page = statements  # the bbox candidates, then the page's venues by id
+    connection.execute(text("SET LOCAL enable_seqscan = off"))
+    try:
+        plans = [
+            connection.exec_driver_sql(f"EXPLAIN (FORMAT JSON) {sql}", parameters).scalar_one()[0]
+            for sql, parameters in (candidates, page)
+        ]
+    finally:
+        connection.execute(text("SET LOCAL enable_seqscan = on"))
+    for plan in plans:
+        scans = _seq_scans(plan["Plan"])
+        assert "current_menu" not in scans
+        assert "place" not in scans
+    if "organization" not in extra:
+        assert "ix_place_latitude_longitude" in _indexes(plans[0]["Plan"])

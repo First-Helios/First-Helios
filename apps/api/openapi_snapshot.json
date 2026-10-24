@@ -1,6 +1,190 @@
 {
   "components": {
     "schemas": {
+      "AreaItemList": {
+        "description": "A cursor-paginated page of the priced rows behind a drawn area's price index.\n\nItems are ordered by ``amount_minor`` (cheapest first), then by the row's\nbusiness key, so the order is total. ``as_of`` is the earliest refresh\ninstant on the page; null when ``items`` is empty. ``next_cursor`` is null\non the last page.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AreaItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "as_of",
+          "items",
+          "next_cursor"
+        ],
+        "title": "AreaItemList",
+        "type": "object"
+      },
+      "AreaItemResponse": {
+        "description": "One priced item or variant row behind a drawn area's price index.\n\n``item_id`` is the node's id for ``GET /v1/items/{item_id}/price-history``.\n``item_name`` is the item's name; ``variant_name`` the variant's (e.g. a\nsize), null on an item's own price. ``age_seconds`` is the observation's age\nat request time, never negative; null when there is no observation time.",
+        "properties": {
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "channel": {
+            "enum": [
+              "unspecified",
+              "dine_in",
+              "takeaway"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "currency_code": {
+            "title": "Currency Code",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Name"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "section_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Name"
+          },
+          "service_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Period"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "jsonld",
+                  "dom",
+                  "pdf",
+                  "llm"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Kind"
+          },
+          "variant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Name"
+          },
+          "venue_id": {
+            "title": "Venue Id",
+            "type": "integer"
+          },
+          "venue_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue Name"
+          }
+        },
+        "required": [
+          "venue_id",
+          "venue_name",
+          "item_id",
+          "section_name",
+          "item_name",
+          "variant_name",
+          "amount_minor",
+          "currency_code",
+          "channel",
+          "service_period",
+          "observed_at",
+          "age_seconds",
+          "source_kind"
+        ],
+        "title": "AreaItemResponse",
+        "type": "object"
+      },
       "ErrorResponse": {
         "description": "The uniform error body returned by every non-2xx response.",
         "properties": {
@@ -494,6 +678,54 @@
           "trails"
         ],
         "title": "PriceHistoryResponse",
+        "type": "object"
+      },
+      "PriceIndexAreaResponse": {
+        "description": "The price index of the placed venues inside a drawn boundary (ADR-0020 \u00a73).\n\n``boundary`` is the normalized corners as ``[lat, lon]`` pairs, without a\nclosing repeat. Each item is computed exactly as a stored price-index row\nis, over the venues the index places inside the boundary: shared chain\nmenus and multi-venue organizations are left out, so ``venue_count`` can\nbe lower than the number of venues with a menu there. ``as_of`` is the\nrefresh instant of those placements; null, with ``items: []``, when the\nboundary holds no placed venue.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "boundary": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Boundary",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PriceIndexGroupResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "boundary",
+          "as_of",
+          "items"
+        ],
+        "title": "PriceIndexAreaResponse",
         "type": "object"
       },
       "PriceIndexCellList": {
@@ -1396,6 +1628,205 @@
         ]
       }
     },
+    "/v1/price-index/area": {
+      "get": {
+        "description": "Return the venue-weighted price statistics of the placed venues inside ``boundary``.\n\nComputed as every price-index row is (ADR-0020 \u00a73): each venue's median,\nthen percentiles over those medians; groups below ``min_venues`` venues are\nserved with ``low_sample: true``. Only the venues the index places count,\nso shared chain menus are left out. One item per category and currency,\nnarrowed by ``category_kind`` and ``currency`` when given. A boundary with\nno placed venue is ``200`` with ``items: []`` and ``as_of: null``.",
+        "operationId": "get_price_index_area_v1_price_index_area_get",
+        "parameters": [
+          {
+            "description": "A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not.",
+            "in": "query",
+            "name": "boundary",
+            "required": true,
+            "schema": {
+              "description": "A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not.",
+              "title": "Boundary",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "all",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "USD",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Currency"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceIndexAreaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "boundary is missing or breaks a rule (the detail names it), or a filter value is unknown."
+          }
+        },
+        "summary": "Get the price index of the venues inside a drawn boundary",
+        "tags": [
+          "price-index"
+        ]
+      }
+    },
+    "/v1/price-index/area/items": {
+      "get": {
+        "description": "Return one page of the priced item and variant rows behind ``/v1/price-index/area``.\n\nThe rows of the venues the index places inside ``boundary`` (shared chain\nmenus left out, as from the median), cheapest first (ADR-0020 \u00a74). Without\n``q``, walking every page gives ``priced_count`` rows. The cursor names the\nlast row's price and business key, not a row id, so it survives a refresh;\nit does not carry ``boundary`` or the filters: send the same ones with\nevery page. A boundary or ``q`` that matches nothing is ``200`` with\n``items: []``.",
+        "operationId": "list_price_index_area_items_v1_price_index_area_items_get",
+        "parameters": [
+          {
+            "description": "A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not.",
+            "in": "query",
+            "name": "boundary",
+            "required": true,
+            "schema": {
+              "description": "A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not.",
+              "title": "Boundary",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "USD",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Currency"
+            }
+          },
+          {
+            "description": "Only rows whose item or variant name contains this text, case-insensitively (section names are not matched).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 2,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose item or variant name contains this text, case-insensitively (section names are not matched).",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AreaItemList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The cursor is malformed."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "boundary is missing or breaks a rule (the detail names it), q or limit is out of range, or a filter value is unknown."
+          }
+        },
+        "summary": "List the priced items behind a drawn boundary's price index (cursor-paginated)",
+        "tags": [
+          "price-index"
+        ]
+      }
+    },
     "/v1/price-index/cells": {
       "get": {
         "description": "Return one page of the ``area_kind`` rows, ordered by area key, category, currency.\n\nThe order is text order, not map order. The cursor does not carry the\nfilters: send the same ones with every page. It names the last row's key, not\na row id, so it survives a refresh; each page's ``as_of`` says which\nsnapshot it came from. A filter that matches nothing is ``200`` with\n``items: []``.",
@@ -1521,7 +1952,7 @@
     },
     "/v1/venues": {
       "get": {
-        "description": "Return one page of current venues ordered by id, with an opaque cursor.\n\nFilters are ANDed. The cursor does not carry them: send the same filters\nwith every page. A filter that matches nothing is ``200`` with ``items: []``.\nThe ``area`` list is geographic: every current venue whose point is in the\narea, not only the price index's contributors.",
+        "description": "Return one page of current venues ordered by id, with an opaque cursor.\n\nFilters are ANDed. The cursor does not carry them: send the same filters\nwith every page. A filter that matches nothing is ``200`` with ``items: []``.\nThe ``area`` and ``boundary`` lists are geographic: every current venue\nwhose point is in the area, not only the price index's contributors. One\ngeographic filter at a time: ``boundary`` with ``area`` or ``area_kind`` is\n``422``.",
         "operationId": "list_venues_v1_venues_get",
         "parameters": [
           {
@@ -1631,6 +2062,24 @@
               "description": "The price-index area kind area is a key of (default latlon_grid_0p01). Requires area.",
               "title": "Area Kind"
             }
+          },
+          {
+            "description": "Only venues whose point lies inside this drawn area. A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not. Not with area or area_kind.",
+            "in": "query",
+            "name": "boundary",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only venues whose point lies inside this drawn area. A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not. Not with area or area_kind.",
+              "title": "Boundary"
+            }
           }
         ],
         "responses": {
@@ -1662,7 +2111,7 @@
                 }
               }
             },
-            "description": "A query parameter failed validation, area is not a canonical area_key of area_kind, or area_kind is given without area."
+            "description": "A query parameter failed validation, area is not a canonical area_key of area_kind, area_kind is given without area, boundary breaks a rule (the detail names it), or boundary is given with area or area_kind."
           }
         },
         "summary": "List venues (cursor-paginated)",
