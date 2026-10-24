@@ -12,6 +12,12 @@ node carries the Capture-targeted Evidence of the text it states:
   words are exactly the name's ("Tacos"), or a heading block containing them.
   Otherwise its items go to the structural ``Unsectioned`` grouping, which
   states no heading of its own.
+- **[5c] sections** (Amendment 28). On a page [5c] gated (``dom_sections.assign``),
+  an assigned item is filed under its heading block instead: the section is keyed
+  and evidenced on that block and named by its printed text. Nothing else moves:
+  an item whose move would merge it with another of the page's items keeps the
+  section it had without [5c], so rows, items, variants, prices and their
+  Evidence are the same with or without it.
 - **Items.** One item per (section, name block, normalized name): the rows of
   one printed item (its sizes, its prices) share it; the same dish in two
   sections is two items. The name is the extractor's copy, grounded by the
@@ -33,13 +39,14 @@ from typing import TYPE_CHECKING
 from packages.helios_parsing.resolve import resolved
 from packages.helios_parsing.validator import (
     Evidence,
+    evidence,
     name_evidence,
     norm_tokens,
     parse_amount,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from packages.helios_parsing.segment import Block
     from packages.helios_parsing.validator import Verdict
@@ -111,8 +118,21 @@ def _section_block(blocks: Sequence[Block], name: str, before: int) -> int | Non
     return None
 
 
-def shape(blocks: Sequence[Block], verdicts: Sequence[Verdict]) -> tuple[ShapedSection, ...]:
-    """The page's sections in reading order; ``Unsectioned`` (if any) first."""
+def _dom_section(block: Block) -> tuple[str, str, Evidence]:
+    """A [5c] section: keyed, evidenced and named on its heading block."""
+    return f"{block.id}:{_norm(block.text)}", _clip(block.text), evidence(block, 0, len(block.text))
+
+
+def shape(
+    blocks: Sequence[Block],
+    verdicts: Sequence[Verdict],
+    headings: Mapping[int, int] | None = None,
+) -> tuple[ShapedSection, ...]:
+    """The page's sections in reading order; ``Unsectioned`` (if any) first.
+
+    ``headings`` is [5c]'s assignment (``DomSections.assignment``): a kept item's
+    name block index to its section heading's block index.
+    """
     index = {b.id: i for i, b in enumerate(blocks)}
     kept = [v for v in verdicts if v.decision != "reject" and v.name_evidence is not None]
 
@@ -129,11 +149,14 @@ def shape(blocks: Sequence[Block], verdicts: Sequence[Verdict]) -> tuple[ShapedS
             printed = _clip(blocks[j].text[span.start : span.end])
             grounded[name] = (f"{blocks[j].id}:{_norm(name)}", printed or _clip(name), span)
 
+    placed = [grounded.get(v.row.section or "") for v in kept]
+    if headings:
+        placed = _with_dom_sections(blocks, index, kept, placed, headings)
+
     sections: dict[str | None, tuple[str | None, Evidence | None, dict[str, _Item]]] = {}
-    for v in kept:
+    for v, found in zip(kept, placed, strict=True):
         assert v.name_evidence is not None  # noqa: S101 - filtered above
         row = v.row
-        found = grounded.get(row.section or "")
         section_key = found[0] if found else None
         if section_key not in sections:
             sections[section_key] = (found[1], found[2], {}) if found else (None, None, {})
@@ -181,3 +204,34 @@ def shape(blocks: Sequence[Block], verdicts: Sequence[Verdict]) -> tuple[ShapedS
         )
         for key, (name, evidence, items) in ordered
     )
+
+
+def _with_dom_sections(
+    blocks: Sequence[Block],
+    index: Mapping[str, int],
+    kept: Sequence[Verdict],
+    placed: list[tuple[str, str, Evidence] | None],
+    headings: Mapping[int, int],
+) -> list[tuple[str, str, Evidence] | None]:
+    """Each kept row's section with [5c]'s assignment applied, unless the move merges
+    two of the page's items (an item is one section's (name block, name))."""
+    item_keys = []
+    for v in kept:
+        assert v.name_evidence is not None  # noqa: S101 - filtered by the caller
+        item_keys.append(f"{v.name_evidence.block_id}:{_norm(v.row.item)}")
+    today = [
+        (found[0] if found else None, key) for found, key in zip(placed, item_keys, strict=True)
+    ]
+    moved: list[tuple[str, str, Evidence] | None] = []
+    for v, found in zip(kept, placed, strict=True):
+        assert v.name_evidence is not None  # noqa: S101 - filtered by the caller
+        j = headings.get(index[v.name_evidence.block_id])
+        moved.append(_dom_section(blocks[j]) if j is not None else found)
+    while True:
+        owners: dict[tuple[str | None, str], set[tuple[str | None, str]]] = {}
+        for found, key, before in zip(moved, item_keys, today, strict=True):
+            owners.setdefault((found[0] if found else None, key), set()).add(before)
+        clash = {before for group in owners.values() if len(group) > 1 for before in group}
+        if not clash:
+            return moved
+        moved = [placed[n] if today[n] in clash else found for n, found in enumerate(moved)]
