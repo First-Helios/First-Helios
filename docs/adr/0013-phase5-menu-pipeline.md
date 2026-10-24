@@ -1984,3 +1984,205 @@ write-contract change.
   (`rejected_unwritten`).
 - **Restoration.** A withdrawn page becomes due again after a new Version or an accepted
   fetch. Its next pages are written as `restoration`s.
+
+## Amendment 28 (2026-10-24, proposed): stage [5c] section assignment from page structure
+
+**Status: Accepted 2026-10-24 by the owner (session P8-11), with the rulings below. Not built.**
+Record: [2026-10-24-p8-11-menu-structure.md](../reviews/2026-10-24-p8-11-menu-structure.md).
+
+**Owner rulings (2026-10-24):**
+- **Q1.** Build (b). Option (a) is dropped: the LLM side is near its limit and GPU
+  re-extraction is time-intensive. The classical, structural dimension is undeveloped.
+- **Q2.** Page gate: ≥90 % of items assigned, with no corroboration gate.
+- **Q3.** Fold [5c] into the post-validator component: `resolve-v2` becomes `resolve-v3`. No
+  migration.
+- **Q4.** Candidates come from `h1`–`h6` and class words, and layout decides which count. The
+  owner's principle: element names can't be trusted, and hierarchy should cluster child items
+  under their section.
+  - Class words only nominate a candidate. A candidate counts only if its layout signature
+    repeats, encloses items of another layout and wraps them, and the page passes the gate.
+  - Two name-free variants were measured and rejected (record section 6a):
+    - container labels: applied 0.644, 18 pages worse;
+    - pure layout: 0.531.
+  - Both fail on flat sibling layouts, where nesting doesn't separate sections.
+- **Q5.** Leaf sections only in this version.
+- **Q6.** The §8 plan and bars as proposed (items 3–4): 35 pages, seed 20261024, 25 gated / 10
+  ungated.
+- **Q7.** Queue four follow-ons, each with its own amendment and evaluation after [5c] ships:
+  - case 5 variants and modifiers;
+  - pseudo-item cleanup;
+  - outline parents and `service_period`;
+  - image-menu signals.
+
+  Barstool Bites' menu URL was not chosen and stays an open side finding.
+
+**Why.** The owner found six menu-structure misses on the local site. All six are traced to a
+stage (record section 2):
+- **[3] chunk context, fed by [2].** segment-v2 keeps only a yes/no `heading` per block, so a
+  dish printed in an `h3` looks like a section heading. The chunker names the last such block
+  in the next chunk's context line, and the model files the following dishes under it:
+  Veracruz "Pineapple" / "Shrimp Taco", Vivo "California Nachos", Barstool Bites "Chicken
+  Caesar*", Que Divino "Picadillo Con Papa".
+- **[4] model output.** Inside a chunk, the model sometimes ignores a heading and keeps the
+  previous section. On Los Mayas, 28 of 94 items are wrong this way: the sides under DINNERS,
+  and BURRITOS, MEXICAN SPECIALS and KIDS SPECIALS missing.
+- **Not section losses:**
+  - Veracruz's missing Aguas Frescas items are a [4] recall miss;
+  - Que Divino's BYO options have no place in the extraction contract (no modifier slot; no
+    `menu_modifier` row exists for any page);
+  - Bottega's drinks exist only in images (§9).
+
+In every reported case the page's DOM prints the right section. Corpus-wide (863 page texts,
+1,568 venue records, read-only):
+- **38 % of named sections (3,003 of 7,934) are a dish's name**, not a heading;
+- on 58 % of pages (501), some chunk's context names a dish as the heading;
+- on 714 pages that already carry gold labels, **today's section accuracy is 0.438**.
+
+### Options
+
+- **(a) Forward: richer segmenter/chunk input.** Give the model heading levels and a context
+  line that names the enclosing section heading.
+  - It changes the chunker (and the segmenter, if `Block` gains fields), so the extractor key
+    changes.
+  - Every page is re-extracted on the laptop GPU, and the extraction bars (recall, accuracy,
+    catch, FR, usable) need a full held-out §8 evaluation.
+  - If the segmenter output changes, `text_hash` and the segmenter tag in every Evidence
+    locator change too. Every page then gets a new `menu-page` Version (§5).
+  - It can't fix [4]'s in-chunk misses (the Los Mayas kind), because the heading is already
+    in the chunk.
+- **(b) Reverse: post-hoc section assignment (proposed).** A new pure stage [5c] between [5b]
+  and shape. It re-parses the bundle's HTML with the segment-v2 parser and asserts identical
+  blocks; any mismatch means no assignment. It then maps each kept item's name block to its
+  enclosing section heading when the page's structure is clean, and keeps today's section
+  otherwise.
+  - The segmenter, `text_hash`, Versions, the extractor key and saved answers are unchanged,
+    and every row, verdict and price is unchanged.
+  - Item and price Evidence locators are unchanged. A re-assigned section cites its heading
+    block's span in the same locator format.
+  - No model call is needed: a version bump re-interprets every page from its saved answers
+    (replaying all 863 page texts takes 16 s on 8 laptop cores).
+- **(c) Not adopted:**
+  - per-platform section parsers (Toast, Wix, WordPress), which §9 and the owner rule out;
+  - renaming sections in shape alone: it can't see the DOM.
+
+### Proposed: [5c] rules (generic; prototype `var/p8-11/domsec.py`, record section 4)
+
+1. **Candidate headings.** Non-chrome, unpriced blocks with letters:
+   - the first block of an `h1`–`h6` element;
+   - or a block whose own element classes read as a heading or category title. Instance ids
+     such as `section-<uuid>` don't count, and nor do item, price, nav or button classes.
+2. **Section style.** Headings are grouped by layout signature (their last three block-level
+   ancestors' tag and first class, ids and digits masked). A signature is a section style when
+   at least half its headings, and at least two, enclose an extracted item of another
+   signature before the next heading of the same signature.
+   - This separates Toast's group `h3` from its dish `h3`.
+   - It drops a lone page title, location or welcome heading.
+3. **Assignment.** An item's section is the nearest preceding section-style heading. Earlier
+   section-style `h` headings of a lower level are its outline parents, for example Toast's
+   "Lunch & Dinner" over "Desserts".
+4. **Page gate.** At least 90 % of the page's kept items are assigned, and either the headings
+   wrap their items (each heading's lowest common ancestor with an item holds no other heading
+   of its style, for at least 95 % of items) or one heading style serves them all.
+   - On a gated page, assigned items take the DOM section; the rest keep today's.
+   - Ungated pages are unchanged.
+5. **Shape.** A [5c] section is keyed and evidenced on its heading block, as a grounded section
+   is today, with the heading's printed text as its name. `Unsectioned` remains for items
+   without one.
+
+### Measured (dev, not §8: the rules were tuned on these)
+
+- **Coverage.** The gate applies to 469 of 863 page texts (54.3 %): 747 of 1,568 records and
+  37,988 of 59,289 items (64.1 %). Of those items, 21,635 change section. Under the strict
+  gate (every item unambiguous), 393 page texts (45.5 %) and 31,859 items qualify. 255 pages
+  (29.5 %) have no section structure at all.
+- **Label-based** (714 labelled pages, 20,411 gold-matched items, lenient token match):
+
+  | | Today | (b) applied |
+  |---|---|---|
+  | All 714 pages | 0.438 | **0.704** |
+  | 412 gated pages | 0.446 | **0.875** |
+
+  On gated pages, 165 pages get better and 7 worse (+5,512 / −84 items). Exact match: 0.405 →
+  0.687.
+- **Hand audit** of 56 disagreements: 12 are pseudo-items (headings or nav emitted as items).
+  Of the other 44, the DOM is right in 39, today's in 4, both wrong in 1.
+- **The six cases:** every reported item gets the section the owner expects. Cantaloupe stays
+  missing and BYO options stay unparsed (not section losses).
+
+### Cost and versioning
+
+- **No GPU, model, segmenter, chunker or Bronze change.**
+- **Pipeline-version bump.** Every published `llm` page is re-interpreted from its saved
+  answers (ADR-0005 interpretation revision): Menu writes for about 1,600 records, then a Gold
+  refresh (about 8 min, per the P8-3 record). Both run on `helios_laptop` only with the owner's
+  go-ahead.
+- **`method_version` is 126 of its 128 characters.** A new `;sections-v1` component doesn't
+  fit (`extraction._checked` raises). See Q3.
+- **Item ids.** Native keys are version-local (`v<version>:<heading block>:<name>`, N1). A
+  re-sectioned item gets a new path, so its `item_id` and price-history trail start at the bump
+  inside the current Version. That is the same effect any page-text change has today.
+- **Pi.** [5c] adds one stdlib HTML parse per page. Its time is measured on the Pi at build
+  (speed test only; the model is unchanged).
+
+### §8 evaluation plan
+
+1. **Metric: section accuracy.**
+   - Scope: gold items that a kept row matches, with a non-empty label section outside a wine
+     list.
+   - An item is correct when its stored section name equals the label's after
+     `norm_tokens` (exact). The lenient token-subset match is recorded beside it.
+   - Reported per page, with the page-clustered bootstrap (Amendment 19 1(a)).
+   - Also recorded:
+     - the gated-page share and per-page better/worse counts against today;
+     - the `Unsectioned` rate;
+     - sections named after a dish.
+2. **Labels.** No new field. LABELLING.md already defines `section` as "the nearest section
+   heading the page prints above the item, as printed". Labelling is blind: the labeller sees
+   neither today's sections nor [5c]'s.
+3. **Held-out set.** A fresh draw (seed 20261024) of 35 pages. The pool is the 149 production
+   page texts that are neither labelled nor audited (57 of them gated). Stratified 25 gated /
+   10 ungated. The exclusions (the 1,287 labelled page text hashes and the audited URLs) are
+   frozen with their sha256 before labelling.
+4. **Bars (proposed, owner sets them).**
+   - On gated pages, section accuracy ≥ 0.85 and at least today's + 0.20 (point estimates).
+   - At most 1 gated page in 10 worse than today.
+   - Ungated pages identical to today, checked.
+5. **Existing §8 bars carry over without a GPU run.** An invariance check runs on every page
+   of the dev and held-out sets: [5c] changes no row, verdict, price, item count or Evidence
+   other than section keys and section Evidence.
+
+### Not in this amendment (later amendments, if the owner wants them)
+
+- Option (a).
+- **Variants and modifiers in an item's own text** (case 5): 6,024 items (9.8 %) print more
+  prices in their own region than were extracted, and 2,909 (4.7 %) carry a choice line.
+- **Pseudo-item removal** using the section-style rule. It touches item recall and the
+  extraction bars.
+- **Outline parents into `menu_section.parent_section_id`, and time-of-day sections into
+  `service_period`.**
+- **Image-menu detection** (case 6). The plan is record-only signals and a 50-page blind
+  labelled sample before any rule (record section 8). OCR stays out of scope.
+
+### Owner questions
+
+- **Q1. Build (b) as the next pipeline version?** (Recommended; (a) stays a later candidate,
+  measured on the GPU.)
+- **Q2. Page gate.** ≥90 % assigned (recommended; applied accuracy 0.704, +5,512 / −84). Or
+  every item assigned (0.671, +4,823 / −74). Add a corroboration gate, where ≥25 % of the DOM
+  headings used must also be section names the model gave (0.679, +4,940 / −27)? Recommended:
+  no corroboration, which keeps [5c] independent of the model.
+- **Q3. Version naming within 128 characters.**
+  - (i) Fold [5c] into the post-validator component: `resolve-v2` becomes `resolve-v3`, "[5b]
+    and [5c]", with no length change. Recommended: no migration.
+  - (ii) Widen `menu_page.method_version`. That is a migration on a table with data, so it
+    stops for review.
+- **Q4. Class-named headings.** Include them (recommended; Squarespace's `menu-section-title`
+  and similar), or `h1`–`h6` only? `h1`–`h6` only is safer but covers fewer pages.
+- **Q5. Outline parents.** Store them now in `parent_section_id` (shape and writer change, no
+  schema change), or keep leaf sections only for this version (recommended)?
+- **Q6. §8 bars and draw** as in plan items 3–4, or other values?
+- **Q7. Follow-ons.** Which to queue next?
+  - case 5 options;
+  - pseudo-items;
+  - image-menu signals;
+  - Barstool Bites' menu URL (`seasideonthepier.com` looks like another restaurant; ADR-0010).
