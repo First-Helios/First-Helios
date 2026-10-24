@@ -1,7 +1,8 @@
 # ADR-0020: Drawn areas in the read API (price summary and items inside a boundary)
 
-**Status:** Proposed 2026-10-23 (session P8-8). Nothing in it is built. It waits for the owner's
-answers to the [owner questions](#owner-questions).
+**Status:** Accepted 2026-10-23 by the owner, OQ1–OQ6 and OQ8 as recommended and OQ7 changed
+(the `boundary` filter on `GET /v1/venues` is built now; see [Owner decision](#owner-decision)).
+Proposed 2026-10-23 (session P8-8). Not built yet.
 **Date:** 2026-10-23
 **Phase:** 8 (public v1 site, an [ADR-0019](./0019-public-v1-site.md) follow-up)
 **Extends:** [ADR-0007](./0007-gold-price-index-projection.md) (price index: placement,
@@ -204,7 +205,8 @@ inside the boundary, so the list and the median always describe the same data (O
 
 ### 5. Not proposed
 
-- **A `boundary` filter on `GET /v1/venues` (OQ7).** The client already filters the 941
+- *(Withdrawn by owner decision 7: the filter is built now.)* **A `boundary` filter on
+  `GET /v1/venues` (OQ7).** The client already filters the 941
   `has_menu` venues itself (5 requests per page load). If the list grows tenfold, the same
   validator and bbox-then-Python evaluation would add it in about 40 ms citywide.
 - **Name search on venues** (ADR-0019 Q7 stays "later"). **`pg_trgm`** (an extension).
@@ -290,6 +292,34 @@ Each has a recommendation. Nothing in this ADR is built until these are answered
 - **OQ8. Order of work.** After acceptance: one build PR for the migration, refresh, endpoints
   and tests, then a refresh on `helios_laptop` (an owner-approved write, after a `pg_dump`),
   then the client PR (the summary under the count, the items list with `q`). Agreed?
+
+## Owner decision
+
+**Answered by the owner on 2026-10-23**, in session P8-8:
+
+1. **OQ1 transport:** GET with `boundary=lat,lon;…`, as in point 1.
+2. **OQ2 limits:** as proposed: 3–50 corners, at most 6 decimals, at most 1,200 characters, a
+   bbox of at most 2° × 2°, self-crossing boundaries accepted under even-odd.
+3. **OQ3 placements:** the Gold migration, a new `gold.price_index_placement` table written by
+   the refresh (point 2). This approves the direction. The exact DDL and migration SQL are
+   reviewed in the build PR, as with ADR-0007 Amendment 3.
+4. **OQ4 summary:** `GET /v1/price-index/area` as in point 3. The client shows "N venues with a
+   menu; M in the index", with the median only when `low_sample` is false.
+5. **OQ5 item rows:** the rows behind the summary (placed families only, so shared chain menus
+   are left out).
+6. **OQ6 name filter:** `q`, an unindexed case-insensitive substring on item and variant names
+   (not section names). No extension. Venue name search stays deferred (ADR-0019 Q7).
+7. **OQ7 changed: add `boundary` to `GET /v1/venues` now.** It uses the same parser and the same
+   exact ray casting as the price-index endpoints. The bbox prefilter runs on
+   `ix_place_latitude_longitude`, and ray casting runs in Python. It is ANDed with the
+   existing filters. `boundary` together with `area` or `area_kind` is `422`: one geographic
+   filter at a time. Paging stays keyset on the Establishment `subject_id`. A page fills from
+   bbox candidates in id order after the cursor, until `limit + 1` venues pass the ray cast or
+   the candidates run out. The list stays geographic (every current venue whose point is
+   inside), as ADR-0018 §A3 defines `area`. Point 5's first bullet is withdrawn.
+8. **OQ8 order:** one First-Helios build PR (migration, refresh, the three endpoint changes,
+   tests). Then a `pg_dump` of `helios_laptop`, `alembic upgrade head` and a Gold refresh there
+   (approved owner writes). Then the frontend PR.
 
 ## References
 

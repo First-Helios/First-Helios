@@ -678,6 +678,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0017](./docs/adr/0017-extraction-harness-generalization.md) | Extraction harness generalization: invariance, multi-model acceptance, per-model configuration | Accepted (items 1–2; items 3–4 deferred) |
 | [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Accepted (built, P7-2) |
 | [0019](./docs/adr/0019-public-v1-site.md) | The path to a public v1 site: frontend, page set, area UX, public deploy | Accepted in part (Q1–Q3, Q6c, Q7, Q9; public deploy deferred); steps 1–6 (local v1) built, the frontend PRs awaiting merge |
+| [0020](./docs/adr/0020-drawn-areas-in-the-read-api.md) | Drawn areas in the read API: `boundary=` polygons, a Gold placement table, area price summary and items | Accepted (OQ1–OQ6, OQ8 as recommended; OQ7 changed: `boundary` on `/v1/venues` too); not built yet |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the
