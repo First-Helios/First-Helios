@@ -426,6 +426,14 @@ def test_section_page_scores_today_and_5c_exact_and_lenient() -> None:
     assert (c["invariance_broken"], c["ungated_changed"]) == (0, 0)
 
 
+def test_section_scoring_loads_unpriced_menu_pages(tmp_path: Path) -> None:
+    unpriced = {**LABEL, "page_id": "unpriced", "items": [_item("Queso", "b0002", "Tacos")]}
+    (tmp_path / "unpriced.json").write_text(json.dumps(unpriced), encoding="utf-8")
+    (tmp_path / "page1.json").write_text(json.dumps(LABEL), encoding="utf-8")
+    assert list(evaluate.load_gold(tmp_path, None, None)) == ["page1"]
+    assert list(evaluate.load_gold(tmp_path, None, None, priced=False)) == ["page1", "unpriced"]
+
+
 def test_print_sections_reports_the_bars(capsys: pytest.CaptureFixture[str]) -> None:
     good = Counter(pages=1, gated=1, section_scored=10, today_exact=5, applied_exact=9)
     worse = Counter(pages=1, gated=1, section_scored=10, today_exact=8, applied_exact=7)

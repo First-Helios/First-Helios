@@ -83,12 +83,15 @@ if TYPE_CHECKING:
     from packages.helios_parsing.validator import Row
 
 
-def load_gold(labels: Path, splits: Path | None, split: str | None) -> dict[str, GoldPage]:
-    """Scorable gold pages by page id (sorted), limited to one split if given."""
+def load_gold(
+    labels: Path, splits: Path | None, split: str | None, *, priced: bool = True
+) -> dict[str, GoldPage]:
+    """Scorable gold pages by page id (sorted), limited to one split if given; with
+    ``priced`` false (section accuracy), every reviewed menu page, priced or not."""
     pages = {}
     for path in sorted(labels.glob("*.json")):
         page = gold_page(json.loads(path.read_text(encoding="utf-8")))
-        if page.scorable:
+        if page.scorable or (not priced and page.reviewed and page.page_label == "menu"):
             pages[page.page_id] = page
     if splits is not None and split is not None:
         members = set(json.loads(splits.read_text(encoding="utf-8"))[split])
@@ -401,7 +404,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, help="invariance: write per-page flip counts")
     parser.add_argument("--baseline", type=Path, help="invariance: fail on flips added to it")
     args = parser.parse_args()
-    gold = load_gold(args.labels, args.splits, args.split)
+    gold = load_gold(args.labels, args.splits, args.split, priced=args.command != "sections")
     if args.command == "compare":
         cmd_compare(args.data, gold, args.tags)
     elif args.command == "loss":
