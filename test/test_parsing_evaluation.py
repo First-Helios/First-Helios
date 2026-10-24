@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -25,6 +26,7 @@ from packages.helios_parsing.evaluation import (
     metrics,
     page_clustered,
     score_page,
+    section_page,
 )
 from packages.helios_parsing.segment import segment
 from packages.helios_parsing.validator import Row
@@ -302,6 +304,14 @@ def test_evaluate_cli_scores_saved_output(
     assert "[5b] accepted 0" in out
     assert "html_list      pages=  1 0.000 (0/6)" in out
 
+    monkeypatch.setattr(sys, "argv", ["evaluate", "sections", "t1", "--pages", *common])
+    evaluate.main()
+    out = capsys.readouterr().out
+    # one heading encloses the two extracted items: no section style, the page is ungated
+    assert "pages=1 gated=0 (0.000) block_mismatch=0 scored items=2 not extracted=4" in out
+    assert "invariance broken on 0 pages; ungated pages changed 0" in out
+    assert "    page1 -    2    2    2    2    2" in out
+
 
 def test_evaluate_cli_refuses_an_incomplete_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -370,6 +380,73 @@ def test_gold_reject_page_counts_one_pages_gold_rows() -> None:
     pairs = gold_page(PAIR_LABEL), segment(PAIR_PAGE)
     assert gold_reject_page(*pairs)["false_reject"] == 0
     assert gold_reject_page(*pairs, ())["false_reject"] == 2
+
+
+DISH_HEADINGS = (
+    "<h2>Tacos</h2><h3>Shrimp Taco</h3><p>$4.00</p><h3>Pork Taco</h3><p>$3.50</p>"
+    "<h2>Drinks</h2><h3>Horchata</h3><p>$2.50</p><h3>Jamaica</h3><p>$2.50</p>"
+)
+
+
+def _dish_label() -> GoldPage:
+    blocks = {b.text: b.id for b in segment(DISH_HEADINGS)}
+    return gold_page(
+        {
+            "page_id": "dishes",
+            "page_label": "menu",
+            "reviewed": True,
+            "items": [
+                _item("Shrimp Taco", blocks["Shrimp Taco"], "Tacos", "4.00"),
+                _item("Pork Taco", blocks["Pork Taco"], "Tacos", "3.50"),
+                _item("Horchata", blocks["Horchata"], "Drinks (all day)", "2.50"),
+                _item("Jamaica", blocks["Jamaica"], "Drinks", "2.50"),
+                _item("Not Extracted", "b0099", "Drinks", "1.00"),
+                _item("Red Wine", "b0099", "Red Wines", "9.00"),  # a wine list: out of scope
+            ],
+        }
+    )
+
+
+def test_section_page_scores_today_and_5c_exact_and_lenient() -> None:
+    rows = [
+        Row("Shrimp Taco", "4.00", section="Tacos"),
+        Row("Pork Taco", "3.50", section="Shrimp Taco"),  # a dish named as its section
+        Row("Horchata", "2.50"),  # Unsectioned
+        Row("Jamaica", "2.50", section="Drinks"),
+    ]
+    c = section_page(_dish_label(), segment(DISH_HEADINGS), rows, DISH_HEADINGS)
+    assert (c["pages"], c["gated"], c["block_mismatch"]) == (1, 1, 0)
+    assert (c["section_scored"], c["section_not_extracted"]) == (4, 1)
+    assert (c["today_exact"], c["today_lenient"]) == (2, 2)
+    # "Drinks" for "Drinks (all day)" is a lenient match only
+    assert (c["applied_exact"], c["applied_lenient"]) == (3, 4)
+    assert (c["today_scored_unsectioned"], c["applied_scored_unsectioned"]) == (1, 0)
+    assert (c["today_dish_sections"], c["today_dish_section_items"]) == (1, 1)
+    assert c["applied_dish_sections"] == 0
+    assert (c["invariance_broken"], c["ungated_changed"]) == (0, 0)
+
+
+def test_section_scoring_loads_unpriced_menu_pages(tmp_path: Path) -> None:
+    unpriced = {**LABEL, "page_id": "unpriced", "items": [_item("Queso", "b0002", "Tacos")]}
+    (tmp_path / "unpriced.json").write_text(json.dumps(unpriced), encoding="utf-8")
+    (tmp_path / "page1.json").write_text(json.dumps(LABEL), encoding="utf-8")
+    assert list(evaluate.load_gold(tmp_path, None, None)) == ["page1"]
+    assert list(evaluate.load_gold(tmp_path, None, None, priced=False)) == ["page1", "unpriced"]
+
+
+def test_print_sections_reports_the_bars(capsys: pytest.CaptureFixture[str]) -> None:
+    good = Counter(pages=1, gated=1, section_scored=10, today_exact=5, applied_exact=9)
+    worse = Counter(pages=1, gated=1, section_scored=10, today_exact=8, applied_exact=7)
+    ungated = Counter(pages=1, section_scored=4, today_exact=2, applied_exact=2)
+    evaluate.print_sections({"a": good, "b": worse, "c": ungated}, per_page=True)
+    out = capsys.readouterr().out
+    assert "pages=3 gated=2 (0.667)" in out
+    assert "bar: gated exact 0.800 >= 0.85: FAIL" in out
+    assert "bar: gated exact 0.800 >= today 0.650 + 0.2: FAIL" in out
+    assert "bar: gated pages worse 1 of 2 <= 10%: FAIL" in out
+    assert "bar: ungated pages identical: pass" in out
+    assert "gated (exact): better 1, worse 1; items +4 / -1" in out
+    assert "    b G   10    8    7    0    0" in out
 
 
 def test_score_page_counts_resolved_accepts_apart() -> None:

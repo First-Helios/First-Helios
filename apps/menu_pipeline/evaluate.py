@@ -16,6 +16,7 @@ chunk under ``"chunks"``, in chunk order: the spike's record) and gold labels
         [--out FLIPS.json] [--baseline FLIPS.json]
     uv run python -m apps.menu_pipeline.evaluate extract --data … --labels … \\
         [--server http://localhost:8080] TAG
+    uv run python -m apps.menu_pipeline.evaluate sections --data … --labels … TAG [--pages]
 
 ``extract`` runs the pipeline's own extractor (``llama_client``: prompt, grammar,
 chunking, sparse retry; 2 requests in flight) over the gold pages and saves each
@@ -27,6 +28,13 @@ gold-row FR and usable prices with page-clustered 95 % intervals (and the share 
 resamples within the FR bar); accepted rows that match no label; real-output
 wrong-price rows accepted; [5b]'s accepts; and per-format and per-page gold-row FR.
 (Amendment 21) Usable prices are checked against :data:`USABLE_BAR`.
+
+``sections`` prints one tag's section accuracy (Amendment 28 plan item 1) without
+and with [5c]: exact and lenient, page-clustered intervals, gated pages and their
+better/worse counts against today, ``Unsectioned`` and dish-named sections, the
+invariance and ungated-identity checks, and the proposed bars on gated pages
+(:data:`SECTION_BAR`, :data:`SECTION_GAIN`, :data:`SECTION_MAX_WORSE`); ``--pages``
+adds the per-page table.
 
 ``invariance`` runs the invariance suite (ADR-0017 item 1,
 ``packages.helios_parsing.invariance``) over the gold pages: no extractor output is
@@ -64,6 +72,7 @@ from packages.helios_parsing.evaluation import (
     metrics,
     page_clustered,
     score_page,
+    section_page,
 )
 from packages.helios_parsing.invariance import VARIANTS, added_flips, invariance_page
 from packages.helios_parsing.output import parse_output, rows_of
@@ -74,12 +83,15 @@ if TYPE_CHECKING:
     from packages.helios_parsing.validator import Row
 
 
-def load_gold(labels: Path, splits: Path | None, split: str | None) -> dict[str, GoldPage]:
-    """Scorable gold pages by page id (sorted), limited to one split if given."""
+def load_gold(
+    labels: Path, splits: Path | None, split: str | None, *, priced: bool = True
+) -> dict[str, GoldPage]:
+    """Scorable gold pages by page id (sorted), limited to one split if given; with
+    ``priced`` false (section accuracy), every reviewed menu page, priced or not."""
     pages = {}
     for path in sorted(labels.glob("*.json")):
         page = gold_page(json.loads(path.read_text(encoding="utf-8")))
-        if page.scorable:
+        if page.scorable or (not priced and page.reviewed and page.page_label == "menu"):
             pages[page.page_id] = page
     if splits is not None and split is not None:
         members = set(json.loads(splits.read_text(encoding="utf-8"))[split])
@@ -241,6 +253,101 @@ def cmd_report(data: Path, gold: dict[str, GoldPage], tag: str, seed: int) -> No
             print(f"    {pid} [{gold[pid].format}] {_ratio(c['false_reject'], c['correct_rows'])}")
 
 
+SECTION_BAR = 0.85  # (Amendment 28) gated pages' section accuracy, exact
+SECTION_GAIN = 0.20  # ... and at least today's plus this
+SECTION_MAX_WORSE = 0.10  # gated pages worse than today, at most this share
+
+
+def _share(c: Counter[str], key: str) -> float:
+    return c[key] / c["section_scored"] if c["section_scored"] else 0.0
+
+
+def _section_row(name: str, group: dict[str, Counter[str]]) -> str:
+    g: Counter[str] = sum(group.values(), Counter())
+    cells = []
+    for side in ("today", "applied"):
+        ci = page_clustered([(c[f"{side}_exact"], c["section_scored"]) for c in group.values()])
+        cells.append(f"{_share(g, side + '_exact'):.3f} {_interval(ci.low, ci.high)}")
+    return (
+        f"  {name:8} {len(group):5} {g['section_scored']:6}  {cells[0]:24} {cells[1]:24} "
+        f"{_share(g, 'today_lenient'):.3f}     {_share(g, 'applied_lenient'):.3f}"
+    )
+
+
+def _section_bars(total: Counter[str], gated: dict[str, Counter[str]]) -> None:
+    g: Counter[str] = sum(gated.values(), Counter())
+    acc, base = _share(g, "applied_exact"), _share(g, "today_exact")
+    worse = sum(c["applied_exact"] < c["today_exact"] for c in gated.values())
+    bars = (
+        (f"gated exact {acc:.3f} >= {SECTION_BAR}", acc >= SECTION_BAR),
+        (f"gated exact {acc:.3f} >= today {base:.3f} + {SECTION_GAIN}", acc >= base + SECTION_GAIN),
+        (
+            f"gated pages worse {worse} of {len(gated)} <= {SECTION_MAX_WORSE:.0%}",
+            worse <= SECTION_MAX_WORSE * len(gated),
+        ),
+        ("ungated pages identical", total["ungated_changed"] == 0),
+        ("invariance clean", total["invariance_broken"] == 0),
+    )
+    for text, ok in bars:
+        print(f"  bar: {text}: {'pass' if ok else 'FAIL'}")
+
+
+def print_sections(pages: dict[str, Counter[str]], *, per_page: bool) -> None:
+    """The section-accuracy record from ``section_page`` counts, one Counter per page."""
+    total: Counter[str] = sum(pages.values(), Counter())
+    gated = {pid: c for pid, c in pages.items() if c["gated"]}
+    print(
+        f"pages={total['pages']} gated={total['gated']} "
+        f"({total['gated'] / max(total['pages'], 1):.3f}) block_mismatch={total['block_mismatch']} "
+        f"scored items={total['section_scored']} not extracted={total['section_not_extracted']}"
+    )
+    print(
+        f"  {'':8} pages  items  today exact [95%]        applied exact [95%]      today len applied len"
+    )
+    ungated = {pid: c for pid, c in pages.items() if not c["gated"]}
+    for name, group in (("all", pages), ("gated", gated), ("ungated", ungated)):
+        if group:
+            print(_section_row(name, group))
+    for metric in ("exact", "lenient"):
+        better = [c for c in gated.values() if c[f"applied_{metric}"] > c[f"today_{metric}"]]
+        worse = [c for c in gated.values() if c[f"applied_{metric}"] < c[f"today_{metric}"]]
+        gain = sum(c[f"applied_{metric}"] - c[f"today_{metric}"] for c in better)
+        loss = sum(c[f"today_{metric}"] - c[f"applied_{metric}"] for c in worse)
+        print(
+            f"  gated ({metric}): better {len(better)}, worse {len(worse)}; items +{gain} / -{loss}"
+        )
+    for side in ("today", "applied"):
+        print(
+            f"  {side:7} Unsectioned {_share(total, side + '_scored_unsectioned'):.3f} of scored "
+            f"items; sections named after a dish {total[side + '_dish_sections']} of "
+            f"{total[side + '_sections']} ({total[side + '_dish_section_items']} items)"
+        )
+    print(
+        f"  invariance broken on {total['invariance_broken']} pages; "
+        f"ungated pages changed {total['ungated_changed']}"
+    )
+    if gated:
+        _section_bars(total, gated)
+    if per_page:
+        print("  per page: id gated items today_exact applied_exact today_len applied_len")
+        for pid, c in sorted(pages.items()):
+            print(
+                f"    {pid} {'G' if c['gated'] else '-'} {c['section_scored']:4} "
+                f"{c['today_exact']:4} {c['applied_exact']:4} "
+                f"{c['today_lenient']:4} {c['applied_lenient']:4}"
+            )
+
+
+def cmd_sections(data: Path, gold: dict[str, GoldPage], tag: str, *, per_page: bool) -> None:
+    pages: dict[str, Counter[str]] = {}
+    for pid in complete(data, gold, [tag]):
+        html = (data / "pages" / f"{pid}.html").read_text(encoding="utf-8")
+        blocks = segment(html)
+        pages[pid] = section_page(gold[pid], blocks, extracted_rows(data, tag, pid, blocks), html)
+    print(tag)
+    print_sections(pages, per_page=per_page)
+
+
 def cmd_invariance(
     data: Path, gold: dict[str, GoldPage], out: Path | None, baseline: Path | None
 ) -> None:
@@ -283,20 +390,21 @@ def cmd_extract(data: Path, gold: dict[str, GoldPage], tag: str, client: LlamaCl
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "command", choices=["compare", "loss", "corrupt", "report", "extract", "invariance"]
+        "command",
+        choices=["compare", "loss", "corrupt", "report", "extract", "invariance", "sections"],
     )
     parser.add_argument("tags", nargs="*")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--labels", type=Path, required=True)
     parser.add_argument("--splits", type=Path)
     parser.add_argument("--split")
-    parser.add_argument("--pages", action="store_true", help="loss: one line per page")
+    parser.add_argument("--pages", action="store_true", help="loss, sections: one line per page")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--server", default="http://localhost:8080", help="extract: llama-server")
     parser.add_argument("--out", type=Path, help="invariance: write per-page flip counts")
     parser.add_argument("--baseline", type=Path, help="invariance: fail on flips added to it")
     args = parser.parse_args()
-    gold = load_gold(args.labels, args.splits, args.split)
+    gold = load_gold(args.labels, args.splits, args.split, priced=args.command != "sections")
     if args.command == "compare":
         cmd_compare(args.data, gold, args.tags)
     elif args.command == "loss":
@@ -305,6 +413,9 @@ def main() -> None:
     elif args.command == "report":
         for tag in args.tags:
             cmd_report(args.data, gold, tag, args.seed)
+    elif args.command == "sections":
+        for tag in args.tags:
+            cmd_sections(args.data, gold, tag, per_page=args.pages)
     elif args.command == "invariance":
         cmd_invariance(args.data, gold, args.out, args.baseline)
     elif args.command == "extract":

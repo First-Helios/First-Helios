@@ -16,8 +16,10 @@ ADR-0013 implementation slice 5 (session P5-4). For each due Version
 2. **Validate.** The answers are parsed, repaired and stitched
    (``output.rows_of``), the validator decides every row, and [5b] price
    resolution (``resolve.judge``, Amendment 19) re-judges its no-match
-   downgrades; the page's schema.org JSON-LD goes through the same validator
-   (§1), without [5b] (no tuning data for it).
+   downgrades; [5c] (``dom_sections.assign``, Amendment 28) then files the
+   ``llm`` stream's items under the page's own section headings when its
+   structure passes the page gate. The page's schema.org JSON-LD goes through the
+   same validator (§1), without [5b] or [5c] (no tuning data for them).
 3. **Write.** Per page, the Evidence its nodes cite is committed first (Menu
    admission accepts only committed input), then in one transaction the ``llm``
    page aggregate and, when
@@ -77,6 +79,7 @@ from apps.menu_pipeline.menu_writes import (
 )
 from packages.helios_core.identity.contracts import SubjectNotEligibleError
 from packages.helios_parsing.chunking import CHUNKER_VERSION, chunks
+from packages.helios_parsing.dom_sections import assign
 from packages.helios_parsing.jsonld import JSONLD_VERSION, menu_items, validator_rows
 from packages.helios_parsing.menu_shape import shape
 from packages.helios_parsing.output import REPAIRS_VERSION, parse_output, rows_of
@@ -495,7 +498,11 @@ class _Run:
         jsonld_rows = validator_rows(menu_items(html))
         if jsonld_rows or head_has_items(self._session, due.source_record_id, "jsonld"):
             streams.append(("jsonld", validate(blocks, jsonld_rows)))
-        shapes = [shape(blocks, validation.verdicts) for _, validation in streams]
+        headings = assign(html, blocks, llm.verdicts).assignment  # [5c], llm stream only
+        shapes = [
+            shape(blocks, validation.verdicts, headings if kind == "llm" else None)
+            for kind, validation in streams
+        ]
         confidence = _confidence(self._scorer.probability(html, bundle.url))
         evidence_ids = record_span_evidence(self._session, due, blocks, shapes)
         self._commit()  # Menu admission accepts only committed Evidence

@@ -51,6 +51,16 @@ on others. Labels under a wine list's section are out of scope and not scored
   wrong rows not accepted;
 - promo: accepted priced rows matched to a ``promo`` item (recorded, not gated).
 
+**Section accuracy** (``section_page``, Amendment 28): the gold items a kept row
+matches (by the label's name block, else by normalized name) whose label names a
+section outside a wine list. The stored section is correct when its ``norm_tokens``
+equal the label's (*exact*); *lenient* also accepts one name's tokens containing the
+other's ("DINNERS" ~ "DINNERS (All Day)"). Each page is scored as shaped without
+[5c] (*today*) and with it (*applied*, ``dom_sections.assign``), with: whether [5c]
+gated the page, ``Unsectioned`` items, sections named after a dish (their tokens
+equal a labelled item's and no labelled section's) and the invariance check
+(``shaped_items`` equal with and without [5c]).
+
 **Loss** (``loss_page``): every gold price lands in exactly one bucket, in this
 order: ``item_missed``, ``row_unpriced``, ``wrong_amount``,
 ``not_accepted:<reason>``, ``accepted``.
@@ -73,6 +83,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from packages.helios_parsing.dom_sections import assign
+from packages.helios_parsing.menu_shape import shape
 from packages.helios_parsing.output import wine_section
 from packages.helios_parsing.resolve import RESOLVERS, judge, resolved
 from packages.helios_parsing.validator import Row, norm_tokens, parse_amount
@@ -80,6 +92,7 @@ from packages.helios_parsing.validator import Row, norm_tokens, parse_amount
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from packages.helios_parsing.menu_shape import ShapedItem, ShapedSection
     from packages.helios_parsing.resolve import Resolver
     from packages.helios_parsing.segment import Block
 
@@ -570,3 +583,90 @@ def corruption_metrics(c: Counter[str]) -> dict[str, float | None]:
         "false_reject": c["false_reject"] / c["correct_rows"] if c["correct_rows"] else None,
         "catch": caught / total if total else None,
     }
+
+
+def shaped_items(sections: Sequence[ShapedSection]) -> Counter[ShapedItem]:
+    """Every shaped item (its key, name, prices, variants and their Evidence) without the
+    section it is filed under: [5c] may change only the sections around these."""
+    return Counter(item for section in sections for item in section.items)
+
+
+def _section_tokens(name: str | None) -> tuple[str, ...]:
+    return tuple(norm_tokens(name or ""))
+
+
+def section_near(stored: str | None, label: str | None) -> bool:
+    """Lenient section match: one name's tokens contain the other's."""
+    a, b = set(_section_tokens(stored)), set(_section_tokens(label))
+    return bool(a) and bool(b) and (a <= b or b <= a)
+
+
+def _sections_by_item(
+    sections: Sequence[ShapedSection],
+) -> tuple[dict[str, str | None], dict[tuple[str, ...], str | None]]:
+    """Each item's section name by its name block, and by its normalized name (first wins)."""
+    by_block: dict[str, str | None] = {}
+    by_name: dict[tuple[str, ...], str | None] = {}
+    for section in sections:
+        for item in section.items:
+            by_block.setdefault(item.evidence.block_id, section.name)
+            by_name.setdefault(_section_tokens(item.name), section.name)
+    return by_block, by_name
+
+
+def _dish_sections(sections: Sequence[ShapedSection], page: GoldPage, prefix: str) -> Counter[str]:
+    dishes = {_section_tokens(it.name) for it in page.items}
+    labelled = {_section_tokens(it.section) for it in page.items if it.section}
+    c: Counter[str] = Counter()
+    for section in sections:
+        if section.name is None:
+            c[f"{prefix}_unsectioned_items"] += len(section.items)
+            continue
+        c[f"{prefix}_sections"] += 1
+        words = _section_tokens(section.name)
+        if words in dishes and words not in labelled:
+            c[f"{prefix}_dish_sections"] += 1
+            c[f"{prefix}_dish_section_items"] += len(section.items)
+    return c
+
+
+def section_page(
+    page: GoldPage,
+    blocks: list[Block],
+    rows: list[Row],
+    html: str,
+    resolvers: Sequence[tuple[str, Resolver]] = RESOLVERS,
+) -> Counter[str]:
+    """Section-accuracy counts for one page, without (``today_*``) and with [5c]
+    (``applied_*``); ``gated`` is 1 when [5c] assigned the page's sections."""
+    verdicts = judge(blocks, rows, resolvers).verdicts
+    dom = assign(html, blocks, verdicts)
+    today = shape(blocks, verdicts)
+    applied = shape(blocks, verdicts, dom.assignment)
+    c: Counter[str] = Counter(pages=1, gated=int(dom.gated), block_mismatch=int(not dom.matched))
+    c["invariance_broken"] = int(shaped_items(today) != shaped_items(applied))
+    c["ungated_changed"] = int(not dom.gated and applied != today)
+    c.update(_dish_sections(today, page, "today"))
+    c.update(_dish_sections(applied, page, "applied"))
+    today_block, today_name = _sections_by_item(today)
+    applied_block, applied_name = _sections_by_item(applied)
+    for it in page.items:
+        if not it.section or wine_section(it.section):
+            continue
+        if it.block is not None and it.block in today_block:
+            before, after = today_block[it.block], applied_block[it.block]
+        elif _section_tokens(it.name) in today_name:
+            words = _section_tokens(it.name)
+            before, after = today_name[words], applied_name[words]
+        else:
+            c["section_not_extracted"] += 1
+            continue
+        want = _section_tokens(it.section)
+        c["section_scored"] += 1
+        c["today_exact"] += _section_tokens(before) == want
+        c["applied_exact"] += _section_tokens(after) == want
+        c["today_lenient"] += section_near(before, it.section)
+        c["applied_lenient"] += section_near(after, it.section)
+        c["today_scored_unsectioned"] += before is None
+        c["applied_scored_unsectioned"] += after is None
+    return c

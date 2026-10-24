@@ -319,7 +319,7 @@ def test_pipeline_version_names_every_component_within_the_column() -> None:
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm == (
         "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;"
-        "repairs-v9;validator-v8;resolve-v2;classifier-v2"
+        "repairs-v9;validator-v8;resolve-v3;classifier-v2"
     )
     assert len(version.llm) <= 128
     assert version.jsonld == "jsonld-v1;validator-v8;segment-v2;classifier-v2"
@@ -624,7 +624,10 @@ def test_version_bump_reinterprets_from_saved_output_and_new_text_is_an_observat
     assert second.source_record_version_id == first.source_record_version_id
 
     later = _T1 + REFETCH_WINDOW + timedelta(minutes=1)
-    venues.fetch({gers: _MENU.replace("</body>", "<p>Elote</p><p>$4.25</p></body>")}, at=later)
+    # above the first heading: [5c] assigns 3 of 4 items, under its gate, so Elote stays
+    # Unsectioned
+    elote = "<p>Elote</p><p>$4.25</p><h2>Tacos</h2>"
+    venues.fetch({gers: _MENU.replace("<h2>Tacos</h2>", elote)}, at=later)
     changed = venues.extract(server, scorer=_Scorer(name="word-v2"))
 
     assert changed.due_by_reason == {"changed": 1} and changed.chunks == 1
@@ -641,6 +644,49 @@ def test_version_bump_reinterprets_from_saved_output_and_new_text_is_an_observat
             select(MenuItem).where(MenuItem.page_id == third.id, MenuItem.name == "Elote")
         )
         assert elote is not None and elote.source_native_key is None  # Unsectioned: not in Gold
+
+
+def test_5c_files_items_under_the_pages_own_headings(
+    venues: _Venues, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(_SECTIONS, "Queso", "Carne Asada Taco")  # a dish named as the section
+    gers = venues.add("Veracruz")
+    venues.resolve()
+    venues.fetch({gers: _MENU}, at=_T1)
+
+    report = venues.extract(_Server())
+
+    assert "resolve-v3" in report.method_version
+    assert (report.items_written, report.prices_written, report.unsectioned_items) == (3, 4, 0)
+    (page,) = venues.pages(gers)
+    with venues.factory() as session:
+        filed = sorted(
+            (str(section.name), str(item.name))
+            for section, item in session.execute(
+                select(MenuSection, MenuItem)
+                .join(MenuItem, MenuItem.section_id == MenuSection.id)
+                .where(MenuSection.page_id == page.id)
+            )
+        )
+        assert filed == [("Drinks", "Horchata"), ("Tacos", "Carne Asada Taco"), ("Tacos", "Queso")]
+        capture = session.scalar(
+            select(Capture)
+            .join(Evidence, Evidence.capture_id == Capture.id)
+            .join(EvidenceLink, EvidenceLink.evidence_id == Evidence.id)
+            .where(EvidenceLink.page_id == page.id)
+            .limit(1)
+        )
+        assert capture is not None and capture.bundle_path is not None
+        bundle = BundleStore(venues.tmp_path).read(capture.bundle_path)
+        cited = {
+            excerpt(bundle, e.locator)
+            for e in session.scalars(
+                select(Evidence)
+                .join(EvidenceLink, EvidenceLink.evidence_id == Evidence.id)
+                .where(EvidenceLink.page_id == page.id, Evidence.capture_id.is_not(None))
+            )
+        }
+        assert {"Tacos", "Drinks"} <= cited  # the sections cite their heading blocks
 
 
 _JSONLD = (
@@ -725,7 +771,7 @@ def test_a_resolved_price_gets_its_own_confidence_reason_and_run_share(venues: _
     assert ("3/6 Catfish Dinner", "6", 1799, RESOLVED_PRICE_CONFIDENCE) in rows
     assert ("Queso", None, 600, FLAGGED_PRICE_CONFIDENCE) in rows
     assert RESOLVED_PRICE_CONFIDENCE < FLAGGED_PRICE_CONFIDENCE < PRICE_CONFIDENCE
-    assert "resolve-v2" in page.method_version
+    assert "resolve-v3" in page.method_version
 
 
 def test_run_report_lists_pages_outside_the_tuning_range() -> None:
