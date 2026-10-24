@@ -205,6 +205,32 @@ All 863 page texts on the laptop (x86_64, 16 CPUs):
    amendment's 57?
 5. **`helios_p812_test`.** Drop the disposable test database now, or after merge?
 
+## 5a. Applied to `helios_laptop` (owner go-ahead, 2026-10-24)
+
+- **Backup:** `var/laptop-run/helios_laptop-2026-10-24-pre-p8-12.dump` (29.4 MB, 36 tables).
+- **Dry run** (read only, at alembic `13081a087231`): 1,597 pages due, all `reinterpret`. Every
+  one had saved answers and a matching bundle.
+- **Re-interpretation** (`var/p8-12/reinterp.py run`, this branch's code):
+  - `run_extraction` ran with an extractor that refuses any model call;
+  - 1,597 of 1,597 pages were written, with 0 failed and **0 model calls**;
+  - 0 withdrawals: the verifier rejected nothing new;
+  - 68,795 prices, unchanged from the previous run;
+  - 31 min wall time.
+- **Gold refresh:** 58,031 `current_menu` rows, up from 54,318: fewer items are
+  `Unsectioned`, so more carry a native key. The price index has 351 rows and 947 families.
+- **The six cases on the site.** Every reported item now sits under the expected section. One
+  thing remains: the merge guard leaves single-dish "sections" wherever the model emitted the
+  same printed dish twice. Case 2 is only partly fixed by [5c]:
+  - Veracruz "Shrimp Taco" still holds 8 duplicated desserts (the real copies are under
+    Desserts), and "Cochinita Pibil Taco" holds one;
+  - Vivo: "Beef Enchiladas", "Chipotle Enchiladas", "Spinach & Mushroom Enchiladas";
+  - Barstool Bites: "Chicken Alfredo";
+  - Que Divino: "Queso Flamiado Con Chorizo";
+  - Los Mayas: a second "MEXICAN SPECIALS".
+
+  Removing these needs duplicate removal, which changes item counts. That falls outside
+  Amendment 28's invariance rule, so it needs its own ruling (the queued pseudo-item cleanup).
+
 ## 6. Artefacts (untracked, `var/p8-12/` in the worktree)
 
 - **Scripts:**
