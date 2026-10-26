@@ -2544,7 +2544,7 @@ validator or Menu write-contract change.
 
 ## Amendment 30 (2026-10-26, proposed): validator grounding to the nearest print, and glued names
 
-**Status: Proposed 2026-10-26 (P8-15). Accepted in part 2026-10-26 by the owner: g1f + G3 are built as `validator-v9` (P8-16, build note below); G2 is dropped for now. The build adds invariance-suite flips (ADR-0017 item 1), so it is not applied until the owner rules on that.**
+**Status: Proposed 2026-10-26 (P8-15). Accepted in part 2026-10-26 by the owner: g1f + G3 are built as `validator-v9` (P8-16, build note below); G2 is dropped for now. The build adds 8 invariance-suite page/style pairs (ADR-0017 item 1); the owner accepted them as claim-style invariance debt (Q-A30 (a), 2026-10-26).**
 Record: [2026-10-26-p8-15-same-narrowed-and-grounding.md](../reviews/2026-10-26-p8-15-same-narrowed-and-grounding.md),
 section 6. Prototype: `var/p8-15/ground.py` (untracked). Build record:
 [2026-10-26-p8-16-validator-v9.md](../reviews/2026-10-26-p8-16-validator-v9.md).
@@ -2612,9 +2612,11 @@ there is no migration.
     - A narrower G3, applied only to the claimed block, was measured too: it adds more flips
       (9 pairs, 6,638 → 6,685), so it is not offered.
     - The ADR-0017 rule is that a change adding flips is rejected. The owner's acceptance
-      came before the suite was run, so the build waits for the owner (draft PR, Q-A30 in
-      the build record): (a) accept the 8 pairs as claim-style invariance debt
-      (recommended), (b) build g1f alone, or (c) hold.
+      came before the suite was run, so it was put to the owner (Q-A30 in the build record):
+      (a) accept the 8 pairs as claim-style invariance debt, (b) build g1f alone, or (c) hold.
+    - **Owner ruling (2026-10-26): (a).** The 8 pairs (+20 flips; `p816-v9.json` is the new
+      baseline map) are recorded as invariance debt next to the claim styles' existing 637.
+      A later change is measured against v9's map.
 - **Applying it** means one saved-answer re-interpretation and a Gold refresh on
   `helios_laptop`. That is queued for after merge.
 
