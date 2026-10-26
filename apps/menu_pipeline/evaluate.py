@@ -17,6 +17,7 @@ chunk under ``"chunks"``, in chunk order: the spike's record) and gold labels
     uv run python -m apps.menu_pipeline.evaluate extract --data … --labels … \\
         [--server http://localhost:8080] TAG
     uv run python -m apps.menu_pipeline.evaluate sections --data … --labels … TAG [--pages]
+    uv run python -m apps.menu_pipeline.evaluate template --data … --labels … TAG [--pages]
 
 ``extract`` runs the pipeline's own extractor (``llama_client``: prompt, grammar,
 chunking, sparse retry; 2 requests in flight) over the gold pages and saves each
@@ -36,6 +37,14 @@ invariance and ungated-identity checks, and the proposed bars on gated pages
 (:data:`SECTION_BAR`, :data:`SECTION_GAIN`, :data:`SECTION_MAX_WORSE`); ``--pages``
 adds the per-page table.
 
+``template`` prints one tag's [5d] record (Amendment 29 plan items 1 and 4) on
+resolve-v3 against resolve-v4, page by page: template-gated pages; item recall,
+kept-item precision, usable prices and price accuracy on gated pages, with the
+page-clustered interval of each change; §8's extraction numbers over all scorable
+pages; per-action counts checked against gold; duplicate rows removed; and the stage
+bars (``evaluation.template_bars``). Gold-row FR and catch are the validator's alone on
+gold rows, so ``report`` gives them.
+
 ``invariance`` runs the invariance suite (ADR-0017 item 1,
 ``packages.helios_parsing.invariance``) over the gold pages: no extractor output is
 read. It prints each style's flips, writes per-page counts with ``--out``, and with
@@ -46,8 +55,10 @@ before and exits non-zero if there is one.
 pages and each held-out set); without it every scorable gold page is scored.
 ``compare`` and ``report`` refuse to score when a tag has no saved output for a gold
 page (an incomplete ``extract`` job must not pass as a smaller score).
-Pages are segmented with the current segmenter; the rows are repaired and
-stitched exactly as the pipeline does. Gold labels, pages and outputs stay in
+Pages are segmented with the current segmenter; the ``llm`` stream is interpreted
+exactly as the pipeline does (``page_template.llm_stream``: repairs, stitching, [5]+[5b],
+[5d], duplicate removal and [5c]), so ``compare``, ``loss``, ``report`` and ``sections``
+score what production stores. Gold labels, pages and outputs stay in
 ``var/``; only counts and rates go into ``docs/reviews/``.
 """
 
@@ -68,19 +79,24 @@ from packages.helios_parsing.evaluation import (
     corruption_metrics,
     gold_page,
     gold_reject_page,
-    loss_page,
+    loss_verdicts,
     metrics,
     page_clustered,
-    score_page,
-    section_page,
+    page_clustered_change,
+    score_verdicts,
+    section_counts,
+    template_bars,
+    template_page,
 )
 from packages.helios_parsing.invariance import VARIANTS, added_flips, invariance_page
 from packages.helios_parsing.output import parse_output, rows_of
+from packages.helios_parsing.page_template import llm_stream
 from packages.helios_parsing.segment import segment
 
 if TYPE_CHECKING:
+    from packages.helios_parsing.output import ExtractorOutput
     from packages.helios_parsing.segment import Block
-    from packages.helios_parsing.validator import Row
+    from packages.helios_parsing.validator import Row, Verdict
 
 
 def load_gold(
@@ -103,9 +119,25 @@ def blocks_of(data: Path, page_id: str) -> list[Block]:
     return segment((data / "pages" / f"{page_id}.html").read_text(encoding="utf-8"))
 
 
-def extracted_rows(data: Path, tag: str, page_id: str, blocks: list[Block]) -> list[Row]:
+def html_of(data: Path, page_id: str) -> str:
+    return (data / "pages" / f"{page_id}.html").read_text(encoding="utf-8")
+
+
+def extracted_outputs(data: Path, tag: str, page_id: str) -> list[ExtractorOutput]:
     result = json.loads((data / "extract" / tag / f"{page_id}.json").read_text(encoding="utf-8"))
-    return rows_of([parse_output(chunk.get("raw") or "") for chunk in result["chunks"]], blocks)
+    return [parse_output(chunk.get("raw") or "") for chunk in result["chunks"]]
+
+
+def extracted_rows(data: Path, tag: str, page_id: str, blocks: list[Block]) -> list[Row]:
+    return rows_of(extracted_outputs(data, tag, page_id), blocks)
+
+
+def interpreted(data: Path, tag: str, page_id: str) -> tuple[list[Block], tuple[Verdict, ...]]:
+    """The page's blocks and its ``llm`` stream's verdicts, as the pipeline stores them."""
+    html = html_of(data, page_id)
+    blocks = segment(html)
+    stream = llm_stream(blocks, extracted_outputs(data, tag, page_id), html)
+    return blocks, stream.validation.verdicts
 
 
 def _fmt(value: float | None) -> str:
@@ -134,8 +166,7 @@ def cmd_compare(data: Path, gold: dict[str, GoldPage], tags: list[str]) -> None:
         total: Counter[str] = Counter()
         by_format: dict[str, Counter[str]] = {}
         for pid in common:
-            blocks = blocks_of(data, pid)
-            counts = score_page(gold[pid], blocks, extracted_rows(data, tag, pid, blocks))
+            counts = score_verdicts(gold[pid], interpreted(data, tag, pid)[1])
             total += counts
             by_format.setdefault(str(gold[pid].format), Counter()).update(counts)
         m = metrics(total)
@@ -158,8 +189,7 @@ def cmd_loss(data: Path, gold: dict[str, GoldPage], tag: str, *, per_page: bool)
     for pid, page in gold.items():
         if not (data / "extract" / tag / f"{pid}.json").exists():
             continue
-        blocks = blocks_of(data, pid)
-        pages[pid] = loss_page(page, blocks, extracted_rows(data, tag, pid, blocks))
+        pages[pid] = loss_verdicts(page, interpreted(data, tag, pid)[1])
         buckets += pages[pid]
     total = sum(buckets.values())
     print(f"{tag} pages={len(pages)} gold prices={total}")
@@ -203,9 +233,9 @@ def cmd_report(data: Path, gold: dict[str, GoldPage], tag: str, seed: int) -> No
     rejects: dict[str, Counter[str]] = {}
     pages: list[tuple[GoldPage, list[Block]]] = []
     for pid in pids:
-        blocks = blocks_of(data, pid)
+        blocks, verdicts = interpreted(data, tag, pid)
         pages.append((gold[pid], blocks))
-        counts = score_page(gold[pid], blocks, extracted_rows(data, tag, pid, blocks))
+        counts = score_verdicts(gold[pid], verdicts)
         total += counts
         usable.append((counts["found_price"], counts["gold_prices"]))
         rejects[pid] = gold_reject_page(gold[pid], blocks)
@@ -341,11 +371,94 @@ def print_sections(pages: dict[str, Counter[str]], *, per_page: bool) -> None:
 def cmd_sections(data: Path, gold: dict[str, GoldPage], tag: str, *, per_page: bool) -> None:
     pages: dict[str, Counter[str]] = {}
     for pid in complete(data, gold, [tag]):
-        html = (data / "pages" / f"{pid}.html").read_text(encoding="utf-8")
-        blocks = segment(html)
-        pages[pid] = section_page(gold[pid], blocks, extracted_rows(data, tag, pid, blocks), html)
+        blocks, verdicts = interpreted(data, tag, pid)
+        pages[pid] = section_counts(gold[pid], blocks, verdicts, html_of(data, pid))
     print(tag)
     print_sections(pages, per_page=per_page)
+
+
+TEMPLATE_ACTIONS = ("add", "drop", "rename", "attach")
+
+
+def _change(gated: dict[str, Counter[str]], num: str, den: str) -> str:
+    """A rate on resolve-v3 and resolve-v4 and the paired page-clustered interval of the
+    change."""
+    pairs = [
+        ((c[f"v3_{num}"], c[f"v3_{den}"]), (c[f"v4_{num}"], c[f"v4_{den}"])) for c in gated.values()
+    ]
+    before = sum(b[0] for b, _ in pairs) / max(sum(b[1] for b, _ in pairs), 1)
+    after = sum(a[0] for _, a in pairs) / max(sum(a[1] for _, a in pairs), 1)
+    diff = page_clustered_change(pairs)
+    if diff.rate is None or diff.low is None or diff.high is None:
+        return "  n/a"
+    return (
+        f"{before:.4f} -> {after:.4f}  change {diff.rate:+.4f} [{diff.low:+.4f}, {diff.high:+.4f}]"
+    )
+
+
+def print_template(pages: dict[str, Counter[str]], *, per_page: bool) -> None:
+    """The [5d] record from ``template_page`` counts, one Counter per page."""
+    total: Counter[str] = sum(pages.values(), Counter())
+    scorable = {pid: c for pid, c in pages.items() if c["scorable"]}
+    gated = {pid: c for pid, c in scorable.items() if c["gated"]}
+    print(
+        f"pages={total['pages']} scorable={len(scorable)} template-gated={total['gated']} "
+        f"(scorable {len(gated)}) duplicate rows removed={total['duplicates']}"
+    )
+    print("  gated scorable pages, resolve-v3 -> resolve-v4 [page-clustered 95% of the change]:")
+    for name, num, den in (
+        ("item recall (kept items)", "found_items", "gold_items"),
+        ("kept-item precision", "kept_matched", "kept_items"),
+        ("usable prices", "found_price", "gold_prices"),
+        ("price accuracy", "accepted_price_exact", "accepted_matched_priced"),
+    ):
+        print(f"    {name:26} {_change(gated, num, den)}")
+    print("  all scorable pages, §8 extraction numbers (v3 -> v4):")
+    v3 = metrics(Counter({k[3:]: n for k, n in total.items() if k.startswith("v3_")}))
+    v4 = metrics(Counter({k[3:]: n for k, n in total.items() if k.startswith("v4_")}))
+    for key in ("item_recall", "usable_prices", "price_accuracy", "kept_item_precision"):
+        print(f"    {key:26} {_fmt(v3[key])} -> {_fmt(v4[key])}")
+    acts: Counter[str] = sum(gated.values(), Counter())
+    print(
+        "  actions, all gated pages: "
+        + ", ".join(f"{a} {total[a]}" for a in TEMPLATE_ACTIONS)
+        + "; checked against gold on gated scorable pages:"
+    )
+    for action in TEMPLATE_ACTIONS:
+        parts = {k: n for k, n in sorted(acts.items()) if k.startswith(action + ":")}
+        print(f"    {action:7} {acts[action]:5}  {parts}")
+    v3_share = total["v3_applied_exact"] / max(total["v3_section_scored"], 1)
+    v4_share = total["v4_applied_exact"] / max(total["v4_section_scored"], 1)
+    print(
+        f"  sections (all pages): exact {v3_share:.4f} -> {v4_share:.4f} "
+        f"({total['v3_section_scored']} -> {total['v4_section_scored']} scored items)"
+    )
+    losing = [c for c in gated.values() if c["lost_gold_items"]]
+    print(
+        f"  gated pages losing a gold item: {len(losing)} "
+        f"({sum(c['lost_gold_items'] for c in losing)} items)"
+    )
+    for text, ok in template_bars(list(pages.values())):
+        print(f"  bar: {text}: {'pass' if ok else 'FAIL'}")
+    if per_page:
+        print("  per page: id gated gold found v3->v4 kept v3->v4 add drop rename attach dup")
+        for pid, c in sorted(scorable.items()):
+            actions = " ".join(f"{c[a]:3}" for a in TEMPLATE_ACTIONS)
+            print(
+                f"    {pid} {'G' if c['gated'] else '-'} {c['v3_gold_items']:4} "
+                f"{c['v3_found_items']:4}->{c['v4_found_items']:4} "
+                f"{c['v3_kept_items']:4}->{c['v4_kept_items']:4} {actions} {c['duplicates']:3}"
+            )
+
+
+def cmd_template(data: Path, gold: dict[str, GoldPage], tag: str, *, per_page: bool) -> None:
+    pages: dict[str, Counter[str]] = {}
+    for pid in complete(data, gold, [tag]):
+        html = html_of(data, pid)
+        blocks = segment(html)
+        pages[pid] = template_page(gold[pid], blocks, extracted_outputs(data, tag, pid), html)
+    print(tag)
+    print_template(pages, per_page=per_page)
 
 
 def cmd_invariance(
@@ -391,20 +504,32 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "command",
-        choices=["compare", "loss", "corrupt", "report", "extract", "invariance", "sections"],
+        choices=[
+            "compare",
+            "loss",
+            "corrupt",
+            "report",
+            "extract",
+            "invariance",
+            "sections",
+            "template",
+        ],
     )
     parser.add_argument("tags", nargs="*")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--labels", type=Path, required=True)
     parser.add_argument("--splits", type=Path)
     parser.add_argument("--split")
-    parser.add_argument("--pages", action="store_true", help="loss, sections: one line per page")
+    parser.add_argument(
+        "--pages", action="store_true", help="loss, sections, template: one line per page"
+    )
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--server", default="http://localhost:8080", help="extract: llama-server")
     parser.add_argument("--out", type=Path, help="invariance: write per-page flip counts")
     parser.add_argument("--baseline", type=Path, help="invariance: fail on flips added to it")
     args = parser.parse_args()
-    gold = load_gold(args.labels, args.splits, args.split, priced=args.command != "sections")
+    priced = args.command not in {"sections", "template"}
+    gold = load_gold(args.labels, args.splits, args.split, priced=priced)
     if args.command == "compare":
         cmd_compare(args.data, gold, args.tags)
     elif args.command == "loss":
@@ -416,6 +541,9 @@ def main() -> None:
     elif args.command == "sections":
         for tag in args.tags:
             cmd_sections(args.data, gold, tag, per_page=args.pages)
+    elif args.command == "template":
+        for tag in args.tags:
+            cmd_template(args.data, gold, tag, per_page=args.pages)
     elif args.command == "invariance":
         cmd_invariance(args.data, gold, args.out, args.baseline)
     elif args.command == "extract":
