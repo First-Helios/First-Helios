@@ -331,8 +331,10 @@ All 863 page texts from saved answers, each timed best of 3 (no model, no DB):
 - **Database tests:** not run locally. The local PostgreSQL needs a password that only
   `.env` holds, and reading `.env` was refused this session. So `helios_p814_test` was not
   created, and the new end-to-end test `test_5d_adds_the_template_line_the_model_missed`
-  and the other database tests skipped here. CI runs them in strict mode, with
-  `alembic check`.
+  and the other database tests skipped here.
+- **CI's strict job** (`HELIOS_STRICT_DB_TESTS=1`, on PR #125) ran every test on its own
+  PostgreSQL: **1,756 passed, 0 skipped**, the end-to-end test included. All five merge
+  checks pass.
 - **The end-to-end test's page was dry-run without a database** (`var/p8-14/e2e_dry.py`):
   - its scripted answers through `llm_stream` gate the page;
   - the missing dish is added at $8.99, with Evidence on its own price block;
