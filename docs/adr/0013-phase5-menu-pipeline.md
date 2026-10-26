@@ -2236,7 +2236,7 @@ Menu write-contract change.
 
 ## Amendment 29 (2026-10-24, proposed): stage [5d] page template and duplicate emissions
 
-**Status: Accepted 2026-10-25 by the owner, with the rulings below. Build: session P8-14.**
+**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars, so it is not applied.**
 Record: [2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md).
 
 **Owner rulings (2026-10-25):**
@@ -2461,3 +2461,51 @@ pages, with page-clustered 95 % intervals:
   - (B) Wait for the next crawl's new pages.
 - **Q6. Bars** as in plan item 1?
 - **Q7. Follow-ons:** which of the "Not in this amendment" items to queue?
+
+**Build (P8-14, 2026-10-25; record
+[2026-10-25-p8-14-page-template-build.md](../reviews/2026-10-25-p8-14-page-template-build.md),
+owner questions in its PR).** One pipeline-version bump: `resolve-v3` → `resolve-v4`.
+`method_version` stays 126 characters. No schema, model, prompt, chunker, segmenter,
+validator or Menu write-contract change.
+- **Stage.** `packages/helios_parsing/page_template.py` (stdlib):
+  - `induce` is [5d] at the ruled config (Q2), with all four actions (Q1) and no model
+    grouping (Q4);
+  - `remove_duplicates` is rule "same" (Q3);
+  - `llm_stream` is the `llm` stream's interpretation in the ruled order: `rows_of` →
+    [5]+[5b] → [5d] → [5]+[5b] on gated pages → duplicate removal → [5c].
+  - Ties between equally supported patterns are broken in a fixed order. The prototype's
+    hash order changed its output on one corpus page.
+- **Run.** `extraction._Run._write` uses `llm_stream`. The run report counts [5d]'s
+  actions and the duplicates removed. The `jsonld` stream is unchanged.
+- **Harness.** `evaluation.template_page` / `template_bars` and
+  `apps.menu_pipeline.evaluate template` report kept-item precision, the per-action checks
+  against gold and the Q6 stage bars. `compare`, `loss`, `report` and `sections` now score
+  the full `llm` stream.
+- **Dev:** the prototype reproduced page by page.
+  - On 223 gated pages:
+    - recall 0.892 → 0.931;
+    - kept-item precision 0.811 → 0.844;
+    - usable prices 0.812 → 0.856.
+  - Corpus actions: ADD 2,036 rows (1,847 items), DROP 1,813, RE-NAME 186, ATTACH 57.
+  - Duplicates: −596 items, with no price Evidence lost.
+  - Section exact 0.7151 → 0.7230. That is 0.7228 measured the prototype's way, which
+    re-judged after removal.
+- **§8 held-out** (seed 20261025: 39 gated + 10 ungated drawn, 38 scorable; frozen sha256s
+  in the record):
+  - **Pass:** item recall 0.903, usable prices 0.759, catch 1.000. Against resolve-v3 on
+    the gated pages:
+    - recall +0.063;
+    - kept-item precision +0.027;
+    - accepted rows matching no label −9;
+    - section accuracy +0.009;
+    - ungated pages unchanged; no price Evidence lost.
+  - **Fail:**
+    - 4 of 37 gated pages lose a gold item (at most 1 in 10 allowed);
+    - price accuracy 0.916 (resolve-v3 0.908);
+    - gold-row FR 0.156, the validator's alone.
+
+  The price-accuracy and FR failures come mostly from one page that prints prices before
+  names.
+  **Not every bar passes, so it is not applied to `helios_laptop`;** the owner decides.
+- **Speed:** a median of +11.9 ms per page on one laptop core (+28.5 ms on gated pages).
+  The Pi was not timed.

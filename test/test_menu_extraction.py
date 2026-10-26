@@ -319,7 +319,7 @@ def test_pipeline_version_names_every_component_within_the_column() -> None:
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm == (
         "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;"
-        "repairs-v9;validator-v8;resolve-v3;classifier-v2"
+        "repairs-v9;validator-v8;resolve-v4;classifier-v2"
     )
     assert len(version.llm) <= 128
     assert version.jsonld == "jsonld-v1;validator-v8;segment-v2;classifier-v2"
@@ -656,7 +656,7 @@ def test_5c_files_items_under_the_pages_own_headings(
 
     report = venues.extract(_Server())
 
-    assert "resolve-v3" in report.method_version
+    assert "resolve-v4" in report.method_version
     assert (report.items_written, report.prices_written, report.unsectioned_items) == (3, 4, 0)
     (page,) = venues.pages(gers)
     with venues.factory() as session:
@@ -687,6 +687,74 @@ def test_5c_files_items_under_the_pages_own_headings(
             )
         }
         assert {"Tacos", "Drinks"} <= cited  # the sections cite their heading blocks
+
+
+# (Amendment 29) one card per dish, an h3 title over a price div; the model misses Flautas
+_CARD_DISHES = {
+    "Enchiladas Suizas": "12.99",
+    "Chile Relleno": "11.49",
+    "Carne Asada Plate": "15.99",
+    "Pollo Loco": "13.49",
+    "Caldo de Res": "10.99",
+    "Torta Ahogada": "9.49",
+}
+_CARDS = (
+    "<html><body><h1>Menu</h1><p>MENU</p><h2>Platos</h2><div class='menu'>"
+    + "".join(
+        f'<div class="item"><h3 class="title">{name}</h3><div class="price">${price}</div></div>'
+        for name, price in [*_CARD_DISHES.items(), ("Flautas", "8.99")]
+    )
+    + "</div></body></html>"
+)
+
+
+def test_5d_adds_the_template_line_the_model_missed(
+    venues: _Venues, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name, price in _CARD_DISHES.items():
+        monkeypatch.setitem(_PRICES, name, [(price, None)])
+        monkeypatch.setitem(_SECTIONS, name, "Platos")
+    gers = venues.add("Jarochos")
+    venues.resolve()
+    venues.fetch({gers: _CARDS}, at=_T1)
+
+    report = venues.extract(_Server())
+
+    assert report.template == {
+        "gated": 1,
+        "added": 1,
+        "dropped": 0,
+        "renamed": 0,
+        "attached": 0,
+        "duplicates": 0,
+    }
+    assert report.rows == {"llm:accept": 7}  # the added row, judged again, is accepted
+    assert (report.items_written, report.prices_written) == (7, 7)
+    (page,) = venues.pages(gers)
+    with venues.factory() as session:
+        assert ("Flautas", None, 899, PRICE_CONFIDENCE) in _rows(session, page.id)
+        flautas = session.scalar(
+            select(MenuItem).where(MenuItem.page_id == page.id, MenuItem.name == "Flautas")
+        )
+        assert flautas is not None and flautas.source_native_key is not None  # under Platos
+        capture = session.scalar(
+            select(Capture)
+            .join(Evidence, Evidence.capture_id == Capture.id)
+            .join(EvidenceLink, EvidenceLink.evidence_id == Evidence.id)
+            .where(EvidenceLink.page_id == page.id)
+            .limit(1)
+        )
+        assert capture is not None and capture.bundle_path is not None
+        bundle = BundleStore(venues.tmp_path).read(capture.bundle_path)
+        cited = {
+            excerpt(bundle, e.locator)
+            for e in session.scalars(
+                select(Evidence)
+                .join(EvidenceLink, EvidenceLink.evidence_id == Evidence.id)
+                .where(EvidenceLink.page_id == page.id, Evidence.capture_id.is_not(None))
+            )
+        }
+        assert {"Flautas", "$8.99"} <= cited  # its name and price cite its own card
 
 
 _JSONLD = (
@@ -771,7 +839,7 @@ def test_a_resolved_price_gets_its_own_confidence_reason_and_run_share(venues: _
     assert ("3/6 Catfish Dinner", "6", 1799, RESOLVED_PRICE_CONFIDENCE) in rows
     assert ("Queso", None, 600, FLAGGED_PRICE_CONFIDENCE) in rows
     assert RESOLVED_PRICE_CONFIDENCE < FLAGGED_PRICE_CONFIDENCE < PRICE_CONFIDENCE
-    assert "resolve-v3" in page.method_version
+    assert "resolve-v4" in page.method_version
 
 
 def test_run_report_lists_pages_outside_the_tuning_range() -> None:
