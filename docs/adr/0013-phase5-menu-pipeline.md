@@ -2236,7 +2236,7 @@ Menu write-contract change.
 
 ## Amendment 29 (2026-10-24, proposed): stage [5d] page template and duplicate emissions
 
-**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars, so it is not applied.**
+**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars. The owner's P8-14 rulings (note at the end) narrow rule "same", treat the two §8 failures as a known validator gap, and approve applying it after a dev re-check (P8-15).**
 Record: [2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md).
 
 **Owner rulings (2026-10-25):**
@@ -2509,3 +2509,23 @@ validator or Menu write-contract change.
   **Not every bar passes, so it is not applied to `helios_laptop`;** the owner decides.
 - **Speed:** a median of +11.9 ms per page on one laptop core (+28.5 ms on gated pages).
   The Pi was not timed.
+
+**Owner rulings after P8-14 (2026-10-25; carried out in P8-15).**
+- **Q1. Rule "same" narrowed.** Copies of a printed item are duplicates only when every copy
+  cites the same *non-empty* set of printed price spans. Unpriced copies stay.
+  - This answers the held-out's two dedupe losses (`79f66c5309ed` "Paloma",
+    `ad991b67d739` "Vegetarian Antipasto"): both copies were unpriced, the model's second copy
+    was grounded onto the first print, and removal took the gold item at the second print.
+  - Re-check it on dev now: the 746 / 294 dev pages and the corpus.
+  - The §8 held-out re-test waits for the next crawl, because this pool's 39 gated texts are
+    used. **The P8-14 held-out set is now dev.**
+- **Q2. Known validator gap.** §8 price accuracy (0.916) and gold-row FR (0.156) on the
+  P8-14 set don't block [5d]. They come mostly from the "price printed before its name"
+  layout (Dahlia Café, `d57b5b288970`). The gap is recorded and queued with the grounding
+  follow-on (Q4).
+- **Q3. Apply once the verdict is settled.** Approved:
+  - a re-interpretation of every published `llm` page on `helios_laptop` from saved answers,
+    then a Gold refresh;
+  - a speed-only timing on the Pi.
+- **Q4. Next follow-on:** validator grounding to the print nearest the cited block (Q7's
+  first item). It is proposed as its own amendment.
