@@ -2236,7 +2236,7 @@ Menu write-contract change.
 
 ## Amendment 29 (2026-10-24, proposed): stage [5d] page template and duplicate emissions
 
-**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars. The owner's P8-14 rulings (note at the end) narrow rule "same", treat the two §8 failures as a known validator gap, and approve applying it after a dev re-check (P8-15).**
+**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars, so it is not applied.**
 Record: [2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md).
 
 **Owner rulings (2026-10-25):**
