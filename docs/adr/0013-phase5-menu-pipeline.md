@@ -2667,9 +2667,17 @@ resolve-v4 with the narrowed rule "same".
 
 ## Amendment 31 (2026-10-26, proposed): the validator's price scan continues past the dish's own headings
 
-**Status: Proposed 2026-10-26 (P8-16). Not built; it waits for the owner's review.**
+**Status: Proposed 2026-10-26 (P8-16). Accepted 2026-10-26 by the owner, with the rulings below; to be built as `validator-v10`.**
 Record: [2026-10-26-p8-16-amendments-31-32.md](../reviews/2026-10-26-p8-16-amendments-31-32.md),
-section 1. Prototype: `var/p8-16/proto/validator_f1.py` (untracked; `validator-v9`, PR #128,
+section 1.
+
+**Owner rulings (2026-10-26), as recommended:**
+- **Q1.** Build F1's heading part as `validator-v10`. The row part stays dropped.
+- **Q2.** First try one more condition, the row's variant words left out when the heading is
+  compared with the row's name. Keep it if it removes the two added invariance pairs
+  without losing the gains; otherwise accept the two pairs as invariance debt.
+- **Q3.** The bilingual-twin losses go to the queued English-name work (owner Q6 on P8-x);
+  they don't block F1. Prototype: `var/p8-16/proto/validator_f1.py` (untracked; `validator-v9`, PR #128,
 plus the edits marked "(F1)").
 
 **Why.** The P8-x gap audit's fix F1 (owner Q1 and Q3: first, and in its own amendment).
@@ -2753,8 +2761,12 @@ other-language row changes no dev page and one corpus text (two rows). Two thing
 
 ## Amendment 32 (2026-10-26, proposed): a shared section price as a [5b]-style resolver
 
-**Status: Proposed 2026-10-26 (P8-16). Not built; it waits for the owner's review, and the
-measurements below argue against building it as ruled.**
+**Status: Proposed 2026-10-26 (P8-16). Not adopted (owner, 2026-10-26): dropped for now, as recommended.**
+
+**Owner rulings (2026-10-26):** Q1, do not build it; F3 stays recorded as measured. Q2,
+no limit moves now. Shared section prices are revisited only after F2 and F4 ([5d]) and the
+English naming land, and then with section bounds from [5c]'s page structure, together with
+G2's revisit (Amendment 30). Q3 falls away with Q1.
 Record: [2026-10-26-p8-16-amendments-31-32.md](../reviews/2026-10-26-p8-16-amendments-31-32.md),
 section 2. Prototype: `var/p8-16/proto/shared32.py` (untracked).
 
