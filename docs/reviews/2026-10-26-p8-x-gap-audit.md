@@ -442,8 +442,17 @@ F3 needs Q2 answered first. F7 is the owner's.
 ### Owner answers (2026-10-26)
 
 - **Q1: yes.** F1 first, then F2 and F4, before any model or prompt work.
-- **Q2: open.** The owner asked what "a whole section" means. The explanation is in the PR
-  thread; the answer will be recorded here.
+- **Q2: yes, with limits, as recommended.** After the owner asked what "a whole section"
+  means, the recommendation was explained in the session with the dev examples from
+  section 2, and the owner approved it:
+  - Deliver a price printed once for the dish's own section, with its Evidence on that
+    line, when it is printed in the section's heading or on the line right under it, and no
+    dish in that section prints its own price.
+  - A choice list ("Tofu or Paneer $17 | Chicken $17 | Lamb $20") gives each dish one
+    variant per choice.
+  - Size charts printed elsewhere, "starting at" prices, add-on surcharges and menu-level
+    prices ("$15 Lunch Menu") stay out.
+  - It is built as a [5b]-style resolver, so the validator bars (FR, catch) apply.
 - **Q3: yes.** F1 becomes its own amendment (Amendment 31). Amendment 30 stays as P8-15
   proposed it.
 - **Q4: add-ons are not items.** An add-on belongs to the item it modifies, listed under it,
