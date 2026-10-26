@@ -2236,9 +2236,47 @@ Menu write-contract change.
 
 ## Amendment 29 (2026-10-24, proposed): stage [5d] page template and duplicate emissions
 
-**Status: Proposed (session P8-13). Not built.** Record:
-[2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md). Owner
-questions below.
+**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars, so it is not applied.**
+Record: [2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md).
+
+**Owner rulings (2026-10-25):**
+- **Q1.** Build (i): [5d] with all four actions (ADD, DROP, RE-NAME, ATTACH) plus duplicate
+  removal. Fold them into the post-validator component, so `resolve-v3` becomes `resolve-v4`.
+  `method_version` stays 126 characters, so there is no migration.
+- **Q2.** Gate: 0.8 explained and 0.8 agreement, with at least 5 seeds. A pattern counts
+  with support from at least 3 seeds and at least 10 % of them.
+- **Q3.** Duplicate rule "same": remove extra copies only when every copy cites the same
+  printed price spans. Removal is at the row level, before shape, so [5c] places the
+  survivor.
+- **Q4.** The model's variant grouping is dropped as a seed signal. There are no "one seed
+  per model item" or "re-attach only where the model grouped variants" options.
+- **Q5.** (A) Held-out: all 39 template-gated pool page texts plus 10 ungated texts drawn
+  with seed 20261025.
+  - The pool is 114 production texts. It excludes labelled text hashes, audited URLs, the
+    P8-12 draw, and the P8-11 / P8-12 / P8-13 traced cases.
+  - The exclusions and the draw are frozen with sha256 before any labelling.
+- **Q6.** The bars are §8's: item recall ≥ 0.85, price accuracy ≥ 0.98, gold-row false
+  reject ≤ 0.12, corruption catch ≥ 0.97 and usable prices ≥ 0.74. The stage bars in plan
+  item 1 also apply, on template-gated pages against `resolve-v3` on the same pages:
+  - item recall and kept-item precision not lower;
+  - accepted rows matching no label up by at most 1 % of kept rows;
+  - at most 1 gated page in 10 loses a gold item;
+  - Amendment 28 section accuracy not lower;
+  - ungated pages unchanged by [5d].
+- **Q7.** All four follow-ons are queued, each with its own amendment:
+  - validator grounding to the print nearest the cited block;
+  - the chunk-boundary fix;
+  - the case-5 variant reader for ungated pages;
+  - wine and fee lines.
+
+  The owner's conditions:
+  - **Wine-list specifics:** ask the owner before designing anything.
+  - **GPU/LLM-process parts** (chunker, prompt, model, re-extraction): the owner decides. Ask
+    before designing.
+- **Direction (owner, 2026-10-25).** The main innovation is LLM-first extraction, then HTML
+  parsing derived from the LLM's own results, which gives one universal pipeline. The LLM pass
+  sorts pages into predictable trends, so no page needs its own case. This work needs human
+  guidance: stop and ask at design forks.
 
 **Why.** The owner's second round of findings on the local site ("issues 2"), each confirmed
 against stored data (record section 1):
@@ -2423,3 +2461,51 @@ pages, with page-clustered 95 % intervals:
   - (B) Wait for the next crawl's new pages.
 - **Q6. Bars** as in plan item 1?
 - **Q7. Follow-ons:** which of the "Not in this amendment" items to queue?
+
+**Build (P8-14, 2026-10-25; record
+[2026-10-25-p8-14-page-template-build.md](../reviews/2026-10-25-p8-14-page-template-build.md),
+owner questions in its PR).** One pipeline-version bump: `resolve-v3` → `resolve-v4`.
+`method_version` stays 126 characters. No schema, model, prompt, chunker, segmenter,
+validator or Menu write-contract change.
+- **Stage.** `packages/helios_parsing/page_template.py` (stdlib):
+  - `induce` is [5d] at the ruled config (Q2), with all four actions (Q1) and no model
+    grouping (Q4);
+  - `remove_duplicates` is rule "same" (Q3);
+  - `llm_stream` is the `llm` stream's interpretation in the ruled order: `rows_of` →
+    [5]+[5b] → [5d] → [5]+[5b] on gated pages → duplicate removal → [5c].
+  - Ties between equally supported patterns are broken in a fixed order. The prototype's
+    hash order changed its output on one corpus page.
+- **Run.** `extraction._Run._write` uses `llm_stream`. The run report counts [5d]'s
+  actions and the duplicates removed. The `jsonld` stream is unchanged.
+- **Harness.** `evaluation.template_page` / `template_bars` and
+  `apps.menu_pipeline.evaluate template` report kept-item precision, the per-action checks
+  against gold and the Q6 stage bars. `compare`, `loss`, `report` and `sections` now score
+  the full `llm` stream.
+- **Dev:** the prototype reproduced page by page.
+  - On 223 gated pages:
+    - recall 0.892 → 0.931;
+    - kept-item precision 0.811 → 0.844;
+    - usable prices 0.812 → 0.856.
+  - Corpus actions: ADD 2,036 rows (1,847 items), DROP 1,813, RE-NAME 186, ATTACH 57.
+  - Duplicates: −596 items, with no price Evidence lost.
+  - Section exact 0.7151 → 0.7230. That is 0.7228 measured the prototype's way, which
+    re-judged after removal.
+- **§8 held-out** (seed 20261025: 39 gated + 10 ungated drawn, 38 scorable; frozen sha256s
+  in the record):
+  - **Pass:** item recall 0.903, usable prices 0.759, catch 1.000. Against resolve-v3 on
+    the gated pages:
+    - recall +0.063;
+    - kept-item precision +0.027;
+    - accepted rows matching no label −9;
+    - section accuracy +0.009;
+    - ungated pages unchanged; no price Evidence lost.
+  - **Fail:**
+    - 4 of 37 gated pages lose a gold item (at most 1 in 10 allowed);
+    - price accuracy 0.916 (resolve-v3 0.908);
+    - gold-row FR 0.156, the validator's alone.
+
+  The price-accuracy and FR failures come mostly from one page that prints prices before
+  names.
+  **Not every bar passes, so it is not applied to `helios_laptop`;** the owner decides.
+- **Speed:** a median of +11.9 ms per page on one laptop core (+28.5 ms on gated pages).
+  The Pi was not timed.

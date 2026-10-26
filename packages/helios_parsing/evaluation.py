@@ -85,7 +85,8 @@ from typing import TYPE_CHECKING, Any
 
 from packages.helios_parsing.dom_sections import assign
 from packages.helios_parsing.menu_shape import shape
-from packages.helios_parsing.output import wine_section
+from packages.helios_parsing.output import rows_of, wine_section
+from packages.helios_parsing.page_template import llm_stream
 from packages.helios_parsing.resolve import RESOLVERS, judge, resolved
 from packages.helios_parsing.validator import Row, norm_tokens, parse_amount
 
@@ -93,8 +94,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from packages.helios_parsing.menu_shape import ShapedItem, ShapedSection
+    from packages.helios_parsing.output import ExtractorOutput
     from packages.helios_parsing.resolve import Resolver
     from packages.helios_parsing.segment import Block
+    from packages.helios_parsing.validator import Verdict
 
 CORRUPTION_SEED = 7
 CORRUPTIONS_PER_TYPE = 10  # trials per corruption type per page
@@ -291,18 +294,32 @@ def score_page(
 ) -> Counter[str]:
     """Counts for one page's extracted (repaired, stitched) rows; sum pages, then ``metrics``.
 
-    Rows are judged as the pipeline judges them: the validator, then [5b] price
-    resolution (``resolve.judge``). (Amendment 19) ``accepted_unmatched`` counts
-    accepted priced rows that match no labelled item, ``wrong_accepted_price``
-    accepted rows of a labelled item at a wrong amount; ``resolved_*`` count [5b]'s
-    accepts: all, matched and priced, at an exact gold amount, matching no item.
+    Rows are judged by the validator, then [5b] price resolution (``resolve.judge``),
+    and scored by :func:`score_verdicts`. The ``llm`` stream's whole interpretation
+    ([5d] and duplicate removal too) is ``page_template.llm_stream``; its verdicts go
+    to :func:`score_verdicts` directly.
+    """
+    return score_verdicts(page, judge(blocks, rows, resolvers).verdicts)
+
+
+def score_verdicts(page: GoldPage, verdicts: Sequence[Verdict]) -> Counter[str]:
+    """Counts for one page's verdicts; sum pages, then ``metrics``.
+
+    (Amendment 19) ``accepted_unmatched`` counts accepted priced rows that match no
+    labelled item, ``wrong_accepted_price`` accepted rows of a labelled item at a wrong
+    amount; ``resolved_*`` count [5b]'s accepts: all, matched and priced, at an exact
+    gold amount, matching no item. (Amendment 29) ``kept_items`` counts the distinct
+    kept items (name block, normalized name), ``kept_matched`` those matching a gold
+    item (the first matching row of each wins) and ``found_items`` the gold items they
+    find: kept-item precision and the stage's item recall.
     """
     c: Counter[str] = Counter(pages=1)
     items = page.items
     found_raw: set[int] = set()
     found_kept: set[int] = set()
     found_price: set[tuple[int, Decimal]] = set()
-    for v in judge(blocks, rows, resolvers).verdicts:
+    kept_items: dict[tuple[str, tuple[str, ...]], int | None] = {}
+    for v in verdicts:
         g = match(v.row, items)
         amt = parse_amount(v.row.amount)
         gold_amts = {parse_amount(p.amount) for p in items[g].prices} if g is not None else set()
@@ -313,6 +330,10 @@ def score_page(
             found_raw.add(g)
             if v.decision != "reject":
                 found_kept.add(g)
+        if v.decision != "reject" and v.name_evidence is not None:
+            key = (v.name_evidence.block_id, tuple(norm_tokens(v.row.item)))
+            if kept_items.get(key) is None:
+                kept_items[key] = g
         if resolved(v):
             c["resolved_accepted"] += 1
             if g is None:
@@ -349,6 +370,9 @@ def score_page(
     c["found_raw"] += len(found_raw)
     c["found_kept"] += len(found_kept)
     c["found_price"] += len(found_price)
+    c["kept_items"] += len(kept_items)
+    c["kept_matched"] += sum(g is not None for g in kept_items.values())
+    c["found_items"] += len({g for g in kept_items.values() if g is not None})
     return c
 
 
@@ -361,6 +385,7 @@ def metrics(c: Counter[str]) -> dict[str, float | None]:
     return {
         "item_recall": _rate(c, "found_raw", "gold_items"),
         "item_recall_kept": _rate(c, "found_kept", "gold_items"),
+        "kept_item_precision": _rate(c, "kept_matched", "kept_items"),
         "usable_prices": _rate(c, "found_price", "gold_prices"),
         "price_accuracy": _rate(c, "accepted_price_exact", "accepted_matched_priced"),
         "validator_false_reject": _rate(c, "false_reject", "correct"),
@@ -375,8 +400,13 @@ def loss_page(
     resolvers: Sequence[tuple[str, Resolver]] = RESOLVERS,
 ) -> Counter[str]:
     """Where each of the page's gold prices went (one bucket per gold price)."""
+    return loss_verdicts(page, judge(blocks, rows, resolvers).verdicts)
+
+
+def loss_verdicts(page: GoldPage, verdicts: Sequence[Verdict]) -> Counter[str]:
+    """:func:`loss_page` over verdicts already judged (``page_template.llm_stream``)."""
     by_item: dict[int, list[tuple[Decimal | None, str, tuple[str, ...]]]] = {}
-    for v in judge(blocks, rows, resolvers).verdicts:
+    for v in verdicts:
         g = match(v.row, page.items)
         if g is not None:
             by_item.setdefault(g, []).append((parse_amount(v.row.amount), v.decision, v.reasons))
@@ -465,6 +495,41 @@ def page_clustered(
         low=rates[int(0.025 * last)],
         high=rates[math.ceil(0.975 * last)],
         at_most=None if bar is None else sum(r <= bar for r in rates) / len(rates),
+    )
+
+
+def page_clustered_change(
+    pages: Sequence[tuple[tuple[int, int], tuple[int, int]]],
+    *,
+    reps: int = BOOTSTRAP_REPS,
+    seed: int = BOOTSTRAP_SEED,
+) -> Clustered:
+    """The change after − before of a rate over ``pages`` (one ((num, den) before,
+    (num, den) after) pair per page) and its 95 % interval from resampling whole pages,
+    the same pages on both sides (Amendment 29: one stage's change on the same pages).
+    Resamples with a zero denominator on either side are skipped."""
+
+    def rate(draw: Sequence[tuple[tuple[int, int], tuple[int, int]]], side: int) -> float | None:
+        den = sum(p[side][1] for p in draw)
+        return sum(p[side][0] for p in draw) / den if den else None
+
+    before, after = rate(pages, 0), rate(pages, 1)
+    if before is None or after is None:
+        return Clustered(None, None, None, None)
+    rng = random.Random(seed)  # noqa: S311 - reproducible resampling, not security
+    deltas = []
+    for _ in range(reps):
+        draw = [pages[rng.randrange(len(pages))] for _ in pages]
+        b, a = rate(draw, 0), rate(draw, 1)
+        if b is not None and a is not None:
+            deltas.append(a - b)
+    deltas.sort()
+    last = len(deltas) - 1
+    return Clustered(
+        rate=after - before,
+        low=deltas[int(0.025 * last)],
+        high=deltas[math.ceil(0.975 * last)],
+        at_most=None,
     )
 
 
@@ -639,7 +704,13 @@ def section_page(
 ) -> Counter[str]:
     """Section-accuracy counts for one page, without (``today_*``) and with [5c]
     (``applied_*``); ``gated`` is 1 when [5c] assigned the page's sections."""
-    verdicts = judge(blocks, rows, resolvers).verdicts
+    return section_counts(page, blocks, judge(blocks, rows, resolvers).verdicts, html)
+
+
+def section_counts(
+    page: GoldPage, blocks: Sequence[Block], verdicts: Sequence[Verdict], html: str
+) -> Counter[str]:
+    """:func:`section_page` over verdicts already judged (``page_template.llm_stream``)."""
     dom = assign(html, blocks, verdicts)
     today = shape(blocks, verdicts)
     applied = shape(blocks, verdicts, dom.assignment)
@@ -670,3 +741,137 @@ def section_page(
         c["today_scored_unsectioned"] += before is None
         c["applied_scored_unsectioned"] += after is None
     return c
+
+
+# (Amendment 29 Q6) the stage bars of [5d] + duplicate removal on template-gated pages,
+# against resolve-v3 (judge, then [5c]) on the same pages
+TEMPLATE_MAX_UNMATCHED = 0.01  # accepted rows matching no label: rise over v3's kept rows
+TEMPLATE_MAX_LOSING = 0.10  # gated pages losing a gold item that v3 found, at most this share
+
+
+def _price_spans(verdicts: Sequence[Verdict]) -> set[str]:
+    return {
+        v.price_evidence.locator
+        for v in verdicts
+        if v.decision == "accept" and v.price_evidence is not None
+    }
+
+
+def _found(page: GoldPage, verdicts: Sequence[Verdict]) -> set[int]:
+    """Gold items a kept row finds."""
+    return {
+        g
+        for v in verdicts
+        if v.decision != "reject" and (g := match(v.row, page.items)) is not None
+    }
+
+
+def template_page(
+    page: GoldPage, blocks: list[Block], outputs: Sequence[ExtractorOutput], html: str
+) -> Counter[str]:
+    """One page under resolve-v3 (``v3_*``: judge, then [5c]) and resolve-v4 (``v4_*``:
+    ``page_template.llm_stream``): ``score_verdicts`` counts (scorable pages only), section
+    counts (``section_counts``), [5d]'s gate and its actions checked against gold.
+
+    Actions (Amendment 29 plan item 4): ``add:new`` finds a gold item v3 missed
+    (``add:new_price_ok`` at a gold amount), ``add:already_found`` one v3 found,
+    ``add:unmatched`` none, ``add:<decision>`` the re-judge; ``drop:pseudo`` matches no
+    gold item, ``drop:redundant`` one another kept row still finds, ``drop:loss`` loses it;
+    ``rename:matched`` / ``rename:unmatched``; ``attach:exact`` (gold item, variant label
+    and amount), ``attach:item_only``, ``attach:unmatched``. ``lost_gold_items`` are gold
+    items v3's kept rows found and v4's don't; ``ungated_changed`` is 1 when [5d] changed
+    an ungated page's rows; ``dedupe_evidence_lost`` counts accepted price spans duplicate
+    removal took out of the page (none under rule "same").
+    """
+    rows = rows_of(outputs, blocks)
+    v3 = judge(blocks, rows).verdicts
+    stream = llm_stream(blocks, outputs, html)
+    tpl, v4 = stream.template, stream.validation.verdicts
+    c: Counter[str] = Counter(pages=1, gated=int(tpl.gated), duplicates=stream.duplicates)
+    c["ungated_changed"] = int(not tpl.gated and tpl.rows != tuple(rows))
+    judged = judge(blocks, list(tpl.rows)).verdicts if tpl.gated else v3
+    c["dedupe_evidence_lost"] = len(_price_spans(judged) - _price_spans(v4))
+    for side, verdicts in (("v3", v3), ("v4", v4)):
+        if page.scorable:
+            c.update({f"{side}_{k}": n for k, n in score_verdicts(page, verdicts).items()})
+        sections = section_counts(page, blocks, verdicts, html)
+        c.update({f"{side}_{k}": n for k, n in sections.items()})
+    c["scorable"] = int(page.scorable)
+    found = _found(page, v3)
+    c["lost_gold_items"] = len(found - _found(page, v4))
+    dropped = set(tpl.dropped)
+    still = _found(page, [v for k, v in enumerate(v3) if k not in dropped])
+    for k in tpl.dropped:
+        g = match(v3[k].row, page.items)
+        c["drop"] += 1
+        c["drop:pseudo" if g is None else "drop:redundant" if g in still else "drop:loss"] += 1
+    for v in judged[len(judged) - len(tpl.added) :] if tpl.added else ():
+        c["add"] += 1
+        c[f"add:{v.decision}"] += 1
+        if v.decision == "reject":
+            continue
+        g = match(v.row, page.items)
+        if g is None:
+            c["add:unmatched"] += 1
+        elif g in found:
+            c["add:already_found"] += 1
+        else:
+            c["add:new"] += 1
+            amt = parse_amount(v.row.amount)
+            c["add:new_price_ok"] += amt in {parse_amount(p.amount) for p in page.items[g].prices}
+    for _, row in tpl.renamed:
+        c["rename"] += 1
+        c["rename:matched" if match(row, page.items) is not None else "rename:unmatched"] += 1
+    for _, row in tpl.attached:
+        c["attach"] += 1
+        g = match(row, page.items)
+        if g is None:
+            c["attach:unmatched"] += 1
+            continue
+        want = {
+            (frozenset(norm_tokens(p.variant or "")), parse_amount(p.amount))
+            for p in page.items[g].prices
+        }
+        got = (frozenset(norm_tokens(row.variant or "")), parse_amount(row.amount))
+        c["attach:exact" if got in want else "attach:item_only"] += 1
+    return c
+
+
+def template_bars(pages: Sequence[Counter[str]]) -> list[tuple[str, bool]]:
+    """Amendment 29 Q6's stage bars from ``template_page`` counts, on template-gated pages
+    (point estimates): (description, pass)."""
+    gated = [c for c in pages if c["gated"]]
+    total: Counter[str] = sum(gated, Counter())
+    scored = [c for c in gated if c["scorable"]]
+
+    def rate(side: str, num: str, den: str) -> float:
+        d = total[f"{side}_{den}"]
+        return total[f"{side}_{num}"] / d if d else 0.0
+
+    r3, r4 = rate("v3", "found_items", "gold_items"), rate("v4", "found_items", "gold_items")
+    p3, p4 = rate("v3", "kept_matched", "kept_items"), rate("v4", "kept_matched", "kept_items")
+    s3 = rate("v3", "applied_exact", "section_scored")
+    s4 = rate("v4", "applied_exact", "section_scored")
+    kept_rows = total["v3_decision:accept"] + total["v3_decision:downgrade"]
+    rise = total["v4_accepted_unmatched"] - total["v3_accepted_unmatched"]
+    losing = sum(c["lost_gold_items"] > 0 for c in scored)
+    return [
+        (f"item recall {r4:.4f} >= v3 {r3:.4f}", r4 >= r3),
+        (f"kept-item precision {p4:.4f} >= v3 {p3:.4f}", p4 >= p3),
+        (
+            f"accepted rows matching no label {rise:+d} <= "
+            f"{TEMPLATE_MAX_UNMATCHED:.0%} of {kept_rows} kept rows",
+            rise <= TEMPLATE_MAX_UNMATCHED * kept_rows,
+        ),
+        (
+            f"gated pages losing a gold item {losing} of {len(scored)} "
+            f"<= {TEMPLATE_MAX_LOSING:.0%}",
+            losing <= TEMPLATE_MAX_LOSING * len(scored),
+        ),
+        (f"section accuracy (exact) {s4:.4f} >= v3 {s3:.4f}", s4 >= s3),
+        ("ungated pages unchanged by [5d]", sum(c["ungated_changed"] for c in pages) == 0),
+        (
+            "no price Evidence lost to duplicate removal",
+            sum(c["dedupe_evidence_lost"] for c in pages) == 0,
+        ),
+    ]

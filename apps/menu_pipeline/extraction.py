@@ -16,10 +16,13 @@ ADR-0013 implementation slice 5 (session P5-4). For each due Version
 2. **Validate.** The answers are parsed, repaired and stitched
    (``output.rows_of``), the validator decides every row, and [5b] price
    resolution (``resolve.judge``, Amendment 19) re-judges its no-match
-   downgrades; [5c] (``dom_sections.assign``, Amendment 28) then files the
-   ``llm`` stream's items under the page's own section headings when its
-   structure passes the page gate. The page's schema.org JSON-LD goes through the
-   same validator (§1), without [5b] or [5c] (no tuning data for them).
+   downgrades. On the ``llm`` stream (``page_template.llm_stream``), [5d]
+   (Amendment 29) then applies the page's own item template when it passes its
+   gate, every row it adds or rewrites is judged again, duplicate emissions are
+   removed, and [5c] (``dom_sections.assign``, Amendment 28) files the items under
+   the page's own section headings when its structure passes the page gate. The
+   page's schema.org JSON-LD goes through the same validator (§1), without [5b],
+   [5c] or [5d] (no tuning data for them).
 3. **Write.** Per page, the Evidence its nodes cite is committed first (Menu
    admission accepts only committed input), then in one transaction the ``llm``
    page aggregate and, when
@@ -79,12 +82,12 @@ from apps.menu_pipeline.menu_writes import (
 )
 from packages.helios_core.identity.contracts import SubjectNotEligibleError
 from packages.helios_parsing.chunking import CHUNKER_VERSION, chunks
-from packages.helios_parsing.dom_sections import assign
 from packages.helios_parsing.jsonld import JSONLD_VERSION, menu_items, validator_rows
 from packages.helios_parsing.menu_shape import shape
-from packages.helios_parsing.output import REPAIRS_VERSION, parse_output, rows_of
+from packages.helios_parsing.output import REPAIRS_VERSION, parse_output
+from packages.helios_parsing.page_template import llm_stream
 from packages.helios_parsing.prompt import PROMPT_VERSION
-from packages.helios_parsing.resolve import RESOLVER_VERSION, judge, resolved
+from packages.helios_parsing.resolve import RESOLVER_VERSION, resolved
 from packages.helios_parsing.segment import SEGMENTER_VERSION, text_hash
 from packages.helios_parsing.validator import VALIDATOR_VERSION, validate
 
@@ -316,6 +319,8 @@ class ExtractionReport:
     truncated_chunks: int = 0
     resent_requests: int = 0
     rows: Counter[str] = field(default_factory=Counter)  # "<kind>:<decision>[:<reason>]"
+    # (Amendment 29) llm pages [5d] gated, its actions (rows) and duplicate rows removed
+    template: Counter[str] = field(default_factory=Counter)
     pages: list[PageShares] = field(default_factory=list)  # per extracted page (llm rows)
     items_written: int = 0
     prices_written: int = 0
@@ -493,12 +498,13 @@ class _Run:
         report = self._report
         blocks = list(bundle.blocks)
         html = page_html(bundle)
-        llm = judge(blocks, rows_of([parse_output(raw) for raw in raws], blocks))
+        interpreted = llm_stream(blocks, [parse_output(raw) for raw in raws], html)
+        llm = interpreted.validation
         streams: list[tuple[SourceKind, Validation]] = [("llm", llm)]
         jsonld_rows = validator_rows(menu_items(html))
         if jsonld_rows or head_has_items(self._session, due.source_record_id, "jsonld"):
             streams.append(("jsonld", validate(blocks, jsonld_rows)))
-        headings = assign(html, blocks, llm.verdicts).assignment  # [5c], llm stream only
+        headings = interpreted.sections.assignment  # [5c], llm stream only
         shapes = [
             shape(blocks, validation.verdicts, headings if kind == "llm" else None)
             for kind, validation in streams
@@ -534,6 +540,15 @@ class _Run:
         report.extracted += 1
         report.flagged += llm.unlabeled_price_runs
         report.pages.append(page_shares(due.key, llm))
+        tpl = interpreted.template
+        report.template.update(
+            gated=tpl.gated,
+            added=len(tpl.added),
+            dropped=len(tpl.dropped),
+            renamed=len(tpl.renamed),
+            attached=len(tpl.attached),
+            duplicates=interpreted.duplicates,
+        )
         for kind, validation, page in written:
             _count_rows(report, kind, validation)
             report.items_written += page.items
