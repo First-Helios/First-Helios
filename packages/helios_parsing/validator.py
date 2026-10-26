@@ -1,10 +1,11 @@
-"""Stage [5] validator v6: static grounding checks on extracted rows (ADR-0013 §1, §5).
+"""Stage [5] validator v9: static grounding checks on extracted rows (ADR-0013 §1, §5).
 
 Ported from ``spikes/menu_model/validator.py`` as frozen at spike commit
 ``e6e4e1f`` with ``MENU_SPIKE_VALIDATOR=v3``; the per-row decisions are the
 spike's, with the v4 changes tuned on the P5-5 findings (session P5-7) and the
 v5 changes tuned on the P5-8 findings (session P5-9) and the v6 changes tuned on
-the P5-10 findings (session P5-11) marked below. Prices are read by
+the P5-10 findings (session P5-11), the v8 change (P5-15) and the v9 changes
+(Amendment 30, P8-16) marked below. Prices are read by
 ``prices.price_tokens`` (v5: currency words, cents, "$.40", "_12"; v6: on a page
 that prints its prices bare, "Cakes16" and "feta -13"). Every row (one item, at
 most one price) gets one decision:
@@ -23,7 +24,12 @@ Checks:
    are a subset of one block's tokens; (v5) an underscore separates words
    ("Patacones_12"), and a name printed again right below (image alt text, then
    a card's heading) is grounded at its last copy; (v6) a word with an integer
-   glued to it grounds as the word ("Cod Cakes16").
+   glued to it grounds as the word ("Cod Cakes16"); (v9) so does a word glued to
+   the next one's capital ("PalomaHerredura Tequila, ..."). A row whose claimed
+   block doesn't print its name grounds on the first print at or after the
+   previous row's; (v9) when there is none, on the print nearest its claim, not
+   the page's first (a dish printed twice, its second copy claimed one line below
+   its name).
 2. **Price grounding.** The amount occurs as a price token in the item's own
    region: its block after the name, then the nearest run of price blocks after
    it before the next extracted item or a price-less heading; or a price-only
@@ -77,7 +83,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
-VALIDATOR_VERSION = "validator-v8"  # part of the pipeline version
+VALIDATOR_VERSION = "validator-v9"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})
@@ -174,6 +180,17 @@ def block_tokens(text: str) -> set[str]:
     glued to it also grounds as the word ("Cod Cakes16")."""
     text = text.replace("_", " ")
     return set(norm_tokens(text)) | set(norm_tokens(_GLUED_INT.sub(" ", text)))
+
+
+# (v9) a lowercase letter glued to an uppercase one: the segmenter joined a name to the
+# description printed after it ("PalomaHerredura Tequila, ...")
+_GLUED_WORDS = re.compile(r"(?<=[a-z])(?=[A-Z])")
+
+
+def grounding_tokens(text: str) -> set[str]:
+    """(v9) The tokens a row's name grounds on: ``block_tokens``, and also with words
+    glued at a capital split apart. A union, as v6's glued integer: it only adds."""
+    return block_tokens(text) | block_tokens(_GLUED_WORDS.sub(" ", text))
 
 
 def parse_amount(value: str | None) -> Decimal | None:
@@ -734,13 +751,14 @@ def unlabeled_price_runs(blocks: list[Block], prices: list[list[PriceToken]]) ->
 
 def validate(blocks: list[Block], rows: list[Row]) -> Validation:
     """Decide every row against the page's segmented blocks (one linear pass)."""
-    block_toks = [block_tokens(b.text) for b in blocks]
+    block_toks = [grounding_tokens(b.text) for b in blocks]
     prices = price_tokens(blocks)
     bare = bare_page(blocks)  # (v6) the page prints its prices bare
     index_of = {b.id: i for i, b in enumerate(blocks)}
 
     # Pass 1: name grounding. Per row, the grounding block is the claimed one if it
-    # grounds, else the first grounding block at/after the previous row's.
+    # grounds, else the first grounding block at/after the previous row's, else (v9)
+    # the grounding block nearest the claim.
     name_block: list[int | None] = []
     cursor = 0
     for row in rows:
@@ -755,7 +773,9 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
             chosen: int | None = claimed
         else:
             after = [i for i in cands if i >= cursor]
-            chosen = after[0] if after else (cands[0] if cands else None)
+            ref = claimed if claimed is not None else cursor
+            nearest = min(cands, key=lambda i: (abs(i - ref), i > ref), default=None)
+            chosen = after[0] if after else nearest  # (v9) not the page's first print
             # image-alt text then the heading repeat the name; take the last copy
             while chosen is not None and chosen + 1 in cands:
                 chosen += 1
