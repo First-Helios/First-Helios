@@ -2236,7 +2236,7 @@ Menu write-contract change.
 
 ## Amendment 29 (2026-10-24, proposed): stage [5d] page template and duplicate emissions
 
-**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars, so it is not applied.**
+**Status: Accepted 2026-10-25 by the owner, with the rulings below. Built in P8-14 (build note below); the §8 held-out check fails one stage bar and two §8 bars. The owner's P8-14 rulings (note at the end) narrow rule "same", treat the two §8 failures as a known validator gap, and approve applying it after a dev re-check (P8-15).**
 Record: [2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md).
 
 **Owner rulings (2026-10-25):**
@@ -2544,9 +2544,79 @@ validator or Menu write-contract change.
 
 ## Amendment 30 (2026-10-26, proposed): validator grounding to the nearest print, and glued names
 
-**Status: Proposed 2026-10-26 (P8-15). Not built; it waits for the owner's review.**
+**Status: Proposed 2026-10-26 (P8-15). Accepted in part 2026-10-26 by the owner: g1f + G3 are built as `validator-v9` (P8-16, build note below); G2 is dropped for now. The build adds invariance-suite flips (ADR-0017 item 1), so it is not applied until the owner rules on that.**
 Record: [2026-10-26-p8-15-same-narrowed-and-grounding.md](../reviews/2026-10-26-p8-15-same-narrowed-and-grounding.md),
-section 6. Prototype: `var/p8-15/ground.py` (untracked).
+section 6. Prototype: `var/p8-15/ground.py` (untracked). Build record:
+[2026-10-26-p8-16-validator-v9.md](../reviews/2026-10-26-p8-16-validator-v9.md).
+
+**Owner rulings on P8-15 (2026-10-26):**
+- **Q1.** Build g1f + G3. G1 stays in its narrow g1f form. G2 is dropped for now, to be
+  revisited with the shared-section-price resolver's section bounds (Amendment 32).
+- **Q2.** The §8 held-out re-test of resolve-v4 (and of `validator-v9`) waits for the next
+  crawl's new page texts.
+- **Q3.** Close #125; #126 replaces it. #125 had already been merged before #126; its rule
+  "same" is superseded by #126's narrowed one on `main`.
+- **Q4.** The two remaining [5d] losses (a dish whose only name line reads like a
+  description) are queued under F2 (the gap audit's [5d] RE-NAME fix).
+- **Q5.** The owner handles the Pi's `known_hosts` entry and its DHCP reservation.
+
+**Build note (P8-16, 2026-10-26).** `packages/helios_parsing/validator.py` is
+`validator-v9`. The string length is unchanged, so `method_version` stays 126 characters and
+there is no migration.
+- **g1f.** In pass 1, a row whose claimed block does not print its name, with no print at or
+  after the cursor, grounds on the print nearest its claim (the cursor when nothing is
+  claimed), ties going to the print above, instead of the page's first print.
+- **G3.** `grounding_tokens` is a block's `block_tokens` together with the tokens of its text
+  with a lowercase letter glued to an uppercase one split. It is used for name grounding in
+  [5] only. `output.split_listed` keeps `block_tokens`, so the repairs are unchanged.
+- **Checks.**
+  - Three tests: a glued name (Paloma); a dish printed twice, its claim under the second
+    print and the cursor past both (Vivo); a tie.
+  - 4 of 4 mutations killed: G3 off, the first-print fallback back, nearest the cursor, the
+    tie flipped.
+  - On all 793 dev pages and the 863 corpus page texts, the build's verdicts equal P8-15's
+    prototype (`g1f+g3` patched onto `validator-v8`) row for row.
+- **Re-measured on dev with labels-v10** (793 pages, `validator-v8` → `validator-v9`;
+  page-clustered 95 % intervals):
+
+  | | v8 | v9 |
+  |---|---|---|
+  | Gold-row FR | 0.0973 [0.074, 0.125] | **0.0958** [0.073, 0.124]; change −0.0015 [−0.0039, −0.0001] |
+  | Corruption catch | 0.9951 [0.992, 0.997] | 0.9950 [0.992, 0.997] |
+  | Price accuracy | 0.9781 | 0.9781 |
+  | Usable prices | 0.8139 | 0.8143; change +0.0004 [+0.0000, +0.0011] |
+  | Item recall | 0.9117 | 0.9117; gold items +51, none lost |
+
+  - **Pages worse on catch or price accuracy.** Two:
+    - `2f8e9a845c2b` (`html_inline`, run-together text): swapped-price catch falls 17/20 →
+      15/20, because G3 lets names ground in glued text;
+    - `49b6a15a40ee`: one more wrong-price accept.
+  - **The P8-14 set alone:** FR 0.1585 → 0.1451, and 43 more gold items.
+  - **Corpus:** 46 page texts change (722 rows), and no price Evidence lies off its blocks.
+  - **Amendment 29 Q6 stage bars:** all pass under v9.
+    - On P8-13's 746 pages: 9 gated pages lose a gold item, as under v8. Section exact is
+      0.7679, against resolve-v3's 0.7620.
+    - On the P8-14 set: 2 of 37 gated pages lose a gold item.
+    - The bars' figures move by at most 0.0005 from v8's.
+  - **Invariance suite (ADR-0017 item 1) fails.** On the 218 tuning pages, v9 adds flips on 8
+    page/style pairs, all in the two claim styles: flips go from 6,638 to 6,658.
+    - g1f adds 9 per claim style on two pages (`8db407b1e8ef` 8, `4b9d6bb201da` 1). Its own
+      choice is right: the row moved off its name takes its own print, not the page's first.
+      But the suite orders rows by section, so a lunch and a dinner menu interleave. The
+      cursor then sits in the other menu, and the unchanged cursor rule sends later rows
+      there too.
+    - G3 adds 3 per claim style on two pages (`49b6a15a40ee`, `00f349e12f5b`). A description
+      glued to the next dish's name ("…masala sauceKaraikudi Nattu Kozhi Varuval") becomes an
+      earlier print of that dish, and a row whose claim misses lands there and binds the
+      previous dish's price. It is also the one new wrong accept on dev.
+    - A narrower G3, applied only to the claimed block, was measured too: it adds more flips
+      (9 pairs, 6,638 → 6,685), so it is not offered.
+    - The ADR-0017 rule is that a change adding flips is rejected. The owner's acceptance
+      came before the suite was run, so the build waits for the owner (draft PR, Q-A30 in
+      the build record): (a) accept the 8 pairs as claim-style invariance debt
+      (recommended), (b) build g1f alone, or (c) hold.
+- **Applying it** means one saved-answer re-interpretation and a Gold refresh on
+  `helios_laptop`. That is queued for after merge.
 
 **Why.** The owner queued it after P8-14 (Amendment 29, Q4 of the P8-14 rulings and Q7's first
 follow-on), with the Q2 gap folded in. The cases, traced on stored pages and saved answers:
