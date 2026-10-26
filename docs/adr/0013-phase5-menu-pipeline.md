@@ -2236,9 +2236,47 @@ Menu write-contract change.
 
 ## Amendment 29 (2026-10-24, proposed): stage [5d] page template and duplicate emissions
 
-**Status: Proposed (session P8-13). Not built.** Record:
-[2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md). Owner
-questions below.
+**Status: Accepted 2026-10-25 by the owner, with the rulings below. Build: session P8-14.**
+Record: [2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md).
+
+**Owner rulings (2026-10-25):**
+- **Q1.** Build (i): [5d] with all four actions (ADD, DROP, RE-NAME, ATTACH) plus duplicate
+  removal. Fold them into the post-validator component, so `resolve-v3` becomes `resolve-v4`.
+  `method_version` stays 126 characters, so there is no migration.
+- **Q2.** Gate: 0.8 explained and 0.8 agreement, with at least 5 seeds. A pattern counts
+  with support from at least 3 seeds and at least 10 % of them.
+- **Q3.** Duplicate rule "same": remove extra copies only when every copy cites the same
+  printed price spans. Removal is at the row level, before shape, so [5c] places the
+  survivor.
+- **Q4.** The model's variant grouping is dropped as a seed signal. There are no "one seed
+  per model item" or "re-attach only where the model grouped variants" options.
+- **Q5.** (A) Held-out: all 39 template-gated pool page texts plus 10 ungated texts drawn
+  with seed 20261025.
+  - The pool is 114 production texts. It excludes labelled text hashes, audited URLs, the
+    P8-12 draw, and the P8-11 / P8-12 / P8-13 traced cases.
+  - The exclusions and the draw are frozen with sha256 before any labelling.
+- **Q6.** The bars are §8's: item recall ≥ 0.85, price accuracy ≥ 0.98, gold-row false
+  reject ≤ 0.12, corruption catch ≥ 0.97 and usable prices ≥ 0.74. The stage bars in plan
+  item 1 also apply, on template-gated pages against `resolve-v3` on the same pages:
+  - item recall and kept-item precision not lower;
+  - accepted rows matching no label up by at most 1 % of kept rows;
+  - at most 1 gated page in 10 loses a gold item;
+  - Amendment 28 section accuracy not lower;
+  - ungated pages unchanged by [5d].
+- **Q7.** All four follow-ons are queued, each with its own amendment:
+  - validator grounding to the print nearest the cited block;
+  - the chunk-boundary fix;
+  - the case-5 variant reader for ungated pages;
+  - wine and fee lines.
+
+  The owner's conditions:
+  - **Wine-list specifics:** ask the owner before designing anything.
+  - **GPU/LLM-process parts** (chunker, prompt, model, re-extraction): the owner decides. Ask
+    before designing.
+- **Direction (owner, 2026-10-25).** The main innovation is LLM-first extraction, then HTML
+  parsing derived from the LLM's own results, which gives one universal pipeline. The LLM pass
+  sorts pages into predictable trends, so no page needs its own case. This work needs human
+  guidance: stop and ask at design forks.
 
 **Why.** The owner's second round of findings on the local site ("issues 2"), each confirmed
 against stored data (record section 1):
