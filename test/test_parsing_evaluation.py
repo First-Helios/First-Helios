@@ -25,11 +25,16 @@ from packages.helios_parsing.evaluation import (
     match,
     metrics,
     page_clustered,
+    page_clustered_change,
     score_page,
     section_page,
+    template_bars,
+    template_page,
 )
+from packages.helios_parsing.output import parse_output
 from packages.helios_parsing.segment import segment
 from packages.helios_parsing.validator import Row
+from test.test_parsing_page_template import SALAD_ROWS, SALADS, _output, _salads
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -185,9 +190,12 @@ def test_score_page_counts_recall_usable_accuracy_validator_and_promo() -> None:
     assert (counts["wrong"], counts["caught"]) == (2, 2)
     assert counts["unpriced_rows"] == 1
     assert (counts["promo_rows_stored"], counts["gold_promo_items"]) == (1, 1)
+    # kept items (name block, name): every kept row names a gold item
+    assert (counts["kept_items"], counts["kept_matched"], counts["found_items"]) == (5, 5, 5)
     assert metrics(counts) == {
         "item_recall": 5 / 6,
         "item_recall_kept": 5 / 6,
+        "kept_item_precision": 1.0,
         "usable_prices": 3 / 6,
         "price_accuracy": 1.0,
         "validator_false_reject": 0.0,
@@ -462,3 +470,60 @@ def test_score_page_counts_resolved_accepts_apart() -> None:
     assert counts["wrong_accepted_price"] == 0
     without = score_page(gold_page(PAIR_LABEL), segment(PAIR_PAGE), rows, ())
     assert (without["resolved_accepted"], without["false_reject"]) == (0, 2)
+
+
+def _salad_label(html: str) -> dict[str, Any]:
+    ids = {b.text.split(" .....")[0]: b.id for b in segment(html)}
+    names = [n for n, _ in SALADS] + ["Caesar Salad"]
+    prices = dict(SALADS) | {"Caesar Salad": "9.39"}
+    return {
+        "page_id": "salads",
+        "page_label": "menu",
+        "format": "price_list",
+        "reviewed": True,
+        "items": [
+            {"name": n, "block": ids[n], "section": "Salads", "prices": [{"amount": prices[n]}]}
+            for n in names
+        ],
+    }
+
+
+def test_template_page_scores_v3_against_v4_with_actions_and_bars(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    html = _salads().replace(
+        "Salad ..... $8.99</p>", "Salad ..... $8.99</p><p>Lettuce, Tomato, Feta, Olives</p>", 1
+    )
+    blocks = segment(html)
+    rows = [*SALAD_ROWS, Row("Lettuce", "8.99", section="Salads")]  # priced from Greek's line
+    outputs = [parse_output(_output(rows, blocks))]
+    c = template_page(gold_page(_salad_label(html)), blocks, outputs, html)
+    assert (c["gated"], c["scorable"], c["duplicates"]) == (1, 1, 0)
+    assert (c["v3_found_items"], c["v4_found_items"], c["v3_gold_items"]) == (6, 7, 7)
+    assert (c["v3_kept_items"], c["v3_kept_matched"]) == (7, 6)  # the ingredient row
+    assert (c["v4_kept_items"], c["v4_kept_matched"]) == (7, 7)
+    assert (c["add"], c["add:new"], c["add:new_price_ok"], c["add:accept"]) == (1, 1, 1, 1)
+    assert (c["drop"], c["drop:pseudo"], c["drop:loss"]) == (1, 1, 0)
+    assert c["v3_accepted_unmatched"] == 1 and c["v4_accepted_unmatched"] == 0
+    assert c["lost_gold_items"] == c["ungated_changed"] == c["dedupe_evidence_lost"] == 0
+    bars = template_bars([c])
+    assert all(ok for _, ok in bars), bars
+    # a page that loses a gold item v3 found fails the losing-pages bar
+    lost = c + Counter(lost_gold_items=1)
+    assert [ok for text, ok in template_bars([lost]) if "losing" in text] == [False]
+    evaluate.print_template({"salads": c}, per_page=True)
+    out = capsys.readouterr().out
+    assert "item recall (kept items)   0.8571 -> 1.0000  change +0.1429" in out
+    assert "bar: kept-item precision 1.0000 >= v3 0.8571: pass" in out
+    assert "    salads G    7    6->   7    7->   7   1   1   0   0   0" in out
+
+
+def test_page_clustered_change_resamples_both_sides_by_page() -> None:
+    pages = [((1, 2), (2, 2)), ((0, 2), (1, 2)), ((2, 4), (2, 4))]
+    ch = page_clustered_change(pages, reps=500, seed=3)
+    assert ch.rate == pytest.approx(5 / 8 - 3 / 8)
+    assert ch.low is not None and ch.high is not None and ch.rate is not None
+    assert 0.0 <= ch.low <= ch.rate <= ch.high <= 0.5
+    same = page_clustered_change([((1, 2), (1, 2))] * 3)
+    assert (same.rate, same.low, same.high) == (0.0, 0.0, 0.0)
+    assert page_clustered_change([((0, 0), (0, 0))]).rate is None

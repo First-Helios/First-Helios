@@ -37,9 +37,10 @@ judged on the paired corruption trials, where it must accept no corrupt row:
 Amendment 19's section single-price rule was built and measured in P5-18 and not kept
 (it failed the accepted-rows-matching-no-label gate); Amendment 21 records it.
 
-:data:`RESOLVER_VERSION` names the whole post-validator component: resolve-v3 is [5b]
+:data:`RESOLVER_VERSION` names the whole post-validator component: resolve-v4 is [5b]
 plus [5c] section assignment from page structure (``dom_sections``, Amendment 28),
-which moves only sections and so changes no verdict here.
+which moves only sections and so changes no verdict here, plus [5d] page template and
+duplicate removal (``page_template``, Amendment 29), which run between [5b] and [5c].
 """
 
 from __future__ import annotations
@@ -67,7 +68,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
     from packages.helios_parsing.validator import Row
 
-RESOLVER_VERSION = "resolve-v3"  # part of the pipeline version: [5b] and [5c]
+RESOLVER_VERSION = "resolve-v4"  # part of the pipeline version: [5b], [5c], [5d], dedupe
 NO_MATCH = frozenset(
     {
         "price_not_grounded",

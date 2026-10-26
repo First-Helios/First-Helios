@@ -30,7 +30,8 @@ and changes nothing but which section a kept item is filed under:
 
 Leaf sections only: no outline parent, no ``service_period``. The section shape
 (key, name, Evidence on the heading block) is ``menu_shape``'s. Part of
-``resolve.RESOLVER_VERSION`` ("resolve-v3" = [5b] + [5c]).
+``resolve.RESOLVER_VERSION`` ("resolve-v4" = [5b] + [5c] + [5d] + duplicate removal,
+``page_template``).
 """
 
 from __future__ import annotations
@@ -199,9 +200,16 @@ def _wrapped(placed: Sequence[Placed], item: int, head: int, same_style: Sequenc
     return sum(common in placed[h].node_ids for h in same_style) == 1
 
 
-def assign(html: str, blocks: Sequence[Block], verdicts: Sequence[Verdict]) -> DomSections:
-    """Stage [5c] over one page's HTML, its Version's blocks and [5b]'s verdicts."""
-    placed = placed_blocks(html)
+def assign(
+    html: str,
+    blocks: Sequence[Block],
+    verdicts: Sequence[Verdict],
+    placed: Sequence[Placed] | None = None,
+) -> DomSections:
+    """Stage [5c] over one page's HTML, its Version's blocks and the kept verdicts;
+    ``placed`` is ``placed_blocks(html)`` when the caller already parsed it."""
+    if placed is None:
+        placed = placed_blocks(html)
     if tuple(p.block for p in placed) != tuple(blocks):
         return DomSections()
     index = {b.id: i for i, b in enumerate(blocks)}

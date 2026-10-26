@@ -39,7 +39,9 @@ This section is the single current-status page. Other docs link here.
   with a menu, 472 placed in 267 cells, 97.0% of them `low_sample`. Section and item
   names (ADR-0006 Amendment 1, revision `c95d883737db`): `section_name` and `item_name` on
   every row, filled by the refresh; after the P8-3 refresh all 9,527 served sections and all
-  52,396 items have a name. Served by `GET /v1/price-index` (Amendment 2). Area kinds
+  52,396 items have a name. Latest refresh 2026-10-26, after the resolve-v4 re-interpretation
+  ([P8-15 record](./docs/reviews/2026-10-26-p8-15-same-narrowed-and-grounding.md)): 59,860
+  `current_menu` rows and 9,375 sections. Served by `GET /v1/price-index` (Amendment 2). Area kinds
   (ADR-0007
   [Amendment 3](./docs/adr/0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
   revision `d978bedc2523`, ADR-0019 step 3): each placed venue also counts in a 0.05° cell and
@@ -138,7 +140,14 @@ This section is the single current-status page. Other docs link here.
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
   chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and
   sparse-chunk retry (`prompt.py`), output parsing with truncated-output recovery
-  and the row repairs (`output.py`), and stitch v3 (`stitch.py`). The evaluation
+  and the row repairs (`output.py`), and stitch v3 (`stitch.py`). After the validator, the
+  post-validator component is `resolve-v4` (`resolve.py`):
+  - [5b] price resolution;
+  - [5c] section assignment from the page's DOM (`dom_sections.py`, ADR-0013 Amendment 28);
+  - [5d] the page's own item template, and duplicate removal (`page_template.py`, Amendment
+    29). `page_template.llm_stream` runs the whole `llm` interpretation.
+
+  The evaluation
   harness is `evaluation.py` (gold-label format with the `promo` mark and promo entries, scores,
   loss buckets, corruption injection), with `apps/menu_pipeline/evaluate.py`
   reading the gitignored labels and outputs. At slice 2 (validator v3, prompt v2.3)
@@ -671,7 +680,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0010](./docs/adr/0010-website-and-menu-url-resolution.md) | Website & menu-URL resolution | Accepted |
 | [0011](./docs/adr/0011-provenance-endpoints-vs-identity-match-keys.md) | Provenance endpoints vs identity match keys | Accepted |
 | [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
-| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted (Amendments 1–19) |
+| [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted; amendments through 30, each with its own status in the ADR (29 accepted and built, 30 proposed) |
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
 | [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1) |
 | [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
