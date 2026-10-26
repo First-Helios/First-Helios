@@ -1988,7 +1988,7 @@ write-contract change.
 ## Amendment 28 (2026-10-24, proposed): stage [5c] section assignment from page structure
 
 **Status: Accepted 2026-10-24 by the owner (session P8-11), with the rulings below. Built in
-P8-12 (build note below); §8 held-out check passed. Not yet applied to `helios_laptop`.**
+P8-12 (build note below); §8 held-out check passed. Applied to `helios_laptop` 2026-10-24.**
 Record: [2026-10-24-p8-11-menu-structure.md](../reviews/2026-10-24-p8-11-menu-structure.md);
 build and evaluation: [2026-10-24-p8-12-section-assignment.md](../reviews/2026-10-24-p8-12-section-assignment.md).
 
@@ -2230,5 +2230,196 @@ Menu write-contract change.
   Every bar passes.
 - **Speed.** [5c] takes a median of 14.4 ms per page on one laptop core (p95 53 ms), about 18 s
   for all 863 page texts. The Pi was not timed (it needs the owner's go-ahead).
-- **Not yet done** (owner go-ahead): the laptop re-interpretation of every published `llm`
-  page from saved answers, then a Gold refresh.
+- **Applied to `helios_laptop`** (owner go-ahead, 2026-10-24; record section 5a): every
+  published `llm` page re-interpreted from saved answers (1,597 pages, 0 model calls), then
+  a Gold refresh.
+
+## Amendment 29 (2026-10-24, proposed): stage [5d] page template and duplicate emissions
+
+**Status: Proposed (session P8-13). Not built.** Record:
+[2026-10-24-p8-13-page-template.md](../reviews/2026-10-24-p8-13-page-template.md). Owner
+questions below.
+
+**Why.** The owner's second round of findings on the local site ("issues 2"), each confirmed
+against stored data (record section 1):
+- **Halal Wings** stores ingredient lines as items, five of them priced with Caesar Salad's
+  $9.39, and misses Caesar Salad and Jalapeno Salad.
+  - [4]: the model named rows by the description under a priced title.
+  - Repairs: `split_listed` made one row per ingredient.
+  - [5]: the validator accepted the rows with the next line's price.
+- **Jarochos** stores "Pequeño / Mediano / Grande" as items. [4] put the size label in the
+  name slot.
+  - The stored Capture prints the values the owner expects, and no newer Version exists.
+  - The $20.99 / $28.49 the owner saw are the next dish's printed prices; the API orders
+    items by name.
+- **Los Mayas and Vivo** keep one-dish sections.
+  - [3]: an item split across a chunk boundary is re-emitted from the next chunk's context
+    line.
+  - [5]: both copies ground to one name block.
+  - [5c]: the merge guard keeps both in place.
+  - On Vivo, a dish printed twice also collapses onto its first print.
+
+Corpus-wide (863 page texts, record section 2):
+- duplicate emissions on 243 pages (708 item keys, 272 one-dish sections);
+- 6,710 pseudo-items on 590 pages (1,731 priced);
+- 11,379 printed priced lines that no item cites (6,828 on the page's own item-price path);
+- 335 size labels stored as items.
+
+### Options
+
+- **(a) Forward fixes at the source.**
+  - A chunker that never splits an item from its price, or no re-emittable context tail.
+  - Prompt changes for size labels and descriptions.
+
+  These change the extractor key, so every page is re-extracted on the GPU and a full §8 run
+  follows. They do not reach the validator's grounding collapse.
+- **(b) Reverse: a page-template stage [5d] plus duplicate removal (proposed).** No model
+  call; every page is re-interpreted from its saved answers, as Amendment 28 was. Generic and
+  stdlib; no per-site or per-platform rule.
+- **(c) Duplicate removal alone.** It fixes the reported one-dish sections and loses no gold
+  item, but leaves the pseudo-items, the missed items and the size-label items.
+- **(d) Not adopted:**
+  - per-site wrappers (ruled out by §9 and the owner);
+  - hand-entered fixes;
+  - a learned classifier (the owner's Amendment 19 constraint: deterministic only).
+
+### Proposed rules (prototype `var/p8-13/template.py`, record section 3)
+
+1. **[5d] page template**, after [5b] on the `llm` stream.
+   - **Seeds:** accepted rows with a name block and a price block.
+   - **Record pattern** of a seed:
+     - the tag paths of its name and price blocks (last three block-level tags; classes are
+       not trusted);
+     - their block offset, the common ancestor's tag, and how many levels each sits under it.
+   - **Template:** seeds are grouped by exact pattern; a group counts with at least 3 seeds
+     and at least 10 % of them.
+   - **Page gate:** at least 5 seeds; ≥ 80 % explained; ≥ 80 % of explained seeds on one name
+     path. Ungated pages are unchanged.
+   - **Name candidates:** a block on a template name path that prints its own price (for a
+     same-line pattern) or carries a seed's class signature (for a split pattern). Its record
+     runs from it, inside the pattern's container, to the next candidate.
+   - **Actions,** on kept rows named inside another candidate's record:
+     - **ATTACH:** a size label printed with its price in a run of 2+ labelled prices becomes
+       a variant of the record's dish.
+     - **RE-NAME:** a row named by the title's words but cited on the description is
+       re-grounded on the title. An accepted description row priced inside the record of a
+       title kept unpriced takes the title's name.
+     - **DROP:** a description-like line (repairs' `_description_like`) with no price of its
+       own and not printing the row's amount. A pipe-separated list stays.
+     - **ADD:** an uncited template price line becomes an item, its name read from the
+       template's name position: one row per printed price, labelled when there are several.
+       It is skipped when it is inside a kept item's span, an add-on, description-like or
+       price labels only, below a dish kept unpriced, under a wine-list heading, or a name
+       and price already on the page.
+   - **Safety net:** every added or rewritten row is judged again by the unchanged
+     validator.
+2. **Duplicate removal** (rule "same"), on every page, after [5d] and before [5c].
+   - A printed item (name block, name) the model emitted under two or more of its sections
+     keeps the rows of its first section, when every copy cites the same printed price
+     spans.
+   - [5c]'s merge guard then no longer holds it back, so on a gated page it lands under its
+     DOM section.
+   - Copies citing different prices (a second printed dish grounded onto the first) are kept.
+3. **Evidence.** Nothing new.
+   - Added and rewritten rows carry the validator's name and price spans on the Version's
+     blocks, in today's locator format.
+   - A removed duplicate's price spans are the same spans its kept copy cites.
+
+### Measured (dev, not §8: the rules were tuned on these pages)
+
+294 scorable labelled pages (P8-12's 714 plus its 32 held-out pages; the extraction harness
+scores pages with a priced gold item). The template gate covers 223. Changes are on gated
+pages, with page-clustered 95 % intervals:
+
+| Measure | Today (resolve-v3) | With [5d] | Change |
+|---|---|---|---|
+| Item recall | 0.892 | 0.931 | +0.039 [+0.033, +0.046] |
+| Kept-item precision | 0.811 | 0.844 | +0.033 [+0.025, +0.042] |
+| Usable prices | 0.812 | 0.856 | +0.044 [+0.037, +0.051] |
+| Price accuracy (accepted) | 0.9934 | 0.9934 | ±0.001 |
+
+- **By action:**
+  - ADD 926: 783 new gold items, 93 match none, 21 rejected by the validator;
+  - DROP 853: 754 non-items, 26 lose a gold item;
+  - RE-NAME 77: 74 right;
+  - ATTACH 29: 24 exact.
+- **Pages:** 149 gain gold items and 5 lose some. Accepted rows matching no label +9, wrong
+  accepted rows +14, row-level false rejects −16.
+- **Validator bars:** gold-row false reject and injected-corruption catch are computed by the
+  validator alone on gold rows, so they cannot move.
+- **Duplicate removal ("same"):**
+  - corpus: 596 copies removed (356 duplicate price rows), 151 fewer one-item sections, no
+    printed price Evidence lost;
+  - dev: −208 items, 0 gold items and 0 gold prices lost;
+  - every reported one-dish section goes.
+- **Section accuracy** (Amendment 28 metric, all 746 dev pages): 0.715 → 0.723 exact, with
+  both. 154 pages gain exact-section items and 8 lose some.
+- **Variants tried:**
+  - gate 0.9: fewer pages, slightly cleaner;
+  - one seed per model item, and re-attaching only where the model grouped variants: the
+    model's own grouping adds nothing measurable;
+  - ADD only: recall +0.038 with no page losing a gold item, but precision +0.003.
+
+### Cost and versioning
+
+- **No GPU, model, prompt, chunker, segmenter, validator or Bronze change.** About 38 ms per
+  page on one laptop core (p95 242 ms). The Pi is not timed.
+- **Version:** fold into the post-validator component, as Amendment 28 did. `resolve-v3` →
+  `resolve-v4` = [5b] + [5c] + [5d] + duplicate removal. `method_version` keeps 126 of 128
+  characters, so there is no migration.
+- **Data:** every published `llm` page is re-interpreted from saved answers, then Gold is
+  refreshed. Both run on `helios_laptop` only, with the owner's go-ahead.
+  - Item counts change: adds, drops, merged duplicates, size labels folded into variants.
+  - An added, re-named or merged item gets a new native key in the current Version.
+
+### §8 evaluation plan
+
+1. **Bars: §8's extraction bars apply**, because items are added and dropped:
+   - item recall ≥ 0.85;
+   - price accuracy ≥ 0.98;
+   - gold-row false reject ≤ 0.12;
+   - corruption catch ≥ 0.97;
+   - usable prices ≥ 0.74.
+
+   Proposed for this stage, on template-gated pages against resolve-v3 on the same pages
+   (point estimates):
+   - item recall and kept-item precision not lower;
+   - accepted rows matching no label up by at most 1 % of kept rows;
+   - at most 1 gated page in 10 loses a gold item;
+   - Amendment 28 section accuracy on [5c]-gated pages not lower;
+   - ungated pages unchanged by [5d].
+2. **Held-out set.** The pool is the production page texts that are neither labelled,
+   audited, drawn by P8-12, nor traced in P8-11 / P8-12 / P8-13: **114 page texts, 39 of them
+   template-gated**. Plan: all 39 gated pages plus 10 ungated drawn with seed **20261025**.
+   The exclusions (labelled text hashes, audited URLs, the P8-12 draw and traced cases) are
+   frozen with their sha256 before labelling.
+3. **Labels.** Blind, full-item labels per LABELLING.md. Labellers see the page blocks only,
+   never the pipeline's output. Each labeller works in its own private scratch folder.
+4. **Scoring.** `score_page` and kept-item precision with and without [5d] + duplicate
+   removal, per action class, page-clustered; plus `evaluate sections`.
+
+### Not in this amendment (queued if the owner wants them)
+
+- (a) the chunk-boundary root cause (an extractor-key change);
+- validator grounding to the print nearest the cited block (Vivo's second Chipotle
+  Enchiladas; it moves the false-reject and catch bars);
+- the case-5 variant reader for ungated pages (Amendment 28 Q7);
+- wine lines the model does not label as wine, and fee / note lines.
+
+### Owner questions
+
+- **Q1. Build which?**
+  - (i) [5d] with all four actions plus duplicate removal, as `resolve-v4`. Recommended.
+  - (ii) Duplicate removal alone first (no gold loss on dev).
+  - (iii) [5d] ADD only plus duplicate removal: no page loses a gold item on dev, but most of
+    the precision gain is given up.
+- **Q2. Gate.** 0.8 explained / 0.8 agreement (recommended: 223 pages) or 0.9 (177 pages,
+  slightly cleaner)?
+- **Q3. Duplicate rule.** "same" (recommended: no printed price Evidence lost) or "all" (also
+  drops the second printed dish's copy: −104 distinct price spans, −57 dev gold prices)?
+- **Q4. Model grouping.** Drop it as a seed signal (recommended; it adds nothing measured)?
+- **Q5. Held-out size.** The pool has only 39 template-gated texts.
+  - (A) Label all 39 plus 10 ungated now. Recommended.
+  - (B) Wait for the next crawl's new pages.
+- **Q6. Bars** as in plan item 1?
+- **Q7. Follow-ons:** which of the "Not in this amendment" items to queue?
