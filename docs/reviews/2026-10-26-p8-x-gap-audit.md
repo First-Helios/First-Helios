@@ -439,6 +439,26 @@ F3 needs Q2 answered first. F7 is the owner's.
   languages, which name should the item carry? The labels use the English line. *It changes
   matching, the prompt or [5d], so the owner should decide.*
 
+### Owner answers (2026-10-26)
+
+- **Q1: yes.** F1 first, then F2 and F4, before any model or prompt work.
+- **Q2: open.** The owner asked what "a whole section" means. The explanation is in the PR
+  thread; the answer will be recorded here.
+- **Q3: yes.** F1 becomes its own amendment (Amendment 31). Amendment 30 stays as P8-15
+  proposed it.
+- **Q4: add-ons are not items.** An add-on belongs to the item it modifies, listed under it,
+  when the page's order makes that item clear. Otherwise it is dropped, or kept in an add-on
+  section. Labels that count a bare add-on as an item ("Add 2 Eggs $2.99", "add avocado
+  3") are to be corrected in the labels revision (Q5), and recall is measured without them.
+- **Q5: yes.** A labels revision corrects the confirmed label errors and adjudicates
+  `cfb443e9b654` (price columns) and `3f54728f8c97` (borrowed size charts) before the next
+  dev measurement.
+- **Q6: English.** A dish printed in two languages carries its English name.
+
+PR #126 check (2026-10-26): P8-15's work is in draft PR #126. Its head moved from `ec02992`
+(measured here) to `8ef07fa`. The two new commits add the Amendment 30 proposal, the P8-15
+record and a README note, and change docs only. So this audit's figures hold for #126's head.
+
 ## Reproduction
 
 `var/p8-x/run.sh` runs a script with `PYTHONPATH` pointing at the exported `ec02992` tree,
