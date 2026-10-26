@@ -2529,3 +2529,138 @@ validator or Menu write-contract change.
   - a speed-only timing on the Pi.
 - **Q4. Next follow-on:** validator grounding to the print nearest the cited block (Q7's
   first item). It is proposed as its own amendment.
+
+**Carried out (P8-15, 2026-10-26; record
+[2026-10-26-p8-15-same-narrowed-and-grounding.md](../reviews/2026-10-26-p8-15-same-narrowed-and-grounding.md)).**
+- **Rule "same" narrowed** (still `resolve-v4`; #125 was not merged, and PR #126 replaces it).
+  - Dev: duplicate rows removed 567 → 349, and nothing else changes except section exact,
+    0.7230 → 0.7212.
+  - The P8-14 set (now dev): pages losing a gold item 4 → 2, and every stage bar passes.
+- **Applied to `helios_laptop`:** 1,597 pages re-interpreted from saved answers (0 model
+  calls), then Gold refreshed. Gold has 59,860 `current_menu` rows (from 58,031) and 1,976
+  one-item sections (from 2,161).
+- **Pi, one core:** a median of +26 ms per page.
+- **Q4:** proposed as Amendment 30.
+
+## Amendment 30 (2026-10-26, proposed): validator grounding to the nearest print, and glued names
+
+**Status: Proposed 2026-10-26 (P8-15). Not built; it waits for the owner's review.**
+Record: [2026-10-26-p8-15-same-narrowed-and-grounding.md](../reviews/2026-10-26-p8-15-same-narrowed-and-grounding.md),
+section 6. Prototype: `var/p8-15/ground.py` (untracked).
+
+**Why.** The owner queued it after P8-14 (Amendment 29, Q4 of the P8-14 rulings and Q7's first
+follow-on), with the Q2 gap folded in. The cases, traced on stored pages and saved answers:
+- **Vivo, a second printed dish collapses onto the first.** "Chipotle Enchiladas" is printed
+  twice (b0136 under Mains, b0286 under Specialty Enchiladas).
+  - The chunk-13 row claims b0287, the line under its print, which does not print the name.
+  - Pass 1's cursor rule then finds no print at or after the cursor and falls back to the
+    page's *first* print, b0136.
+  - The second dish is lost, and its row collides with the first.
+- **The P8-14 dedupe-collapse pages.** Each has its own cause:
+  - **Vegetarian Antipasto** (`ad991b67d739`): the copy claims b0522 ("Pasta Entrees"), two
+    blocks past its print b0520. The cursor rule sends it to b0922, the same dish in a later
+    menu.
+  - **Paloma** (`79f66c5309ed`): the model's claim b0041 is right. But the segmenter glued the
+    name to its description ("PalomaHerredura Tequila, …"), so the block doesn't ground
+    "paloma". The row falls through to the bar menu's print, b0256.
+- **The Q2 gap, price printed before its name** (Dahlia Café `d57b5b288970`). Each price is
+  printed in the block just before its dish's name.
+  - The validator's after-name scan binds the next dish's price.
+  - The model reads the page the same way: it gives "Kettle Chips" the next dish's $14.04
+    (gold $5.50), and it names section headings as priced items ("BURGERS $15.01").
+  - On the P8-14 set, this page holds 145 of the 320 gold-row false rejects and 105 of the
+    accepted wrong-price rows.
+
+### Options (all deterministic and generic; no per-site rule, no model change)
+
+- **G1, nearest print.** A row whose claimed block does not print its name grounds on a print
+  near its claim.
+  - (g1) Use v9's claim-drift rule, `output.printed_name_block`, before the cursor rule.
+  - (g1u) Use the nearest print anywhere.
+  - **(g1f) Replace only the cursor rule's first-print fallback.** When the claim does not
+    ground and no print lies at or after the cursor, take the print nearest the claim, not
+    the page's first. (Recommended.)
+- **G2, price before name.** A page-level layout vote at section ends.
+  - In a name / description / price layout, a section's last dish is followed by a price,
+    and its first dish has none before it. A price-first layout is the other way round.
+  - The vote's item names are the blocks in the page's item-name style, the (tag, path) most
+    of the rows' name blocks share. The model's rows can't be used directly: they include
+    section headings.
+  - On a gated page, a row binds the price-only run just above its name, and an acceptance on
+    a price after the name becomes `price_not_grounded`.
+- **G3, glued words.** A block's grounding tokens also split a lowercase letter glued to an
+  uppercase one ("PalomaHerredura" → "Paloma Herredura"). It is a union rule, as v6's
+  glued-integer split ("Cod Cakes16") is: it can only add a grounding. (Recommended.)
+
+### Measured (dev, not §8: P8-13's 746 pages plus the P8-14 set, 793 menu pages)
+
+Everything below runs through the production `llm_stream` with saved answers (so [5d], the
+re-judge, duplicate removal and [5b] all see the change). Gold-row FR and catch come from the
+harness's `corruption_eval`, run per page with seed 20261026. Gold-item counts are against
+resolve-v4 with the narrowed rule "same".
+
+| 793 pages | Recall | Price acc | Usable | Gold-row FR | Catch | Gold items | Rows re-claimed |
+|---|---|---|---|---|---|---|---|
+| resolve-v4 | 0.9061 | 0.9785 | 0.8064 | 0.1008 | 0.9950 | | |
+| g1 | 0.9055 | 0.9784 | 0.8055 | 0.1006 | 0.9951 | +6 −15 | 16,079 |
+| g1u | 0.9055 | 0.9784 | 0.8052 | 0.1006 | 0.9951 | +9 −20 | 18,028 |
+| **g1f** | 0.9061 | 0.9785 | 0.8066 | 0.1007 | 0.9951 | **+2 −0** | 79 |
+| G2 | 0.9060 | **0.9832** | 0.8073 | **0.0961** | 0.9948 | +0 −1 | |
+| **G3** | 0.9061 | 0.9784 | 0.8067 | 0.0994 | 0.9947 | **+49 −0** | |
+| **g1f + G3** (proposed) | 0.9061 | 0.9784 | 0.8068 | 0.0993 | 0.9949 | **+51 −0** | 77 |
+| g1 + G2 + G3 | 0.9055 | 0.9831 | 0.8068 | 0.0945 | 0.9947 | +55 −16 | 16,011 |
+
+- **On the P8-14 set** (47 menu pages; resolve-v4 → G2 + G3 + g1):
+  - price accuracy 0.872 → 0.924;
+  - gold-row FR 0.156 → 0.085 (page-clustered [0.047, 0.129]);
+  - usable prices 0.759 → 0.766;
+  - catch 1.000.
+
+  Without Dahlia, G3 alone moves FR 0.094 → 0.079.
+- **Dahlia under G2:** wrong-price accepts 105 → 4, gold-row FR 145 → 26 of 180. Usable
+  prices only go 18 → 25: the model's amounts are wrong too, and the validator can only
+  downgrade them, not correct them.
+- **Vivo:** g1, g1u and g1f all restore the second Chipotle Enchiladas on b0286 (price on
+  b0287).
+  - Vegetarian Antipasto: g1 re-grounds the copy on b0520.
+  - Paloma: G3 grounds the claim on b0041 (that page's gold-row FR 12 → 11 of 12; the page's
+    other rejects are unrelated).
+- **Corpus sizing** (863 page texts):
+  - g1f changes 36 page texts (85 rows); g1 changes 187 (16,740 rows re-claimed).
+  - G3 changes 12 page texts; g1f + G3 together change 46.
+  - **G2 gates 8 page texts. At least 2 of them are false gates** (spot-checked):
+    - Mom's Special Cooking and Wen's Café print name → price. 17 and 24 rows change.
+    - On Wen's, each dish is printed twice (a list block and a heading). The item-name style
+      picks the list blocks, so the dish headings become section bounds, and one-dish
+      "sections" vote price-first.
+    - Neither page is labelled, so the dev table can't see it.
+- **Versioning.** G1 and G3 change the validator: `validator-v8` → `validator-v9`. The string
+  length is unchanged, so `method_version` stays 126 characters and there is no migration.
+  Applying it means one more saved-answer re-interpretation and a Gold refresh.
+
+### Proposal
+
+1. **Build G3 + g1f as validator-v9.** Measured together on dev (793 pages):
+   - +51 gold items with none lost; it changes 53 pages, and 46 corpus page texts;
+   - gold-row FR 0.1008 → 0.0993, catch 0.9950 → 0.9949 (11,487 / 11,546);
+   - price accuracy 0.9785 → 0.9784, usable prices 0.8064 → 0.8068.
+
+   It fixes Vivo and Paloma, but not Vegetarian Antipasto (that needs the broader g1).
+2. **G2 is not ready to build.** It removes most of the Q2 gap on Dahlia, but its section bounds
+   false-gate normal pages. How to bound sections is a design fork for the owner (Q2 below).
+3. **Re-check before applying:** dev in full (the FR and catch bars move with the validator),
+   and the §8 held-out at the next crawl, together with resolve-v4's.
+
+### Owner questions
+
+- **Q1. Build G3 + g1f as validator-v9?** Recommended. Or G3 alone, or neither.
+- **Q2. G2's section bounds.** Which, if any, should be prototyped next?
+  - (a) Move G2 after the validator, where the HTML is, and bound sections with [5c]'s
+    DOM section headings. The gold-row FR and catch harness would then need the page HTML,
+    which is a harness change.
+  - (b) Keep it in the validator, and bound sections only by headings in a style that never
+    precedes a price-bearing run of its own. Cheaper, but still a structural guess.
+  - (c) Leave the price-first layout as a known gap and accept the data loss on those pages.
+    Dahlia is 1 page text in 863.
+- **Q3. G1 scope.** g1f only (recommended)? The broader g1 / g1u also fixes Antipasto but
+  loses 15 to 20 dev gold items.
