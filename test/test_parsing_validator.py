@@ -590,3 +590,55 @@ def test_v8_a_second_table_reads_its_own_split_header() -> None:
     )
     rows = [Row("Tenders", "65", variant="Full"), Row("Tenders", "35", variant="each")]
     assert _decide(rows, html) == ["accept", "downgrade"]
+
+
+def test_v9_a_name_glued_to_its_description_grounds_on_its_own_block() -> None:
+    html = (
+        "<h2>Cocktails</h2><p>PalomaHerredura Tequila, grapefruit, lime</p><p>$12</p>"
+        "<h2>Bar</h2><p>Paloma</p><p>$9</p>"
+    )
+    check = _check([Row("Paloma", "12", claimed_block="b0002")], html)
+    verdict = check.verdicts[0]
+    assert (verdict.decision, verdict.reasons) == ("accept", ())
+    assert verdict.name_evidence is not None and verdict.name_evidence.block_id == "b0002"
+    # a union: the glued words still ground together, and a name split wrongly never does
+    assert _decide([Row("PalomaHerredura Tequila", "12")], html) == ["accept"]
+    assert _decide([Row("Paloma Margarita", "12")], html) == ["reject"]
+
+
+TWICE = (
+    "<h2>Mains</h2><p>Chipotle Enchiladas</p><p>$14</p><p>Tacos</p><p>$10</p>"
+    "<h2>Specialty Enchiladas</h2><p>Chipotle Enchiladas</p><p>$16</p>"
+    "<p>Mole Enchiladas</p><p>$17</p><p>Verde Enchiladas</p><p>$15</p>"
+)
+
+
+def test_v9_with_no_print_after_the_cursor_a_row_takes_the_print_nearest_its_claim() -> None:
+    blocks = segment(TWICE)
+    ids = {b.text: b.id for b in blocks}
+    first, second = [b.id for b in blocks if b.text == "Chipotle Enchiladas"]
+    rows = [
+        Row("Mole Enchiladas", "17", claimed_block=ids["Mole Enchiladas"]),
+        # the claim is the line under the second print, which doesn't print the name
+        Row("Chipotle Enchiladas", "16", claimed_block=ids["$16"]),
+        Row("Verde Enchiladas", "15", claimed_block=ids["Verde Enchiladas"]),
+        # a copy claimed under the first print, the cursor past both prints
+        Row("Chipotle Enchiladas", "14", claimed_block=ids["$14"]),
+    ]
+    verdicts = validate(blocks, rows).verdicts
+    assert [v.decision for v in verdicts] == ["accept"] * 4
+    assert verdicts[1].name_evidence is not None and verdicts[1].name_evidence.block_id == second
+    assert verdicts[3].name_evidence is not None
+    assert verdicts[3].name_evidence.block_id == first
+
+
+def test_v9_the_print_nearest_the_claim_prefers_the_one_above_on_a_tie() -> None:
+    html = "<p>Flan</p><p>$5</p><p>Flan</p><p>$6</p><p>Churros</p><p>$4</p>"
+    blocks = segment(html)
+    rows = [
+        Row("Churros", "4", claimed_block="b0005"),
+        Row("Flan", "5", claimed_block="b0002"),  # b0001 and b0003 both one block away
+    ]
+    verdicts = validate(blocks, rows).verdicts
+    assert [v.decision for v in verdicts] == ["accept", "accept"]
+    assert verdicts[1].name_evidence is not None and verdicts[1].name_evidence.block_id == "b0001"
