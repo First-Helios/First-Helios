@@ -1987,8 +1987,10 @@ write-contract change.
 
 ## Amendment 28 (2026-10-24, proposed): stage [5c] section assignment from page structure
 
-**Status: Accepted 2026-10-24 by the owner (session P8-11), with the rulings below. Not built.**
-Record: [2026-10-24-p8-11-menu-structure.md](../reviews/2026-10-24-p8-11-menu-structure.md).
+**Status: Accepted 2026-10-24 by the owner (session P8-11), with the rulings below. Built in
+P8-12 (build note below); §8 held-out check passed. Not yet applied to `helios_laptop`.**
+Record: [2026-10-24-p8-11-menu-structure.md](../reviews/2026-10-24-p8-11-menu-structure.md);
+build and evaluation: [2026-10-24-p8-12-section-assignment.md](../reviews/2026-10-24-p8-12-section-assignment.md).
 
 **Owner rulings (2026-10-24):**
 - **Q1.** Build (b). Option (a) is dropped: the LLM side is near its limit and GPU
@@ -2186,3 +2188,47 @@ In every reported case the page's DOM prints the right section. Corpus-wide (863
   - pseudo-items;
   - image-menu signals;
   - Barstool Bites' menu URL (`seasideonthepier.com` looks like another restaurant; ADR-0010).
+
+**Build (P8-12, 2026-10-24; record
+[2026-10-24-p8-12-section-assignment.md](../reviews/2026-10-24-p8-12-section-assignment.md),
+owner questions in its PR).** One pipeline-version bump: `resolve-v2` → `resolve-v3` ([5b] +
+[5c]). `method_version` stays 126 characters. No schema, model, prompt, chunker, segmenter or
+Menu write-contract change.
+- **Stage.** `packages/helios_parsing/dom_sections.assign(html, blocks, verdicts)` (stdlib).
+  - It re-parses with a subclass of segment-v2's parser; if the blocks differ, nothing is
+    assigned.
+  - It then applies rules 1–4 above as ruled (Q2: ≥ 90 % assigned, no corroboration gate;
+    Q4: `h1`–`h6` and class words).
+  - It returns the assignment for gated pages only.
+- **Shape.** `menu_shape.shape(..., headings)` files an assigned item under its heading block:
+  - the key is `<heading block>:<normalized heading text>`;
+  - the name is the printed heading text;
+  - the Evidence is the heading block's span.
+
+  Leaf sections only (Q5). An item whose move would merge two of the page's items (the same
+  printed item that the model emitted under two sections) keeps today's section. That keeps
+  every row, item, variant, price and their Evidence unchanged. Corpus-wide this holds back
+  599 items on 151 of 863 page texts.
+- **Run.** `extraction._Run._write` applies [5c] to the `llm` stream only. The `jsonld` stream
+  is unchanged.
+- **Harness.** `evaluation.section_page` and `apps.menu_pipeline.evaluate sections` report
+  plan item 1's metric and the item 4 bars.
+- **Dev (714 labelled pages):**
+  - applied lenient 0.712, exact 0.695;
+  - gated pages 0.887 / 0.882;
+  - 166 better / 7 worse (lenient).
+
+  This reproduces the prototype exactly once the prototype's name-fallback scoring is used and
+  the merge guard is switched off (0.704; 165 / 7; +5,512 / −84).
+- **§8 held-out** (seed 20261024; 149-text pool, 56 gated; 25 gated / 10 ungated drawn; 32 menu
+  pages scored):
+  - gated pages exact **0.961** [0.946, 0.976] against today's 0.461;
+  - 0 of 23 gated pages worse;
+  - ungated pages identical;
+  - invariance clean on every dev, held-out and production page.
+
+  Every bar passes.
+- **Speed.** [5c] takes a median of 14.4 ms per page on one laptop core (p95 53 ms), about 18 s
+  for all 863 page texts. The Pi was not timed (it needs the owner's go-ahead).
+- **Not yet done** (owner go-ahead): the laptop re-interpretation of every published `llm`
+  page from saved answers, then a Gold refresh.
