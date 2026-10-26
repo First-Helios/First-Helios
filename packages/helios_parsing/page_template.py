@@ -39,9 +39,10 @@ Every row [5d] adds or rewrites is judged again by the unchanged validator and [
 
 **Duplicate removal** (rule "same", :func:`remove_duplicates`): a printed item (name
 block, normalized name) the model emitted under two or more of its sections keeps the rows
-of its first section when every copy cites the same printed price spans; copies citing
-different prices (a second printed dish grounded onto the first) stay. With the clash
-gone, [5c]'s merge guard no longer holds the survivor back.
+of its first section when every copy cites the same non-empty set of printed price spans.
+Copies citing different prices, and unpriced copies, stay: either may be a second printed
+dish the validator grounded onto the first print. With the clash gone, [5c]'s merge guard
+no longer holds the survivor back.
 
 :func:`llm_stream` is the ``llm`` stream's whole post-model interpretation, in order:
 ``rows_of`` → [5]+[5b] → [5d] → [5]+[5b] again → duplicate removal → [5c]. Part of
@@ -483,7 +484,7 @@ def remove_duplicates(verdicts: Sequence[Verdict]) -> tuple[Verdict, ...]:
 
     A printed item is its name block and normalized name; a copy is its rows under one of
     the model's sections. The first section's rows (reading order) stay, and the others go
-    only when every copy cites the same printed price spans."""
+    only when every copy cites the same non-empty set of printed price spans."""
     groups: dict[tuple[str, str], dict[str, list[int]]] = {}
     for k, v in enumerate(verdicts):
         if v.decision == "reject" or v.name_evidence is None:
@@ -504,6 +505,8 @@ def remove_duplicates(verdicts: Sequence[Verdict]) -> tuple[Verdict, ...]:
         }
         if len(spans) > 1:
             continue  # a copy cites another printed price: a second dish, not a copy
+        if not next(iter(spans)):
+            continue  # no copy cites a price: a second print may be grounded onto the first
         first = min(by_section.values(), key=min)
         drop |= {k for ks in by_section.values() if ks is not first for k in ks}
     return tuple(v for k, v in enumerate(verdicts) if k not in drop)

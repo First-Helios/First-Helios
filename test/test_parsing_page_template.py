@@ -377,6 +377,16 @@ def test_duplicate_removal_same_rule() -> None:
     # copies within one model section are shape's to merge, not removal's
     one = judge(blocks, [rows[1], rows[1]]).verdicts
     assert remove_duplicates(one) == one
+    # unpriced copies cite no price to compare, so both stay (a second print may have been
+    # grounded onto the first); priced copies of the same spans are still removed
+    unpriced = judge(
+        blocks,
+        [Row("Pork Taco", None, section="Tacos"), Row("Pork Taco", None, section="Shrimp Taco")],
+    ).verdicts
+    assert all(v.name_evidence is not None and v.price_evidence is None for v in unpriced)
+    assert remove_duplicates(unpriced) == unpriced
+    priced = judge(blocks, rows[1:3]).verdicts
+    assert remove_duplicates(priced) == priced[:1]
 
 
 def test_the_survivor_is_placed_by_5c() -> None:
