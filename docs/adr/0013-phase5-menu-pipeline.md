@@ -2736,3 +2736,203 @@ resolve-v4 with the narrowed rule "same".
     Dahlia is 1 page text in 863.
 - **Q3. G1 scope.** g1f only (recommended)? The broader g1 / g1u also fixes Antipasto but
   loses 15 to 20 dev gold items.
+
+## Amendment 31 (2026-10-26, proposed): the validator's price scan continues past the dish's own headings
+
+**Status: Proposed 2026-10-26 (P8-16). Accepted 2026-10-26 by the owner, with the rulings below; to be built as `validator-v10`.**
+Record: [2026-10-26-p8-16-amendments-31-32.md](../reviews/2026-10-26-p8-16-amendments-31-32.md),
+section 1.
+
+**Owner rulings (2026-10-26), as recommended:**
+- **Q1.** Build F1's heading part as `validator-v10`. The row part stays dropped.
+- **Q2.** First try one more condition, the row's variant words left out when the heading is
+  compared with the row's name. Keep it if it removes the two added invariance pairs
+  without losing the gains; otherwise accept the two pairs as invariance debt.
+- **Q3.** The bilingual-twin losses go to the queued English-name work (owner Q6 on P8-x);
+  they don't block F1. Prototype: `var/p8-16/proto/validator_f1.py` (untracked; `validator-v9`, PR #128,
+plus the edits marked "(F1)").
+
+**Why.** The P8-x gap audit's fix F1 (owner Q1 and Q3: first, and in its own amendment).
+- [5]'s price scan (`_price_run`) ends at the first price-less heading after a dish's name.
+- On pages that print each dish's name again as a heading, the scan stops before the dish's
+  own price. Some print the name again, some print it in a second language, some print an
+  item code: `83b9a566697a` prints `li` name, `li` 中文, `h3` name, `h3` 中文, then the price;
+  cards print "C2" between title and price.
+- The audit sized it at 290 lost prices: heading 204, emitted description row 49, other-language
+  row 37. On gold rows, 268 rejects (1.1 % of gold prices) are heading stops.
+
+### Proposal (`validator-v10`, on top of `validator-v9`)
+
+Before a price run starts, the scan does not end at a price-less heading that is one of:
+- **the row's own name again**: its words, item codes aside, are all the row's name words
+  ("Kung Pao Chicken", "C2 Crispy Rice");
+- **only an item code**: up to three letters, then one to three digits ("C2", "M2", "#12",
+  "N1:");
+- **a short line (≤ 40 characters) in the other script** from the row's name (CJK against
+  Latin): the dish's bilingual twin heading.
+
+Every other heading still ends the scan, a section heading included. Nothing else in [5]
+changes.
+
+**Dropped from F1: the row part.** Scanning past an unpriced emitted description row or an
+other-language row changes no dev page and one corpus text (two rows). Two things explain it:
+- `validator-v6`'s `_NOT_ITEM` already lets description sentences through;
+- the other-language rows the audit counted are priced twins, which are no scan stop to
+  skip.
+
+### Measured (dev, not §8; labels-v10; against `validator-v9`)
+
+793 dev pages, page-clustered 95 %; corruption seed 20261026:
+
+| | v9 | v9 + F1 | Change |
+|---|---|---|---|
+| Usable prices | 0.8143 | **0.8212** | +0.0069 [+0.0026, +0.0126]; gold prices +192 −28 |
+| Gold-row FR | 0.0958 | **0.0878** [0.067, 0.113] | −0.0080 [−0.0199, −0.0002] |
+| Corruption catch | 0.9950 | 0.9950 [0.992, 0.997] | 11,494 / 11,552 |
+| Price accuracy | 0.9781 | 0.9787 | wrong-price accepts 453 → 444 |
+| Item recall | 0.9117 | 0.9112 | gold items +0 −13 |
+
+- **Where it lands.** 83b9a566697a's gold-row FR goes 122 → 10 (+59 prices) and the item-code
+  cards on 05273895b4e2 go 88 → 54 (+23); then fde6a5187560 +15 and 2aa22b5d5dc5 +13. The P8-14
+  set gains 12 prices with FR unchanged.
+- **Pages worse on catch or price accuracy** (two):
+  - held:7f7d7c98ba45: one new wrong accept (a comma-joined row of four cocktail names at
+    4.00);
+  - ab61da9d75b5: 34 / 34 → 30 / 30 caught (fewer trials drawn, none missed).
+- **The 28 lost gold prices.** 16 are on dc55a13f2101: the model emits each dish's Chinese
+  line as its own priced row, and F1 lets that twin bind the dish's price first, so the English
+  row is downgraded `price_bound_to_other_item`. That belongs with the owner's Q6 ruling
+  (bilingual dishes carry their English name; queued).
+- **The 13 lost gold items** come through [5d], not [5]. F1 changes the first judge's
+  verdicts, which changes the template:
+  - held:c1ebd4d32417 (10): the page's gate fails, agreement 0.67 under 0.8, so [5d]'s
+    additions there go (they were bare-integer rows);
+  - 4723ed747fe3 (2) and 113e4327a7dd (1): RE-NAME / DROP interplay.
+- **Amendment 29 Q6 stage bars: all pass** on P8-13's 746 pages and on the P8-14 set. Gated
+  pages losing a gold item: 9 of 221 and 2 of 37.
+- **Invariance suite** (218 tuning pages, against `validator-v9`):
+  - total flips fall 6,658 → 6,639;
+  - but one page adds two pairs: 05273895b4e2, `variant_in_name` 16 → 18 in both forms. A
+    variant written into the name changes the name's words, so the item-code heading no
+    longer reads as the row's own name.
+  - ADR-0017 rejects any added pair, so this needs the owner's ruling (Q2 below).
+- **Corpus** (863 page texts): 40 change (680 rows). Accepts +267, distinct price spans +267,
+  rows −48 ([5d] and duplicate removal), and no price Evidence lies off its blocks.
+
+### Owner questions
+
+- **Q1. Build F1 (heading part only) as `validator-v10`?** *Recommended.* +164 net gold prices
+  and FR −0.008 on dev, with catch flat, every stage bar passing, and fewer flips in total.
+- **Q2. The two added invariance pairs** (05273895b4e2, variant in the name). Choose one:
+  - (a) Accept them as debt, since total flips fall by 19 (*recommended*);
+  - (b) also strip the row's variant words before comparing with the heading. That is one
+    more condition, to be measured before the build.
+- **Q3. The bilingual-twin losses** (dc55a13f2101, 16 prices). Leave them to the queued Q6
+  work (English names, twin rows merged), or block F1 until then? *Recommended: leave them
+  to Q6.*
+
+## Amendment 32 (2026-10-26, proposed): a shared section price as a [5b]-style resolver
+
+**Status: Proposed 2026-10-26 (P8-16). Not adopted (owner, 2026-10-26): dropped for now, as recommended.**
+
+**Owner rulings (2026-10-26):** Q1, do not build it; F3 stays recorded as measured. Q2,
+no limit moves now. Shared section prices are revisited only after F2 and F4 ([5d]) and the
+English naming land, and then with section bounds from [5c]'s page structure, together with
+G2's revisit (Amendment 30). Q3 falls away with Q1.
+Record: [2026-10-26-p8-16-amendments-31-32.md](../reviews/2026-10-26-p8-16-amendments-31-32.md),
+section 2. Prototype: `var/p8-16/proto/shared32.py` (untracked).
+
+**Why.** The P8-x gap audit's fix F3, approved by the owner (Q2) with exactly these limits:
+- a dish takes a price printed once for its own section, with its Evidence on that line;
+- only when the price is printed in the section's heading or on the line right under it, and
+  no dish in the section prints its own price;
+- a choice list ("Tofu or Paneer $17 | Chicken $17 | Lamb $20") gives one variant per choice;
+- charts printed elsewhere, "starting at" prices, add-on surcharges and menu-level prices stay
+  out;
+- it is built as a [5b]-style resolver, so FR and catch apply.
+
+The audit counted 411 lost prices (407 on labels-v10) whose amount is printed in a line above
+the dish with another dish in between.
+
+### The prototype
+
+Tagged `resolved_section_price`:
+- **Accept pass, inside [5b]** (`resolve.resolve`, so the gold-row FR and catch see it): a row
+  kept unpriced for a no-match reason whose amount, and variant on a choice list, is the
+  section's printed price is accepted, citing it.
+- **Fill pass, after duplicate removal on the llm stream:** a dish emitted unpriced takes the
+  section's price. Under a choice list it becomes one row per choice, the choice's label as its
+  variant.
+
+The section:
+- its heading is the nearest marked heading above the dish that names no item;
+- it ends at the next heading of its level;
+- it holds no sub-section;
+- its price line is the heading or the line right under it, and nothing else in it prints a
+  price;
+- the line is no add-on or surcharge, no "starting at" or "from" price, and no menu-level
+  title.
+
+Three revisions were measured, each a generic correction to the false fills its predecessor
+showed on dev:
+- **r1** applied the limits as stated. It also found a section heading as the line printing
+  the model's own section name, because many pages head sections with plain paragraphs.
+- **r2** added: marked prices only (no bare numbers: "Available September 22", "Choice of
+  2"); a heading that names a kept dish heads no section; a dish printed elsewhere with its
+  own price is skipped; package, combo and per-person lines count as menu-level ("Pick 2
+  Lunch – $13.95", "Premium Package – $19/person/hour").
+- **r3** stopped a dish's own heading from ending its section.
+
+### Measured (dev, not §8; labels-v10; against `validator-v9`)
+
+| 793 dev pages | Usable change | Gold prices | FR change | Catch | Wrong-price accepts |
+|---|---|---|---|---|---|
+| r1 | +0.0010 [+0.0002, +0.0022] | +25 −0 | −0.0039 [−0.0070, −0.0014] | 0.9949 | 453 → **466** |
+| r2 | +0.0002 [+0.0000, +0.0006] | +5 −0 | −0.0021 [−0.0040, −0.0007] | 0.9950 | 453 → 454 |
+| r3 | +0.0000 [+0.0000, +0.0001] | +1 −0 (−1 gold item) | −0.0023 [−0.0042, −0.0008] | 0.9951 | 453 → 453 |
+
+- **False fills, the owner's kinds** (`var/p8-16/measure/fills32*.txt`):
+  - **the dish prints its own price elsewhere:** r1 13, for example "Pick 2 Lunch – $13.95"
+    over a Cuban whose own price is $18.95; r2 1 and r3 1 ("17.L House Fried Rice", whose own
+    price, 12.25, is printed after its bilingual headings);
+  - **a "starting at" line:** none in any revision; the line filter held;
+  - **a line outside the section:** none once r2 stops dish headings heading sections. In r1,
+    83b9a566697a's dish headings were read as sections (4 wrong fills).
+  - **menu-level and package prices:** r1 filled "Pick 2 Lunch – $13.95" over 15 dishes and
+    "Premium Package – $19/person/hour" over 6. r2 and r3 still fill "$16.99* Big Yummm
+    Deal" over 2 burgers: a word list can't close this kind.
+  - Most accepts and fills land on items no label covers (r3: 32 of 33). Examples are
+    unlabelled cocktails under "$7 Cocktails" and wing flavours under "Jumbo Wings 5 for
+    $9.95". They read as right, but they can't be scored.
+- **Why it reaches so little.** Of 676 unpriced kept rows whose gold item is priced, r3 fills
+  2. The rest stop at:
+  - **no price on the heading or the line right under it: 320** (the owner's limit);
+  - another heading between section and dish: 168;
+  - a sub-section: 99;
+  - another price in the section: 35;
+  - no section heading: 23;
+  - the rest: 29.
+
+  The audit's 407 counted a shared price printed anywhere above the dish.
+- **Invariance suite** (r3, against `validator-v9`): 4 added page/style pairs, 6,658 → 6,686
+  flips, in `section_none` and `section_generic`. Finding the heading from the model's
+  section label makes the decision depend on the model's output style, which ADR-0017 item 1
+  forbids. Only marked or DOM headings (`MODEL_SECTIONS = False`) are admissible. That variant
+  matched r1 in reach on dev (s32h: same +25, FR −0.0031).
+- **Corpus** (r3): 9 page texts change (67 rows); no price Evidence off its blocks.
+
+### Owner questions
+
+- **Q1. Build it?** Under Q2's limits it delivers about nothing on dev. r1 found +25 gold
+  prices only by also accepting 13 wrong prices, and the guards that remove those remove the
+  gain. *Recommended: do not build now; record F3 as measured.*
+- **Q2. If shared prices are still wanted**, which limit should move?
+  - (a) The price line may be any line between the heading and the section's first dish (not
+    only the line right under the heading). This reaches part of the 320.
+  - (b) Section bounds from [5c]'s DOM sections, which the owner tied to G2's revisit
+    (Amendment 30), instead of marked headings.
+  - (c) Neither: leave F3 to the model and prompt side, which is the owner's GPU/LLM decision.
+
+  This is a design fork; each needs its own measurement.
+- **Q3. Unscorable fills.** Most fills land on items no label covers. Label those pages'
+  missing items in a later revision before judging any widened variant?
