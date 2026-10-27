@@ -1010,6 +1010,25 @@ Phase 5's open questions were answered at ADR-0013's acceptance ([Amendment 3](.
    | R111 No review queue for ambiguous venues | A review UI is planned (see item 4) |
    | R116 No image healthcheck; CI builds amd64 while the Pi builds arm64 | Phase 8 deploy work |
 
+7. **Menu coverage beyond one static page per venue** (owner, 2026-10-27: on the to-do list,
+   not scheduled). Two gaps found on firsthelios.com, where most of a venue's menu goes
+   missing:
+   - **Several menu pages per venue.** [ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md)
+     D3.5 stores one menu URL per venue. Sites that split the menu over pages lose all but
+     one. Example: Tex Mex Joe's (venue 21459) stores only `/blank`
+     (drinks, desserts, kids), not `/lunch` or `/services3`. Reconciling several pages,
+     and a site's own menu against a platform's, needs a record-contract change, which was
+     deferred in ADR-0010.
+   - **Script-loaded menus.** Ordering widgets and apps whose items exist only after
+     JavaScript runs. Examples: Tex Mex Joe's ChowNow modal (`ordering.chownow.com/order/10074`,
+     linked only from a script setting); smorefood pages that load each category on click.
+     A static fetch can't see them. Reaching them means page rendering (a new runtime
+     dependency) or per-platform readers, which the owner rejected (one universal pipeline).
+
+   Next step: size both on the corpus (how many venues have several menu-classified pages,
+   and how many menu URLs are script shells). Then write an ADR proposing the record change
+   and, if rendering, the dependency. Stop for review before building (CLAUDE.md).
+
 ---
 
 ## Appendix A — V1 Reference Map
