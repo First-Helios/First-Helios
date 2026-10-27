@@ -5,11 +5,13 @@ Session P8-18, 2026-10-27, from the owner's triage of firsthelios.com (venues 21
 [ADR-0015 Amendment 2](../adr/0015-menu-url-reverification.md#amendment-2-2026-10-27-proposed-a-wrong-place-page-check)
 (wrong-place check) and
 [ADR-0006 Amendment 2](../adr/0006-gold-menu-read-models.md#amendment-2-2026-10-27-proposed-json-ld-precedence-per-dish)
-(JSON-LD precedence). Both are **Proposed**, and the owner questions are in the amendments.
+(JSON-LD precedence). Both were proposed with owner questions, then **accepted 2026-10-27
+with every question as recommended**, built and applied; §3 records the apply.
 
-Read-only: `helios_laptop` (Alembic `13081a087231`) and the stored bundles under the main
-checkout's `var/replay/menu-page`. Nothing was fetched, withdrawn, re-extracted or refreshed;
-no laptop or Pi writes; no model calls. Code: `main` at bc22af0.
+The measurements in §1 and §2 are read-only. They read `helios_laptop` (Alembic
+`13081a087231`) and the stored bundles under the main checkout's `var/replay/menu-page`. For
+them nothing was fetched, withdrawn, re-extracted or refreshed, and no model was called. Code:
+`main` at bc22af0.
 
 Artefacts are untracked, under `var/p8-18/` in this worktree:
 - `dump_pages.py` → `pages.jsonl`: every `menu-page` record, its latest Version's bundle,
@@ -234,7 +236,52 @@ the Gold-row proxy.
 For Carmen's, (a)/(d) show the clean 73 jsonld rows; (b) shows 73 + the 16 llm fragments
 until P8-19 lands; (c) shows llm (85) with the fragments.
 
-## 3. Doc drift noticed
+## 3. Owner decision, build and apply (2026-10-27)
+
+The owner accepted both amendments with every question as recommended. Both are built, in
+the same PR (build notes in the ADRs).
+
+**Applied to `helios_laptop`:**
+- **Backup:** `pg_dump` `var/laptop-run/helios_laptop-2026-10-27-pre-p8-18.dump` (main
+  checkout; sha256 67b43b27…).
+- **Sweep:** `python -m apps.discovery.place_sweep`. The dry run and the live run flagged the
+  same 55 keys, and the live run withdrew all 55:
+  - menu-URL `needs_review` went 74 → 129;
+  - 1,602 pages were checked; 74 not resolved and 6 older-URL bundles were skipped.
+- **Rescore:** `python -m apps.menu_pipeline.rescore` (R4) withdrew the streams of 54 records
+  (`menu_url_withdrawn`): 54 llm and 21 jsonld pages. Sarpino's `/menu` was already withdrawn.
+  No page was due.
+- **Gold:** `python -m apps.gold.refresh` (7 m 54 s, effective 2026-10-27T03:38:50Z):
+
+  | | Before | After |
+  |---|---|---|
+  | `current_menu` rows | 60,119 | **56,194** |
+  | `price_index` rows | 352 | 341 |
+
+  - The flagged records now carry 0 rows; before, 2,503. So about 1,422 rows went to the
+    per-dish rule. That is derived, since nothing else changed in the run.
+  - On the 131 two-stream records still live: 4,101 llm and 3,811 jsonld rows.
+  - Carmen's Hideaway: 73 jsonld rows plus 18 llm rows. The llm rows are the `split_listed`
+    fragments ("Egg", "Potato" …) and four dishes its JSON-LD lacks (Enchiladas, Tamales,
+    Chips & Guacamole, Veggie Compuesto).
+
+**Pi.**
+- **Backup:** `~/helios-backups/firsthelios-20261027-p8-18-08bb684/`
+  (`pi-helios-pre.dump` sha256 ecbd3a25…, code tgz).
+- **Restore:** the database was restored from the laptop dump (sha256 f52fc41c…). Backend code
+  is unchanged at 08bb684, since nothing in the build touches the schema (13081a087231). The
+  restore was clean, with 56,194 / 341 rows and 178 s of downtime. `/healthz`, `/readyz` and
+  `/v1/venues` all return 200.
+
+**firsthelios.com, checked publicly.**
+- `GET /v1/venues/21183/menu` (Jefes) returns `menus: []`: the Galloway, NJ menu is gone.
+- `GET /v1/venues/8652/menu` (Carmen's) returns one menu of 91 items, with no cross-stream
+  duplicates. Some names still repeat:
+  - "Egg" ×3 and "Potato" ×2 are the llm `split_listed` fragments (P8-19);
+  - "Sliced Avocado" and "Tiny Guacamole" are listed by the page's own JSON-LD under both
+    Breakfast Sides and Lunch & Dinner Sides.
+
+## 4. Doc drift noticed
 
 - The P8-18 brief says PR #134 is merged; it is **open** (as is #133).
 - README's ADR table still says ADR-0021 is "Proposed (P8-17; owner Q1–Q7 open)". It was

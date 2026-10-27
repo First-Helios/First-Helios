@@ -379,3 +379,11 @@ on these labels. So this is a census of the stored corpus, not an estimate for n
     - no area judges nothing;
     - the sweep: a dry run writes nothing, a live run withdraws only the wrong-place
       record.
+
+**Applied 2026-10-27 (P8-18).**
+- **`helios_laptop`:** the sweep withdrew the 55 records (menu-URL `needs_review` 74 → 129).
+  R4 withdrew 54 records' streams. The Gold refresh dropped all 2,503 rows they carried.
+- **Pi:** restored from that database.
+- **Jefes (21183):** firsthelios.com now shows no menu.
+
+The record's §3 has the figures.

@@ -543,6 +543,15 @@ change to the selector, the Gold refresh, the columns or any migration:
 
   With the rule disabled, the per-dish test fails.
 
+**Applied 2026-10-27 (P8-18).** `helios_laptop`'s Gold refresh (effective 03:38:50Z) has
+56,194 `current_menu` rows, from 60,119:
+- about 1,422 rows fewer from this rule;
+- 2,503 fewer from ADR-0015 Amendment 2's withdrawals.
+
+The Pi was restored from that database. Carmen's Hideaway (8652) on firsthelios.com shows
+each JSON-LD dish once: 73 jsonld rows plus 18 llm dishes its JSON-LD lacks. The record's §3
+has the figures.
+
 ## Implementation notes (2026-09-28)
 
 - Point 4 `as_of`: `gold.current_menu` has no `as_of` column; `effective_instant` plays that role,
