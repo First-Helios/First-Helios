@@ -39,9 +39,11 @@ This section is the single current-status page. Other docs link here.
   with a menu, 472 placed in 267 cells, 97.0% of them `low_sample`. Section and item
   names (ADR-0006 Amendment 1, revision `c95d883737db`): `section_name` and `item_name` on
   every row, filled by the refresh; after the P8-3 refresh all 9,527 served sections and all
-  52,396 items have a name. Latest refresh 2026-10-27 (01:10 UTC), after the `validator-v10`
-  re-interpretation (ADR-0013 Amendment 31, applied note): 60,119 `current_menu` rows and 9,404
-  sections, also restored to the Pi that serves firsthelios.com. Served by `GET /v1/price-index` (Amendment 2). Area kinds
+  52,396 items have a name. Latest refresh 2026-10-27 (03:38 UTC), after the P8-18 wrong-place
+  withdrawals (ADR-0015 Amendment 2) and with JSON-LD precedence per dish (ADR-0006
+  Amendment 2) ([P8-18 record](./docs/reviews/2026-10-27-p8-18-site-data-fixes.md)): 56,194
+  `current_menu` rows and 341 price-index rows, also restored to the Pi that serves
+  firsthelios.com. Served by `GET /v1/price-index` (Amendment 2). Area kinds
   (ADR-0007
   [Amendment 3](./docs/adr/0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
   revision `d978bedc2523`, ADR-0019 step 3): each placed venue also counts in a 0.05° cell and
@@ -675,7 +677,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0003](./docs/adr/0003-three-layer-schema.md) | Three-layer schema (raw / canonical / mart) | Superseded by ADR-0004 |
 | [0004](./docs/adr/0004-modular-monolith-identity-and-lifecycle.md) | Modular monolith, lifecycle layers, and shared identity | Accepted |
 | [0005](./docs/adr/0005-immutable-menu-snapshots-and-selection.md) | Immutable Menu snapshots and scoped selection | Accepted (commit check cost, Amendment 1) |
-| [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted (Amendment 1 accepted and built 2026-10-22) |
+| [0006](./docs/adr/0006-gold-menu-read-models.md) | Gold menu read models: shape, materialization, and refresh | Accepted (Amendment 1 accepted and built 2026-10-22; Amendment 2, JSON-LD precedence per dish, accepted and built in P8-18) |
 | [0007](./docs/adr/0007-gold-price-index-projection.md) | Gold price-index projection: grain, aggregation, and its blocking dependencies | Accepted (target shape; slice 1 built, Amendment 1; API, Amendment 2; area kinds and cell list built, Amendment 3) |
 | [0008](./docs/adr/0008-read-api-conventions.md) | Read-API framework and conventions (First Light) | Accepted (Unit A; Unit B, the staging deploy, not built; history reads, Amendment 3) |
 | [0009](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md) | Venue discovery: source, ingestion, dedupe/minting, and schedule | Accepted |
@@ -684,7 +686,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0012](./docs/adr/0012-venue-lifecycle.md) | Venue lifecycle: re-observation, closure, re-homing, and readiness | Accepted |
 | [0013](./docs/adr/0013-phase5-menu-pipeline.md) | Phase 5 menu pipeline: page classifier, on-device LLM extraction, validator | Accepted; amendments through 30, each with its own status in the ADR (29 accepted and built, 30 proposed) |
 | [0014](./docs/adr/0014-location-overrides.md) | Location overrides: durable, evidence-backed coordinate corrections | Accepted |
-| [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1) |
+| [0015](./docs/adr/0015-menu-url-reverification.md) | Menu-URL precision before the first Pi run: re-verify saved menu URLs | Accepted (Amendment 1; Amendment 2, the wrong-place page check `place-v1`, accepted and built in P8-18) |
 | [0016](./docs/adr/0016-course-labels-for-the-price-index.md) | Course labels for the price index | Accepted (Amendment 1) |
 | [0017](./docs/adr/0017-extraction-harness-generalization.md) | Extraction harness generalization: invariance, multi-model acceptance, per-model configuration | Accepted (items 1–2; items 3–4 deferred) |
 | [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Accepted (built, P7-2) |

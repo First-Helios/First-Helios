@@ -737,6 +737,22 @@ re-runnable from stored evidence.
 - **Monthly spot check:** 10 random newly extracted pages, labelled blind by an
   agent, the owner confirming disagreements; a failure makes them the next
   held-out set ([ADR-0013 §8](./docs/adr/0013-phase5-menu-pipeline.md#8-quality-bars-and-evaluation-discipline-q5), Amendment 3).
+- **Several menu pages per venue, before the next re-collection** (owner, 2026-10-27, after
+  P8-18). This is the system-wide rework of
+  [ADR-0010](./docs/adr/0010-website-and-menu-url-resolution.md) D3.5 (one menu URL per
+  venue), and the scheduled form of §7 item 7 (in PR #134).
+  - **The contract.** One website gives up to 2–3 verified menu pages per venue. Each page
+    passes the classifier and `place-v1`
+    ([ADR-0015 Amendment 2](./docs/adr/0015-menu-url-reverification.md#amendment-2-2026-10-27-proposed-a-wrong-place-page-check)),
+    and has its own record, re-verification and withdrawal. All of them join the venue's one
+    menu in Gold and the API.
+  - **The next re-collection** (re-discovery plus refetch) runs on it. A venue whose only
+    page was withdrawn as another place's (P8-18: Jefes, 21183) is re-discovered there.
+  - **Script-loaded pages** that only verify after a render (Jefes's own smorefood page) are
+    sized in the same unit. The `--render` path exists (ADR-0013 Amendment 2); it is not a
+    per-platform reader.
+  - **First an ADR** (record key per page, which pages count, duplicates across pages, one
+    merged menu or one per page). Stop for review before building (CLAUDE.md).
 
 **Done when:** Menu Silver and Gold can be reconstructed from replay bundles,
 Bronze provenance, and durable Identity decisions without changing those

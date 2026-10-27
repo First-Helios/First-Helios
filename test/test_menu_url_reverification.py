@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Literal
 import pytest
 from sqlalchemy import select
 
+from apps.discovery.place_check import PLACE_CHECK, PlaceArea
+from apps.discovery.place_sweep import sweep_places
 from apps.discovery.registry import RegistryEntry
 from apps.discovery.url_pipeline import (
     MENU_URL_NAMESPACE,
@@ -26,7 +28,12 @@ from apps.discovery.url_pipeline import (
     resolve_urls,
 )
 from apps.discovery.web_client import CaptureFailure, MenuUrlDiscovery, PlatformAmbiguous
+from apps.menu_pipeline.bundle import Bundle, BundleStore
 from packages.helios_core.identity.models import ResolutionEvent, ResolutionEvidence
+from packages.helios_core.provenance.contracts import (
+    BronzeObservation,
+    persist_source_record_observation,
+)
 from packages.helios_core.provenance.models import (
     Capture,
     Evidence,
@@ -34,6 +41,7 @@ from packages.helios_core.provenance.models import (
     SourceRecord,
     SourceRecordVersion,
 )
+from packages.helios_parsing.segment import SEGMENTER_VERSION, segment
 from test.test_url_pipeline import (
     _NOW,
     _human_unassign,
@@ -46,6 +54,8 @@ from test.test_url_pipeline import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from sqlalchemy.orm import Session
 
 
@@ -68,6 +78,7 @@ class _Reverifier:
         self.verifier = verifier
         self.verdict = verdict
         self.ambiguous = ambiguous
+        self.page_html: str | None = None  # the verified page, for place-v1
         self.at = _NOW
         self.verified: list[str] = []
         self.discovered: list[tuple[str, str | None]] = []
@@ -81,14 +92,25 @@ class _Reverifier:
                 "skipped" if self.verdict.startswith("robots") else "failed"
             )
             return CaptureFailure(outcome, self.verdict, self.at)
-        return MenuUrlDiscovery(menu_url, "crawled", self.at, "sha256:page", website)
+        return MenuUrlDiscovery(
+            menu_url, "crawled", self.at, "sha256:page", website, page_html=self.page_html
+        )
 
     def discover_menu_attempt(
         self, website: str, *, address: str | None = None
     ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous, ...] | CaptureFailure:
         self.discovered.append((website, address))
         found: tuple[MenuUrlDiscovery | PlatformAmbiguous, ...] = (
-            (MenuUrlDiscovery(self.menu_url, "crawled", self.at, "sha256:page", website),)
+            (
+                MenuUrlDiscovery(
+                    self.menu_url,
+                    "crawled",
+                    self.at,
+                    "sha256:page",
+                    website,
+                    page_html=self.page_html,
+                ),
+            )
             if self.menu_url
             else ()
         )
@@ -103,12 +125,18 @@ def _run(
     *,
     at: datetime,
     registry: dict[str, RegistryEntry] | None = None,
+    place_area: PlaceArea | None = None,
 ) -> UrlDiscoveryReport:
     resolver.at = at
     resolver.verified.clear()
     resolver.discovered.clear()
     return resolve_urls(
-        session, resolver=resolver, registry=registry or {}, decided_at=at, observed_at=at
+        session,
+        resolver=resolver,
+        registry=registry or {},
+        decided_at=at,
+        observed_at=at,
+        place_area=place_area,
     )
 
 
@@ -326,3 +354,138 @@ def test_chain_homepage_skips_are_counted_and_the_venue_address_is_passed(
     assert _versions(session, MENU_URL_NAMESPACE, "v10") == []
     again = _run(session, resolver, at=_NOW + timedelta(days=1))
     assert again.cooldown_skipped == 1, "the skip is recorded as a failed site attempt"
+
+
+# --------------------------------------------------------------------------- #
+# The wrong-place check place-v1 (ADR-0015 Amendment 2).
+# --------------------------------------------------------------------------- #
+
+_AREA = PlaceArea(
+    localities=frozenset({"austin"}), postcodes=frozenset({"78701"}), regions=frozenset({"TX"})
+)
+_AUSTIN = {"freeform": "1 Congress Ave", "locality": "Austin", "region": "TX", "postcode": "78701"}
+_HERE = "<h1>Menu</h1><p>Tacos $3</p><footer>1 Congress Ave, Austin, TX 78701</footer>"
+_ELSEWHERE = "<h1>Menu</h1><p>Wings (4) in Galloway, NJ $5</p><p>Shrimp (4) in Galloway, NJ $7</p>"
+
+
+def _seed_austin(session: Session, name: str, gers: str, website: str) -> None:
+    poi = _poi(name, 30.41, -97.70, gers_id=gers, websites=(website,))
+    _seed(session, [replace(poi, raw={**poi.raw, "addresses": [_AUSTIN]})])
+
+
+def test_a_recheck_of_another_places_page_withdraws_the_menu_url(session: Session) -> None:
+    _seed_austin(session, "Wrong Place", "p1", "wrongplace.com")
+    resolver = _Reverifier("https://wrongplace.com/menu")
+    _run(session, resolver, at=_NOW)
+    resolver.page_html, resolver.menu_url = _ELSEWHERE, None
+
+    report = _run(session, resolver, at=_NOW + REVERIFY_WINDOW, place_area=_AREA)
+
+    assert resolver.discovered == [("https://wrongplace.com/", "1 Congress Ave")], "re-discovers"
+    assert (report.menu_urls_wrong_place, report.menu_urls_withdrawn) == (1, 1)
+    assert _record(session, MENU_URL_NAMESPACE, "p1").state == "needs_review"
+    assert _versions(session, MENU_URL_NAMESPACE, "p1")[-1]["verification_failure"] == (
+        "wrong_place"
+    )
+    assert (_latest_event(session, "p1").method) == WITHDRAW_METHOD
+
+
+def test_discovery_drops_another_places_page(session: Session) -> None:
+    _seed_austin(session, "Sitemap Pick", "p2", "sitemap.com")
+    resolver = _Reverifier("https://sitemap.com/galloway-08205/menu")
+    resolver.page_html = _ELSEWHERE
+
+    report = _run(session, resolver, at=_NOW, place_area=_AREA)
+
+    assert (report.menu_urls_wrong_place, report.menu_urls_absent) == (1, 1)
+    assert _versions(session, MENU_URL_NAMESPACE, "p2") == []
+    reason = session.scalar(
+        select(Capture.reason_code)
+        .join(Source, Source.id == Capture.source_id)
+        .where(Source.namespace == MENU_URL_NAMESPACE)
+        .order_by(Capture.id.desc())
+        .limit(1)
+    )
+    assert reason == "wrong_place"
+
+
+def test_a_page_of_the_venues_own_place_is_saved_with_the_check(session: Session) -> None:
+    _seed_austin(session, "Right Place", "p3", "rightplace.com")
+    resolver = _Reverifier("https://rightplace.com/menu")
+    resolver.page_html = _HERE
+
+    report = _run(session, resolver, at=_NOW, place_area=_AREA)
+
+    assert (report.menu_urls_found, report.menu_urls_wrong_place) == (1, 0)
+    assert _versions(session, MENU_URL_NAMESPACE, "p3")[-1]["place_check"] == PLACE_CHECK
+
+
+def test_without_an_area_no_page_is_judged(session: Session) -> None:
+    _seed_austin(session, "No Area", "p4", "noarea.com")
+    resolver = _Reverifier("https://noarea.com/menu")
+    resolver.page_html = _ELSEWHERE
+
+    report = _run(session, resolver, at=_NOW)
+
+    assert (report.menu_urls_found, report.menu_urls_wrong_place) == (1, 0)
+    assert "place_check" not in _versions(session, MENU_URL_NAMESPACE, "p4")[-1]
+
+
+def _stored_page(session: Session, base_dir: Path, gers: str, url: str, html: str) -> None:
+    """A ``menu-page`` Version of ``url`` whose bundle holds ``html``, as page_bronze writes."""
+    blocks = tuple(segment(html))
+    bundle = Bundle(url, "text/html", html.encode(), None, SEGMENTER_VERSION, blocks)
+    bundle_path = BundleStore(base_dir).write(bundle, fetched_at=_NOW)
+    persist_source_record_observation(
+        session,
+        BronzeObservation(
+            source_namespace="menu-page",
+            source_kind="menu_page",
+            external_key=gers,
+            observed_at=_NOW,
+            content_hash=f"sha256:{gers}-page",
+            source_payload={"menu_url": url, "segmenter": SEGMENTER_VERSION},
+            evidence_locator="$.menu_url",
+            source_url=url,
+            fetched_at=_NOW,
+            capture_content_hash=f"sha256:{gers}-bytes",
+            bundle_path=bundle_path,
+        ),
+    )
+
+
+def test_the_sweep_withdraws_saved_urls_whose_stored_page_is_elsewhere(
+    session: Session, tmp_path: Path
+) -> None:
+    for name, gers, host, html in (
+        ("Sweep Wrong", "p5", "sweepwrong.com", _ELSEWHERE),
+        ("Sweep Right", "p6", "sweepright.com", _HERE),
+    ):
+        _seed_austin(session, name, gers, host)
+        _run(session, _Reverifier(f"https://{host}/menu"), at=_NOW)
+        _stored_page(session, tmp_path, gers, f"https://{host}/menu", html)
+    later = _NOW + timedelta(days=1)
+
+    dry = sweep_places(
+        session,
+        place_area=_AREA,
+        base_dir=tmp_path,
+        observed_at=later,
+        decided_at=later,
+        dry_run=True,
+    )
+    assert "p5" in dry.wrong_place_keys and "p6" not in dry.wrong_place_keys
+    assert dry.withdrawn == 0
+    assert _record(session, MENU_URL_NAMESPACE, "p5").state == "resolved"
+
+    report = sweep_places(
+        session, place_area=_AREA, base_dir=tmp_path, observed_at=later, decided_at=later
+    )
+
+    assert report.withdrawn == 1
+    assert _record(session, MENU_URL_NAMESPACE, "p5").state == "needs_review"
+    assert _record(session, MENU_URL_NAMESPACE, "p6").state == "resolved"
+    assert _versions(session, MENU_URL_NAMESPACE, "p5")[-1]["verification_failure"] == (
+        "wrong_place"
+    )
+    assert (_latest_event(session, "p5").method) == WITHDRAW_METHOD

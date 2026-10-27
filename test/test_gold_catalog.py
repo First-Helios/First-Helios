@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
@@ -29,10 +30,11 @@ from packages.helios_core.domains.menu.commands import persist_menu
 from packages.helios_core.domains.menu.contracts import (
     ItemInput,
     MenuAggregate,
+    PriceInput,
     Target,
     VariantInput,
 )
-from packages.helios_core.domains.menu.enumeration import enumerate_current_requests
+from packages.helios_core.domains.menu.enumeration import dish_key, enumerate_current_requests
 from packages.helios_core.domains.menu.models import MenuPage, PriceObservation
 from packages.helios_core.domains.menu.selection import (
     ContextRef,
@@ -709,3 +711,163 @@ def test_an_unusable_base_names_nothing(factory: sessionmaker[Session]) -> None:
     path = f'[["base","{base.page_id}"],["section","s-food"],["item","i-burger"]]'
     assert [(row["target_path"], row["price_state"]) for row in rows] == [(path, "unresolved_base")]
     assert _names(rows) == {path: (None, None, None)}
+
+
+# --------------------------------------------------------------------------- #
+# JSON-LD precedence per dish (ADR-0006 Amendment 2).
+# --------------------------------------------------------------------------- #
+
+_Dish = tuple[str, str, int | None]  # item key, name, priced amount (None: no price)
+
+
+def _stream(
+    scope: ScopeFixture,
+    kind: Literal["jsonld", "llm"],
+    dishes: tuple[_Dish, ...],
+    *,
+    variant_of: str | None = None,
+) -> MenuAggregate:
+    """A page of ``kind`` in the burger page's family, its dishes under one section.
+
+    Each stream keys its dishes natively by kind, as the real streams do, so no
+    dish of one corresponds to a dish of the other by path. ``variant_of`` puts
+    that item's price on a "Large" variant instead of the item.
+    """
+    value = aggregate(scope)
+    evidence = value.page.evidence_ids
+    items = tuple(
+        ItemInput(
+            item_key=key,
+            section_key="food",
+            name=name,
+            position=position,
+            dietary_tags=(),
+            effect="replace",
+            support_kind="direct",
+            evidence_ids=evidence,
+            source_native_key=f"{kind}-{key}",
+        )
+        for position, (key, name, _) in enumerate(dishes)
+    )
+    variants = tuple(
+        VariantInput(
+            variant_key="large",
+            item_key=key,
+            label="Large",
+            position=0,
+            effect="replace",
+            support_kind="direct",
+            evidence_ids=evidence,
+            source_native_key=f"{kind}-{key}-large",
+        )
+        for key, _, _ in dishes
+        if key == variant_of
+    )
+    prices = tuple(
+        PriceInput(
+            observation_key=f"{key}-price",
+            target=(
+                Target(kind="variant", key="large", item_key=key)
+                if key == variant_of
+                else Target(kind="item", key=key)
+            ),
+            applicability_key="lunch",
+            price_kind="absolute",
+            price_state="priced",
+            amount_minor=amount,
+            currency_code="USD",
+            confidence=Decimal("1"),
+            evidence_ids=evidence,
+        )
+        for key, _, amount in dishes
+        if amount is not None
+    )
+    return replace(
+        value,
+        page=replace(value.page, source_kind=kind),
+        items=items,
+        variants=variants,
+        prices=prices,
+    )
+
+
+def _enumerated(factory: sessionmaker[Session], scope: ScopeFixture) -> set[str]:
+    """The leaf native keys enumerated for this scope's own family."""
+    with factory() as session:
+        requests = enumerate_current_requests(session, effective_instant=E)
+    return {
+        r.target.native_path[-1][1]
+        for r in requests
+        if r.source_record_id == scope.local_input.source_record_id
+    }
+
+
+def test_a_priced_jsonld_dish_hides_the_same_llm_dish(factory: sessionmaker[Session]) -> None:
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    jsonld = (("burger", "Burger", 1100), ("shake", "Shake", 500), ("pie", "Pie", None))
+    llm = (
+        ("burger", "the BURGER", 1050),  # equal after normalization: hidden
+        ("shake", "Shake", 450),  # priced on a variant: its item is the dish, hidden
+        ("pie", "Pie", 300),  # jsonld names it without a price: kept
+        ("fries", "Fries & Dip", 400),  # llm only: kept
+    )
+    with factory.begin() as session:
+        persist_menu(session, _stream(scope, "jsonld", jsonld))
+        persist_menu(session, _stream(scope, "llm", llm, variant_of="shake"))
+    assert _enumerated(factory, scope) == {
+        "jsonld-burger",
+        "jsonld-shake",
+        "llm-pie",
+        "llm-fries",
+    }
+
+
+def test_a_jsonld_head_without_prices_hides_nothing(factory: sessionmaker[Session]) -> None:
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    with factory.begin() as session:
+        persist_menu(session, _stream(scope, "jsonld", (("burger", "Burger", None),)))
+        persist_menu(session, _stream(scope, "llm", (("burger", "Burger", 1050),)))
+    assert _enumerated(factory, scope) == {"llm-burger"}
+
+
+def test_a_withdrawn_jsonld_head_hides_nothing(factory: sessionmaker[Session]) -> None:
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    jsonld = _stream(scope, "jsonld", (("burger", "Burger", 1100),))
+    with factory.begin() as session:
+        written = persist_menu(session, jsonld)
+        persist_menu(session, _stream(scope, "llm", (("burger", "Burger", 1050),)))
+    withdrawal = MenuAggregate(
+        page=replace(
+            jsonld.page,
+            operation="withdrawal",
+            supersedes_page_id=written.page_id,
+            stream_revision=2,
+            interpretation_revision=2,
+        )
+    )
+    with factory.begin() as session:
+        persist_menu(session, withdrawal)
+    assert _enumerated(factory, scope) == {"llm-burger"}
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "same"),
+    [
+        ("Fish & Chips", "chips and fish", True),
+        ("The Burger", "BURGER", True),
+        ("Phó", "Phó", True),  # NFKC: a decomposed accent equals the composed one
+        ("Burger", "Cheeseburger", False),
+        ("Egg, Bacon, Cheese & Ranchera", "Egg", False),
+    ],
+)
+def test_dish_key_normalizes_names_only(left: str, right: str, same: bool) -> None:
+    assert (dish_key(left) == dish_key(right)) is same
+
+
+def test_dish_key_of_an_empty_name_matches_nothing() -> None:
+    assert dish_key(None) is None
+    assert dish_key("") is None
+    assert dish_key("& the") is None

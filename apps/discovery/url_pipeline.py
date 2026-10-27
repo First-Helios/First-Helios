@@ -52,6 +52,13 @@ from sqlalchemy.orm import aliased
 
 from apps.discovery.menu_url import ordering_platform_host, platform_signal
 from apps.discovery.models import DiscoveryLifecycleState
+from apps.discovery.place_check import (
+    PLACE_CHECK,
+    PlaceArea,
+    VenuePlace,
+    place_verdict,
+    venue_place,
+)
 from apps.discovery.web_client import (
     CaptureFailure,
     MenuPdfLinked,
@@ -85,6 +92,7 @@ from packages.helios_core.provenance.models import (
     SourceRecord,
     SourceRecordVersion,
 )
+from packages.helios_parsing.segment import segment
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -102,7 +110,15 @@ REVERIFY_WINDOW = timedelta(days=90)
 # Re-verification failures that are a verdict on the page itself: it answered
 # and isn't a menu (or is gone). Any other failure keeps the URL and retries.
 WITHDRAW_REASONS = frozenset(
-    {"no_menu_found", "not_html", "http_404", "http_410", "platform_root", "social_link"}
+    {
+        "no_menu_found",
+        "not_html",
+        "http_404",
+        "http_410",
+        "platform_root",
+        "social_link",
+        "wrong_place",  # (ADR-0015 Amendment 2) another place's menu
+    }
 )
 WITHDRAW_METHOD = "menu-url-reverify"
 
@@ -136,6 +152,7 @@ class VenueToResolve:
     source_url: str
     content_hash: str
     address: str | None = None
+    place: VenuePlace | None = None  # the Overture address fields (ADR-0015 Amendment 2)
 
 
 @dataclass(slots=True)
@@ -158,6 +175,7 @@ class UrlDiscoveryReport:
     menu_urls_reverified: int = 0
     menu_urls_reverify_deferred: int = 0
     menu_urls_withdrawn: int = 0
+    menu_urls_wrong_place: int = 0  # verified menu pages place-v1 rejects
     platform_ambiguous: int = 0
     menu_pdf_only: int = 0
     needs_review: int = 0
@@ -301,6 +319,7 @@ def iter_venues_to_resolve(session: Session, *, page_size: int = 100) -> Iterato
                 source_url=source_url,
                 content_hash=content_hash,
                 address=freeform if isinstance(freeform, str) else None,
+                place=venue_place(payload) if isinstance(payload, dict) else None,
             )
         if len(rows) < page_size:
             return
@@ -442,6 +461,25 @@ def _with_render(payload: dict[str, object], menu: MenuUrlDiscovery) -> dict[str
     return out
 
 
+def _wrong_place(
+    venue: VenueToResolve, menu: MenuUrlDiscovery, place_area: PlaceArea | None
+) -> bool:
+    """``place-v1`` rejects the verified page as another place's (ADR-0015 Amendment 2).
+
+    Only a page the resolver read can be judged: a registry menu, or a result
+    without its page, passes.
+    """
+    if place_area is None or venue.place is None or menu.page_html is None:
+        return False
+    blocks = segment(menu.page_html)
+    return place_verdict(menu.menu_url, blocks, venue.place, place_area).wrong
+
+
+def _checked(payload: dict[str, object], place_area: PlaceArea | None) -> dict[str, object]:
+    """Record the place check that accepted a menu URL, when one ran."""
+    return payload if place_area is None else dict(payload, place_check=PLACE_CHECK)
+
+
 def _menu_key(gers_id: str, menu_url: str) -> str:
     platform = ordering_platform_host(menu_url)
     return f"{gers_id}|{platform}" if platform else gers_id
@@ -515,6 +553,7 @@ def _reverify_menus(
     observed_at: datetime,
     decided_at: datetime,
     report: UrlDiscoveryReport,
+    place_area: PlaceArea | None = None,
 ) -> tuple[bool, dict[str, CaptureFailure]]:
     """Re-check each of the venue's due menu URLs; return (fetched?, failed key → verdict).
 
@@ -558,8 +597,16 @@ def _reverify_menus(
         if _menu_key(venue.gers_id, result.menu_url) != key:
             failed[key] = CaptureFailure("failed", "no_menu_found", result.fetched_at)
             continue
+        if _wrong_place(venue, result, place_area):
+            report.menu_urls_wrong_place += 1
+            failed[key] = CaptureFailure("failed", "wrong_place", result.fetched_at)
+            continue
         payload = _with_render(
-            dict(saved.payload, menu_url=result.menu_url, verifier=resolver.verifier), result
+            _checked(
+                dict(saved.payload, menu_url=result.menu_url, verifier=resolver.verifier),
+                place_area,
+            ),
+            result,
         )
         _persist_and_assign(
             session,
@@ -707,6 +754,7 @@ def _transfer_menus(
     decided_at: datetime,
     not_before: datetime,
     report: UrlDiscoveryReport,
+    place_area: PlaceArea | None = None,
 ) -> bool:
     worked = False
     for key in _menu_keys(session, venue.gers_id):
@@ -743,14 +791,21 @@ def _transfer_menus(
         if key != _menu_key(venue.gers_id, result.menu_url):
             report.needs_review += 1
             continue
+        if _wrong_place(venue, result, place_area):
+            report.menu_urls_wrong_place += 1
+            report.menu_urls_absent += 1
+            continue
         payload = _with_render(
-            dict(
-                saved.payload,
-                menu_url=result.menu_url,
-                website=website,
-                signal=result.signal,
-                found_via=result.found_via,
-                verifier=resolver.verifier,
+            _checked(
+                dict(
+                    saved.payload,
+                    menu_url=result.menu_url,
+                    website=website,
+                    signal=result.signal,
+                    found_via=result.found_via,
+                    verifier=resolver.verifier,
+                ),
+                place_area,
             ),
             result,
         )
@@ -789,8 +844,13 @@ def _resolve_venue(
     decided_at: datetime,
     observed_at: datetime,
     report: UrlDiscoveryReport,
+    place_area: PlaceArea | None = None,
 ) -> bool:
-    """Resolve one venue's website and menu-URL. True if it wrote or crawled."""
+    """Resolve one venue's website and menu-URL. True if it wrote or crawled.
+
+    With ``place_area``, a verified page ``place-v1`` rejects is another place's
+    menu: a re-check withdraws it like a failed one, and discovery drops it.
+    """
     if not venue.organization_is_current:
         report.org_not_current += 1  # e.g. merged/retired; venue lifecycle fixes it
         return False
@@ -890,6 +950,7 @@ def _resolve_venue(
             decided_at=decided_at,
             not_before=transition_at,
             report=report,
+            place_area=place_area,
         )
 
     platform_host = ordering_platform_host(entry.menu_url if entry and entry.menu_url else website)
@@ -968,6 +1029,7 @@ def _resolve_venue(
                 observed_at=observed_at,
                 decided_at=decided_at,
                 report=report,
+                place_area=place_area,
             )
             worked |= reverified
             if not failed:
@@ -988,11 +1050,13 @@ def _resolve_venue(
         discovery = resolver.discover_menu_attempt(website, address=venue.address)
         worked = True
         # The own-site menu (if any) plus one per ordering platform (S6b).
-        acquired = (
+        verified = (
             ()
             if isinstance(discovery, CaptureFailure)
             else tuple(item for item in discovery if isinstance(item, MenuUrlDiscovery))
         )
+        acquired = tuple(m for m in verified if not _wrong_place(venue, m, place_area))
+        report.menu_urls_wrong_place += len(verified) - len(acquired)
         if not isinstance(discovery, CaptureFailure):
             report.platform_ambiguous += sum(
                 isinstance(item, PlatformAmbiguous) for item in discovery
@@ -1000,6 +1064,8 @@ def _resolve_venue(
         if not acquired:
             if isinstance(discovery, CaptureFailure):
                 failure = discovery
+            elif verified:  # every verified page was another place's (ADR-0015 Amendment 2)
+                failure = CaptureFailure("failed", "wrong_place", observed_at)
             elif any(isinstance(item, MenuPdfLinked) for item in discovery):
                 # Counted where it is seen: the venue's menu is likely PDF-only,
                 # which v1 does not read (ADR-0013 Amendment 3).
@@ -1032,6 +1098,7 @@ def _resolve_venue(
             decided_at=decided_at,
             report=report,
             refresh=_menu_key(venue.gers_id, menu.menu_url) in failed,
+            place_area=place_area,
         )
     rediscovered = {_menu_key(venue.gers_id, menu.menu_url) for menu in acquired}
     for key, failure in sorted(failed.items()):
@@ -1062,6 +1129,7 @@ def _persist_menu(
     decided_at: datetime,
     report: UrlDiscoveryReport,
     refresh: bool = False,
+    place_area: PlaceArea | None = None,
 ) -> bool:
     """Persist one menu URL under its own key: ``<gers>`` or ``<gers>|<platform host>``.
 
@@ -1117,6 +1185,7 @@ def _persist_menu(
         if (
             verified.fetched_at < transition_at
             or ordering_platform_host(verified.menu_url) != platform
+            or _wrong_place(venue, verified, place_area)
         ):
             report.menu_urls_absent += 1
             return worked
@@ -1131,6 +1200,7 @@ def _persist_menu(
         menu_payload["platform"] = platform
     if menu.signal != "registry":  # a registry menu is never re-verified (D3.2)
         menu_payload["verifier"] = resolver.verifier
+        menu_payload = _checked(menu_payload, place_area)
     menu_payload = _with_render(menu_payload, menu)
     menu_outcome = _persist_and_assign(
         session,
@@ -1174,6 +1244,7 @@ def resolve_urls(
     limit: int | None = None,
     batch_size: int = 100,
     on_batch: Callable[[], None] | None = None,
+    place_area: PlaceArea | None = None,
 ) -> UrlDiscoveryReport:
     """Resolve website + menu-URL for current venues. Flushes; caller commits.
 
@@ -1185,6 +1256,9 @@ def resolve_urls(
     The registry is keyed by host, so it can override or augment a venue that
     Overture already gives a website for; supplying a website to a venue Overture
     has none for is a later unit (it needs a name/Subject key, not a host).
+
+    ``place_area`` turns on the wrong-place check ``place-v1`` (ADR-0015
+    Amendment 2; :func:`apps.discovery.place_check.load_place_area`).
     """
     from apps.discovery.lifecycle import lock_lifecycle
 
@@ -1203,6 +1277,7 @@ def resolve_urls(
             decided_at=decided_at,
             observed_at=observed_at,
             report=report,
+            place_area=place_area,
         ):
             worked += 1
         if on_batch is not None and report.venues % batch_size == 0:
