@@ -39,9 +39,9 @@ This section is the single current-status page. Other docs link here.
   with a menu, 472 placed in 267 cells, 97.0% of them `low_sample`. Section and item
   names (ADR-0006 Amendment 1, revision `c95d883737db`): `section_name` and `item_name` on
   every row, filled by the refresh; after the P8-3 refresh all 9,527 served sections and all
-  52,396 items have a name. Latest refresh 2026-10-26, after the resolve-v4 re-interpretation
-  ([P8-15 record](./docs/reviews/2026-10-26-p8-15-same-narrowed-and-grounding.md)): 59,860
-  `current_menu` rows and 9,375 sections. Served by `GET /v1/price-index` (Amendment 2). Area kinds
+  52,396 items have a name. Latest refresh 2026-10-26 (23:40 UTC), after the `validator-v9`
+  re-interpretation ([P8-16 record](./docs/reviews/2026-10-26-p8-16-validator-v10.md)): 59,894
+  `current_menu` rows and 9,387 sections, also restored to the Pi that serves firsthelios.com. Served by `GET /v1/price-index` (Amendment 2). Area kinds
   (ADR-0007
   [Amendment 3](./docs/adr/0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
   revision `d978bedc2523`, ADR-0019 step 3): each placed venue also counts in a 0.05° cell and
@@ -135,8 +135,9 @@ This section is the single current-status page. Other docs link here.
 - **Menu parsing stages** (ADR-0013 slice 2): `packages/helios_parsing/`.
   Pure functions, called by the page classifier, `menu-page` Bronze and extraction (below): the segmented-text hash
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
-  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v9`, ADR-0013
-  Amendment 30: a name grounds on the print nearest its claim and on words glued at a capital; per-row
+  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v10`, ADR-0013
+  Amendments 30-31: a name grounds on the print nearest its claim and on words glued at a capital, and
+  the price scan passes the dish's own headings; per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
   chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and

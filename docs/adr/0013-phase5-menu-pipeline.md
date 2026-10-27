@@ -2617,8 +2617,13 @@ there is no migration.
     - **Owner ruling (2026-10-26): (a).** The 8 pairs (+20 flips; `p816-v9.json` is the new
       baseline map) are recorded as invariance debt next to the claim styles' existing 637.
       A later change is measured against v9's map.
-- **Applying it** means one saved-answer re-interpretation and a Gold refresh on
-  `helios_laptop`. That is queued for after merge.
+- **Applied 2026-10-26** (owner go-ahead, after #128 merged):
+  - `helios_laptop` re-interpreted from saved answers: 1,597 pages, 0 failed, 0 model calls;
+    prices 70,885 → 70,915.
+  - Gold refreshed (effective 2026-10-26T23:40Z): `current_menu` 59,860 → 59,894 rows.
+  - The Pi (firsthelios.com) restored from that database, with backend `bcd8cd6`.
+  - Record: [2026-10-26-p8-16-validator-v10.md](../reviews/2026-10-26-p8-16-validator-v10.md),
+    section 3.
 
 **Why.** The owner queued it after P8-14 (Amendment 29, Q4 of the P8-14 rulings and Q7's first
 follow-on), with the Q2 gap folded in. The cases, traced on stored pages and saved answers:
@@ -2739,9 +2744,11 @@ resolve-v4 with the narrowed rule "same".
 
 ## Amendment 31 (2026-10-26, proposed): the validator's price scan continues past the dish's own headings
 
-**Status: Proposed 2026-10-26 (P8-16). Accepted 2026-10-26 by the owner, with the rulings below; to be built as `validator-v10`.**
+**Status: Proposed 2026-10-26 (P8-16). Accepted 2026-10-26 by the owner, with the rulings below. Built as `validator-v10` (build note below).**
 Record: [2026-10-26-p8-16-amendments-31-32.md](../reviews/2026-10-26-p8-16-amendments-31-32.md),
-section 1.
+section 1. Prototype: `var/p8-16/proto/validator_f1.py` (untracked; `validator-v9`, PR #128,
+plus the edits marked "(F1)"). Build record:
+[2026-10-26-p8-16-validator-v10.md](../reviews/2026-10-26-p8-16-validator-v10.md).
 
 **Owner rulings (2026-10-26), as recommended:**
 - **Q1.** Build F1's heading part as `validator-v10`. The row part stays dropped.
@@ -2749,8 +2756,40 @@ section 1.
   compared with the row's name. Keep it if it removes the two added invariance pairs
   without losing the gains; otherwise accept the two pairs as invariance debt.
 - **Q3.** The bilingual-twin losses go to the queued English-name work (owner Q6 on P8-x);
-  they don't block F1. Prototype: `var/p8-16/proto/validator_f1.py` (untracked; `validator-v9`, PR #128,
-plus the edits marked "(F1)").
+  they don't block F1.
+
+**Build note (P8-16, 2026-10-26).** `packages/helios_parsing/validator.py` is
+`validator-v10`.
+- **The rule.** `_price_run` takes the row's name. Before a run starts, a price-less heading
+  for which `own_heading(block, name)` holds doesn't end the scan. `own_heading` is true for:
+  - the name's words again, item codes aside;
+  - an item code alone (`_ITEM_CODE`, which requires a digit);
+  - a line of at most `OWN_HEADING_CHARS` (40) characters in the other script.
+- **Version and storage.** `method_version` grows from 126 to 127 characters, inside the
+  column's 128, so there is no migration, but the next version bump that lengthens it must
+  check this. The JSON-LD stream's version names the validator too.
+- **Checks.**
+  - Two tests: the dish's own headings are passed; a section heading, a heading adding words
+    to the name, and a long other-script heading still end the scan.
+  - 6 of 6 mutations killed. A seventh, the separate digit check, survived because the
+    pattern already requires a digit, so that check was removed.
+  - The build's verdicts equal the prototype (`f1h` on `validator-v9`) on all 1,885 page
+    texts.
+- **Q2's condition, tested before the build.** It can't remove the two pairs. In the normal
+  output style F1 now accepts rows such as "Kyay Oh Soup ( Chicken )" at 10.99. In the
+  variant-in-name style ("Kyay Oh Soup Chicken") the name grounds on another block before
+  the scan is reached, as it did under v9. So per Q2 the two pairs are recorded as
+  invariance debt.
+- **Measured on dev with labels-v10.1** (793 pages, against `validator-v9`):
+  - usable prices 0.8132 → **0.8201** (+0.0069 [+0.0026, +0.0127]);
+  - gold-row FR 0.0960 → **0.0880**;
+  - catch 0.9949 → 0.9949;
+  - price accuracy 0.9779 → 0.9785;
+  - gold items −13, through [5d] as in the proposal.
+  - Every Amendment 29 Q6 stage bar passes on both sets.
+  - Invariance: 6,658 → 6,639 flips, with the two debt pairs.
+- **Applying it** means one more saved-answer re-interpretation and Gold refresh on
+  `helios_laptop`, then the Pi's data refresh, after merge.
 
 **Why.** The P8-x gap audit's fix F1 (owner Q1 and Q3: first, and in its own amendment).
 - [5]'s price scan (`_price_run`) ends at the first price-less heading after a dish's name.
