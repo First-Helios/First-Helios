@@ -2788,8 +2788,15 @@ plus the edits marked "(F1)"). Build record:
   - gold items −13, through [5d] as in the proposal.
   - Every Amendment 29 Q6 stage bar passes on both sets.
   - Invariance: 6,658 → 6,639 flips, with the two debt pairs.
-- **Applying it** means one more saved-answer re-interpretation and Gold refresh on
-  `helios_laptop`, then the Pi's data refresh, after merge.
+- **Applied 2026-10-27** (owner go-ahead, after #131 merged):
+  - `helios_laptop` re-interpreted from saved answers: 1,597 pages, 0 failed, 0 model calls;
+    prices written 70,915 → 71,207.
+  - Gold refreshed (effective 2026-10-27T01:10Z): `current_menu` 59,894 → 60,119 rows, 9,404
+    sections; the price index has 352 rows.
+  - The Pi (firsthelios.com) restored from that database, with backend `08bb684`, after 179 s of
+    downtime. Every public endpoint returns 200.
+  - Backups: `var/laptop-run/helios_laptop-2026-10-26-pre-v10.dump` (laptop) and
+    `~/helios-backups/firsthelios-20261027-v10-bcd8cd6/` (Pi).
 
 **Why.** The P8-x gap audit's fix F1 (owner Q1 and Q3: first, and in its own amendment).
 - [5]'s price scan (`_price_run`) ends at the first price-less heading after a dish's name.
