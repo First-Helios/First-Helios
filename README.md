@@ -39,9 +39,9 @@ This section is the single current-status page. Other docs link here.
   with a menu, 472 placed in 267 cells, 97.0% of them `low_sample`. Section and item
   names (ADR-0006 Amendment 1, revision `c95d883737db`): `section_name` and `item_name` on
   every row, filled by the refresh; after the P8-3 refresh all 9,527 served sections and all
-  52,396 items have a name. Latest refresh 2026-10-26 (23:40 UTC), after the `validator-v9`
-  re-interpretation ([P8-16 record](./docs/reviews/2026-10-26-p8-16-validator-v10.md)): 59,894
-  `current_menu` rows and 9,387 sections, also restored to the Pi that serves firsthelios.com. Served by `GET /v1/price-index` (Amendment 2). Area kinds
+  52,396 items have a name. Latest refresh 2026-10-27 (01:10 UTC), after the `validator-v10`
+  re-interpretation (ADR-0013 Amendment 31, applied note): 60,119 `current_menu` rows and 9,404
+  sections, also restored to the Pi that serves firsthelios.com. Served by `GET /v1/price-index` (Amendment 2). Area kinds
   (ADR-0007
   [Amendment 3](./docs/adr/0007-gold-price-index-projection.md#amendment-3-2026-10-22-area-kinds-and-the-cell-list),
   revision `d978bedc2523`, ADR-0019 step 3): each placed venue also counts in a 0.05° cell and
