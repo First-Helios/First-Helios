@@ -1,7 +1,8 @@
 # ADR-0021: One page-structure model and a decision hierarchy for structural signals
 
-**Status:** Proposed 2026-10-26 (session P8-17). Not built. Waiting for the owner's answers to
-[Q1–Q7](#owner-questions).
+**Status:** Accepted 2026-10-26 by the owner: Q1–Q7 and the brand-title sub-fork (Q8), all as
+recommended (see [Owner decision](#owner-decision)). Proposed 2026-10-26 (session P8-17). Not built:
+step 1 (D4) is the next ADR-0013 amendment.
 **Date:** 2026-10-26
 **Phase:** 8 (menu quality); a Phase 5 pipeline decision
 **Extends:** [ADR-0013](./0013-phase5-menu-pipeline.md) (menu pipeline; Amendment 28 [5c]
@@ -127,7 +128,8 @@ Rules out of scope:
    `resolve-v5`). One rule family: on a gated page, a kept row named or priced inside another
    block's record moves onto the record's title. It has three triggers:
    - **RE-NAME**: a row named by a description, option or alt-text line takes the title's name,
-     not when the title is a brand or category over the dish's own name line (Q3);
+     not when the row's name is a short, non-description line in the card (a brand or
+     category title over the dish's own name line; Q8);
    - **ATTACH**: a price block in the record printing labelled prices gives the title one row
      per price;
    - **choice lines**: a label line's row becomes the title's variant(s), one per choice
@@ -223,6 +225,30 @@ data.
   classifier-only labels add only to kept precision and accepted-unmatched. *Recommended.*
 - **Q7. Form.** A new ADR-0021 for the cross-stage architecture, with each build step an
   ADR-0013 amendment (step 1 next), rather than one large ADR-0013 amendment. *Recommended.*
+
+## Owner decision
+
+2026-10-26, all as recommended:
+- **Q1.** Adopt D1 and D4's order. One `PageStructure` from the existing re-parse, with no
+  segmenter change. [5d] first, then [5c], then [5]/[5b] once the harness carries HTML.
+- **Q2.** D2 as stated: membership, then class × shape, then path × shape for classless blocks
+  only, then position as a tie-break, with text-shape vetoes. Structure decides relations, not
+  existence; ADD stays as Amendment 29 built it.
+- **Q3 (a).** The page's price-slot test decides section-like titles. A card's lines move onto
+  its title only when the page's dish cards normally have a price slot and this card lacks it.
+  It is built and measured in step 1.
+- **Q4.** One variant per choice. Santopatio's dev label (`e6942e6d1e2a`) and the record's 3.4
+  gold problems (cases 11, 28, 33/38) are relabelled in the next labels pass (labels-v10.2),
+  before step 1 is measured.
+- **Q5.** Keep `dom_sections.signature` (the first class token).
+- **Q6.** Dev results are reported primarily on the item-labelled pages (420 with saved
+  answers). The 793-page figures are kept for continuity.
+- **Q7.** ADR-0021 is the architecture; each build step is its own ADR-0013 amendment (step 1:
+  Amendment 33, `resolve-v5`).
+- **Q8 (brand titles, a sub-fork from the record's 3.4).** RE-NAME does not move a row named by
+  a short, non-description line in the card onto the title ("AUSTIN EASTCIDERS" /
+  "Pineapple Cider" / "$7" keeps "Pineapple Cider"). Only description, option and alt-text
+  names move. Labels name the dish line.
 
 ## References
 
