@@ -1,11 +1,11 @@
-"""Stage [5] validator v9: static grounding checks on extracted rows (ADR-0013 §1, §5).
+"""Stage [5] validator v10: static grounding checks on extracted rows (ADR-0013 §1, §5).
 
 Ported from ``spikes/menu_model/validator.py`` as frozen at spike commit
 ``e6e4e1f`` with ``MENU_SPIKE_VALIDATOR=v3``; the per-row decisions are the
 spike's, with the v4 changes tuned on the P5-5 findings (session P5-7) and the
 v5 changes tuned on the P5-8 findings (session P5-9) and the v6 changes tuned on
-the P5-10 findings (session P5-11), the v8 change (P5-15) and the v9 changes
-(Amendment 30, P8-16) marked below. Prices are read by
+the P5-10 findings (session P5-11), the v8 change (P5-15), the v9 changes
+(Amendment 30, P8-16) and the v10 change (Amendment 31, P8-16) marked below. Prices are read by
 ``prices.price_tokens`` (v5: currency words, cents, "$.40", "_12"; v6: on a page
 that prints its prices bare, "Cakes16" and "feta -13"). Every row (one item, at
 most one price) gets one decision:
@@ -34,7 +34,9 @@ Checks:
    region: its block after the name, then the nearest run of price blocks after
    it before the next extracted item or a price-less heading; or a price-only
    block just before it (price-first layouts); or the nearest preceding section
-   heading with words (a shared "all tacos $3" price). (v4) A price printed
+   heading with words (a shared "all tacos $3" price); (v10) a price-less heading that
+   prints the dish's own name again, an item code, or the name in the other script
+   doesn't end the scan (`own_heading`). (v4) A price printed
    with a leading plus ("+$2") is a modifier's and grounds no item price
    (``addon_price``); on pages that print each price above the name and again
    below it, the run ends after the item's own lower copy. (v5) "add $.95" is a
@@ -83,7 +85,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
-VALIDATOR_VERSION = "validator-v9"  # part of the pipeline version
+VALIDATOR_VERSION = "validator-v10"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})
@@ -657,6 +659,35 @@ def section_line(
     return []
 
 
+# (v10) an item code printed as its own heading or beside the name ("C2", "M2", "#12", "N1:")
+_ITEM_CODE = re.compile(r"#?[^\W\d_]{0,3}[-. ]?\d{1,3}[^\W\d_]?[.:)]?")
+OWN_HEADING_CHARS = 40  # the longest other-script heading read as the dish's twin
+
+
+def _cjk(text: str) -> bool:
+    return any(ord(c) >= 0x2E80 for c in text)
+
+
+def _item_code(tok: str) -> bool:
+    return bool(_ITEM_CODE.fullmatch(tok))  # the pattern requires a digit
+
+
+def own_heading(block: Block, name: str) -> bool:
+    """(v10) A price-less heading that belongs to the dish ``name`` and so doesn't end its
+    price scan: the name printed again (an item code beside it allowed: "C2 Crispy Rice"),
+    an item code alone ("C2"), or a short line in the other script (a bilingual dish's
+    twin heading, "宫保鸡丁" under "Kung Pao Chicken"). A section heading ends the scan."""
+    text = block.text.strip()
+    if _cjk(text) != _cjk(name) and len(text) <= OWN_HEADING_CHARS:
+        return True
+    toks = norm_tokens(text)
+    words = [t for t in toks if not _item_code(t)]
+    if not words:
+        return any(_item_code(t) for t in toks)
+    own = set(norm_tokens(name))
+    return bool(own) and set(words) <= own
+
+
 _ADDON_LEAD = re.compile(r"(?:\+|(?<![^\W\d_])add)\s*$", re.IGNORECASE)
 _OWN_ADDON = re.compile(r"[\W_]*(?:add|\+)?[\W_]*", re.IGNORECASE)  # "Add Sauerkraut +1"
 
@@ -675,6 +706,7 @@ def _price_run(
     *,
     inline: bool,
     bare: bool = False,
+    name: str | None = None,
 ) -> list[PriceToken]:
     """The nearest run of price blocks after an item's name block.
 
@@ -682,7 +714,8 @@ def _price_run(
     immediately following price-only blocks join ("SUB SHRIMP 12.99"). Otherwise
     skip non-price blocks (descriptions, allergens, icons; at most ``SCAN`` of them)
     to the first price-bearing block and take the consecutive price blocks from
-    there. The scan stops at another extracted item or at a price-less heading.
+    there. The scan stops at another extracted item or at a price-less heading, (v10)
+    unless the heading is the dish's own (``own_heading``, given the row's ``name``).
 
     (v4) Pages that print every price twice, above the name and again below the
     description ("$4.00" / name / description / "$4.00" / "$5.00" / next name),
@@ -716,6 +749,8 @@ def _price_run(
                 blocks[nb - 1], prices[nb - 1]
             )
         elif blocks[j].heading:
+            if name is not None and not prices[j] and own_heading(blocks[j], name):
+                continue  # (v10) the dish's own name again, an item code, its twin
             break
     return run
 
@@ -864,7 +899,9 @@ def validate(blocks: list[Block], rows: list[Row]) -> Validation:
             region = list(listed)
         else:
             region.extend(
-                _price_run(blocks, prices, nb, stop_blocks, inline=bool(region), bare=bare)
+                _price_run(
+                    blocks, prices, nb, stop_blocks, inline=bool(region), bare=bare, name=row.item
+                )
             )
         if (  # price-first layout: only when nothing is priced after the name
             not region

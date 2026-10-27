@@ -642,3 +642,32 @@ def test_v9_the_print_nearest_the_claim_prefers_the_one_above_on_a_tie() -> None
     verdicts = validate(blocks, rows).verdicts
     assert [v.decision for v in verdicts] == ["accept", "accept"]
     assert verdicts[1].name_evidence is not None and verdicts[1].name_evidence.block_id == "b0001"
+
+
+def test_v10_the_scan_continues_past_the_dish_own_headings() -> None:
+    # 83b9a566697a's layout: the name, its Chinese line, then both again as headings
+    bilingual = (
+        "<ul><li>Kung Pao Chicken</li><li>宫保鸡丁</li></ul>"
+        "<h3>Kung Pao Chicken</h3><h3>宫保鸡丁</h3><p>Peanuts, chiles.</p><p>$12</p>"
+    )
+    assert _verdicts([Row("Kung Pao Chicken", "12", claimed_block="b0001")], bilingual) == [
+        ("accept", ())
+    ]
+    # a card's item code between its title and its price, alone or beside the name
+    cards = (
+        "<div><p>Crispy Rice</p><h4>C2</h4><p>$9</p></div>"
+        "<div><p>Gyoza</p><h4>C3 Gyoza</h4><p>$7</p></div>"
+    )
+    assert _decide([Row("Crispy Rice", "9"), Row("Gyoza", "7")], cards) == ["accept", "accept"]
+
+
+def test_v10_a_section_heading_still_ends_the_scan() -> None:
+    html = (
+        "<p>Flan</p><h2>Drinks</h2><p>$5</p>"
+        "<p>Chicken Wings</p><h3>Chicken Dishes</h3><p>$14</p>"
+        "<p>Pho</p><h3>" + "越南河粉" * 11 + "</h3><p>$13</p>"
+    )
+    assert (
+        _decide([Row("Flan", "5"), Row("Chicken Wings", "14"), Row("Pho", "13")], html)
+        == ["downgrade"] * 3
+    )
