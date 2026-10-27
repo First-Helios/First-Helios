@@ -24,10 +24,18 @@ Scope of this first full-catalog unit (deliberately bounded; see ADR-0006,
   operating at ``E`` is excluded, so retired-predecessor facts never enter the
   current catalog (ADR-0004 §5). Shared Organization prices are enumerated as
   their own ``organization``-scoped rows, never merged into a local value.
+* **JSON-LD precedence per dish (ADR-0006 Amendment 2).** When a subject's live
+  ``jsonld`` head prices a dish, the same dish on its ``llm`` head is not
+  enumerated: the two streams key their dishes differently, so the selector's
+  kind rank never compares them. A dish is a price target's item (the target
+  itself, or a variant's or modifier's parent item); dishes match on their
+  normalized name only (:func:`dish_key`). The llm stream's other dishes stay.
 """
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import TYPE_CHECKING, Literal, cast
 
 from sqlalchemy import select
@@ -53,9 +61,54 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from packages.helios_core.domains.menu.contracts import NodeKind
+    from packages.helios_core.domains.menu.selection import _Node, _PageGraph
 
 _Channel = Literal["unspecified", "dine_in", "takeaway"]
 _Scope = Literal["organization", "establishment"]
+
+# The validator's name normalization (``helios_parsing.validator.norm_tokens``),
+# restated: helios_core does not import helios_parsing.
+_WORD = re.compile(r"\w+", re.UNICODE)
+_IGNORED = frozenset({"and", "the", "a", "of", "with", "w", "n"})
+
+
+def dish_key(name: str | None) -> frozenset[str] | None:
+    """A dish name as an order-free word set (NFKC, lower case, "&" read as "and")."""
+    if not name:
+        return None
+    text = unicodedata.normalize("NFKC", name).lower().replace("&", " and ")
+    words = frozenset(word for word in _WORD.findall(text) if word not in _IGNORED)
+    return words or None
+
+
+def _dish(graph: _PageGraph, node: _Node) -> frozenset[str] | None:
+    """The normalized name of a price target's item: itself, or its parent item."""
+    if node.kind == "item":
+        return dish_key(node.name)
+    if node.parent_kind == "item" and node.parent_id is not None:
+        item = graph.nodes.get(("item", node.parent_id))
+        return dish_key(item.name) if item is not None else None
+    return None
+
+
+def _jsonld_dishes(session: Session, heads: dict[str, MenuPage]) -> frozenset[frozenset[str]]:
+    """The dishes a subject's live ``jsonld`` head prices; empty without one."""
+    page = heads.get("jsonld")
+    if page is None or page.operation == "withdrawal":
+        return frozenset()
+    graph = _graph(session, page.id)
+    dishes: set[frozenset[str]] = set()
+    for price in session.scalars(
+        select(PriceObservation).where(
+            PriceObservation.page_id == page.id, PriceObservation.price_state == "priced"
+        )
+    ):
+        node = graph.nodes.get(_price_target_column(price))
+        if node is not None and node.effect != "suppress":
+            dish = _dish(graph, node)
+            if dish is not None:
+                dishes.add(dish)
+    return frozenset(dishes)
 
 
 def _sort_key(request: SelectionRequest) -> tuple[str, ...]:
@@ -85,7 +138,8 @@ def enumerate_current_requests(
     subjects; each scope is checked with the same read-only live-Identity/
     operating gate the selector uses (over all of the subject's heads), and
     only its priced targets whose effective window contains ``E`` become
-    grain-unique :class:`SelectionRequest` values. The
+    grain-unique :class:`SelectionRequest` values, less the llm head's dishes
+    that the subject's live jsonld head also prices. The
     result is deterministic given committed Bronze/Identity/Menu.
     """
     session.flush()
@@ -120,10 +174,12 @@ def enumerate_current_requests(
             if _current_gate(session, owned, effective_instant) is not None:
                 continue  # broken mapping or not operating at E: excluded from current
             scope_kind = cast("_Scope", subject_kind)
+            jsonld_dishes = _jsonld_dishes(session, owned)
             for page in owned.values():
                 if page.operation == "withdrawal":
                     continue
                 graph = _graph(session, page.id)
+                hidden = jsonld_dishes if page.source_kind == "llm" else frozenset()
                 for price in session.scalars(
                     select(PriceObservation).where(PriceObservation.page_id == page.id)
                 ):
@@ -131,6 +187,8 @@ def enumerate_current_requests(
                     node = graph.nodes.get((node_kind, node_id))
                     if node is None or node.effect == "suppress":
                         continue
+                    if hidden and _dish(graph, node) in hidden:
+                        continue  # the subject's jsonld head prices this dish
                     native_path = _canonical_native_path(session, page, node)
                     if native_path is None:
                         continue

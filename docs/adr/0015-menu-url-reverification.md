@@ -4,7 +4,8 @@
 amended by [Amendment 1](#amendment-1-2026-09-29-acceptance-decisions); the
 verifier is ADR-0013's page classifier (`classifier-v1`; `classifier-v2` since S6f, see Amendment 1; `classifier-v2+v3`, v2 AND v3, since P5-33, ADR-0013 Amendment 27) from the first Pi run.
 [Amendment 2](#amendment-2-2026-10-27-proposed-a-wrong-place-page-check) (a wrong-place
-page check) is Proposed (P8-18).
+page check, `place-v1`) was accepted 2026-10-27, all questions as recommended, and built in
+P8-18.
 **Date:** 2026-09-28
 **Phase:** 4/5 boundary (Pi gate 1b)
 **Decides for:** the "page classifier or saved-menu re-verification path"
@@ -198,7 +199,9 @@ Owner decisions at the start of session S6d, with the code facts that shaped the
 
 ## Amendment 2 (2026-10-27, proposed): a wrong-place page check
 
-**Status: Proposed 2026-10-27 (session P8-18). Not built; nothing withdrawn.** Record:
+**Status: Proposed 2026-10-27 (session P8-18). Accepted 2026-10-27 by the owner, Q1–Q5 as
+recommended, and built in P8-18 (see the [build note](#owner-decision-and-build-amendment-2)).**
+Record:
 [2026-10-27-p8-18-site-data-fixes.md](../reviews/2026-10-27-p8-18-site-data-fixes.md) §1
 (measurements, the blind precision check and the full flagged list). Prototype:
 `var/p8-18/places.py` and `check.py` (untracked).
@@ -316,3 +319,63 @@ on these labels. So this is a census of the stored corpus, not an estimate for n
 - **Q5. Residuals.** Accept the two live non-WRONG flags (Sarpino's dish page, Fabaceae)
   being withdrawn with the rest? There is no per-venue exception, and withdrawal is
   reversible.
+
+### Owner decision and build (Amendment 2)
+
+**Answered by the owner on 2026-10-27, all as recommended:**
+- Q1: discovery's verification;
+- Q2: the corpus gazetteer;
+- Q3: the stored-bundle sweep;
+- Q4: re-discovery left to the schedule;
+- Q5: the residuals are withdrawn with the rest.
+
+**Built 2026-10-27 (P8-18).** No schema change, no migration, no new dependency; the
+`verifier` string and the extraction pipeline version are unchanged.
+- **`apps/discovery/place_check.py`.**
+  - `place_verdict` is item 1's rule, as measured.
+  - `load_place_area` builds the area for a run:
+    - localities with at least 3 POIs, every postcode and the area's regions, from the latest
+      Overture Versions;
+    - the gazetteer, from every stored `menu-page` bundle;
+    - the chain URLs, from the menu-URL records' latest payloads.
+
+    On `helios_laptop`: 39 localities, 106 postcodes, `TX`, 239 gazetteer slugs and 186 chain
+    URLs, in 3.1 s.
+  - Over the stored pages the module reproduces the measured prototype exactly: 59 records,
+    the same evidence on each.
+- **`url_pipeline.py`.**
+  - `VenueToResolve.place` holds the Overture address fields. `MenuUrlDiscovery.page_html`
+    (filled by `SiteFetcher`, outside the result's equality) carries the verified page.
+  - With a `place_area` (`resolve_urls` loads it at the start of a run; `--base-dir`):
+    - a re-check of a wrong-place page is `failed/wrong_place`, now in `WITHDRAW_REASONS`.
+      It re-discovers, then withdraws through `_withdraw_menu`;
+    - discovery drops a wrong-place result. A site whose every verified page is another
+      place's records `failed/wrong_place`;
+    - a lifecycle transfer treats it as absent.
+  - Accepted saves record `place_check: "place-v1"`. The report counts
+    `menu_urls_wrong_place`. Bronze's `FAILURE_REASONS` gains `wrong_place`.
+  - **One placement differs from item 3's wording.** The check runs where `url_pipeline`
+    accepts a result, not inside `SiteFetcher`'s candidate loop. So a dropped page is not
+    replaced by the next-ranked candidate. On a shared host's sitemap (Jefes's smorefood) that
+    candidate is usually another restaurant, possibly an Austin one that would pass. The
+    resolver protocol and its test fakes are unchanged.
+- **`python -m apps.discovery.place_sweep [--dry-run] [--base-dir]`** is item 4. A record is
+  checked when:
+  - it is resolved;
+  - it is not a registry record;
+  - its latest `menu-page` Version holds a bundle of the saved URL.
+
+  On `helios_laptop` the dry run checked 1,602 pages and skipped 80: 74 not resolved, and 6
+  whose bundle is of an older URL. It flags **55**: the 54 live records of the record's §1.5,
+  plus Sarpino's `/menu`, whose Menu stream was already withdrawn but whose URL record is
+  resolved. The other 4 of the 59 (Twin Peaks ×2, Haywire, Woof Gang) are already withdrawn.
+- **Tests.**
+  - `test/test_place_check.py`: each evidence kind, the exclusions and the chain exemption,
+    pure.
+  - `test/test_menu_url_reverification.py`, with the database:
+    - a wrong-place re-check withdraws;
+    - discovery drops a wrong-place page (`failed/wrong_place`);
+    - a right-place page is saved with `place_check`;
+    - no area judges nothing;
+    - the sweep: a dry run writes nothing, a live run withdraws only the wrong-place
+      record.

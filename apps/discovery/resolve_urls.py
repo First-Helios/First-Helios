@@ -25,6 +25,12 @@ not exercised in CI.
 JavaScript-only own-site pages with headed Chromium (ADR-0013 §4, session S6f);
 it needs the worker image and a display, so run it under ``xvfb-run -a``. It
 stays off for Pi runs until the Pi measurement is recorded (ADR-0013 §4).
+
+Every verified page also passes the wrong-place check ``place-v1`` (ADR-0015
+Amendment 2): its area is read at the start of the run from the Overture records
+and the stored menu-page bundles under ``--base-dir`` (the deploy directory).
+A re-checked URL it rejects is withdrawn like one that fails the verifier
+(``menu_urls_wrong_place``).
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from apps.discovery.place_check import load_place_area
 from apps.discovery.registry import load_registry
 from apps.discovery.url_pipeline import resolve_urls
 from apps.discovery.web_client import SiteFetcher
@@ -69,6 +76,12 @@ def _parse_args() -> argparse.Namespace:
         "--model-root", type=Path, default=DEFAULT_ROOT, help="verified model files (ADR-0013)"
     )
     parser.add_argument(
+        "--base-dir",
+        type=Path,
+        default=Path(),
+        help="deploy directory that bundle paths (var/replay/...) are relative to",
+    )
+    parser.add_argument(
         "--render",
         action="store_true",
         help="render pages that need JavaScript with headed Chromium (run under xvfb-run -a)",
@@ -99,6 +112,7 @@ def main() -> None:
         ) as fetcher,
         get_sessionmaker()() as session,
     ):
+        place_area = load_place_area(session, base_dir=args.base_dir)
         report = resolve_urls(
             session,
             resolver=fetcher,
@@ -107,6 +121,7 @@ def main() -> None:
             observed_at=now,
             limit=args.limit,
             on_batch=session.commit,  # commit every 100 venues (D3.3)
+            place_area=place_area,
         )
         session.commit()
 

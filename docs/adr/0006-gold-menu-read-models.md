@@ -8,7 +8,8 @@ follow-up was accepted on 2026-09-20. See [Owner decision](#owner-decision).
 [Amendment 1](#amendment-1-2026-10-22-section-names-and-variant-only-item-names)
 (section and item names) was accepted 2026-10-22 and built in session P8-3.
 [Amendment 2](#amendment-2-2026-10-27-proposed-json-ld-precedence-per-dish)
-(JSON-LD precedence per dish) is Proposed (P8-18).
+(JSON-LD precedence per dish) was accepted 2026-10-27, all questions as recommended, and
+built in P8-18.
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md),
 [ADR-0005](./0005-immutable-menu-snapshots-and-selection.md)
 **Implements:** [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
@@ -427,7 +428,9 @@ Built 2026-10-22, session P8-3, as proposed:
 
 ## Amendment 2 (2026-10-27, proposed): JSON-LD precedence per dish
 
-**Status: Proposed 2026-10-27 (session P8-18). Not built.** Record:
+**Status: Proposed 2026-10-27 (session P8-18). Accepted 2026-10-27 by the owner, Q1–Q4 as
+recommended, and built in P8-18 (see the
+[build note](#owner-decision-and-build-amendment-2)).** Record:
 [2026-10-27-p8-18-site-data-fixes.md](../reviews/2026-10-27-p8-18-site-data-fixes.md) §2.
 Owner decision (2026-10-27): "prefer JSON-LD when a page has it". This amendment is how.
 
@@ -513,6 +516,32 @@ Under (a)/(d) Carmen's shows only the 73.
   the current catalog)? Or in the selector?
 - **Q4. Applying it.** After the build, `python -m apps.gold.refresh` on `helios_laptop`,
   then the Pi's data refresh?
+
+### Owner decision and build (Amendment 2)
+
+**Answered by the owner on 2026-10-27, all as recommended:**
+- Q1: (b), per dish;
+- Q2: normalized-name equality only;
+- Q3: `enumeration.py`;
+- Q4: the laptop Gold refresh and the Pi data refresh after the build.
+
+**Built 2026-10-27 (P8-18)** in `packages/helios_core/domains/menu/enumeration.py`, with no
+change to the selector, the Gold refresh, the columns or any migration:
+- `dish_key(name)` is the normalization: NFKC, lower case, "&" → "and", the word set without
+  the validator's ignored tokens ("and", "the", "a", "of", "with", "w", "n"). An empty set
+  matches nothing.
+- `_jsonld_dishes(heads)` collects the dish keys of a live `jsonld` head's `priced`
+  observations. A dish is the target item, or the variant's or modifier's parent item; a
+  section price has no dish.
+- In `enumerate_current_requests`, a price target on the subject's `llm` head whose dish key
+  is in that set is skipped.
+- **Tests** (`test/test_gold_catalog.py`):
+  - a same-name dish, equal only after normalization and priced on a variant, is hidden;
+  - a dish the jsonld head names without a price, and an llm-only dish, stay;
+  - a jsonld head without prices, and a withdrawn one, hide nothing;
+  - `dish_key` cases.
+
+  With the rule disabled, the per-dish test fails.
 
 ## Implementation notes (2026-09-28)
 

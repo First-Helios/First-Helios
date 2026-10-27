@@ -150,6 +150,7 @@ def test_new_reason_codes_are_valid_and_scheme_maps_to_redirect_refused() -> Non
         ("skipped", "pdf"),
         ("failed", "render_timeout"),
         ("failed", "menu_pdf_only"),
+        ("failed", "wrong_place"),
     ):
         validate_outcome(outcome, reason)
     with pytest.raises(ValueError, match="outcome/reason"):

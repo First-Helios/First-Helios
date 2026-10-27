@@ -70,7 +70,7 @@ import socket
 import tempfile
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -148,6 +148,9 @@ class MenuUrlDiscovery:
     content_hash: str
     found_via: str | None = None
     render: str | None = None  # set when the verified page was rendered (ADR-0013 §4)
+    # The verified page's HTML, for the pipeline's wrong-place check (ADR-0015
+    # Amendment 2); not part of the result's identity.
+    page_html: str | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -705,6 +708,7 @@ class SiteFetcher:
             result.content_hash,
             found_via,
             result.render,
+            result.text,
         )
 
     def _platform_page(self, url: str) -> FetchResult | None:

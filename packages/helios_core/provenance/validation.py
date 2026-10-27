@@ -165,6 +165,7 @@ FAILURE_REASONS = frozenset(
         "no_menu_found",
         "render_timeout",
         "menu_pdf_only",  # no menu URL verified, but a fetched page links a menu PDF
+        "wrong_place",  # every verified menu page was another place's (ADR-0015 Amendment 2)
     }
 )
 
