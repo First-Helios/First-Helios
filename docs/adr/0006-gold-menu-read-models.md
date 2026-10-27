@@ -7,6 +7,8 @@ the first unit materializes a **bounded input set**. The full-catalog refresh
 follow-up was accepted on 2026-09-20. See [Owner decision](#owner-decision).
 [Amendment 1](#amendment-1-2026-10-22-section-names-and-variant-only-item-names)
 (section and item names) was accepted 2026-10-22 and built in session P8-3.
+[Amendment 2](#amendment-2-2026-10-27-proposed-json-ld-precedence-per-dish)
+(JSON-LD precedence per dish) is Proposed (P8-18).
 **Extends:** [ADR-0004](./0004-modular-monolith-identity-and-lifecycle.md),
 [ADR-0005](./0005-immutable-menu-snapshots-and-selection.md)
 **Implements:** [Plan 0002 Step 6](https://github.com/First-Helios/First-Helios/blob/f77292a0fecfc8f5e100b3705dc0cf9ae4a4d548/docs/plans/0002-identity-foundation-before-menu.md#step-6---featdb-add-gold-menu-read-models)
@@ -422,6 +424,95 @@ Built 2026-10-22, session P8-3, as proposed:
   canonical path has no such prefix, so the prefix lookup finds no node and `section_name` stays
   null. The wire already lists that row under a separate base-prefixed section, which is null
   today too. Raised in the P8-3 PR, not changed here.
+
+## Amendment 2 (2026-10-27, proposed): JSON-LD precedence per dish
+
+**Status: Proposed 2026-10-27 (session P8-18). Not built.** Record:
+[2026-10-27-p8-18-site-data-fixes.md](../reviews/2026-10-27-p8-18-site-data-fixes.md) §2.
+Owner decision (2026-10-27): "prefer JSON-LD when a page has it". This amendment is how.
+
+### The gap
+
+A page with schema.org menu data publishes two Menu streams in one family (`root_key = page`):
+`jsonld` and `llm`. In current mode, enumeration takes every live stream head of the subject
+(Owner decision D5.3). The selector's `jsonld > dom > pdf > llm` rank decides only between
+claims on the **same target path**, and the two streams key their dishes differently (JSON-LD
+native keys, llm block keys). So both are enumerated, and the same dish is two Gold rows.
+Carmen's Hideaway (venue 8652) shows its tamales twice.
+
+On `helios_laptop`, 152 records publish both streams (90 URLs):
+- llm 8,914 priced items, jsonld 5,421.
+- 4,701 of the llm's priced items repeat a priced jsonld dish by name. Of 4,118 such names,
+  97.9 % carry the same price set; 74 overlap and 13 differ.
+- **JSON-LD covers less than the llm on 73 of the 152 records**, and 66 of them have no
+  JSON-LD price at all (Kerbey Lane: 2 jsonld items, 0 prices; llm 156 priced).
+
+So whole-page precedence would empty real menus. That is the fork below.
+
+### Proposed: per dish, with the llm stream's other dishes kept (option b)
+
+In `enumerate_current_requests` (Menu domain, `enumeration.py`, beside the selector):
+
+1. For one subject's heads in one family, when a live `jsonld` head exists, collect the
+   **dish names** of its priced targets. A target's dish is its innermost `item` ancestor,
+   or itself when it is an item. A name is the item's content name, normalized:
+   - NFKC, lower case, "&" → "and";
+   - the set of its words (order-free).
+
+   This is the validator's `norm_tokens` rule, restated in the Menu domain, since
+   `helios_core` does not import `helios_parsing`.
+2. A priced target on that subject's `llm` head whose dish name is in that set is **not
+   enumerated**. Every other llm target is enumerated as today.
+3. Nothing else changes:
+   - the selector, its rank and its lifecycle rules;
+   - Menu data, since nothing is withdrawn or deleted;
+   - the `gold.current_menu` columns, so there is no migration;
+   - determinism and rebuild equality (point 6), because the rule is a function of
+     committed Menu content.
+
+   `gold.price_index` (ADR-0007) reads `current_menu`, so its medians lose the duplicates
+   too.
+
+Sized on the 152 records, priced item rows (the Gold-row proxy):
+
+| Option | Priced rows | Notes |
+|---|---|---|
+| Today | 14,335 | 4,701 llm duplicates |
+| (a) whole page: a live jsonld head hides the llm head | 5,421 | 36 records lose every price |
+| **(b) per dish (proposed)** | **9,634** | about 326 near-duplicates remain (same price, names overlap but differ) |
+| (c) jsonld when it has at least as many priced dishes, else llm | 8,972 | jsonld on 79 records |
+| (d) whole page when jsonld has any price, else llm | 7,840 | jsonld on 86 records; 1,794 llm-only priced dishes lost there |
+
+Carmen's under (b): 73 jsonld rows, plus 16 llm dishes with no jsonld name. Those are mostly
+`split_listed` fragments ("Egg", "Potato"), which P8-19's title-slot veto (ADR-0021) removes.
+Under (a)/(d) Carmen's shows only the 73.
+
+**Tests when built.**
+- Enumeration over a two-stream family: a same-name dish is jsonld only, an llm-only dish
+  stays, a jsonld head without prices hides nothing, and a withdrawn jsonld head hides
+  nothing.
+- A name equal only after normalization.
+- An Organization base page: the rule applies within each subject's own heads only.
+- Rebuild equality, unchanged.
+
+### Alternatives
+
+- **(a), (c), (d):** see the table. (d) is the literal "prefer JSON-LD when the page has
+  it" with a fallback, and drops 1,794 priced dishes that only the llm read.
+- **Near-duplicate matching:** same price and a name-token overlap of at least 0.5. It
+  would catch most of the 326, but it is fuzzy matching, which point 8 excludes.
+- **Doing it in Gold SQL or the refresh:** a second definition of "current" (point 5).
+
+### Owner questions (Amendment 2)
+
+- **Q1. The fork.** Per dish with the llm stream's extras kept, (b) (recommended)? Or whole
+  page when JSON-LD has a price, (d)?
+- **Q2. The match.** Normalized-name equality only (recommended; about 326 near-duplicates
+  stay)? Or also the near-duplicate rule above?
+- **Q3. Where.** In `enumeration.py`, Menu domain (recommended: enumeration already defines
+  the current catalog)? Or in the selector?
+- **Q4. Applying it.** After the build, `python -m apps.gold.refresh` on `helios_laptop`,
+  then the Pi's data refresh?
 
 ## Implementation notes (2026-09-28)
 

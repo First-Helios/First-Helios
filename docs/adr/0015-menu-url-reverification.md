@@ -2,7 +2,9 @@
 
 **Status:** Accepted 2026-09-29 (owner, session S6d): option C, B first, as
 amended by [Amendment 1](#amendment-1-2026-09-29-acceptance-decisions); the
-verifier is ADR-0013's page classifier (`classifier-v1`; `classifier-v2` since S6f, see Amendment 1; `classifier-v2+v3`, v2 AND v3, since P5-33, ADR-0013 Amendment 27) from the first Pi run
+verifier is ADR-0013's page classifier (`classifier-v1`; `classifier-v2` since S6f, see Amendment 1; `classifier-v2+v3`, v2 AND v3, since P5-33, ADR-0013 Amendment 27) from the first Pi run.
+[Amendment 2](#amendment-2-2026-10-27-proposed-a-wrong-place-page-check) (a wrong-place
+page check) is Proposed (P8-18).
 **Date:** 2026-09-28
 **Phase:** 4/5 boundary (Pi gate 1b)
 **Decides for:** the "page classifier or saved-menu re-verification path"
@@ -193,3 +195,124 @@ Owner decisions at the start of session S6d, with the code facts that shaped the
    Amendment 2) and the verifier bumped to `classifier-v2`, which accepts rendered
    Toast menus; the bump makes the next run re-check every URL `classifier-v1`
    saved.*
+
+## Amendment 2 (2026-10-27, proposed): a wrong-place page check
+
+**Status: Proposed 2026-10-27 (session P8-18). Not built; nothing withdrawn.** Record:
+[2026-10-27-p8-18-site-data-fixes.md](../reviews/2026-10-27-p8-18-site-data-fixes.md) §1
+(measurements, the blind precision check and the full flagged list). Prototype:
+`var/p8-18/places.py` and `check.py` (untracked).
+
+**The gap.** The verifier decides whether a page is a menu, not whose menu it is. Jefes
+(venue 21183) shows a Galloway, NJ takeout's menu. Discovery found it in its own website's
+host's sitemap (smorefood), and `classifier-v2` accepted it, correctly, as a menu. Over the
+1,682 stored menu pages, a generic check flags 59 records (39 URLs, 54 live). A blind judge
+rated 52 of the 54 live records WRONG.
+
+1. **The check, `place-v1`.** A pure function, `apps/discovery/place_check.py`. Its inputs
+   are the page URL, its `segment-v2` blocks, the venue's Overture address (locality, region,
+   postcode), the area (below), and whether the URL is a chain page. The page is
+   **wrong-place** when it does not name the venue's metro and shows evidence of another
+   place:
+   - *Mentions:* "City, ST" and "City, ST 12345", ST a US state code. An all-caps city counts
+     only with a ZIP. A mention followed by "!" or a lower-case word is a name, not a place.
+   - *Foreign:* the ZIP is outside the area's postcodes; or the state is not the venue's;
+     or the place is in the venue's state and contains no area locality.
+   - *Metro named:* the venue's locality as a word on the page or in the URL path, an area
+     locality written "City, <venue state>", or an area postcode.
+   - *E1, URL place:* the URL path names a foreign place. That is a foreign ZIP closing a
+     slug, or a run of up to four path tokens equal to a gazetteer city.
+   - *E2, address:* a foreign "City, ST 12345", on a page naming at most two foreign places
+     with a ZIP. Not on a chain page: one menu URL saved for at least two area venues whose
+     names share their first word, where a lone out-of-town address is the head office.
+   - *E3, dominant place:* one foreign place, outside chrome and wine sections
+     (`output.wine_section`), named at least twice, on a page with at most two foreign places
+     outside chrome.
+   - *Verdict:* wrong-place when the metro is not named and E1, E2 or E3 holds. Also when E1
+     holds and the URL path does not name the metro, even if the page does: that is another
+     location's page of a chain whose location list includes the metro.
+
+   Wine appellations, brewery towns and chain location lists are excluded by construction:
+   they are many distinct places, or they sit in chrome, or they include the metro.
+2. **The area, from data.** Per run, from the latest Overture Versions in the database:
+   - the localities with at least 3 POIs (39 in `helios_laptop`, Austin to Dale);
+   - every POI postcode (106).
+
+   No hand-made place list. A second metro would come with its own Overture area.
+3. **Where it runs: discovery's verification (this ADR).** The URL is what is wrong, and
+   re-discovery is what can find the right one.
+   - The `SiteFetcher` page check becomes the classifier AND `place-v1`, for:
+     - every own-site and platform candidate in `discover_menu_attempt`;
+     - every `verify_menu_attempt`.
+
+     The venue's address reaches both through `VenueToResolve`, which gains locality,
+     region and postcode, read from the same Overture payload.
+   - A page the classifier accepts and `place-v1` rejects is
+     `CaptureFailure("failed", "wrong_place")`.
+   - `wrong_place` joins `WITHDRAW_REASONS`. As item 3 and Amendment 1 item 3 say, a failed
+     re-check re-discovers. If nothing verifies, `_withdraw_menu` writes the rejected
+     `menu_not_verified` observation (`verification_failure: wrong_place`) and the
+     `menu-url-reverify` unassignment.
+   - Downstream nothing new is needed:
+     - the record in `needs_review` is out of `due_pages` (`menu_url_withdrawn`);
+     - R4's `retract_rejected` withdraws its Menu streams at the next re-score or extraction
+       (ADR-0013 Amendment 27);
+     - the next Gold refresh drops its rows.
+
+     It is reversible: a later verified URL re-assigns the record (Amendment 1 item 4), and
+     R4 restores its pages.
+   - Accepted saves record `place_check: "place-v1"` in the payload. The `verifier` string
+     (`classifier-v2+v3`) and the extraction pipeline version are unchanged, so nothing is
+     re-extracted and nothing is forced to refetch (Q3).
+4. **Applying it to the saved URLs: a stored-bundle sweep.** `python -m
+   apps.discovery.place_sweep [--dry-run]`:
+   - for each resolved menu-URL record, read the latest stored `menu-page` bundle of its
+     URL (same external key), with no fetch;
+   - apply `place-v1`;
+   - withdraw a flagged record through `_withdraw_menu`, with the bundle Capture's
+     `fetched_at`.
+
+   Then `python -m apps.menu_pipeline.rescore` (R4) and `python -m apps.gold.refresh`. On
+   `helios_laptop` that is the 39 URLs and 59 records of the record's §1.5. 54 are live,
+   carrying 2,503 of Gold's 60,119 rows.
+5. **Known misses (not proposed).**
+   - Location lists by neighbourhood only (Cane Rosso: "North Dallas"; 1 in the 60-URL
+     unflagged sample).
+   - Stale menus (`holiday-menu-2015`).
+   - Phone area codes: Overture phones are not ingested (Amendment 1 item 6).
+   - Non-US place names.
+6. **No new dependency, no schema change, no migration.** No per-site, per-platform or
+   per-venue rule.
+
+**Measured (record §1.4).** Every v2 flag was judged blind by Sonnet subagents and the
+disagreements were re-checked in the main session:
+- **URLs:** 34 of 39 WRONG, precision 0.872;
+- **live records:** 52 of 54, precision 0.963. The other two are Sarpino's
+  `…/new-york-deli-pizza` dish page (RIGHT) and Fabaceae (UNSURE: a Houston footer, a 512
+  phone).
+
+The two refinements from v1 to v2 (name-shaped mentions, the chain-page exemption) were tuned
+on these labels. So this is a census of the stored corpus, not an estimate for new pages.
+
+### Owner questions (Amendment 2)
+
+- **Q1. Where.** In discovery's verification, as item 3 (recommended: the URL is what is
+  wrong, and re-discovery can replace it)? Or as a second extraction-time verifier, which
+  withdraws the streams but keeps the URL saved and never looks for another?
+- **Q2. Gazetteer for E1.** Foreign places named on any stored menu page, rebuilt from the
+  bundles at the start of each run (recommended)? Mostly chains' chrome location lists:
+  285 slugs, about 8 s. It adds 4 URLs, all judged WRONG: tiltedkilt `las-vegas`, firepitatl
+  `atlanta`, thecheesybite `richmond-tx`, haywire `houston`. Or only the places the page
+  itself names (35 URLs instead of 39)?
+- **Q3. Applying it.** The stored-bundle sweep (item 4: no network, exactly the list judged;
+  future verifications check new pages) (recommended)? Or bump the `verifier` string so the
+  next `resolve_urls` re-verifies every saved URL against the live page? That took about 3
+  hours on the laptop in P5-33, and re-judges every page with the classifier too: P8-1 Q3's
+  real menu was lost that way.
+- **Q4. Re-discovery for the withdrawn venues.** Leave it to the schedule (recommended):
+  Amendment 1 item 4 retries a rule-withdrawn record when the verifier changes or after
+  `REVERIFY_WINDOW`. Or add a `--venues` filter to `resolve_urls` and run it now for these
+  venues?
+- **Q5. Residuals.** Accept the two live non-WRONG flags (Sarpino's dish page, Fabaceae)
+  being withdrawn with the rest? There is no per-venue exception, and withdrawal is
+  reversible.
