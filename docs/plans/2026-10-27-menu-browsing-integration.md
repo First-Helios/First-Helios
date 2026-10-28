@@ -1,6 +1,6 @@
 # Menu browsing integration — proposed contract and ownership
 
-Status: first cache/loading slice approved by owner 2026-10-27; no new metadata
+Status: first cache/loading slice and remaining application work approved by owner 2026-10-27; no new metadata
 contract agreed with extraction yet. Backend branch `feat/menu-cache-validation`
 and frontend `feat/menu-cache`, in `var/menu-browsing/{backend,frontend}`.
 Extraction session identified from Claude records: `db8b4026-4c7c-4c22-b2a8-07f114e74560`,
@@ -18,6 +18,16 @@ This session proposes changes only to frontend `js/api.js`, `js/main.js`,
 `dev_server.py`, tests/tools/docs; backend `apps/api/` and API tests/docs.
 First slice is limited to API fetch/cache helpers, restaurant/history UI, price
 presentation, proxy conditional-header forwarding, HTTP validation and their tests.
+The authorized follow-on also owns the native frontend pagination/navigation
+helpers, map/area/list loading, About summary, and their tests/documentation.
+The two remote branches are claimed by this session; first-slice preservation
+commits are backend `e1b76dc` and frontend `3031434`.
+
+The extraction worktree/Claude records were checked again during continuation:
+the active changes concern PageStructure/page-template parsing and tests, with no
+new collection-quality or publication API contract available. No new wire fields
+are consumed. This session keeps the current API body unchanged and documents
+the dependencies below rather than inferring metadata.
 
 Do not touch discovery, capture, extraction, parsing, validation, source identities,
 ORM models, migrations, Gold refresh logic, persisted quality metadata, `infra/`,

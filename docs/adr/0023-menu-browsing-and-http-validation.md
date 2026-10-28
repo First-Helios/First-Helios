@@ -1,7 +1,10 @@
 # ADR-0023: Bounded menu browsing cache and HTTP validation
 
 **Status:** First slice accepted 2026-10-27 by the owner ("approved").
-Follow-on pagination/navigation and new collection metadata remain separate slices.
+The owner subsequently authorized the remaining application slice (pagination,
+navigation restoration and eliminating catalog-count downloads), including commits
+and pushes on the claimed branches. New collection metadata still requires its
+own agreed contract.
 **Date:** 2026-10-27
 **Scope:** Frontend data lifecycle and API HTTP validation; no ingestion, schema,
 deployment or dependency changes.
@@ -71,14 +74,22 @@ caching is deferred because neither the measurement nor a cheap revision
 covering live provenance, identity, Gold corrections and withdrawals justifies
 it yet. No new cache service or dependency is needed.
 
-## Bounded follow-on slice
+## Accepted application follow-on slice
 
-After the first slice passes, separately review/implement demand-paged area
-venues (first 50 immediately; more on explicit request), independently rendered
-index/list failures, route-state restoration of loaded pages/cursors, map viewport
-and scroll, and cache-cohort reset on a changed head page. State should reference
-the bounded response cache, not retain unbounded copied DOM/data. Do not claim
-the first slice fixes area paging or all back-navigation behavior.
+The owner's continuation authorizes demand-paged area venues (first 50 immediately;
+more on explicit request), independently rendered summary/list failures, restoring
+opened pages/cursors, filters/search/boundary, viewport, scroll and originating-link
+focus, and resetting dependent pages when a cached page changes. About must use
+available summaries instead of enumerating every venue for a count.
+
+Navigation metadata uses the existing memory-only design: 20 routes, 64 KiB total,
+ten-minute expiry, cache-key/version/cursor references instead of response copies
+or detached DOM. Response cache eviction/expiry invalidates the saved chain.
+Every already opened page revalidates while visible; a changed page drops its
+dependent tail. New dependent pages always validate against current server data.
+These client versions are not publication revisions or snapshot guarantees.
+No dependency, schema, ingestion hook or service is added. See the
+[implementation and acceptance record](../reviews/2026-10-27-menu-browsing-followon.md).
 
 Future metadata consumption waits for written agreement with the extraction
 owner. Official URL, menu/page IDs, known partial coverage and immediate revision
@@ -107,6 +118,6 @@ invalidation are follow-ups, not fields to fabricate in the client.
 
 The owner answered "approved" after reviewing this proposal. The first slice,
 cache bounds/freshness, HTTP validator approach and unknown-coverage wording are
-accepted. Follow-on paging/navigation work and new collection metadata stay
-distinct reviewable slices. Implementation and measured acceptance are recorded
+accepted. The user later explicitly authorized the application follow-on described
+above. New collection metadata remains separate. Implementation and measured acceptance are recorded
 in [the first-slice record](../reviews/2026-10-27-menu-cache-first-slice.md).
