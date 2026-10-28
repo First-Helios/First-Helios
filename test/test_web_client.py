@@ -947,3 +947,64 @@ def test_the_injected_page_check_decides_and_names_the_verifier(tmp_path: Path) 
     with _fetcher(tmp_path / "strict", routes, page_check=RejectAll()) as fetcher:
         assert fetcher.verifier == "reject-all-v1"
         assert _menus(fetcher, "https://k.com/") == ()
+
+
+# -- several own-site pages (ADR-0022) -------------------------------------------
+
+
+def test_discover_returns_every_verified_own_site_page_in_rank_order(tmp_path: Path) -> None:
+    # Tex Mex Joe's shape: meal-period links only, which the old lexicon missed.
+    routes = {
+        "/": (
+            200,
+            '<a href="/lunch">Lunch</a><a href="/services3">Breakfast</a>'
+            '<a href="/blank">Drinks/Desserts/Kid\'s Menu</a><a href="/contact">Contact</a>',
+            _HTML,
+        ),
+        "/lunch": (200, "<title>Lunch Menu</title><p>Enchiladas $11</p>", _HTML),
+        "/services3": (200, "<title>Breakfast Menu</title><p>Migas $9</p>", _HTML),
+        "/blank": (200, "<title>Drinks Menu</title><p>Margarita $8</p>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        found = _menus(fetcher, "https://joes.com/")
+    assert [m.menu_url for m in found] == [
+        "https://joes.com/lunch",
+        "https://joes.com/services3",
+        "https://joes.com/blank",
+    ]
+    assert all(m.page_html for m in found), "each page's bytes reach the pipeline's checks"
+
+
+def test_two_candidates_landing_on_one_page_count_once(tmp_path: Path) -> None:
+    routes = {
+        "/": (200, '<a href="/our-menu">Menu</a>', _HTML),
+        "/menu": (301, "https://k.com/our-menu", _HTML),
+        "/our-menu": (200, "<title>Our Menu</title>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        found = _menus(fetcher, "https://k.com/")
+    assert [m.menu_url for m in found] == ["https://k.com/our-menu"]
+
+
+def test_a_deep_link_website_page_is_itself_the_first_candidate(tmp_path: Path) -> None:
+    calls: list[str] = []
+    website = "https://orders.example.com/order-online/jefes-austin"
+    routes = {
+        website: (200, "<title>Jefes Menu</title><p>Tacos $3</p>", _HTML),
+        "/menu": (200, "<title>Dinner Menu</title><p>Fajitas $15</p>", _HTML),
+    }
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        found = _menus(fetcher, website)
+        assert [(m.menu_url, m.signal) for m in found] == [
+            (website, "website"),
+            ("https://orders.example.com/menu", "well_known"),
+        ]
+        assert calls.count(website) == 1, "judged from the bytes already fetched"
+        recheck = fetcher.verify_menu_attempt(website, website, not_before=found[0].fetched_at)
+        assert isinstance(recheck, MenuUrlDiscovery), "a re-check accepts the website page"
+
+
+def test_a_root_website_page_is_never_its_own_menu(tmp_path: Path) -> None:
+    routes = {"/": (200, "<title>Our Menu</title><p>Tacos $3</p>", _HTML)}
+    with _fetcher(tmp_path, routes) as fetcher:
+        assert _menus(fetcher, "https://k.com/") == ()

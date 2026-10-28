@@ -5,6 +5,7 @@ from __future__ import annotations
 from apps.discovery.menu_url import (
     MAX_CANDIDATES,
     address_on_page,
+    is_deep_link,
     is_platform_venue_page,
     looks_like_menu,
     menu_links_from_html,
@@ -359,3 +360,23 @@ def test_rank_by_address_tries_the_slug_naming_the_address_first() -> None:
     ]
     assert rank_by_address(urls, "1501 E 6th St") == [urls[1], urls[2], urls[0]]
     assert rank_by_address(urls, None) == urls
+
+
+def test_meal_period_links_are_candidates_but_not_page_signals() -> None:
+    # ADR-0022 point 2: Tex Mex Joe's "Lunch" and "Breakfast" links.
+    assert looks_like_menu("Lunch", "/lunch")
+    assert looks_like_menu("Breakfast", "/services3")
+    assert looks_like_menu("", "/happy-hour")
+    assert not looks_like_menu("Lunch Services", "/catering-services"), "the blocklist still vetoes"
+    assert not page_menu_signal("<title>Lunch</title>", "https://k.com/lunch")
+    assert menu_links_from_sitemap(
+        "<urlset><url><loc>https://k.com/brunch</loc></url></urlset>", "https://k.com/"
+    ) == ["https://k.com/brunch"]
+
+
+def test_a_deep_link_is_a_page_not_a_site_root() -> None:
+    assert is_deep_link("https://smorefood.com/order-online/jefes-austin")
+    assert is_deep_link("https://www.chain.com/locations/austin/")
+    assert not is_deep_link("https://k.com/")
+    assert not is_deep_link("https://k.com/index.html")
+    assert not is_deep_link("https://www.toasttab.com/joes"), "platform pages have their own rule"

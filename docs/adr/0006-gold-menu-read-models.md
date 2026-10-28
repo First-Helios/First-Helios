@@ -552,6 +552,11 @@ The Pi was restored from that database. Carmen's Hideaway (8652) on firsthelios.
 each JSON-LD dish once: 73 jsonld rows plus 18 llm dishes its JSON-LD lacks. The record's §3
 has the figures.
 
+**Extended by [ADR-0022](./0022-several-menu-pages-per-venue.md) point 4 (accepted
+2026-10-27)** across one venue's own-site page families. They are ranked `<gers>` first, then
+by key. A dish on a later family whose `dish_key` and price set equal an earlier family's is
+not enumerated; the same name at other prices stays. Platform families are outside the rule.
+
 ## Implementation notes (2026-09-28)
 
 - Point 4 `as_of`: `gold.current_menu` has no `as_of` column; `effective_instant` plays that role,

@@ -84,6 +84,7 @@ from apps.discovery.menu_url import (
     MAX_PLATFORM_CANDIDATES,
     MAX_SITEMAP_CHILDREN,
     address_on_page,
+    is_deep_link,
     is_platform_venue_page,
     menu_links_from_sitemap,
     menu_pdf_links,
@@ -142,7 +143,7 @@ class MenuUrlDiscovery:
     menu_url: str
     # "well_known" (a known path) | "crawled" (sitemap or anchor) | "platform"
     # (the venue's own site is a shared platform host, or a homepage link
-    # into one, D3.5)
+    # into one, D3.5) | "website" (a deep-link website's own page, ADR-0022)
     signal: str
     fetched_at: datetime
     content_hash: str
@@ -648,6 +649,8 @@ class SiteFetcher:
             return False
         if platform:
             valid = is_platform_venue_page(result.url, ordering_only=True)
+        elif is_deep_link(website) and same_resource(result.url, website):
+            valid = True  # the website page itself is the menu (ADR-0022 point 7)
         else:
             valid = homepage is not None and (
                 not same_resource(result.url, website)
@@ -746,10 +749,14 @@ class SiteFetcher:
 
         Otherwise: fetch the homepage and sitemap(s) for candidate signals,
         probe one random path to detect a catch-all/soft-404 host (R08), then
-        GET each ranked candidate in order and accept the first that is
+        GET each ranked candidate in order and accept every one that is
         robots-allowed, resolves to a 200 HTML page distinct from the
         homepage, and whose own content carries a menu word
-        (the :class:`PageVerifier`). Then, whether or not an own-site menu
+        (the :class:`PageVerifier`), each final page once (ADR-0022). A
+        deep-link website whose own page passes the check comes first (signal
+        ``"website"``). Only when no own-site page verified are up to
+        :data:`MAX_RENDER_CANDIDATES` JavaScript-only candidates rendered.
+        Then, whether or not an own-site menu
         verified, verify the homepage's links into ordering platforms (D3.5b,
         S6b): one page per platform host, :data:`MAX_PLATFORM_CANDIDATES` hosts
         in all, each passing the same page check. When the homepage links
@@ -760,8 +767,8 @@ class SiteFetcher:
         :class:`PlatformAmbiguous`. Candidates are built from the homepage's
         final (post-redirect) URL.
 
-        Returns the own-site result first (when one verified), then platform
-        results in homepage order; empty when nothing verified.
+        Returns the own-site results first, in rank order, then platform results
+        in homepage order; empty when nothing verified.
         """
         self._menu_pdf = None
         if platform_signal(website):
@@ -808,6 +815,16 @@ class SiteFetcher:
         is_catch_all: bool | None = None  # probed lazily: only a 200 well-known path needs it
 
         found: list[MenuUrlDiscovery | PlatformAmbiguous] = []
+        own: list[MenuUrlDiscovery] = []
+        if (
+            homepage is not None
+            and homepage_html is not None
+            and is_deep_link(website)
+            and self._page_check.is_menu(homepage_html, homepage.url, trust_path=False)
+        ):
+            # The website is itself a deep link and that page is the menu (ADR-0022
+            # point 7): judged from the bytes already fetched, ranked first.
+            own.append(self._discovered(homepage, "website"))
         js_only: list[str] = []  # static pages that need a browser, in rank order
         for candidate in candidates:
             result = self.fetch(candidate)
@@ -815,6 +832,8 @@ class SiteFetcher:
                 continue
             if same_resource(result.url, base):
                 continue  # the candidate just redirected back to the homepage (R08)
+            if any(same_resource(result.url, page.menu_url) for page in own):
+                continue  # another candidate already landed on this page
             self._note_menu_pdf(result.text, result.url)
             is_well_known = candidate.rstrip("/") in well_known
             if is_well_known and is_catch_all is None:
@@ -826,16 +845,16 @@ class SiteFetcher:
                 continue
             if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
                 continue  # identical body to the homepage: a catch-all/soft-404 answer
-            found.append(
+            own.append(
                 self._discovered(
                     result,
                     "well_known" if is_well_known else "crawled",
                     None if is_well_known else self._found_via.get(candidate, base),
                 )
             )
-            break
-        if not found:
-            found.extend(self._render_own_site(js_only, base, well_known, is_catch_all))
+        # Every verified own-site page, in rank order (ADR-0022): the pipeline drops
+        # wrong-place pages and duplicates, and keeps at most MAX_MENU_PAGES.
+        found.extend(own or self._render_own_site(js_only, base, well_known, is_catch_all))
 
         if homepage_html is not None:
             # One page per platform host, and a redirect can't leave that host,

@@ -48,6 +48,26 @@ _MENU_TERMS: frozenset[str] = frozenset(
     {"menu", "menus", "food", "carte", "eats"},
 )
 
+# Meal-period tokens that also make a link a candidate (ADR-0022 point 2): a site
+# that splits its menu over pages often names them only "Lunch" or "Breakfast".
+# Candidates only: a page's own menu signal (:func:`page_menu_signal`) keeps
+# :data:`_MENU_TERMS`, and the page check decides.
+_MEAL_TERMS: frozenset[str] = frozenset(
+    {
+        "breakfast",
+        "brunch",
+        "lunch",
+        "dinner",
+        "happy",
+        "happyhour",
+        "kids",
+        "specials",
+        "dessert",
+        "desserts",
+    },
+)
+_CANDIDATE_TERMS = _MENU_TERMS | _MEAL_TERMS
+
 # Whole-token lookalikes that veto an otherwise-matching page or link (R34):
 # "/menu-of-services" and "/wp-admin/nav-menus.php" both contain a menu term
 # but are a services page and a CMS admin screen, not a menu.
@@ -68,6 +88,11 @@ _BLOCKLIST_TERMS: frozenset[str] = frozenset(
     },
 )
 
+# Paths that name a site's root page under another name (:func:`is_deep_link`).
+_ROOT_PAGES: frozenset[str] = frozenset(
+    {"index.html", "index.htm", "index.php", "home", "home.html", "en", "en-us"}
+)
+
 # Phrases that look menu-ish but are navigation chrome, not a menu page.
 _NEGATIVE_SUBSTRINGS: tuple[str, ...] = (
     "menu icon",
@@ -80,8 +105,9 @@ _NEGATIVE_SUBSTRINGS: tuple[str, ...] = (
 )
 
 # Bound the number of candidates the I/O layer will verify per site, so a page
-# stuffed with menu-ish links cannot fan out into hundreds of fetches.
-MAX_CANDIDATES = 8
+# stuffed with menu-ish links cannot fan out into hundreds of fetches. 12 since a
+# venue keeps up to three pages (ADR-0022 point 2).
+MAX_CANDIDATES = 12
 
 # Bound sitemap-index expansion and multi-sitemap fan-out (R75): never follow
 # more than this many child/declared sitemap documents for one site.
@@ -177,6 +203,18 @@ def same_resource(a: str, b: str) -> bool:
     return _dedupe_key(a) == _dedupe_key(b)
 
 
+def is_deep_link(url: str) -> bool:
+    """True when a website names a page, not a site root (and not a platform host).
+
+    Such a website (``smorefood.com/order-online/<venue>``, a chain's location
+    page) may itself be the venue's menu, so discovery checks it (ADR-0022).
+    """
+    if platform_signal(url):
+        return False
+    path = urlsplit(url).path.strip("/").lower()
+    return bool(path) and path not in _ROOT_PAGES
+
+
 def looks_like_menu(text: str, href: str) -> bool:
     """True when an anchor's text or URL path signals a menu, and is not chrome.
 
@@ -190,7 +228,7 @@ def looks_like_menu(text: str, href: str) -> bool:
     tokens = _tokens(text) | _tokens(_url_path(href))
     if tokens & _BLOCKLIST_TERMS:
         return False
-    return bool(_MENU_TERMS & tokens)
+    return bool(_CANDIDATE_TERMS & tokens)
 
 
 def _url_path(url: str) -> str:
@@ -542,7 +580,7 @@ def menu_links_from_sitemap(sitemap_xml: str, base_url: str) -> list[str]:
         path_tokens = _tokens(urlsplit(loc).path)
         if path_tokens & _BLOCKLIST_TERMS:
             continue
-        if _MENU_TERMS & path_tokens:
+        if _CANDIDATE_TERMS & path_tokens:
             out.append(loc)
     return out
 
