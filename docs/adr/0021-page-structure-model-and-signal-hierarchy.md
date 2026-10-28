@@ -1,8 +1,9 @@
 # ADR-0021: One page-structure model and a decision hierarchy for structural signals
 
 **Status:** Accepted 2026-10-26 by the owner: Q1–Q7 and the brand-title sub-fork (Q8), all as
-recommended (see [Owner decision](#owner-decision)). Proposed 2026-10-26 (session P8-17). Not built:
-step 1 (D4) is the next ADR-0013 amendment.
+recommended (see [Owner decision](#owner-decision)). Proposed 2026-10-26 (session P8-17). Step 1
+(D4) is built and proposed as ADR-0013 Amendment 33 (session P8-21, 2026-10-28), awaiting the
+owner's review.
 **Date:** 2026-10-26
 **Phase:** 8 (menu quality); a Phase 5 pipeline decision
 **Extends:** [ADR-0013](./0013-phase5-menu-pipeline.md) (menu pipeline; Amendment 28 [5c]

@@ -2982,3 +2982,86 @@ showed on dev:
   This is a design fork; each needs its own measurement.
 - **Q3. Unscorable fills.** Most fills land on items no label covers. Label those pages'
   missing items in a later revision before judging any widened variant?
+
+## Amendment 33 (2026-10-28, proposed): the [5d] record rewrite on the page-structure model (`resolve-v5`)
+
+**Status: Proposed 2026-10-28 (P8-21). Built on the branch for measurement (`resolve-v5`); a
+stage bar regresses, so it stops for the owner's review. Not applied to `helios_laptop` or the
+Pi.**
+Record: [2026-10-28-p8-21-page-structure.md](../reviews/2026-10-28-p8-21-page-structure.md).
+Architecture: [ADR-0021](./0021-page-structure-model-and-signal-hierarchy.md) D1 and D4 step 1
+(Q1–Q8 accepted 2026-10-26).
+
+**Why.** ADR-0021's step 1: one record notion for [5d], and one rule family for F2 (RE-NAME),
+F4 (ATTACH) and choice lines (santopatio's Nachos).
+
+### What was built
+
+- **`packages/helios_parsing/page_structure.py`** (D1). It's stdlib and built from the
+  existing re-parse and the first judge's seeds; nothing is stored.
+  - Per block: node chain, class signature, tag path, one text shape.
+  - Per page:
+    - the title signature (≥ 3 split seeds, ≥ 0.8 of its seed-role blocks titles);
+    - the record depth;
+    - the price slot (the main price signature);
+    - records (a title's container holding no second title).
+- **The record rewrite** (`page_template`, before [5d]'s per-row actions). On a gated page, an
+  accepted row named and priced inside another title's record moves onto the title, when the
+  record holds the page's price slot or the page is slotted (Q3 (a)):
+  - choice and label lines become the title's variants, one per choice (Q4); their same-block
+    seeds stop counting as an item pattern;
+  - description and option rows take the title's name; a short non-description line keeps
+    its own (Q8);
+  - unclaimed labelled prices in the record are attached to the title; add-ons never.
+- **Two safety rules added in the build** (not in ADR-0021):
+  - all or nothing per record;
+  - no harm: a rewritten row the re-judge no longer accepts goes back to the model's row.
+- ADD skips only records the rewrite moved rows onto.
+- `resolve-v4` → `resolve-v5`; `method_version` stays 127 of 128 characters.
+
+### Measured (dev, labels-v10.2, 331 scorable item-labelled pages; not §8)
+
+| | v5 as ruled | v5 + R2 (choice-line records only) |
+|---|---|---|
+| Usable prices | +0.0018 [+0.0004, +0.0031] | **+0.0025 [+0.0015, +0.0037]** |
+| Gold prices / items | +63 −21 / +8 −18 | **+62 −2 / +8 −0** |
+| Kept-item precision | +0.0012 | +0.0014 |
+| Price accuracy, FR, catch | unchanged | unchanged |
+| Stage bars failing | item recall; section exact | section exact (0.7607 / 0.7617) |
+| Gated pages losing a gold item | 2 / 258 | 0 / 258 |
+| Invariance (through `llm_stream`) | flips 6,653 → 6,606; 0 added pairs | 6,607; 0 added pairs |
+| Corpus (863 texts) | 72 change; accepts +48; 0 Evidence off its blocks | 68 change; accepts +46; 0 off |
+
+- **Q3 (a) can't tell a heading card from a dish card with options.** Both lack the page's
+  price slot. As ruled, it anchors santopatio's "A La Carte" taco lists (16 gold items), a
+  sauces card and catering trays.
+  - **R2** additionally requires a choice line in the record, the text half of Q3 (b). It
+    removes those losses and keeps Nachos and Quesadilla.
+- **The section bar fails on one page in both variants.** On held:12bf8e6a3406 a correct
+  rename tips [5c]'s 90 % gate, and 31 → 13 items keep an exact section. Every other changed
+  page gains (R2: +7 on 11 pages).
+- **Chunk boundaries** split 2.2 % of records, worth about 28 dev gold prices; chunking is
+  unchanged.
+
+### Owner questions
+
+- **Q1. The heading-card guard.** Choose one:
+  - (a) Keep Q3 (a) as ruled. Two stage bars fail, and 18 gold items are lost.
+  - (b) **Add R2:** label lines move onto the title only when the record holds a choice line
+    ("/", "or", ","). Only the section bar fails, and no item is lost. *Recommended.*
+  - (c) Drop the label-line trigger; keep RE-NAME and ATTACH only.
+- **Q2. The section bar's one page.** It's a correct item gain that tips [5c]'s gate. Choose one:
+  - (a) Accept it as a known [5c]-gate interaction, to be revisited in ADR-0021 step 2 ([5c]
+    on the same records). *Recommended.*
+  - (b) Hold v5 until step 2 is built and measured with it.
+- **Q3. The two safety rules** (all-or-nothing, no-harm) added in the build. Keep them as part
+  of `resolve-v5`? *Recommended.*
+- **Q4. Reach.** v5 moves accepted rows only (+62 dev gold prices, against P8-17's 909-amount
+  headroom). Should a later amendment also consider downgraded rows, re-judged with the
+  record's slot price? Not built or measured.
+- **Q5. Unlabelled multiple prices** ("11.00 | 15.50" in a record's slot). They stay out, since
+  a variant is never inferred (Amendment 19 2(b)). Confirm, or label the policy for them?
+- **Q6. Apply.** After Q1–Q3, approve the usual sequence?
+  - re-interpret `helios_laptop` from saved answers, then refresh Gold;
+  - a speed-only timing on the Pi;
+  - the §8 held-out re-test at the next crawl's new page texts, as for `resolve-v4`.
