@@ -555,8 +555,11 @@ def induce(
             continue
         new = moved.get(k) or (anchored[k][0] if k in anchored else None)
         named.add(index[new.claimed_block or ""] if new else _key(k, verdicts, index)[0])
+    # ADD skips the lines of a record whose rows the rewrite moved onto its title
+    onto = {index[r.claimed_block or ""] for rs in anchored.values() for r in rs}
+    onto |= {index[r.claimed_block or ""] for r in priced_lines}
     inside = (
-        {j for r in structure.records if _anchors(structure, r) for j in r.members}
+        {j for r in structure.records if r.title in onto for j in r.members}
         if structure is not None
         else set()
     )
