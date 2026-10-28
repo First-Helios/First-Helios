@@ -32,7 +32,7 @@ app.add_middleware(
     # Without this, cross-origin JavaScript can read a response's body but
     # not its X-Request-ID header, so a reported error can't be correlated
     # to a log line from the browser side (R46).
-    expose_headers=[REQUEST_ID_HEADER],
+    expose_headers=[REQUEST_ID_HEADER, "ETag", "Cache-Control"],
 )
 app.middleware("http")(request_context_middleware)
 register_exception_handlers(app)

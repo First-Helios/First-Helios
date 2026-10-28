@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated, Any, cast
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session  # noqa: TC002 - FastAPI resolves this at runtime for Depends
 
+from apps.api.cache_validation import ValidatedRoute
 from apps.api.db import get_session
 from apps.api.errors import NotFoundError
 from apps.api.item_ids import decode_item_id
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from packages.helios_core.domains.menu.contracts import NodeKind
     from packages.helios_core.domains.menu.history import HistoryPoint, PriceTrail
 
-router = APIRouter(prefix="/items", tags=["items"])
+router = APIRouter(prefix="/items", tags=["items"], route_class=ValidatedRoute)
 
 # Real item_ids are about 150-300 characters (ADR-0018 §B4); this only bounds
 # the work a junk path can cause.

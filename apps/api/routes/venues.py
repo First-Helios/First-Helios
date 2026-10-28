@@ -28,6 +28,7 @@ from sqlalchemy.orm import (
 )
 
 from apps.api.boundaries import BOUNDARY_DESCRIPTION, InvalidBoundaryError, boundary_param
+from apps.api.cache_validation import ValidatedRoute
 from apps.api.db import get_session
 from apps.api.errors import ApiError, NotFoundError
 from apps.api.item_ids import ItemId, encode_item_id
@@ -69,7 +70,7 @@ if TYPE_CHECKING:
     from apps.api.schemas import Channel, MenuScope, PriceState, SourceKind
     from packages.helios_core.gold.price_index import Boundary
 
-router = APIRouter(prefix="/venues", tags=["venues"])
+router = APIRouter(prefix="/venues", tags=["venues"], route_class=ValidatedRoute)
 
 # Documented per ADR-0008 SS4 error contract (R37): a malformed/overflowing
 # ``cursor`` maps to 400, and both routes' query/path validation maps to 422.
