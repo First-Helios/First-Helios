@@ -310,6 +310,11 @@ verifies** is a discovery-logic change, follow-up session **S6b**
 (D4.6, owner-approved). It doesn't gate the Pi run: a run before S6b just collects platform
 menus for fewer venues, and a later run adds the rest.
 
+**Amended by [ADR-0022](./0022-several-menu-pages-per-venue.md) (accepted 2026-10-27).** A venue
+keeps up to three own-site menu pages. The first stays `<gers>`, and each other page is
+`<gers>|<path[?query]>`; the suffix starts with `/`, so it never meets a platform host. Each
+key is versioned, re-verified and withdrawn on its own.
+
 ### 8. Existing rows: purge and rebuild (D4.3)
 
 The owner chose deletion over preserving pre-ADR history. The Bronze triggers

@@ -753,8 +753,9 @@ re-runnable from stored evidence.
     per-platform reader.
   - **First an ADR** (record key per page, which pages count, duplicates across pages, one
     merged menu or one per page). Stop for review before building (CLAUDE.md).
-    [ADR-0022](./docs/adr/0022-several-menu-pages-per-venue.md) proposed (P8-20): about 600
-    venues gain a second page, about 800 pages at a cap of 3; owner questions Q1–Q9.
+    [ADR-0022](./docs/adr/0022-several-menu-pages-per-venue.md) accepted 2026-10-27, Q1–Q9 as
+    recommended, and built (P8-20): about 600 venues gain a second page, about 800 pages at a
+    cap of 3. The re-collection on it is next.
 
 **Done when:** Menu Silver and Gold can be reconstructed from replay bundles,
 Bronze provenance, and durable Identity decisions without changing those

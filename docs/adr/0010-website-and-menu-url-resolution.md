@@ -376,3 +376,7 @@ Website provenance points to the upstream release or registry. Verified menu pro
 ## Amendment — ADR-0015 (accepted 2026-09-29)
 
 Amendment 3's own-site menu-page verifier is replaced by the ADR-0013 page classifier (`classifier-v1` at acceptance, `classifier-v2` since S6f). Saved menu URLs record their verifier and are re-verified when it changes or after 90 days; one that fails is re-discovered or withdrawn to `needs_review`. Platform pages pass the same page check, and a chain homepage's platform links are kept only for the location whose address the page shows. See [ADR-0015](./0015-menu-url-reverification.md) for the accepted decision.
+
+## Amendment — ADR-0022 (accepted 2026-10-27)
+
+D3.5's one own-site menu URL per venue is replaced: a venue keeps up to three verified own-site menu pages. The first stays `<gers>` while it verifies, and the others are keyed `<gers>|<path>`. Meal-period link names are candidates, `MAX_CANDIDATES` is 12, near-copy pages are dropped, and a deep-link website page is itself checked. See [ADR-0022](./0022-several-menu-pages-per-venue.md).

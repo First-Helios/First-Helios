@@ -30,6 +30,13 @@ Scope of this first full-catalog unit (deliberately bounded; see ADR-0006,
   kind rank never compares them. A dish is a price target's item (the target
   itself, or a variant's or modifier's parent item); dishes match on their
   normalized name only (:func:`dish_key`). The llm stream's other dishes stay.
+* **One dish once across a venue's own-site pages (ADR-0022 point 4).** A venue
+  keeps up to three own-site menu pages, the ``menu-page`` records keyed
+  ``<gers>`` and ``<gers>|<path>``. Within one scope subject, those families are
+  ranked ``<gers>`` first, then by key; a dish on a later family whose dish key
+  **and** price set equal a dish of an earlier family is not enumerated. The same
+  name at other prices (lunch and dinner) stays, and platform families
+  (``<gers>|<host>``) are not part of the rule.
 """
 
 from __future__ import annotations
@@ -54,6 +61,7 @@ from packages.helios_core.domains.menu.selection import (
     _stream_heads,
     _subject_heads,
 )
+from packages.helios_core.provenance.contracts import get_record_version
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -70,6 +78,9 @@ _Scope = Literal["organization", "establishment"]
 # restated: helios_core does not import helios_parsing.
 _WORD = re.compile(r"\w+", re.UNICODE)
 _IGNORED = frozenset({"and", "the", "a", "of", "with", "w", "n"})
+# ``apps.menu_pipeline.page_bronze.MENU_PAGE_NAMESPACE``, restated: helios_core does
+# not import apps. Its keys are the menu-URL keys (ADR-0011 §7, ADR-0022 point 1).
+MENU_PAGE_NAMESPACE = "menu-page"
 
 
 def dish_key(name: str | None) -> frozenset[str] | None:
@@ -111,6 +122,39 @@ def _jsonld_dishes(session: Session, heads: dict[str, MenuPage]) -> frozenset[fr
     return frozenset(dishes)
 
 
+_Dish = tuple[frozenset[str], frozenset[tuple[int, str]]]  # (dish key, its price set)
+
+
+def _family_dishes(session: Session, heads: dict[str, MenuPage]) -> frozenset[_Dish]:
+    """Each dish one subject's live heads in a family price, with its set of amounts."""
+    prices: dict[frozenset[str], set[tuple[int, str]]] = {}
+    for page in heads.values():
+        if page.operation == "withdrawal":
+            continue
+        graph = _graph(session, page.id)
+        for price in session.scalars(
+            select(PriceObservation).where(
+                PriceObservation.page_id == page.id, PriceObservation.price_state == "priced"
+            )
+        ):
+            node = graph.nodes.get(_price_target_column(price))
+            dish = _dish(graph, node) if node is not None and node.effect != "suppress" else None
+            if dish is not None and price.amount_minor is not None:
+                prices.setdefault(dish, set()).add((price.amount_minor, price.currency_code))
+    return frozenset((dish, frozenset(amounts)) for dish, amounts in prices.items())
+
+
+def _own_site_rank(session: Session, page: MenuPage) -> tuple[str, int, str] | None:
+    """``(gers, rank, key)`` of an own-site ``menu-page`` family; ``None`` for any other."""
+    version = get_record_version(session, page.source_record_version_id)
+    if version.source_namespace != MENU_PAGE_NAMESPACE:
+        return None
+    gers, _, suffix = version.external_key.partition("|")
+    if suffix and not suffix.startswith("/"):
+        return None  # a platform page, <gers>|<host>
+    return gers, 1 if suffix else 0, version.external_key
+
+
 def _sort_key(request: SelectionRequest) -> tuple[str, ...]:
     """A total, deterministic order so ids and insert order are stable per run."""
     context = request.context
@@ -139,8 +183,9 @@ def enumerate_current_requests(
     operating gate the selector uses (over all of the subject's heads), and
     only its priced targets whose effective window contains ``E`` become
     grain-unique :class:`SelectionRequest` values, less the llm head's dishes
-    that the subject's live jsonld head also prices. The
-    result is deterministic given committed Bronze/Identity/Menu.
+    that the subject's live jsonld head also prices, and less the dishes an
+    earlier own-site page of the same venue already prices at the same amounts.
+    The result is deterministic given committed Bronze/Identity/Menu.
     """
     session.flush()
     families = (
@@ -148,6 +193,21 @@ def enumerate_current_requests(
         .tuples()
         .all()
     )
+    family_heads = {
+        family: heads
+        for family in families
+        if (heads := _stream_heads(session, family[0], family[1], None))
+    }
+    ranks = {
+        family: _own_site_rank(session, next(iter(heads.values())))
+        for family, heads in family_heads.items()
+    }
+    # A venue's own-site families in rank order, then every other family.
+    ordered = sorted(
+        family_heads,
+        key=lambda family: (ranks[family] or ("~", 0, ""), family[0], family[1]),
+    )
+    earlier: dict[tuple[int, str, str], set[_Dish]] = {}  # (subject, kind, gers) -> dishes
     requests: list[SelectionRequest] = []
     seen: set[
         tuple[
@@ -164,10 +224,9 @@ def enumerate_current_requests(
             str,
         ]
     ] = set()
-    for source_record_id, root_key in families:
-        heads = _stream_heads(session, source_record_id, root_key, None)
-        if not heads:
-            continue
+    for source_record_id, root_key in ordered:
+        heads = family_heads[(source_record_id, root_key)]
+        rank = ranks[(source_record_id, root_key)]
         subjects = {(page.subject_id, page.subject_kind) for page in heads.values()}
         for subject_id, subject_kind in sorted(subjects):
             owned = _subject_heads(heads, subject_id)
@@ -175,6 +234,14 @@ def enumerate_current_requests(
                 continue  # broken mapping or not operating at E: excluded from current
             scope_kind = cast("_Scope", subject_kind)
             jsonld_dishes = _jsonld_dishes(session, owned)
+            repeated: frozenset[frozenset[str]] = frozenset()
+            if rank is not None:
+                dishes = _family_dishes(session, owned)
+                seen_dishes = earlier.setdefault((subject_id, subject_kind, rank[0]), set())
+                repeated = frozenset(
+                    dish for dish, amounts in dishes if (dish, amounts) in seen_dishes
+                )
+                seen_dishes.update(dishes)
             for page in owned.values():
                 if page.operation == "withdrawal":
                     continue
@@ -189,6 +256,8 @@ def enumerate_current_requests(
                         continue
                     if hidden and _dish(graph, node) in hidden:
                         continue  # the subject's jsonld head prices this dish
+                    if repeated and _dish(graph, node) in repeated:
+                        continue  # an earlier own-site page prices it at the same amounts
                     native_path = _canonical_native_path(session, page, node)
                     if native_path is None:
                         continue

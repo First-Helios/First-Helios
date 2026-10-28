@@ -10,10 +10,11 @@ recently observed Overture record):
    locations of one chain never collapse (ADR-0009 hazard, ADR-0010 §4).
 2. **Menu-URL** — a registry ``menu_url`` always wins; otherwise crawl the site
    (robots-aware, rate-limited, cached) for a menu page, then persist + assign
-   it the same way. The site's own menu is keyed ``<gers>``; each verified
-   ordering-platform page linked from the homepage gets its own
-   ``<gers>|<platform host>`` record, even when an own-site menu verifies
-   (ADR-0011 §7, S6b). A saved menu-URL is reused until the registry or the
+   it the same way. The site's own menu pages, up to :data:`MAX_MENU_PAGES`, are
+   keyed ``<gers>`` (the first, sticky while it verifies) and ``<gers>|<path>``
+   (ADR-0022); each verified ordering-platform page linked from the homepage
+   gets its own ``<gers>|<platform host>`` record, even when an own-site menu
+   verifies (ADR-0011 §7, S6b). A saved menu-URL is reused until the registry or the
    website changes, or until it is due for re-verification (ADR-0015): saved
    by an older page verifier, or last verified more than
    :data:`REVERIFY_WINDOW` ago. A re-check that passes appends a Version; one
@@ -50,7 +51,7 @@ from urllib.parse import urlsplit
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import aliased
 
-from apps.discovery.menu_url import ordering_platform_host, platform_signal
+from apps.discovery.menu_url import ordering_platform_host, platform_signal, same_resource
 from apps.discovery.models import DiscoveryLifecycleState
 from apps.discovery.place_check import (
     PLACE_CHECK,
@@ -80,6 +81,7 @@ from packages.helios_core.identity.models import (
 )
 from packages.helios_core.provenance.contracts import (
     BronzeObservation,
+    PersistedBronzeObservation,
     canonicalize_http_url,
     latest_capture_at,
     persist_source_record_observation,
@@ -121,6 +123,15 @@ WITHDRAW_REASONS = frozenset(
     }
 )
 WITHDRAW_METHOD = "menu-url-reverify"
+# Several own-site menu pages per venue (ADR-0022): at most this many, the first
+# keyed ``<gers>`` and each other ``<gers>|<path>``.
+MAX_MENU_PAGES = 3
+# Own-site payloads written by the several-pages discovery carry this marker; a
+# ``<gers>`` record without it is re-discovered once (ADR-0022 point 8).
+PAGES_VERSION = "pages-v1"
+# A further page whose block-text set has at least this Jaccard with a kept page's
+# is a duplicate of it, and is not stored (ADR-0022 point 3).
+DUPLICATE_PAGE_JACCARD = 0.9
 
 _Outcome = Literal["assigned", "updated", "unchanged", "needs_review"]
 
@@ -176,6 +187,8 @@ class UrlDiscoveryReport:
     menu_urls_reverify_deferred: int = 0
     menu_urls_withdrawn: int = 0
     menu_urls_wrong_place: int = 0  # verified menu pages place-v1 rejects
+    menu_pages_duplicate: int = 0  # further own-site pages that repeat a kept page
+    menu_pages_over_cap: int = 0  # further own-site pages beyond MAX_MENU_PAGES
     platform_ambiguous: int = 0
     menu_pdf_only: int = 0
     needs_review: int = 0
@@ -485,6 +498,112 @@ def _menu_key(gers_id: str, menu_url: str) -> str:
     return f"{gers_id}|{platform}" if platform else gers_id
 
 
+def _path_key(gers_id: str, menu_url: str) -> str:
+    """A further own-site page's key, ``<gers>|<path[?query]>`` (ADR-0022 point 1).
+
+    A platform key's suffix is a host, with no leading ``/``, so the two never meet.
+    """
+    split = urlsplit(menu_url)
+    path = split.path or "/"
+    return f"{gers_id}|{path}?{split.query}" if split.query else f"{gers_id}|{path}"
+
+
+def _is_own_key(gers_id: str, key: str) -> bool:
+    """``<gers>`` or ``<gers>|<path>``: one of the venue's own-site page records."""
+    return key == gers_id or key.startswith(gers_id + "|/")
+
+
+def _key_accepts(gers_id: str, key: str, menu_url: str) -> bool:
+    """Whether ``menu_url`` (a re-check's final URL) still belongs under ``key``.
+
+    An own-site key takes any own-site URL (a redirect may move the page); a
+    platform key only a page on its own platform host.
+    """
+    if _is_own_key(gers_id, key):
+        return ordering_platform_host(menu_url) is None
+    return key == _menu_key(gers_id, menu_url)
+
+
+def _page_blocks(menu: MenuUrlDiscovery) -> frozenset[str]:
+    """The page's segmented block texts, for the duplicate rule (ADR-0022 point 3)."""
+    if menu.page_html is None:
+        return frozenset()
+    return frozenset(text for block in segment(menu.page_html) if (text := block.text.strip()))
+
+
+def _duplicate_page(a: frozenset[str], b: frozenset[str]) -> bool:
+    return bool(a | b) and len(a & b) / len(a | b) >= DUPLICATE_PAGE_JACCARD
+
+
+def _assign_own_pages(
+    session: Session,
+    venue: VenueToResolve,
+    pages: list[MenuUrlDiscovery],
+    *,
+    website: str,
+    failed: dict[str, CaptureFailure],
+    report: UrlDiscoveryReport,
+) -> list[tuple[MenuUrlDiscovery, str]]:
+    """Key each verified own-site page, rank order in, up to :data:`MAX_MENU_PAGES`.
+
+    ADR-0022 points 1-3. A page whose URL an existing own-site key holds keeps
+    that key, and those pages count first. ``<gers>`` is free when it has no
+    record, its URL just failed its re-check, it is rule-withdrawn, or it was
+    saved for another website; a free ``<gers>`` takes the first-ranked other
+    page, and the rest take path keys. Live keys of this website not seen this
+    run still count towards the cap. A page that is the same resource as, or a
+    near copy of, a page already taken is dropped.
+    """
+    keys = [key for key in _menu_keys(session, venue.gers_id) if _is_own_key(venue.gers_id, key)]
+    saved = {
+        key: _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key) for key in keys
+    }
+    held: dict[str, str] = {}  # key -> its saved URL
+    for key, record in saved.items():
+        url = record.payload.get("menu_url") if record else None
+        if isinstance(url, str):
+            held[key] = url
+    live = {
+        key
+        for key, record in saved.items()
+        if record is not None
+        and record.state == "resolved"
+        and record.payload.get("website") == website
+        and key not in failed
+    }
+    gers = saved.get(venue.gers_id)
+    gers_free = (
+        gers is None
+        or venue.gers_id in failed
+        or gers.payload.get("website") != website
+        or (gers.state == "needs_review" and _rule_withdrawn(session, venue.gers_id))
+    )
+
+    def holder(page: MenuUrlDiscovery) -> str | None:
+        return next((k for k, url in held.items() if same_resource(url, page.menu_url)), None)
+
+    taken: list[tuple[MenuUrlDiscovery, str, frozenset[str]]] = []
+    ordered = [p for p in pages if holder(p) is not None] + [p for p in pages if holder(p) is None]
+    for page in ordered:
+        blocks = _page_blocks(page)
+        if any(
+            same_resource(page.menu_url, other.menu_url) or _duplicate_page(blocks, other_blocks)
+            for other, _, other_blocks in taken
+        ):
+            report.menu_pages_duplicate += 1
+            continue
+        page_key = holder(page)
+        if page_key is None and gers_free and all(k != venue.gers_id for _, k, _ in taken):
+            page_key = venue.gers_id
+        elif page_key is None:
+            page_key = _path_key(venue.gers_id, page.menu_url)
+        if page_key not in live and len(live | {k for _, k, _ in taken}) >= MAX_MENU_PAGES:
+            report.menu_pages_over_cap += 1
+            continue
+        taken.append((page, page_key, blocks))
+    return [(page, key) for page, key, _ in taken]
+
+
 def _menu_keys(session: Session, gers_id: str) -> list[str]:
     """Every menu-URL record key of one venue: ``<gers>`` and each ``<gers>|<host>``."""
     return sorted(
@@ -554,12 +673,15 @@ def _reverify_menus(
     decided_at: datetime,
     report: UrlDiscoveryReport,
     place_area: PlaceArea | None = None,
+    force_own: bool = False,
 ) -> tuple[bool, dict[str, CaptureFailure]]:
     """Re-check each of the venue's due menu URLs; return (fetched?, failed key → verdict).
 
-    A pass appends a Version with the current verifier (resetting the window).
-    A failure in :data:`WITHDRAW_REASONS` is returned for re-discovery; any
-    other failure is recorded as a Capture and the URL is kept.
+    A pass appends a Version with the current verifier (resetting the window),
+    and an own-site key's carries :data:`PAGES_VERSION`. A failure in
+    :data:`WITHDRAW_REASONS` is returned for re-discovery; any other failure is
+    recorded as a Capture and the URL is kept. ``force_own`` re-checks every
+    own-site key whatever its window (the venue predates ADR-0022's discovery).
     """
     worked = False
     failed: dict[str, CaptureFailure] = {}
@@ -572,8 +694,11 @@ def _reverify_menus(
             or saved.subject_id != venue.organization_subject_id
             or saved.payload.get("website") != website
             or not isinstance(url, str)
-            or not _reverify_due(
-                session, key, saved, verifier=resolver.verifier, observed_at=observed_at
+            or not (
+                (force_own and _is_own_key(venue.gers_id, key))
+                or _reverify_due(
+                    session, key, saved, verifier=resolver.verifier, observed_at=observed_at
+                )
             )
         ):
             continue
@@ -594,20 +719,17 @@ def _reverify_menus(
             )
             report.menu_urls_reverify_deferred += 1
             continue
-        if _menu_key(venue.gers_id, result.menu_url) != key:
+        if not _key_accepts(venue.gers_id, key, result.menu_url):
             failed[key] = CaptureFailure("failed", "no_menu_found", result.fetched_at)
             continue
         if _wrong_place(venue, result, place_area):
             report.menu_urls_wrong_place += 1
             failed[key] = CaptureFailure("failed", "wrong_place", result.fetched_at)
             continue
-        payload = _with_render(
-            _checked(
-                dict(saved.payload, menu_url=result.menu_url, verifier=resolver.verifier),
-                place_area,
-            ),
-            result,
-        )
+        fields: dict[str, object] = {"menu_url": result.menu_url, "verifier": resolver.verifier}
+        if _is_own_key(venue.gers_id, key):
+            fields["pages"] = PAGES_VERSION
+        payload = _with_render(_checked(dict(saved.payload, **fields), place_area), result)
         _persist_and_assign(
             session,
             saved=saved,
@@ -641,11 +763,13 @@ def _withdraw_menu(
     observed_at: datetime,
     decided_at: datetime,
     report: UrlDiscoveryReport,
+    pages: bool = False,
 ) -> None:
     """Move a menu URL the current verifier rejects to ``needs_review`` (ADR-0015 item 3).
 
     The rejected check is persisted as a ``rejected/menu_not_verified``
-    observation, whose Evidence supports the unassignment.
+    observation, whose Evidence supports the unassignment. ``pages`` marks it
+    as decided by ADR-0022's discovery (:data:`PAGES_VERSION`).
     """
     saved = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
     url = saved.payload.get("menu_url") if saved else None
@@ -657,7 +781,30 @@ def _withdraw_menu(
     ):
         return
     payload = dict(saved.payload, verifier=verifier, verification_failure=failure.reason_code)
-    persisted = persist_source_record_observation(
+    if pages:
+        payload["pages"] = PAGES_VERSION
+    persisted = _persist_rejected(session, key, payload, url, failure, observed_at=observed_at)
+    unassign_source_record(
+        session,
+        source_record_id=persisted.source_record_id,
+        from_subject_id=venue.organization_subject_id,
+        decision=_decision(WITHDRAW_METHOD, decided_at=decided_at, observed_at=observed_at),
+        evidence_ids=[persisted.evidence_id],
+    )
+    report.menu_urls_withdrawn += 1
+
+
+def _persist_rejected(
+    session: Session,
+    key: str,
+    payload: dict[str, object],
+    url: str,
+    failure: CaptureFailure,
+    *,
+    observed_at: datetime,
+) -> PersistedBronzeObservation:
+    """A ``rejected/menu_not_verified`` observation of one menu-URL record."""
+    return persist_source_record_observation(
         session,
         BronzeObservation(
             source_namespace=MENU_URL_NAMESPACE,
@@ -673,14 +820,33 @@ def _withdraw_menu(
             reason_code="menu_not_verified",
         ),
     )
-    unassign_source_record(
-        session,
-        source_record_id=persisted.source_record_id,
-        from_subject_id=venue.organization_subject_id,
-        decision=_decision(WITHDRAW_METHOD, decided_at=decided_at, observed_at=observed_at),
-        evidence_ids=[persisted.evidence_id],
+
+
+def _mark_withdrawn_retried(
+    session: Session,
+    key: str,
+    failure: CaptureFailure,
+    *,
+    verifier: str,
+    observed_at: datetime,
+) -> None:
+    """Record that discovery retried a rule-withdrawn own-site key and found nothing for it.
+
+    The record stays in ``needs_review``. The rejected observation carries the
+    current verifier and :data:`PAGES_VERSION` and restarts the key's
+    re-verification window (ADR-0015), so the retry is not repeated every run.
+    """
+    saved = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
+    url = saved.payload.get("menu_url") if saved else None
+    if saved is None or saved.state != "needs_review" or not isinstance(url, str):
+        return
+    payload = dict(
+        saved.payload,
+        verifier=verifier,
+        verification_failure=failure.reason_code,
+        pages=PAGES_VERSION,
     )
-    report.menu_urls_withdrawn += 1
+    _persist_rejected(session, key, payload, url, failure, observed_at=observed_at)
 
 
 def _first_overture_website(websites: tuple[str, ...]) -> str | None:
@@ -788,7 +954,7 @@ def _transfer_menus(
         if result.fetched_at < not_before:
             report.menu_urls_absent += 1
             continue
-        if key != _menu_key(venue.gers_id, result.menu_url):
+        if not _key_accepts(venue.gers_id, key, result.menu_url):
             report.needs_review += 1
             continue
         if _wrong_place(venue, result, place_area):
@@ -976,13 +1142,22 @@ def _resolve_venue(
             if candidate and candidate.payload.get("website") == website:
                 menu_key, saved_menu = key, candidate
                 break
+    # A <gers> record from before several-pages discovery is re-discovered once (ADR-0022).
+    pages_due = (
+        menu_key == venue.gers_id
+        and saved_menu is not None
+        and saved_menu.payload.get("signal") != "registry"
+        and saved_menu.payload.get("pages") != PAGES_VERSION
+    )
     if saved_menu is not None and saved_menu.state == "needs_review":
         # Only a rule-withdrawn record is retried: when the registry now names a
-        # menu, or when the verifier or the window says it's due (ADR-0015).
+        # menu, when the verifier or the window says it's due (ADR-0015), or once
+        # for several-pages discovery.
         if not (
             _rule_withdrawn(session, menu_key)
             and (
                 (entry is not None and entry.menu_url is not None)
+                or pages_due
                 or _reverify_due(
                     session,
                     menu_key,
@@ -1006,6 +1181,15 @@ def _resolve_venue(
         return worked
     acquired: tuple[MenuUrlDiscovery, ...]
     failed: dict[str, CaptureFailure] = {}
+    # Rule-withdrawn own-site keys this run's discovery retries (ADR-0015): due path
+    # keys, and <gers> when it passed the retry gate above.
+    retry_keys = _withdrawn_pages_due(
+        session, venue, website=website, verifier=resolver.verifier, observed_at=observed_at
+    )
+    if menu_key == venue.gers_id and saved_menu is not None and saved_menu.state == "needs_review":
+        retry_keys.append(venue.gers_id)
+    # Discovery's verdict on the site when nothing was acquired (no_menu_found otherwise).
+    page_verdict = CaptureFailure("failed", "no_menu_found", observed_at)
     if entry is not None and entry.menu_url is not None:
         # The registry always wins, and is never crawled for platform links.
         if not entry.content_hash or entry.source_url is None:
@@ -1030,13 +1214,15 @@ def _resolve_venue(
                 decided_at=decided_at,
                 report=report,
                 place_area=place_area,
+                force_own=pages_due,
             )
             worked |= reverified
-            if not failed:
+            if not failed and not pages_due and not retry_keys:
                 if not reverified:
                     report.menu_urls_reused += 1
                 return worked
-            # A saved URL failed its re-check: re-discover now, whatever the cooldown.
+            # A saved URL failed its re-check, a withdrawn further page is due, or the
+            # venue predates several-pages discovery: re-discover, whatever the cooldown.
         elif saved_menu is None or saved_menu.state != "needs_review":
             # (A due rule-withdrawn record is retried whatever the cooldown.)
             latest = latest_capture_at(session, MENU_URL_NAMESPACE, website)
@@ -1073,6 +1259,7 @@ def _resolve_venue(
                 report.menu_pdf_only += 1
             else:
                 failure = CaptureFailure("failed", "no_menu_found", observed_at)
+            page_verdict = failure
             record_capture_attempt(
                 session,
                 source_namespace=MENU_URL_NAMESPACE,
@@ -1085,11 +1272,31 @@ def _resolve_venue(
             report.menu_urls_absent += 1
         registry_source_url = None
 
-    for menu in acquired:
+    assignments = (
+        [(menu, _menu_key(venue.gers_id, menu.menu_url)) for menu in acquired]
+        if registry_source_url is not None
+        else [
+            *_assign_own_pages(
+                session,
+                venue,
+                [m for m in acquired if ordering_platform_host(m.menu_url) is None],
+                website=website,
+                failed=failed,
+                report=report,
+            ),
+            *(
+                (m, _menu_key(venue.gers_id, m.menu_url))
+                for m in acquired
+                if ordering_platform_host(m.menu_url) is not None
+            ),
+        ]
+    )
+    for menu, key in assignments:
         worked |= _persist_menu(
             session,
             venue,
             menu,
+            menu_key=key,
             source_url=registry_source_url or menu.menu_url,
             website=website,
             resolver=resolver,
@@ -1097,10 +1304,10 @@ def _resolve_venue(
             observed_at=observed_at,
             decided_at=decided_at,
             report=report,
-            refresh=_menu_key(venue.gers_id, menu.menu_url) in failed,
+            refresh=key in failed,
             place_area=place_area,
         )
-    rediscovered = {_menu_key(venue.gers_id, menu.menu_url) for menu in acquired}
+    rediscovered = {key for _, key in assignments}
     for key, failure in sorted(failed.items()):
         if key not in rediscovered:
             _withdraw_menu(
@@ -1112,8 +1319,44 @@ def _resolve_venue(
                 observed_at=observed_at,
                 decided_at=decided_at,
                 report=report,
+                pages=_is_own_key(venue.gers_id, key),
             )
+    # A retried key discovery did not re-acquire keeps needs_review with a marked
+    # rejected check, unless the site's failure says nothing about its pages.
+    if registry_source_url is None and page_verdict.reason_code in WITHDRAW_REASONS | {
+        "menu_pdf_only"
+    }:
+        for key in retry_keys:
+            if key not in rediscovered:
+                _mark_withdrawn_retried(
+                    session, key, page_verdict, verifier=resolver.verifier, observed_at=observed_at
+                )
     return worked
+
+
+def _withdrawn_pages_due(
+    session: Session,
+    venue: VenueToResolve,
+    *,
+    website: str,
+    verifier: str,
+    observed_at: datetime,
+) -> list[str]:
+    """The venue's rule-withdrawn ``<gers>|<path>`` keys of this website due a retry."""
+    due: list[str] = []
+    for key in _menu_keys(session, venue.gers_id):
+        if key == venue.gers_id or not _is_own_key(venue.gers_id, key):
+            continue
+        saved = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=key)
+        if (
+            saved is not None
+            and saved.state == "needs_review"
+            and saved.payload.get("website") == website
+            and _rule_withdrawn(session, key)
+            and _reverify_due(session, key, saved, verifier=verifier, observed_at=observed_at)
+        ):
+            due.append(key)
+    return due
 
 
 def _persist_menu(
@@ -1121,6 +1364,7 @@ def _persist_menu(
     venue: VenueToResolve,
     menu: MenuUrlDiscovery,
     *,
+    menu_key: str,
     source_url: str,
     website: str,
     resolver: MenuUrlResolver,
@@ -1131,7 +1375,7 @@ def _persist_menu(
     refresh: bool = False,
     place_area: PlaceArea | None = None,
 ) -> bool:
-    """Persist one menu URL under its own key: ``<gers>`` or ``<gers>|<platform host>``.
+    """Persist one menu URL under its key: ``<gers>``, ``<gers>|<path>`` or ``<gers>|<host>``.
 
     Each key is checked on its own (ADR-0011 §7): a disputed key, or one held by
     an Organization outside this GERS lifecycle, is counted and kept as history
@@ -1142,7 +1386,6 @@ def _persist_menu(
     """
     worked = False
     platform = ordering_platform_host(menu.menu_url)
-    menu_key = _menu_key(venue.gers_id, menu.menu_url)
     saved_menu = _saved_record(session, namespace=MENU_URL_NAMESPACE, external_key=menu_key)
     withdrawn = (
         saved_menu is not None
@@ -1201,6 +1444,8 @@ def _persist_menu(
     if menu.signal != "registry":  # a registry menu is never re-verified (D3.2)
         menu_payload["verifier"] = resolver.verifier
         menu_payload = _checked(menu_payload, place_area)
+        if not platform:
+            menu_payload["pages"] = PAGES_VERSION
     menu_payload = _with_render(menu_payload, menu)
     menu_outcome = _persist_and_assign(
         session,

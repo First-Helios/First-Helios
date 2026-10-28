@@ -1,6 +1,9 @@
 # ADR-0022: Several own-site menu pages per venue
 
-**Status:** Proposed 2026-10-27 (session P8-20). Not built: stop for owner review (CLAUDE.md).
+**Status:** Accepted 2026-10-27 by the owner, Q1–Q9 all as recommended (see
+[Owner decision](#owner-decision)). Proposed 2026-10-27 (session P8-20). Built in P8-20 (see
+[Build notes](#build-notes)); the re-collection on `helios_laptop` and the Pi is a separate,
+owner-approved step.
 **Date:** 2026-10-27
 **Phase:** 6 deliverable "Several menu pages per venue, before the next re-collection"
 (ROADMAP.md; §7 item 7)
@@ -243,6 +246,85 @@ unfetched ones.
   venues on their 20-day cooldown (recommended)?
 - **Q9. The 43 wrong websites.** Record them for a later website-resolution unit (recommended)?
   They are out of scope here.
+
+## Owner decision
+
+**Answered by the owner on 2026-10-27: "approved all recs".** Every question is answered as
+recommended:
+
+- Q1: sticky `<gers>` for the first page, `<gers>|<path>` for the others.
+- Q2: cap 3.
+- Q3: 12 candidates plus meal-period terms; drinks and catering terms stay out.
+- Q4:
+  - (a) block-text Jaccard ≥ 0.9, at discovery only;
+  - (b) cross-record enumeration rule by dish key and price set, own-site families only.
+- Q5: the site joins the pages into one menu, and the API is unchanged.
+- Q6: re-verification and withdrawal per key.
+- Q7: no rendering for extra pages; a deep-link website page is checked as the first
+  candidate.
+- Q8: the `pages-v1` marker forces one re-discovery of every venue with a `<gers>` record,
+  rule-withdrawn ones included; venues with no record keep the 20-day cooldown.
+- Q9: the 43 wrong websites are left for a later website-resolution unit.
+
+## Build notes
+
+Built 2026-10-27 (P8-20), with no migration and no API change.
+
+- **Candidates** (`apps/discovery/menu_url.py`).
+  - `_MEAL_TERMS` (breakfast, brunch, lunch, dinner, happy, happyhour, kids, specials,
+    dessert, desserts) extend the anchor and sitemap lexicon (`looks_like_menu`,
+    `menu_links_from_sitemap`, and so the menu-PDF links).
+  - `page_menu_signal` keeps `_MENU_TERMS`.
+  - `MAX_CANDIDATES` is 12.
+  - `is_deep_link(url)`: a non-root path off a platform host. `/index.html`, `/home` and
+    `/en` are roots.
+- **Discovery** (`SiteFetcher.discover_menu_url`).
+  - It returns every verified own-site page in rank order, each final page once.
+  - A deep-link website whose own page passes the check (`trust_path=False`, the homepage's
+    bytes) comes first, with the new signal `"website"`.
+  - JavaScript-only candidates are rendered only when no own-site page verified, as before.
+  - `_verifies` accepts the website page itself for a deep-link website, so it re-verifies.
+- **Records** (`apps/discovery/url_pipeline.py`).
+  - `_assign_own_pages` keys the pages. A URL held by an own-site key keeps that key, and
+    those pages count first. `<gers>` is free when it has no record, its URL failed its
+    re-check, it is rule-withdrawn, or it was saved for another website; a free `<gers>`
+    takes the first-ranked other page. The rest take `_path_key` (`<gers>|<path[?query]>`).
+  - A page that is the same resource as, or a Jaccard ≥ 0.9 copy of, a taken page is dropped
+    (`menu_pages_duplicate`). A new key beyond `MAX_MENU_PAGES` (3) live keys of this website
+    is dropped too (`menu_pages_over_cap`).
+  - Own-site payloads carry `"pages": "pages-v1"` (`PAGES_VERSION`), and so do withdrawals
+    after this discovery. A `<gers>` record without it is re-discovered once: its own-site
+    keys are re-checked whatever their window (`_reverify_menus(force_own=True)`), and a
+    rule-withdrawn `<gers>` passes the retry gate.
+  - A rule-withdrawn `<gers>|<path>` key that is due (`_reverify_due`) also triggers
+    re-discovery (`_withdrawn_pages_due`). A retried key that discovery does not re-acquire
+    keeps `needs_review` with a marked `rejected/menu_not_verified` observation
+    (`_mark_withdrawn_retried`), which restarts its window. That is skipped when the site's
+    failure says nothing about its pages (network, robots), so those retry next run.
+  - `_key_accepts`: an own-site key takes any own-site re-check URL, and a platform key only
+    its own host. This is used by re-verification and the lifecycle transfer.
+- **Gold** (`packages/helios_core/domains/menu/enumeration.py`).
+  - Families are processed with each venue's own-site `menu-page` families in rank order
+    (`_own_site_rank`, from the record key through `get_record_version`).
+  - Per scope subject and GERS, a later family's dish whose `dish_key` and price set
+    (`(amount_minor, currency)` of its priced observations) equal an earlier family's is
+    skipped. Platform families are outside the rule.
+- **Site** (frontend repo, branch `p8-20-one-menu`). The venue page renders one "Menu": each
+  page's sections follow a line naming its scope, price count and source page (host and
+  path), with one table of contents over all sections. The API orders menus by source
+  record id, and a venue's `<gers>` record is written first.
+- **Tests.**
+  - `test/test_several_menu_pages.py`: path keys and the cap; the duplicate rule; the sticky
+    first page with one forced re-discovery; per-key withdrawal and its reversal; the
+    rule-withdrawn `<gers>` retried once.
+  - `test_web_client.py`: every page in rank order (the Tex Mex Joe's shape); one page reached
+    twice; the deep-link website page, with its re-check; a root page is never its own menu.
+  - `test_menu_url.py`: meal terms are candidates, not page signals; `is_deep_link`.
+  - `test_gold_catalog.py`: a later page's dish is hidden only at the same prices, ranked by
+    key, with platform pages outside the rule.
+- **Known gap.** When a venue's website changes, path keys saved for the old website are not
+  re-checked (re-verification skips another website's keys, as for platform keys today).
+  They stay resolved until a human or a later unit withdraws them. No path key exists yet.
 
 ## References
 

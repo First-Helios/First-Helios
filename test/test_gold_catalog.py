@@ -34,7 +34,11 @@ from packages.helios_core.domains.menu.contracts import (
     Target,
     VariantInput,
 )
-from packages.helios_core.domains.menu.enumeration import dish_key, enumerate_current_requests
+from packages.helios_core.domains.menu.enumeration import (
+    MENU_PAGE_NAMESPACE,
+    dish_key,
+    enumerate_current_requests,
+)
 from packages.helios_core.domains.menu.models import MenuPage, PriceObservation
 from packages.helios_core.domains.menu.selection import (
     ContextRef,
@@ -871,3 +875,79 @@ def test_dish_key_of_an_empty_name_matches_nothing() -> None:
     assert dish_key(None) is None
     assert dish_key("") is None
     assert dish_key("& the") is None
+
+
+# --------------------------------------------------------------------------- #
+# One dish once across a venue's own-site pages (ADR-0022 point 4).
+# --------------------------------------------------------------------------- #
+
+
+def _menu_page_records(session: Session, keys: tuple[str, ...]) -> list[ScopeFixture]:
+    """One open venue whose ``menu-page`` records are ``keys``, each its own family."""
+    scope = _seed_scope(session, uuid4().hex, "open")
+    pages = []
+    for key in keys:
+        persisted = persist_source_record_observation(
+            session,
+            replace(
+                _observation(uuid4().hex),
+                source_namespace=MENU_PAGE_NAMESPACE,
+                source_kind="menu_page",
+                external_key=key,
+                identity_match_url=None,
+            ),
+        )
+        admit_source_record(
+            session,
+            source_record_id=persisted.source_record_id,
+            decision=decision(),
+            evidence_ids=(persisted.evidence_id,),
+        )
+        event = assign_source_record(
+            session,
+            source_record_id=persisted.source_record_id,
+            to_subject_id=scope.establishment.subject_id,
+            decision=decision(),
+            evidence_ids=(persisted.evidence_id,),
+        )
+        pages.append(
+            replace(
+                scope,
+                establishment=ResolvedScopeRequest(
+                    scope.establishment.subject_id, persisted.source_record_id, event.id
+                ),
+                local_input=persisted,
+            )
+        )
+    return pages
+
+
+def test_a_later_own_site_page_hides_a_dish_only_at_the_same_prices(
+    factory: sessionmaker[Session],
+) -> None:
+    gers = uuid4().hex
+    with factory.begin() as session:
+        # Keyed so the path key sorts first by id order, to prove rank is by key.
+        lunch, first, toast = _menu_page_records(
+            session, (f"{gers}|/lunch", gers, f"{gers}|toasttab.com")
+        )
+    with factory.begin() as session:
+        persist_menu(
+            session, _stream(first, "llm", (("burger", "Burger", 1100), ("shake", "Shake", 500)))
+        )
+        persist_menu(
+            session,
+            _stream(
+                lunch,
+                "llm",
+                (
+                    ("burger", "BURGER", 1100),  # same dish, same price: hidden
+                    ("shake", "Shake", 450),  # lunch price: kept
+                    ("soup", "Soup", 600),  # lunch only: kept
+                ),
+            ),
+        )
+        persist_menu(session, _stream(toast, "llm", (("burger", "Burger", 1100),)))
+    assert _enumerated(factory, first) == {"llm-burger", "llm-shake"}
+    assert _enumerated(factory, lunch) == {"llm-shake", "llm-soup"}
+    assert _enumerated(factory, toast) == {"llm-burger"}, "platform pages are not in the rule"
