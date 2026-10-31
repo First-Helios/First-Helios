@@ -1,8 +1,7 @@
 # ADR-0023: Render-state exploration — menu states behind tabs, accordions and script
 
-**Status:** Proposed 2026-10-28 (session P8-21). Accepted in part 2026-10-30 by the owner: Q1–Q3 as
-recommended (see [Owner decision](#owner-decision)); Q4 (the Pi budget) and Q5 (live fetching for
-step 0) are open. D2 is not built: step 0 measures first.
+**Status:** Proposed 2026-10-28 (session P8-21). Accepted 2026-10-30 by the owner, Q1–Q5 (see
+[Owner decision](#owner-decision)). D2 is not built: step 0 measures first.
 **Date:** 2026-10-28
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7, "script-loaded menus")
 **Extends:** [ADR-0013](./0013-phase5-menu-pipeline.md) §4 (headless render) and
@@ -129,6 +128,16 @@ sets for the Pi.
 - **Q2.** If D2 is built, its controls are ARIA roles and attributes plus `summary` only, with a
   cart/account veto. No class names, no menu-word vocabulary.
 - **Q3.** One appended DOM per page: no Capture-per-state contract change.
-- **Open:**
-  - Q4, the Pi time budget per page (no number was proposed);
-  - Q5, whether step 0 may fetch live, politely, into a scratch cache (asked, not recommended).
+- **Q4 and Q5 (2026-10-30, after recommendations were given; "accept all"):**
+  - **Q4.** A provisional cap of **90 s per page** on the Pi for render plus exploration,
+    confirmed or revised by step 0's first Pi render timing. The reasoning:
+    - Pi throughput is set by the model (§8: 7.8 pages/h, about 460 s per page);
+    - about 15 % of pages render (§4), so the cap adds at most about 3 % fleet-wide;
+    - on the laptop it covers the plain-render p90 (48.5 s).
+  - **Q5.** Step 0 renders live with the production `BrowserRenderer`, into a scratch cache on
+    the laptop:
+    - robots.txt for the page and every sub-request host;
+    - 3 s per host, images, fonts and media blocked, the Helios token;
+    - no login or forms, and bot checks are skipped.
+
+    That is about 50 renders: the 13 `pending_render` sites and their menu candidates.

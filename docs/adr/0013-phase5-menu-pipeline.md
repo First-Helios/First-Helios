@@ -3000,10 +3000,18 @@ Architecture: [ADR-0021](./0021-page-structure-model-and-signal-hierarchy.md) D1
   revisited in ADR-0021 step 2. It doesn't block v5.
 - **Q3.** All-or-nothing per record and no-harm stay part of `resolve-v5`.
 - **Q5.** Unlabelled multiple prices stay out (Amendment 19 2(b)).
-- **Open (no recommendation was made):**
-  - Q4: whether a later amendment brings downgraded rows into reach;
-  - Q6: the apply sequence. It writes `helios_laptop` and the Pi, which this session kept
-    read-only, so it is confirmed with the owner separately, after the merge.
+- **Q4 and Q6 (2026-10-30, after recommendations were given; "accept all"):**
+  - **Q4.** No separate amendment for downgraded rows. They come into reach through
+    ADR-0021 step 3 (a record-bounded price region in [5]/[5b], measured on FR and catch),
+    not through a [5d] rewrite.
+  - **Q6.** Apply after #138 merges, in `resolve-v4`'s sequence:
+    1. dump `helios_laptop`;
+    2. re-interpret every published `llm` page from saved answers (0 model calls);
+    3. refresh Gold;
+    4. a speed-only timing on the Pi.
+  - The Pi's data refresh is combined with P8-20's pending one (one restore). The §8 held-out
+    re-test owed for `resolve-v4` and `validator-v9`/`v10` is drawn next session from the page
+    texts P8-20's re-collection produced, and covers `resolve-v5` too.
 
 **Why.** ADR-0021's step 1: one record notion for [5d], and one rule family for F2 (RE-NAME),
 F4 (ATTACH) and choice lines (santopatio's Nachos).
