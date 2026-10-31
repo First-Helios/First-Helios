@@ -35,6 +35,24 @@ induction, with the model's accepted output as its seeds), on the ``llm`` stream
      description-like or price-label-only name, below a dish kept unpriced, under a
      wine-list heading (Amendment 15), or when the name and price are already held.
 
+7. **(v5) Record rewrite** (ADR-0013 Amendment 33; ADR-0021 D4 step 1), before the actions
+   above, on the page-structure model (``page_structure``): an accepted row named and
+   priced inside another title's record moves onto that title, when the record passes the
+   price-slot test (ADR-0021 Q3 (a)): it holds the page's price slot, or the page's records
+   normally hold one and it lacks it.
+   - **Choice and label lines** become the title's variants, one row per choice, only in a
+     record that prints a choice line ("Chicken / Bistec $14.99"; Amendment 33 Q1 (b)): a
+     heading card prints one dish per line, and its lines stay items. The same-block seeds
+     moved lines form no longer count as an item pattern.
+   - **RE-NAME:** a row named by a description or an option list takes the title's name; a
+     short line that is no description keeps its name (Q8, a brand title).
+   - **ATTACH:** a labelled price in the record no accepted row cites is given to the title.
+   - **All or nothing:** when one accepted label line of a record stays an item, none of
+     its lines moves.
+   - **No harm** (:func:`llm_stream`): a rewritten row the re-judge no longer accepts goes
+     back to the model's row, and an attached price it doesn't accept is not attached.
+   Rows the rewrite moves skip the per-row actions above.
+
 Every row [5d] adds or rewrites is judged again by the unchanged validator and [5b].
 
 **Duplicate removal** (rule "same", :func:`remove_duplicates`): a printed item (name
@@ -46,7 +64,8 @@ no longer holds the survivor back.
 
 :func:`llm_stream` is the ``llm`` stream's whole post-model interpretation, in order:
 ``rows_of`` → [5]+[5b] → [5d] → [5]+[5b] again → duplicate removal → [5c]. Part of
-``resolve.RESOLVER_VERSION`` ("resolve-v4" = [5b] + [5c] + [5d] + duplicate removal).
+``resolve.RESOLVER_VERSION`` ("resolve-v5" = [5b] + [5c] + [5d] with the record rewrite +
+duplicate removal).
 """
 
 from __future__ import annotations
@@ -63,6 +82,7 @@ from packages.helios_parsing.output import (
     strip_diet_marks,
     wine_section,
 )
+from packages.helios_parsing.page_structure import LABEL, PRICE, build
 from packages.helios_parsing.prices import price_tokens
 from packages.helios_parsing.resolve import judge
 from packages.helios_parsing.segment import BLOCK_TAGS
@@ -73,6 +93,7 @@ if TYPE_CHECKING:
 
     from packages.helios_parsing.dom_sections import Placed, Signature
     from packages.helios_parsing.output import ExtractorOutput
+    from packages.helios_parsing.page_structure import PageStructure, Record
     from packages.helios_parsing.prices import PriceToken
     from packages.helios_parsing.segment import Block
     from packages.helios_parsing.validator import Validation, Verdict
@@ -93,6 +114,8 @@ _LEADERS = re.compile(r"[.…·•_\-–—|:]{2,}|\s[|•·]\s")
 _LETTER = re.compile(r"[^\W\d_]")
 _ADDON_LINE = re.compile(r"\s*(?:\+|add\b|extra\b|sub\b|substitute\b)", re.IGNORECASE)
 _WORD_START = re.compile(r"(?![\W_]*[/|,;])(?=.*[^\W\d_]{3,})")
+_CHOICE = re.compile(r"\s*/\s*|\s*,\s*|\s+or\s+", re.IGNORECASE)  # (v5) between choices
+_CHOICE_WORD = re.compile(r"[^\W\d_]{2,}")  # (v5) every choice has a word
 
 Loose = tuple[str, ...]  # a block's last block-level tags
 Pattern = tuple[Loose, Loose, int, str, int, int]  # name path, price path, offset, lca, levels
@@ -112,6 +135,10 @@ class Template:
     attached: tuple[tuple[int, Row], ...] = ()  # input row, the row as a variant of its dish
     renamed: tuple[tuple[int, Row], ...] = ()  # input row, the row on its title
     added: tuple[Row, ...] = ()
+    # (v5) the record rewrite: input row -> its rows on its record's title (one per choice)
+    anchored: tuple[tuple[int, tuple[Row, ...]], ...] = ()
+    priced_lines: tuple[Row, ...] = ()  # (v5) a record's unclaimed labelled prices, on its title
+    records: int = 0  # (v5) records on the page (``page_structure``)
 
 
 def _chain(p: Placed) -> list[tuple[int, str]]:
@@ -162,6 +189,220 @@ def _key(k: int, verdicts: Sequence[Verdict], index: dict[str, int]) -> tuple[in
     return index[ev.block_id], " ".join(norm_tokens(verdicts[k].row.item))
 
 
+def _choices(label: str) -> list[str]:
+    """A choice line's label, one entry per choice ("Chicken / Bistec / Pastor" -> three);
+    a label that is no choice list ("1/2 lb", "Large") stays whole."""
+    parts = [p.strip(" -–—:|") for p in _CHOICE.split(label)]
+    if len(parts) < 2 or not all(_CHOICE_WORD.search(p) for p in parts):
+        return [label]
+    return parts
+
+
+def _anchors(structure: PageStructure, record: Record) -> bool:
+    """ADR-0021 Q3 (a), the price-slot test: a record's lines belong to its title when it
+    holds the page's price slot, or when the page's dish records normally hold one and this
+    record lacks it (a dish with options). A record without the slot on a page whose
+    records don't normally have one may be a heading over items, and is left alone."""
+    return record.slot or structure.slotted
+
+
+def _choice_card(
+    structure: PageStructure,
+    record: Record,
+    blocks: Sequence[Block],
+    prices: Sequence[Sequence[PriceToken]],
+) -> bool:
+    """(Amendment 33 Q1 (b)) The record prints a choice line: a label line whose label is a
+    choice list ("Chicken / Bistec / Pastor $14.99"). A dish with options prints its choices;
+    a heading card ("A La Carte": "• Al Pastor $3.75", "• Birria $4.00") prints one dish per
+    line, and its lines stay items."""
+    for j in record.members:
+        if structure.shapes[j] != LABEL:
+            continue
+        label = blocks[j].text[: min(t.start for t in prices[j])].strip(" -–—:|$•·")
+        if len(_choices(label)) > 1:
+            return True
+    return False
+
+
+def _anchored(
+    structure: PageStructure | None,
+    n: int,
+    blocks: Sequence[Block],
+    prices: Sequence[Sequence[PriceToken]],
+) -> Record | None:
+    """The anchored record holding block ``n`` (not as its title), if any; for a label line,
+    only a record that prints a choice line (:func:`_choice_card`)."""
+    if structure is None:
+        return None
+    record = structure.record(n)
+    if record is None or not _anchors(structure, record):
+        return None
+    if structure.shapes[n] == LABEL and not _choice_card(structure, record, blocks, prices):
+        return None
+    return record
+
+
+def _record_rewrite(
+    blocks: Sequence[Block],
+    verdicts: Sequence[Verdict],
+    kept: list[int],
+    index: dict[str, int],
+    prices: list[list[PriceToken]],
+    structure: PageStructure | None,
+    keep: frozenset[int] = frozenset(),
+    quiet: frozenset[str] = frozenset(),
+) -> tuple[dict[int, tuple[Row, ...]], set[int], tuple[Row, ...]]:
+    """(v5) The record rewrite (ADR-0021 D4 step 1): on a gated page, an accepted row named
+    and priced inside another title's anchored record moves onto that title.
+
+    - **Choice and label lines:** a row named by the label printed with its own price
+      ("BOWL $9.95", "Chicken / Bistec / Pastor $14.99") becomes the title's variant, one
+      row per choice.
+    - **RE-NAME:** a row whose name is a description or an option list takes the title's
+      name. A row named by a short line that is no description keeps its name (ADR-0021
+      Q8: "AUSTIN EASTCIDERS" / "Pineapple Cider" keeps "Pineapple Cider"). A row the
+      title already holds at its amount is dropped.
+    - **ATTACH:** a labelled price in the record that no accepted row cites gives the title
+      one row per choice.
+
+    The title's own rows that are not accepted, unpriced or at a moved amount, are dropped
+    once a moved row carries the price. Returns (input row -> its rows on the title, rows
+    to drop, the attached rows)."""
+    anchored: dict[int, tuple[Row, ...]] = {}
+    drop: set[int] = set()
+    if structure is None or not structure.records:
+        return anchored, drop, ()
+    on: dict[int, list[int]] = {}  # block -> kept rows named on it
+    for k in kept:
+        on.setdefault(_key(k, verdicts, index)[0], []).append(k)
+    cited = {
+        (index[v.price_evidence.block_id], v.price_evidence.start)
+        for v in verdicts
+        if v.decision == "accept" and v.price_evidence is not None
+    }
+
+    def title_name(t: int) -> str:
+        for k in on.get(t, ()):
+            if not _description_like(verdicts[k].row.item):
+                return verdicts[k].row.item
+        return _named_text(blocks[t], prices[t])
+
+    moved_to: dict[int, list[int]] = {}  # title block -> rows moved onto it
+    for k in kept:
+        v, pe = verdicts[k], verdicts[k].price_evidence
+        n = _key(k, verdicts, index)[0]
+        record = _anchored(structure, n, blocks, prices)
+        if record is None or v.decision != "accept" or pe is None or k in keep:
+            continue
+        t, p = record.title, index[pe.block_id]
+        name = title_name(t)
+        if not name or (p != t and p not in record.members):
+            continue  # no title text, or priced outside the record
+        tid = blocks[t].id
+        if structure.shapes[n] == LABEL and p == n:
+            tok = next((x for x in prices[n] if x.start == pe.start), None)
+            label = price_label(blocks[n].text, prices[n], tok).strip() if tok else ""
+            words = set(norm_tokens(v.row.item))
+            choices = _choices(label)
+            if (
+                not label
+                or _description_like(label)
+                or not words
+                or not words <= set(norm_tokens(label))
+                or any(len(c.split()) > MAX_LABEL_WORDS for c in choices)
+            ):
+                continue
+            anchored[k] = tuple(
+                replace(v.row, item=name, variant=c, claimed_block=tid) for c in choices
+            )
+        elif not prices[n] and (_description_like(v.row.item) or len(_choices(v.row.item)) > 1):
+            amount = parse_amount(v.row.amount)
+            held = [
+                parse_amount(verdicts[j].row.amount)
+                for j in on.get(t, ())
+                if verdicts[j].decision == "accept"
+            ]
+            if amount in held:
+                drop.add(k)  # the title already holds it
+                continue
+            if held:
+                continue  # the title holds another price: not this rule's to decide
+            anchored[k] = (replace(v.row, item=name, claimed_block=tid),)
+        else:
+            continue
+        moved_to.setdefault(t, []).append(k)
+    # All or nothing per record: when one accepted label line of a record stays an item,
+    # its lines are items, and none moves (a half-moved record loses the moved ones too,
+    # since the price scan from the title stops at the line left behind).
+    by_title = {r.title: r for r in structure.records}
+    for t, ks in list(moved_to.items()):
+        record = by_title[t]
+        lines = [k for k in ks if anchored[k][0].variant is not None]
+        if not lines:
+            continue
+        left = [
+            k
+            for j in record.members
+            if structure.shapes[j] == LABEL
+            for k in on.get(j, ())
+            if verdicts[k].decision == "accept" and k not in anchored
+        ]
+        if left:
+            for k in lines:
+                del anchored[k]
+            moved_to[t] = [k for k in ks if k not in lines]
+            if not moved_to[t]:
+                del moved_to[t]
+    for t, ks in moved_to.items():
+        amounts = {parse_amount(verdicts[k].row.amount) for k in ks}
+        for j in on.get(t, ()):
+            v = verdicts[j]
+            if v.decision != "accept" and (
+                v.row.amount is None or parse_amount(v.row.amount) in amounts
+            ):
+                drop.add(j)  # the title's unpriced copy: a moved row now carries its price
+    priced: list[Row] = []
+    for record in structure.records:
+        t = record.title
+        if (
+            not _anchors(structure, record)
+            or not (on.get(t) or t in moved_to)
+            or blocks[t].id in quiet
+        ):
+            continue
+        name = title_name(t)
+        rows = [verdicts[k].row for k in on.get(t, ())] + [
+            r for k in moved_to.get(t, ()) for r in anchored[k]
+        ]
+        section = rows[0].section if rows else None
+        for j in record.members:
+            if structure.shapes[j] not in (LABEL, PRICE) or blocks[j].in_chrome or j in on:
+                continue
+            for tok in prices[j]:
+                if tok.kind != "money" or (j, tok.start) in cited or is_addon(blocks[j], tok):
+                    continue
+                label = price_label(blocks[j].text, prices[j], tok).strip()
+                choices = _choices(label)
+                if (
+                    not _LETTER.search(label)
+                    or _description_like(label)
+                    or any(len(c.split()) > MAX_LABEL_WORDS for c in choices)
+                ):
+                    continue
+                priced += [
+                    Row(
+                        item=name,
+                        amount=str(tok.amount),
+                        variant=c,
+                        section=section,
+                        claimed_block=blocks[t].id,
+                    )
+                    for c in choices
+                ]
+    return anchored, drop, tuple(priced)
+
+
 def raw_sections(
     outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]
 ) -> list[tuple[int, str]]:
@@ -183,10 +424,13 @@ def induce(
     rows: Sequence[Row],
     verdicts: Sequence[Verdict],
     sections: Sequence[tuple[int, str]] = (),
+    keep: frozenset[int] = frozenset(),
+    quiet: frozenset[str] = frozenset(),
 ) -> Template:
     """Stage [5d] over one page: ``placed`` its blocks with DOM context (empty when the
     re-parse differs), ``rows`` and their ``verdicts`` ([5b]'s, one per row), ``sections``
-    :func:`raw_sections`."""
+    :func:`raw_sections`. (v5) ``keep``: rows the record rewrite leaves as they are;
+    ``quiet``: title blocks it attaches no price to (:func:`llm_stream`'s second pass)."""
     ungated = Template(rows=tuple(rows))
     if not placed or len(placed) != len(blocks):
         return ungated
@@ -202,6 +446,17 @@ def induce(
         v = verdicts[k]
         if v.decision == "accept" and v.price_evidence is not None:
             seeds.append((_key(k, verdicts, index)[0], index[v.price_evidence.block_id]))
+    structure = build(blocks, placed, prices, seeds)
+    # (v5) label lines inside another title's anchored record are that dish's prices,
+    # not an item pattern of their own
+    if structure is not None:
+        seeds = [
+            (n, p)
+            for n, p in seeds
+            if not (
+                n == p and structure.shapes[n] == LABEL and _anchored(structure, n, blocks, prices)
+            )
+        ]
     if len(seeds) < MIN_SEEDS:
         return replace(ungated, seeds=len(seeds))
     support: Counter[Pattern] = Counter(
@@ -264,13 +519,15 @@ def induce(
         for k in kept
         if verdicts[k].decision == "accept" and verdicts[k].price_evidence is not None
     }
-    drop: set[int] = set()
+    anchored, drop, priced_lines = _record_rewrite(
+        blocks, verdicts, kept, index, prices, structure, keep, quiet
+    )
     attached: list[tuple[int, Row]] = []
     renamed: list[tuple[int, Row]] = []
     for k in kept:
         v = verdicts[k]
         n = _key(k, verdicts, index)[0]
-        if n in cand_pats:
+        if n in cand_pats or k in anchored or k in drop:
             continue
         m = owner(n)
         if m is None:
@@ -327,29 +584,44 @@ def induce(
                 continue
             drop.add(k)  # DROP: a description or ingredient line kept as an item
     moved = dict(attached) | dict(renamed)
-    named: set[int] = set()
+    named: set[int] = {index[r.claimed_block or ""] for r in priced_lines}
     for k in kept:
         if k in drop:
             continue
-        new = moved.get(k)
+        new = moved.get(k) or (anchored[k][0] if k in anchored else None)
         named.add(index[new.claimed_block or ""] if new else _key(k, verdicts, index)[0])
+    # ADD skips the lines of a record whose rows the rewrite moved onto its title
+    onto = {index[r.claimed_block or ""] for rs in anchored.values() for r in rs}
+    onto |= {index[r.claimed_block or ""] for r in priced_lines}
+    inside = (
+        {j for r in structure.records if r.title in onto for j in r.members}
+        if structure is not None
+        else set()
+    )
     added = _additions(
         blocks,
         placed,
         verdicts,
         [k for k in kept if k not in drop],
-        attached,
+        attached + [(k, r) for k, rs in anchored.items() for r in rs],
         sections,
-        _Page(index, paths, prices, template, support, cand_pats, named),
+        _Page(index, paths, prices, template, support, cand_pats, named, inside),
     )
+    out: list[Row] = []
+    for k, r in enumerate(rows):
+        if k not in drop:
+            out.extend(anchored.get(k, (moved.get(k, r),)))
     return replace(
         stats,
-        rows=tuple(moved.get(k, r) for k, r in enumerate(rows) if k not in drop) + added,
+        rows=(*out, *priced_lines, *added),
         gated=True,
         dropped=tuple(sorted(drop)),
         attached=tuple(attached),
         renamed=tuple(renamed),
         added=added,
+        anchored=tuple(sorted(anchored.items())),
+        priced_lines=priced_lines,
+        records=len(structure.records) if structure is not None else 0,
     )
 
 
@@ -364,6 +636,7 @@ class _Page:
     support: Counter[Pattern]
     cand_pats: dict[int, list[Pattern]]
     named: set[int]  # name blocks of kept rows, after the moves
+    inside: set[int]  # (v5) blocks inside an anchored record, titles excluded
 
 
 def _additions(
@@ -421,6 +694,9 @@ def _additions(
             return True  # the name and price blocks relate otherwise
         if m in named or q in covered or m in covered:
             return True  # inside a kept item (so no kept row cites its price)
+        if m in pg.inside:
+            return True  # (v5) a line of another dish's record
+
         if any(is_addon(blocks[q], t) for t in prices[q]) or _ADDON_LINE.match(blocks[m].text):
             return True
         name = _named_text(blocks[m], prices[m])
@@ -512,6 +788,38 @@ def remove_duplicates(verdicts: Sequence[Verdict]) -> tuple[Verdict, ...]:
     return tuple(v for k, v in enumerate(verdicts) if k not in drop)
 
 
+def _harmed(
+    template: Template, n: int, first: Sequence[Verdict], judged: Sequence[Verdict]
+) -> tuple[frozenset[int], frozenset[str]]:
+    """(v5) The record rewrite's harm after the re-judge: input rows the validator accepted
+    whose rewritten rows it no longer all accepts, and the titles of attached prices it
+    doesn't accept. ``template.rows`` is the kept input rows in order (a rewritten row as
+    its rows on the title), then the attached prices, then ADD's rows."""
+    if not template.anchored and not template.priced_lines:
+        return frozenset(), frozenset()
+    anchored = dict(template.anchored)
+    dropped = set(template.dropped)
+    keep: set[int] = set()
+    at = 0
+    for k in range(n):
+        if k in dropped:
+            continue
+        size = len(anchored.get(k, (None,)))
+        if (
+            k in anchored
+            and first[k].decision == "accept"
+            and any(v.decision != "accept" for v in judged[at : at + size])
+        ):
+            keep.add(k)
+        at += size
+    quiet = {
+        v.row.claimed_block or ""
+        for v in judged[at : at + len(template.priced_lines)]
+        if v.decision != "accept"
+    }
+    return frozenset(keep), frozenset(quiet)
+
+
 @dataclass(frozen=True, slots=True)
 class LlmStream:
     """The ``llm`` stream's interpretation of one page: what Menu stores and why."""
@@ -529,8 +837,15 @@ def llm_stream(blocks: Sequence[Block], outputs: Sequence[ExtractorOutput], html
     placed = placed_blocks(html)
     if tuple(p.block for p in placed) != tuple(blocks):
         placed = []
-    template = induce(blocks, placed, rows, first.verdicts, raw_sections(outputs, blocks))
+    sections = raw_sections(outputs, blocks)
+    template = induce(blocks, placed, rows, first.verdicts, sections)
     judged = judge(blocks, list(template.rows)) if template.gated else first
+    keep, quiet = _harmed(template, len(rows), first.verdicts, judged.verdicts)
+    if keep or quiet:
+        # (v5) no harm: the record rewrite never turns an accepted row into one the
+        # validator doesn't accept, and attaches no price the validator doesn't accept
+        template = induce(blocks, placed, rows, first.verdicts, sections, keep, quiet)
+        judged = judge(blocks, list(template.rows))
     kept = remove_duplicates(judged.verdicts)
     return LlmStream(
         validation=replace(judged, verdicts=kept),
