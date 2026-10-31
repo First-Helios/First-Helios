@@ -781,3 +781,29 @@ Built 2026-10-22, session P8-5, as proposed (points 1–9, OQ1–OQ5):
   against `helios_p85_test`), `snapshots.py`, `api.sh` (read-only API on 127.0.0.1:8781),
   `done_when.py` (`done_when.json`), `explain_built.py` (`explain_built.out`), `ro.sh` with
   `measure.sql`/`activity.sql`.
+
+## Amendment 4 (2026-10-31): a printed price counts once in a venue's median
+
+**Status: Accepted 2026-10-31 under the owner's delegation**, with
+[ADR-0013 Amendment 34](./0013-phase5-menu-pipeline.md#amendment-34-2026-10-31-one-stored-variant-per-choice-of-one-printed-price-resolve-v6)
+(one stored variant per choice of a printed price). Built (PR, not merged).
+
+**Amends Amendment 1 item 2 (venue weighting).** A venue's sample is the median of its
+**printed prices**: priced `item`/`variant` rows of one source record that cite the same
+`price_evidence_ids` count once. The rest is unchanged:
+- `priced_count` still counts rows. A drawn area's items walk still returns `priced_count`
+  rows (ADR-0020).
+- `unpriced_count`, placement, `low_sample` and the area kinds are unchanged.
+- Rows citing one span always carry one amount (checked on `helios_laptop`: 0 groups with two
+  amounts).
+
+**Why.** Under Amendment 34 a choice line ("Chicken, Bistec or Pastor 14.99") is three rows at
+one printed price. Counting rows would weigh that price three times in the venue's median.
+
+**Effect before Amendment 34's data.** `helios_laptop` already holds 32 such groups (32 extra
+rows of 103,683): one dish filed under two sections, or an `llm` and a `jsonld` row for one
+dish whose names normalize differently. They now count once.
+
+**Implementation.** `AGGREGATE_SQL` (`packages/helios_core/gold/price_index.py`) groups the
+priced rows by `(area, category, currency, venue, source_record_id, price_evidence_ids)` before
+the venue median (`spans`). The refresh and the drawn-area read share it, so they can't drift.

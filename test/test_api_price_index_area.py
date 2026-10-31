@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import json
+import zlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -201,7 +202,13 @@ def _row(
         "amount_minor": amount,
         "price_source_kind": "jsonld" if priced else None,
         "price_observed_at": observed if priced else None,
-        "price_evidence_ids": [record.evidence_id] if priced else [],
+        # The record's Evidence, then a printed span per row (ADR-0007 Amendment 4).
+        "price_evidence_ids": [
+            record.evidence_id,
+            10**12 + zlib.crc32(f"{path}|{service_period}".encode()),
+        ]
+        if priced
+        else [],
         "content_evidence_ids": [],
         "content_name": content_name,
         "section_name": section_name,

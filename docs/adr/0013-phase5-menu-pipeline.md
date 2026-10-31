@@ -3110,7 +3110,7 @@ are not.
 - Every printed price is still stored once, so prices and the usable-price measurement are
   right. The harness scores verdicts, not stored shapes, so it didn't see this.
 - Fixing it changes storage, so it needs a decision: Q7 below.
-- **Q7 (open).** Choose one:
+- **Q7 (decided 2026-10-31: (b), see [Amendment 34](#amendment-34-2026-10-31-one-stored-variant-per-choice-of-one-printed-price-resolve-v6)).** Choose one:
   - (a) keep one row per printed price, with the first choice's label (today);
   - (b) store one variant per choice, each citing the same printed span. The variant list is
     then complete, but the price index's venue median counts that price once per choice;
@@ -3121,3 +3121,71 @@ are not.
   the owner's Q4 ruling as stored data. Counting each span once keeps the median unchanged.
   It is a `menu_shape` plus Gold change: its own small amendment, with a re-interpretation
   and a Gold refresh.
+
+## Amendment 34 (2026-10-31): one stored variant per choice of one printed price (`resolve-v6`)
+
+**Status: Accepted 2026-10-31 under the owner's delegation** ("answer questions on your own
+and work autonomously"). It answers Amendment 33 Q7 with (b), as recommended. Built (PR, not
+merged). Not applied to `helios_laptop` or the Pi: that waits for the merge and the owner's
+go-ahead.
+
+**The gap (Amendment 33).** `menu_shape` kept one stored price row per printed price span per
+item (`_Item.seen`). A choice line's variants all cite the line's one printed price, so only the
+first choice was stored. Santopatio's Nachos were stored as Chicken 14.99, Birria 15.99 and
+Shrimp 16.99; Bistec, Pastor, Beef Fajita and Combo were missing.
+
+**Decision.**
+1. **Storage** (`packages/helios_parsing/menu_shape.py`). A printed price span prices an item
+   once without a label, or once per distinct variant label. "Chicken, Bistec or Pastor 14.99"
+   is three variants, each citing the line's one span.
+   - A span that priced the item without a label prices no labelled variant, and the other
+     way round. The validator already downgrades such a row (`price_belongs_to_other_variant`);
+     `shape` holds the rule anyway.
+   - Verdicts don't change, so the harness and every §8 number are the same.
+2. **The price index counts each printed span once** ([ADR-0007 Amendment 4](./0007-gold-price-index-projection.md#amendment-4-2026-10-31-a-printed-price-counts-once-in-a-venues-median)).
+   A venue's median is over its printed prices, so a choice line weighs one price, as before
+   this amendment.
+3. **Version.** `RESOLVER_VERSION` becomes `resolve-v6`, the post-validator component that
+   already names [5b]–[5d] and duplicate removal. The method version stays 127 characters.
+   Every `llm` page becomes due for re-interpretation from saved answers (no model call).
+   - The JSON-LD stream is shaped by the same code and rewritten with its page. Its own
+     method version (`jsonld-v1;…`) has no resolver part and doesn't change, as for v5's
+     duplicate removal.
+
+**For the read API and the frontend** (owned by another session; no route changes here):
+- A venue's menu read now lists every choice as its own variant, each with the shared price
+  and the same price Evidence.
+- `/v1/price-index/area` items still walk `priced_count` rows (ADR-0020's invariant), since
+  `priced_count` counts rows. A choice line is now several rows at one price.
+- Medians count each printed price once. A client that computes its own statistics from the
+  items walk should group rows by price Evidence to match.
+
+**Measured** (a scratch copy of `helios_laptop`, `helios_p821q7_test`, 2026-10-31; the live
+database was not written):
+- **Copy.** A fresh `pg_dump` of `helios_laptop` (alembic `13081a087231`, 103,683
+  `current_menu` rows), restored as `helios_p821q7_test`.
+- **Re-interpretation** from saved answers (`var/q7/q7_reinterp.py` in the PR worktree,
+  untracked):
+  - 3,056 due pages, all extracted, **0 model calls**, 0 failures, 3,096 pages/h;
+  - items written 205,027 (unchanged from resolve-v5's apply);
+  - prices written **127,273**, against v5's 127,252: **+21**;
+  - empty 59, flagged 541 and JSON-LD pages 348 (all unchanged).
+- **Gold refresh** (branch code):
+  - `current_menu` 103,683 → **103,697** rows: items 95,877 (unchanged), variants 7,806 →
+    7,820;
+  - price index 416 rows, same keys, 981 placed;
+  - 12 rows change, 4 of them in their statistics. The citywide `all` row's median goes
+    1025 → **1016**, `priced_count` 56,678 → 56,690, and p25/p75/min/max are unchanged.
+- **Where the median moves.** Rows citing one span: 43 groups, 46 extra rows. That is the 32
+  pre-existing groups (one dish under two sections, `llm` + `jsonld` near-duplicates) plus
+  choice lines. Counting each span once changes the venue median of **7 of 1,478** subjects.
+- **Choice lines are rare** in today's data: +14 stored variants. Santopatio's kind of line is
+  the exception, not the rule.
+
+**Apply (after merge, owner's go-ahead):**
+1. back up `helios_laptop`;
+2. re-interpret from saved answers, as measured here;
+3. refresh Gold;
+4. coordinate the Pi restore (check `DEPLOYED_COMMIT` first).
+
+The scratch copy is dropped once the PR is reviewed.

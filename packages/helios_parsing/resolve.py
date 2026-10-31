@@ -42,6 +42,8 @@ plus [5c] section assignment from page structure (``dom_sections``, Amendment 28
 which moves only sections and so changes no verdict here, plus [5d] page template and
 duplicate removal (``page_template``, Amendment 29; v5 adds the record rewrite on the
 page-structure model, ``page_structure``, Amendment 33), which run between [5b] and [5c].
+resolve-v6 adds one stored variant per choice of one printed price (``menu_shape``,
+Amendment 34); verdicts are unchanged.
 """
 
 from __future__ import annotations
@@ -69,7 +71,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
     from packages.helios_parsing.validator import Row
 
-RESOLVER_VERSION = "resolve-v5"  # part of the pipeline version: [5b], [5c], [5d], dedupe
+RESOLVER_VERSION = "resolve-v6"  # part of the pipeline version: [5b], [5c], [5d], dedupe, shape
 NO_MATCH = frozenset(
     {
         "price_not_grounded",
