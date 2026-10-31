@@ -319,7 +319,7 @@ def test_pipeline_version_names_every_component_within_the_column() -> None:
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm == (
         "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;"
-        "repairs-v9;validator-v10;resolve-v4;classifier-v2"
+        "repairs-v9;validator-v10;resolve-v5;classifier-v2"
     )
     assert len(version.llm) <= 128
     assert version.jsonld == "jsonld-v1;validator-v10;segment-v2;classifier-v2"
@@ -656,7 +656,7 @@ def test_5c_files_items_under_the_pages_own_headings(
 
     report = venues.extract(_Server())
 
-    assert "resolve-v4" in report.method_version
+    assert "resolve-v5" in report.method_version
     assert (report.items_written, report.prices_written, report.unsectioned_items) == (3, 4, 0)
     (page,) = venues.pages(gers)
     with venues.factory() as session:
@@ -839,7 +839,7 @@ def test_a_resolved_price_gets_its_own_confidence_reason_and_run_share(venues: _
     assert ("3/6 Catfish Dinner", "6", 1799, RESOLVED_PRICE_CONFIDENCE) in rows
     assert ("Queso", None, 600, FLAGGED_PRICE_CONFIDENCE) in rows
     assert RESOLVED_PRICE_CONFIDENCE < FLAGGED_PRICE_CONFIDENCE < PRICE_CONFIDENCE
-    assert "resolve-v4" in page.method_version
+    assert "resolve-v5" in page.method_version
 
 
 def test_run_report_lists_pages_outside_the_tuning_range() -> None:

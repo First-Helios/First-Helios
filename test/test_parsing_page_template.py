@@ -152,7 +152,9 @@ def test_split_card_template_attaches_renames_and_adds() -> None:
     assert tpl.gated
     coctel, fish, huevos = ids["Coctel de Camaron"], ids["Fish Tacos"], ids["Huevos Rancheros"]
     n = len(DISHES)
-    # ATTACH: the size labels become variants of the card's dish
+    # ATTACH: the size labels become variants of the card's dish (no choice line, so the
+    # v5 record rewrite leaves them to [5d]'s own ATTACH)
+    assert tpl.anchored == ()
     assert tpl.attached == (
         (n, Row("Coctel de Camaron", "12.49", variant="Pequeño", claimed_block=coctel)),
         (n + 1, Row("Coctel de Camaron", "28.99", variant="Grande", claimed_block=coctel)),
