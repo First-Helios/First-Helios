@@ -3,7 +3,8 @@
 **Status:** Accepted 2026-10-27 by the owner, Q1–Q9 all as recommended (see
 [Owner decision](#owner-decision)). Proposed 2026-10-27 (session P8-20). Built in P8-20 (see
 [Build notes](#build-notes)), and applied on `helios_laptop` and the Pi on 2026-10-28 through
-2026-10-31 (see [Applied](#applied-2026-10-28-to-2026-10-31)).
+2026-10-31 (see [Applied](#applied-2026-10-28-to-2026-10-31)). Point 2's cap and candidate terms are
+amended by [ADR-0024](./0024-further-menu-page-discovery.md) D2 (see [Amendment 1](#amendment-1-2026-10-31-adr-0024-d2-cap-6-and-drinkscatering-terms)).
 **Date:** 2026-10-27
 **Phase:** 6 deliverable "Several menu pages per venue, before the next re-collection"
 (ROADMAP.md; §7 item 7)
@@ -381,6 +382,21 @@ Owner-approved. The code was a git archive of `main` 633ac61, and the Gold refre
 - **Observed for the frontend.** `GET /v1/venues/{id}/menu` orders menus by subject kind, then
   source record. A venue's Establishment-scoped pages therefore come before an
   Organization-scoped `<gers>` page, and the order is not page rank.
+
+## Amendment 1 (2026-10-31): ADR-0024 D2, cap 6 and drinks/catering terms
+
+Owner decision on [ADR-0024](./0024-further-menu-page-discovery.md) D2, after its D1 measurement:
+- **Point 2's cap:** `MAX_MENU_PAGES` 3 → **6**. 61–71 % of the 4th to 6th verified pages
+  were distinct menus; past the 6th, other locations' pages grow.
+- **Point 2's lexicon:** catering, drinks, beverages and bar (with singular forms) are
+  added as **candidate terms only**.
+  - The page's own menu signal (`_MENU_TERMS`) is unchanged, so the page check still
+    decides.
+  - Wine is not added.
+- Everything else in this ADR is unchanged: keys, the duplicate rule, sticky first pages and
+  platform records.
+- The [Applied](#applied-2026-10-28-to-2026-10-31) section describes the re-collection under
+  cap 3. The new cap and terms reach stored data at the next re-collection.
 
 ## References
 

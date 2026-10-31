@@ -197,7 +197,10 @@ def page_signals(html: str, url: str, blocks: list[Block]) -> list[float]:
     path = base.path.rstrip("/")
     child = 0
     for href in parser.hrefs:
-        target = urlsplit(urljoin(url, href))
+        try:
+            target = urlsplit(urljoin(url, href))
+        except ValueError:  # page markup: a stray "[" in an href is skipped, never fatal
+            continue
         if (target.hostname or "") != (base.hostname or ""):
             continue
         tail = target.path.rstrip("/")
