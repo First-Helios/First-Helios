@@ -1,6 +1,6 @@
 # ADR-0025: Choosing the venue's own location page on multi-location sites
 
-**Status:** Proposed 2026-10-31 (session P8-21). Not built. Stop for owner review.
+**Status:** Proposed 2026-10-31 (session P8-21). Accepted 2026-10-31 under the owner's delegation (see [Decision](#decision-2026-10-31)). Not built: D1 measures first.
 **Date:** 2026-10-31
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
 **Extends:** [ADR-0022](./0022-several-menu-pages-per-venue.md) (several own-site pages),
@@ -124,3 +124,18 @@ A group or chain site often has one menu page per location. Today:
   homepage gap on 3 of 23 menu sites, and this one on 2. Run D1 here first, or (d) first?
   *Recommended:* (d) first. Its gain is coverage (venues with no menu today); this ADR's is
   precision on a small share.
+
+## Decision (2026-10-31)
+
+The owner delegated these questions to the agent session ("answer questions on your own and
+work autonomously", 2026-10-31). The session took each recommendation. The owner can overturn
+any of them before this PR merges.
+
+- **Q1.** D1 (measure) runs before any rule. No pipeline change until D1's labels are in.
+- **Q2.** A chain's shared menu is kept for every venue, even when it prints one location's
+  address.
+- **Q3.** A page printing a single nearby address is flagged as a possible moved venue, not
+  withdrawn.
+- **Q4.** ADR (d), the homepage as a menu candidate, runs first. D1 here follows it.
+
+Status after this decision: **Accepted (agent, delegated); D1 not started.**
