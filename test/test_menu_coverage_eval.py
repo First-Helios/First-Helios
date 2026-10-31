@@ -284,7 +284,7 @@ SITES: dict[str, tuple[dict, dict[str, tuple[int, str, str]]]] = {  # type: igno
         {
             "https://onepage.example/": (
                 200,
-                _home([("#about", "About")], _menu("Our Food", DINNER)),
+                _menu("Menu", DINNER, '<a href="#about">About</a>'),  # a one-page site
                 _HTML,
             )
         },
@@ -362,7 +362,7 @@ BASELINE = [
     ("shared_price", 1, 1, 1, 0),
     ("pdf", 0, 0, 0, 0),  # a PDF menu is linked, never read (ADR-0013 Amendment 3)
     ("multi_location", 1, 1, 2, 1),  # both locations' menus are collected
-    ("homepage_menu", 0, 0, 0, 0),  # a menu printed on the homepage is not a candidate
+    ("homepage_menu", 1, 1, 1, 0),  # the homepage, as nothing else verifies (ADR-0026)
     ("no_menu", 0, 0, 0, 0),
 ]
 
