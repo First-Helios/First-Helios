@@ -89,11 +89,14 @@ def test_further_own_site_pages_get_path_keys_up_to_the_cap(session: Session) ->
         "https://joes.com/services3": _html("Migas $9"),
         "https://joes.com/blank": _html("Margarita $8"),
         "https://joes.com/kids": _html("Quesadilla $6"),
+        "https://joes.com/dinner": _html("Fajitas $19"),
+        "https://joes.com/brunch": _html("Chilaquiles $12"),
+        "https://joes.com/dessert": _html("Flan $5"),
     }
     report = _run(session, _Pages(pages), at=_NOW)
 
-    assert MAX_MENU_PAGES == 3  # noqa: PLR2004
-    assert (report.menu_urls_found, report.menu_pages_over_cap) == (3, 1)
+    assert MAX_MENU_PAGES == 6  # noqa: PLR2004
+    assert (report.menu_urls_found, report.menu_pages_over_cap) == (6, 1)
     assert _url(session, "mp1") == "https://joes.com/lunch"
     assert _url(session, "mp1|/services3") == "https://joes.com/services3"
     assert _url(session, "mp1|/blank") == "https://joes.com/blank"

@@ -66,7 +66,12 @@ _MEAL_TERMS: frozenset[str] = frozenset(
         "desserts",
     },
 )
-_CANDIDATE_TERMS = _MENU_TERMS | _MEAL_TERMS
+# Drinks and catering pages (ADR-0024 Q6): candidates only, like the meal periods; the page
+# check still decides. Wine stays out (out of extraction scope, and none verified in D1).
+_DRINK_CATERING_TERMS: frozenset[str] = frozenset(
+    {"catering", "drinks", "drink", "beverages", "beverage", "bar"},
+)
+_CANDIDATE_TERMS = _MENU_TERMS | _MEAL_TERMS | _DRINK_CATERING_TERMS
 
 # Whole-token lookalikes that veto an otherwise-matching page or link (R34):
 # "/menu-of-services" and "/wp-admin/nav-menus.php" both contain a menu term
