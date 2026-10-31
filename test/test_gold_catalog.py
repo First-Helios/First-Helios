@@ -730,14 +730,16 @@ def _stream(
     dishes: tuple[_Dish, ...],
     *,
     variant_of: str | None = None,
+    shared: bool = False,
 ) -> MenuAggregate:
     """A page of ``kind`` in the burger page's family, its dishes under one section.
 
     Each stream keys its dishes natively by kind, as the real streams do, so no
     dish of one corresponds to a dish of the other by path. ``variant_of`` puts
-    that item's price on a "Large" variant instead of the item.
+    that item's price on a "Large" variant instead of the item. ``shared`` writes
+    the Organization's page instead of the Establishment's.
     """
-    value = aggregate(scope)
+    value = aggregate(scope, shared=shared)
     evidence = value.page.evidence_ids
     items = tuple(
         ItemInput(
@@ -795,14 +797,17 @@ def _stream(
     )
 
 
-def _enumerated(factory: sessionmaker[Session], scope: ScopeFixture) -> set[str]:
-    """The leaf native keys enumerated for this scope's own family."""
+def _enumerated(
+    factory: sessionmaker[Session], scope: ScopeFixture, *, shared: bool = False
+) -> set[str]:
+    """The leaf native keys enumerated for this scope's own (or shared) family."""
+    source = scope.shared_input if shared else scope.local_input
     with factory() as session:
         requests = enumerate_current_requests(session, effective_instant=E)
     return {
         r.target.native_path[-1][1]
         for r in requests
-        if r.source_record_id == scope.local_input.source_record_id
+        if r.source_record_id == source.source_record_id
     }
 
 
@@ -882,8 +887,14 @@ def test_dish_key_of_an_empty_name_matches_nothing() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _menu_page_records(session: Session, keys: tuple[str, ...]) -> list[ScopeFixture]:
-    """One open venue whose ``menu-page`` records are ``keys``, each its own family."""
+def _menu_page_records(
+    session: Session, keys: tuple[str, ...], *, on_organization: frozenset[str] = frozenset()
+) -> list[ScopeFixture]:
+    """One open venue whose ``menu-page`` records are ``keys``, each its own family.
+
+    A key in ``on_organization`` is assigned to the venue's Organization (write its
+    page with ``shared=True``); the others to its Establishment.
+    """
     scope = _seed_scope(session, uuid4().hex, "open")
     pages = []
     for key in keys:
@@ -903,21 +914,19 @@ def _menu_page_records(session: Session, keys: tuple[str, ...]) -> list[ScopeFix
             decision=decision(),
             evidence_ids=(persisted.evidence_id,),
         )
+        request = scope.organization if key in on_organization else scope.establishment
         event = assign_source_record(
             session,
             source_record_id=persisted.source_record_id,
-            to_subject_id=scope.establishment.subject_id,
+            to_subject_id=request.subject_id,
             decision=decision(),
             evidence_ids=(persisted.evidence_id,),
         )
+        resolved = ResolvedScopeRequest(request.subject_id, persisted.source_record_id, event.id)
         pages.append(
-            replace(
-                scope,
-                establishment=ResolvedScopeRequest(
-                    scope.establishment.subject_id, persisted.source_record_id, event.id
-                ),
-                local_input=persisted,
-            )
+            replace(scope, organization=resolved, shared_input=persisted)
+            if key in on_organization
+            else replace(scope, establishment=resolved, local_input=persisted)
         )
     return pages
 
@@ -951,3 +960,21 @@ def test_a_later_own_site_page_hides_a_dish_only_at_the_same_prices(
     assert _enumerated(factory, first) == {"llm-burger", "llm-shake"}
     assert _enumerated(factory, lunch) == {"llm-shake", "llm-soup"}
     assert _enumerated(factory, toast) == {"llm-burger"}, "platform pages are not in the rule"
+
+
+def test_a_venues_pages_on_its_organization_and_establishment_are_one_menu(
+    factory: sessionmaker[Session],
+) -> None:
+    # Measured on helios_laptop after P8-20: 1,026 of 1,236 repeats sat on two subjects.
+    gers = uuid4().hex
+    with factory.begin() as session:
+        first, lunch = _menu_page_records(
+            session, (gers, f"{gers}|/lunch"), on_organization=frozenset({gers})
+        )
+    with factory.begin() as session:
+        persist_menu(session, _stream(first, "llm", (("burger", "Burger", 1100),), shared=True))
+        persist_menu(
+            session, _stream(lunch, "llm", (("burger", "Burger", 1100), ("soup", "Soup", 600)))
+        )
+    assert _enumerated(factory, first, shared=True) == {"llm-burger"}
+    assert _enumerated(factory, lunch) == {"llm-soup"}, "the Organization page ranks first"
