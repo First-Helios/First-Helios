@@ -148,6 +148,10 @@ async def request_context_middleware(
             "an unexpected error occurred",
         )
     response.headers[REQUEST_ID_HEADER] = request_id
+    if response.status_code >= 400:
+        response.headers["Cache-Control"] = "no-store"
+        if "etag" in response.headers:
+            del response.headers["etag"]
     _apply_cors_headers(request, response)
     logger.info("request_completed", status_code=response.status_code)
     return response

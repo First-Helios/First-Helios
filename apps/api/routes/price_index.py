@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session  # noqa: TC002 - FastAPI resolves this at runtime for Depends
 
 from apps.api.boundaries import BoundaryQuery, boundary_param
+from apps.api.cache_validation import ValidatedRoute
 from apps.api.db import get_session
 from apps.api.item_ids import ItemId, encode_item_id
 from apps.api.pagination import (
@@ -58,7 +59,7 @@ if TYPE_CHECKING:
     from apps.api.schemas import Channel, MenuScope, SourceKind
     from packages.helios_core.gold.price_index_read import AreaItemRow, PriceIndexRow
 
-router = APIRouter(prefix="/price-index", tags=["price-index"])
+router = APIRouter(prefix="/price-index", tags=["price-index"], route_class=ValidatedRoute)
 
 _RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
