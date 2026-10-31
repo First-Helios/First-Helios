@@ -2986,8 +2986,9 @@ showed on dev:
 ## Amendment 33 (2026-10-28, proposed): the [5d] record rewrite on the page-structure model (`resolve-v5`)
 
 **Status: Proposed 2026-10-28 (P8-21). Accepted 2026-10-30 by the owner, with the rulings below.
-`resolve-v5` is built with R2 (Q1 (b)). Not applied to `helios_laptop` or the Pi yet (Q6 runs
-from `main` after the merge).**
+`resolve-v5` is built with R2 (Q1 (b)) and merged (#138). Applied to `helios_laptop` 2026-10-31
+(3,056 pages re-interpreted, 0 model calls; Gold 104,764 `current_menu` rows; Pi +4.0 ms/page). The
+Pi's restore waits for the owner's go.**
 Record: [2026-10-28-p8-21-page-structure.md](../reviews/2026-10-28-p8-21-page-structure.md).
 Architecture: [ADR-0021](./0021-page-structure-model-and-signal-hierarchy.md) D1 and D4 step 1
 (Q1–Q8 accepted 2026-10-26).
@@ -3087,3 +3088,36 @@ F4 (ATTACH) and choice lines (santopatio's Nachos).
   - re-interpret `helios_laptop` from saved answers, then refresh Gold;
   - a speed-only timing on the Pi;
   - the §8 held-out re-test at the next crawl's new page texts, as for `resolve-v4`.
+
+**Applied (2026-10-31).**
+- `helios_laptop` re-interpreted: 3,056 pages, 0 model calls.
+- Gold refreshed with `main` at ab674e5 (#139's cross-scope dedupe included): `current_menu`
+  103,563 → **103,683** rows (items −74, variants +194).
+  An earlier refresh on 66d4bba, before #139 merged, read 104,764 because P8-20's dedupe was
+  missing. It was redone.
+- The Pi restored from that database, after coordinating with P8-20, which had already
+  deployed backend ab674e5. Downtime was 265 s and `pg_restore` wrote no errors. Every public
+  endpoint returns 200 on firsthelios.com and www.
+- Backups: laptop `var/laptop-run/helios_laptop-2026-10-31-pre-p8-21.dump`; Pi
+  `~/helios-backups/firsthelios-20261031-p8-21/` (pre-dump sha256 `f4e1d27a…`, laptop dump
+  `8c10e89c…`).
+
+**A gap found in the applied data: one stored row per printed price.** `menu_shape` keeps one
+price row per printed price span per item (`_Item.seen`). A choice line's variants all cite
+the line's one printed price, so **only the first choice is stored**. Santopatio's Nachos
+are stored as Chicken 14.99, Birria 15.99, Shrimp 16.99; Bistec, Pastor, Beef Fajita and Combo
+are not.
+- Every printed price is still stored once, so prices and the usable-price measurement are
+  right. The harness scores verdicts, not stored shapes, so it didn't see this.
+- Fixing it changes storage, so it needs a decision: Q7 below.
+- **Q7 (open).** Choose one:
+  - (a) keep one row per printed price, with the first choice's label (today);
+  - (b) store one variant per choice, each citing the same printed span. The variant list is
+    then complete, but the price index's venue median counts that price once per choice;
+  - (c) one row per printed price, labelled with every choice ("Chicken / Bistec / Pastor"),
+    which is what labels-v10.1 had.
+
+  *Recommended: (b), with the price index counting each printed price span once.* (b) is
+  the owner's Q4 ruling as stored data. Counting each span once keeps the median unchanged.
+  It is a `menu_shape` plus Gold change: its own small amendment, with a re-interpretation
+  and a Gold refresh.
