@@ -2986,8 +2986,9 @@ showed on dev:
 ## Amendment 33 (2026-10-28, proposed): the [5d] record rewrite on the page-structure model (`resolve-v5`)
 
 **Status: Proposed 2026-10-28 (P8-21). Accepted 2026-10-30 by the owner, with the rulings below.
-`resolve-v5` is built with R2 (Q1 (b)). Not applied to `helios_laptop` or the Pi yet (Q6 runs
-from `main` after the merge).**
+`resolve-v5` is built with R2 (Q1 (b)) and merged (#138). Applied to `helios_laptop` 2026-10-31
+(3,056 pages re-interpreted, 0 model calls; Gold 104,764 `current_menu` rows; Pi +4.0 ms/page). The
+Pi's restore waits for the owner's go.**
 Record: [2026-10-28-p8-21-page-structure.md](../reviews/2026-10-28-p8-21-page-structure.md).
 Architecture: [ADR-0021](./0021-page-structure-model-and-signal-hierarchy.md) D1 and D4 step 1
 (Q1–Q8 accepted 2026-10-26).
