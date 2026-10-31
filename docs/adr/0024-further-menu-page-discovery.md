@@ -1,8 +1,8 @@
 # ADR-0024: Further menu-page discovery — the page cap and the candidate terms
 
-**Status:** Proposed 2026-10-30 (session P8-21). Accepted in part 2026-10-31 by the owner: Q1–Q3 as
-recommended (D1 measures first); Q4 (a cost ceiling) had no recommendation and comes back with
-D1's numbers. D2 is not built.
+**Status:** Proposed 2026-10-30 (session P8-21). Accepted 2026-10-31 by the owner: Q1–Q3 (D1 measured
+first), then Q4–Q7 as recommended after D1 (cap 6; catering, drinks, beverages and bar as
+candidate terms; the page's own menu signal unchanged; no separate cost ceiling).
 **Date:** 2026-10-30
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
 **Amends (if accepted):** [ADR-0022](./0022-several-menu-pages-per-venue.md) points 2–3
@@ -193,3 +193,14 @@ politely into a scratch cache. No render, no database write.
     and it would need its own measurement.
 - **Q4 (cost ceiling).** With Q5 and Q6, the cost is about +8 % pages and +1,500 fetches per
   re-collection. *Recommended:* accept that, with no separate ceiling.
+
+### D2 decision (owner, 2026-10-31, "approved")
+
+- **Q5.** `MAX_MENU_PAGES` 3 → 6.
+- **Q6.** Catering, drinks, beverages and bar (with singular forms) become candidate terms only.
+  Wine is not added.
+- **Q7.** The page's own menu signal (`page_menu_signal`, `_MENU_TERMS`) is unchanged.
+- **Q4.** No separate cost ceiling (about +8 % pages and about 1,500 fetches per re-collection).
+
+The build is an `apps/discovery` change (`url_pipeline.MAX_MENU_PAGES`, `menu_url._CANDIDATE_TERMS`).
+It reaches stored data only at the next re-collection, which the owner schedules.
