@@ -2,8 +2,8 @@
 
 **Status:** Accepted 2026-10-27 by the owner, Q1–Q9 all as recommended (see
 [Owner decision](#owner-decision)). Proposed 2026-10-27 (session P8-20). Built in P8-20 (see
-[Build notes](#build-notes)); the re-collection on `helios_laptop` and the Pi is a separate,
-owner-approved step.
+[Build notes](#build-notes)), and applied on `helios_laptop` and the Pi on 2026-10-28 through
+2026-10-31 (see [Applied](#applied-2026-10-28-to-2026-10-31)).
 **Date:** 2026-10-27
 **Phase:** 6 deliverable "Several menu pages per venue, before the next re-collection"
 (ROADMAP.md; §7 item 7)
@@ -333,6 +333,54 @@ Built 2026-10-27 (P8-20), with no migration and no API change.
 - **Known gap.** When a venue's website changes, path keys saved for the old website are not
   re-checked (re-verification skips another website's keys, as for platform keys today).
   They stay resolved until a human or a later unit withdraws them. No path key exists yet.
+
+## Applied (2026-10-28 to 2026-10-31)
+
+Owner-approved. The code was a git archive of `main` 633ac61, and the Gold refresh used the
+#139 fix. Scripts and logs are under the main checkout's untracked `var/laptop-run/`
+(`run_p8_20.sh`, `run_p8_20_resume.sh`, `p8-20-run.log`).
+
+- **Dumps.**
+  - Before: `helios_laptop-2026-10-27-pre-p8-20.dump`, sha256 `fcc2a56b…1b928`.
+  - After the run: `helios_laptop-2026-10-29-post-p8-20.dump`, `08b3c2d0…281a`.
+  - After the fixed Gold refresh: `helios_laptop-2026-10-31-p8-20-pi.dump`, `5506a70b…e2c9`.
+- **`resolve_urls --render`**, 2026-10-28T01:21Z to 2026-10-29T02:12Z (about 25 h). It covered
+  every venue with a `<gers>` record (the `pages-v1` marker), plus about 3,270 menu-less venues
+  whose 20-day failure cooldown had expired; 3,166 were still in cooldown.
+  - 1,547 menu URLs found and 169 updated.
+  - 1,295 re-verified, 165 deferred, 8 withdrawn.
+  - 271 pages dropped as wrong-place, 235 as duplicates, and 272 over the cap.
+  - 120 menus look PDF-only, and there were 2,339 renders.
+  - The result is 907 `<gers>|<path>` records. The render handler logged ten non-fatal
+    `UnicodeError`s, from subrequest hosts that are invalid under IDNA (`render.py:565`).
+- **Menu-page fetch**, to 2026-10-29T03:39Z: 1,689 pages fetched, with 1,508 new Versions,
+  505 changed and 878 unchanged.
+- **Extraction.** The laptop GPU had failed ("GPU requires reset"), and llama.cpp silently
+  fell back to the CPU at about 10 tokens/s. The run was stopped at 03:52Z. After the owner
+  rebooted, it resumed on the GPU at 09:02Z and finished at 14:38Z:
+  - 2,005 pages (1,500 new, 505 changed; 950 reused saved answers);
+  - 135,497 items and 83,669 prices written;
+  - 37 empty, 0 failed, about 17 s per model page.
+- **Rescore:** 0 due. **Gold**, 14:38Z: 104,642 `current_menu` rows, up from 56,194; 1,860
+  families and 416 price-index rows.
+- **The cross-subject fix** (#139, see the build notes). The Gold refresh at
+  2026-10-31T02:13:48Z gives 103,563 rows:
+  - 1,018 `<gers>` families with 57,503 rows;
+  - 537 path-key families with 23,509 rows;
+  - 296 platform families with 22,551 rows.
+
+  Repeats across a venue's own-site pages went from 1,236 to 257, all of them a different
+  price set.
+- **Pi.** Restored from the last dump on 2026-10-31, with 223 s of downtime; the backup is at
+  `~/helios-backups/firsthelios-20261031-p8-20/`. All public endpoints return 200.
+- **Spot-checks.**
+  - Tex Mex Joe's (21459) serves 3 menus: `/blank` (`<gers>`, kept although `/lunch` now
+    ranks first), `/lunch` and `/services3`, 100 priced Gold rows where it had 28.
+  - Jefes (21183) stays empty: its only record is the `wrong_place` withdrawal, and its own
+    page sits behind a bot checkpoint.
+- **Observed for the frontend.** `GET /v1/venues/{id}/menu` orders menus by subject kind, then
+  source record. A venue's Establishment-scoped pages therefore come before an
+  Organization-scoped `<gers>` page, and the order is not page rank.
 
 ## References
 
