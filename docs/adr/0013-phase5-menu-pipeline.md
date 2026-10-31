@@ -3009,7 +3009,8 @@ Architecture: [ADR-0021](./0021-page-structure-model-and-signal-hierarchy.md) D1
     2. re-interpret every published `llm` page from saved answers (0 model calls);
     3. refresh Gold;
     4. a speed-only timing on the Pi.
-  - The Pi's data refresh is combined with P8-20's pending one (one restore). The §8 held-out
+  - The Pi's data refresh was to be combined with P8-20's, but P8-20 applied its own on
+    2026-10-31 before #138 merged, so `resolve-v5` gets its own Pi restore. The §8 held-out
     re-test owed for `resolve-v4` and `validator-v9`/`v10` is drawn next session from the page
     texts P8-20's re-collection produced, and covers `resolve-v5` too.
 

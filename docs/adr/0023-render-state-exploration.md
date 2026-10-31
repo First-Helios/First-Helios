@@ -141,3 +141,50 @@ sets for the Pi.
     - no login or forms, and bot checks are skipped.
 
     That is about 50 renders: the 13 `pending_render` sites and their menu candidates.
+
+## Step 0 results (2026-10-30)
+
+Run: `var/p8-21/coverage/step0.py` under `xvfb-run`, the production `BrowserRenderer`, 3 s per
+host, scratch output (`step0.log`, `step0-tabs.log`).
+
+**Plain render.**
+- 13 `pending_render` sites, 21 pages: 18 rendered, 3 refused.
+- The 3 refusals are `redirect_refused`: the site redirects to another host, which the renderer
+  doesn't follow, by design.
+- Laptop render time: 12.9 s median, 49.7 s max (S6f: 13.9 s).
+- Two script-shell homepages render into full priced menus: gotjiskitchen.com (15 priced
+  blocks) and hastalalunatacos.com (16). Both menus sit on the homepage itself, which is
+  ADR (d)'s gap.
+- hanghartatx.com's menu pages and the Chipotle location page show a few prices. The rest
+  render text without prices.
+
+**The D2 prototype (clicks).**
+- 18 rendered pages, plus the 3 reviewed pages with tab states.
+- Controls in scope on 5 pages. Clicks revealed **4 new blocks in all, and 0 new priced
+  blocks**. 0 pages navigated away.
+- Exploration time: 3.6 s median, 25.8 s max.
+
+**A labelling correction found on the way.** The static coverage baseline listed 4
+"script-loaded" tab states. Three of them (5th Street's Drinks, Brix & Ale's Dinner and
+Dessert) are hidden panels in the static HTML. The first-pass packets showed only each page's
+first 90 blocks. Those fixtures are corrected, and tab-state coverage is 0.833 (5 of 6). Only
+Café Blue's wine page lacks its items.
+
+**Coverage with the renderer on** (`run.py` with `P821_RENDER=1`, all 29 reviewed sites):
+unchanged.
+- Venue coverage 0.391 and state coverage 0.230, as static.
+- Page precision falls from 0.600 to 0.462: the renders collect extra, unexpected pages.
+- Discovery renders at most 2 JavaScript-only candidates, and only when nothing verified. The
+  two menus a render reveals are on homepages, which are never candidates.
+
+**Against D1's bar** (interaction raises state coverage on the rendered set by ≥ 0.10): **not
+met.** On these sites, tab and accordion panels ship in the HTML, and the clicks found nothing
+the plain render didn't.
+
+**Recommendation from step 0:**
+- Don't build D2 now.
+- The measured gain is the plain render of script-shell pages, which the pipeline already has.
+  Its gap is *which* pages get rendered: a homepage menu is never a candidate (ADR (d)), and
+  only 2 JavaScript-only candidates are rendered per site, and only when nothing verifies.
+- Revisit D2 if the coverage set grows and a site class with click-loaded menus appears
+  (ordering widgets are network-response sources and stay out).

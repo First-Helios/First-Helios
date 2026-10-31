@@ -23,24 +23,27 @@ untracked, under `var/p8-21/coverage/` in this worktree.
 - **Coverage is scored apart from extraction.** A page that is never collected is counted
   here, not as an extraction miss. The extraction harness (`evaluation.py`) still owns recall,
   wrong associations, false rejects and invented items.
-- **Real sites, 19 reviewed** (static fetch, production verifier):
+- **Real sites, 29 reviewed** (production verifier; final, 2026-10-30). That's 19 labelled from
+  static pages, plus 10 from renders (ADR-0023 step 0). Roppolo's is a wrong-place venue (owner).
 
-  | Measure | All 19 | dev (6) | held (13) |
-  |---|---|---|---|
-  | Venue coverage (≥ 1 expected page collected) | **0.688** (11 / 16) | 0.667 | 0.700 |
-  | Complete coverage (every expected page) | **0.375** | 0.333 | 0.400 |
-  | Page recall | **0.319** (15 / 47) | 0.333 | 0.314 |
-  | Page recall without Chick-fil-A's 17 category pages | 0.467 (14 / 30) | | |
-  | Page precision (collected pages that are expected) | 0.714 | 0.833 | 0.667 |
-  | Collected pages that are another location's | 0.095 | 0 | 0.133 |
-  | No-menu sites left empty | 3 / 3 | | |
-  | State coverage | **0.280** | | |
-  | — static / tab / script / image | 0.343 / 0.667 / 0 / 0 | | |
-  | Requests (live, beyond the cache) | 89 | | |
+  | Measure | All 29 | dev (10) | held (19) | With the renderer (all 29) |
+  |---|---|---|---|---|
+  | Venue coverage (≥ 1 expected page collected) | **0.391** (9 / 23) | 0.300 | 0.462 | 0.391 |
+  | Complete coverage (every expected page) | **0.217** | 0.200 | 0.231 | 0.217 |
+  | Page recall | **0.214** (12 / 56) | 0.211 | 0.216 | 0.214 |
+  | Page precision (collected pages that are expected) | 0.600 | 0.800 | 0.533 | 0.462 |
+  | Collected pages that are another location's | 0.200 (4 / 20) | 0 | 0.267 | 0.154 |
+  | No-menu sites left empty | 5 / 6 | | | 5 / 6 |
+  | State coverage | **0.230** | 0.190 | 0.250 | 0.230 |
+  | — static / tab / script / image | 0.257 / 0.833 / 0 / 0 | | | same |
 
-- **13 more real sites are labelled but not scored** (`pending_render`): their homepage or menu
-  page is a script shell, so the expected pages and states can't be checked without a render.
-  **2 sites are `blocked`**: they answer 403 to the Helios User-Agent.
+  - **Turning the renderer on finds no expected page.** It only collects more unexpected pages.
+    The two menus a render reveals sit on homepages, which discovery never tries (ADR (d)).
+  - The first scoring, before the render labels and the Roppolo's ruling, was on 19 sites:
+    venue coverage 0.688, page recall 0.319.
+- **5 real sites are not scored:**
+  - 2 are `blocked`: they answer 403 to the Helios User-Agent;
+  - 3 are `render_refused`: they redirect to another host, which the renderer doesn't follow.
 - **Synthetic sites, 10** (one per kind; the test's assertions record today's coverage):
 
   | Site kind | Collected | Note |
@@ -118,21 +121,22 @@ page's blocks.
 |---|---|---|
 | A further page outside the lexicon or past the cap | Café Blue kids and drinks; Chick-fil-A's categories; vcafe's ordering page | 29 of 39 expected pages missed on 8 separate-pages sites (overlaps the image row) |
 | Image menus | El Jacalito (6 pages), Cap City, Los Chilakillers `/menu`, La Señora's banners | 4 sites, 9 pages missed |
-| Menu on the homepage | Tony C's | 1 site |
+| Menu on the homepage | Tony C's (static), Got Ji's Kitchen and Hasta la Luna (script shells; the render shows the menu) | 3 sites |
 | A menu page with no menu word | Heart of Texas Bakery's flavor list | 1 site |
-| A tab panel loaded by script | 5th Street's Drinks, Brix & Ale's Dinner and Dessert, Café Blue's Wine | 4 states uncovered |
-| Another location's menu collected | Roppolo's West Campus, the taco food truck | 2 of 21 collected pages |
-| Script-shell sites (not scored) | 13 `pending_render` | 13 of 34 sites (38 %) |
+| A tab panel loaded by script | Café Blue's Wine (5th Street's and Brix & Ale's tabs are hidden panels in the HTML: a first-pass packet artifact, corrected) | 1 state |
+| Menu not visible even after a render | Hang Hart (heading + order button), Pollos, Shugabee's, Teddy V, Chipotle, Sbarro | 6 sites |
+| Another location's menu collected | Roppolo's (wrong place: 3 pages), the taco food truck | 4 of 20 collected pages |
+| Parked domain | G'raj Mahal, Nland Surf Park (both GoDaddy parking pages after a render) | 2 sites (left empty: correct) |
+| Render refused (redirect to another host) | 123 Noodles, Austin Chinatown, Mojo's | 3 of 34 |
 | Bot block | 2 `blocked` | 2 of 34 |
 
-Cost: 89 live requests for the 19 scored sites (most pages were cached by the collector), no
-render.
+Cost: static, 32 live requests for the 29 scored sites (most pages cached by the collector).
+Step 0: 24 renders, 12.9 s median.
 
 ## 3. What this baseline does not measure
 
-- **Rendered states.** The 13 `pending_render` sites and the `script` states need the renderer.
-  After P8-20's re-collection, its `--render` results in `var/site-cache` can be read (read-only)
-  to finish their labels, or a render pass can be scheduled.
+- **Click-loaded states beyond this set.** Step 0 rendered the 13 script-shell sites and probed
+  ARIA clicks (ADR-0023, step 0 results). No click revealed a price here. A larger set might.
 - **Extraction on the collected pages.** Item-level labels per fixture page were not made. The
   extraction numbers stay the dev harness's.
 - **Small n.** 19 scored sites; every rate here has a wide interval. This is a baseline to
