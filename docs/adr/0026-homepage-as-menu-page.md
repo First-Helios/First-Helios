@@ -68,6 +68,14 @@ except the render sample below.
 
   The coverage set's two render-revealed homepage menus (Got Ji's, Hasta la Luna) are not
   typical of the population.
+- **The coverage set with the rule built** (29 reviewed sites, offline): no site changes, and
+  venue coverage stays 0.391.
+  - Tony C's prints its menu on the homepage, but its `/menu` and `/concession-menus` pages
+    verify (both labelled not the venue's menu), so a last resort never fires there. Only
+    option C below would reach it.
+  - Got Ji's and Hasta la Luna need a render (D).
+
+  The gain shows in the population, not in this 29-site set.
 
 ### What is not measured
 
@@ -102,7 +110,7 @@ except the render sample below.
 |---|---|---|
 | **A. Status quo** (root homepage never a candidate) | No new wrong pages | 32 venues keep no menu although their homepage prints it (+21 with featured items) |
 | **B. Last-resort homepage, static (chosen)** | +32 full menus (+2.6 % of venues with a menu), +21 featured-item pages, no change where a page verifies | 12 wrong pages of 65 kept (0.82 precision in this stratum) |
-| **C. Homepage always a candidate** | Also reaches the homepage when a page verifies | Adds teasers beside real menus (51 such homepages pass among venues with a menu) |
+| **C. Homepage always a candidate** | Also reaches the homepage when a page verifies (Tony C's) | Adds teasers beside real menus (51 such homepages pass among venues with a menu) |
 | **D. B plus rendering JS-only homepages** | Reaches script-shell homepages | 0 of 34 sampled pass; about 15 s per render, at most 530 renders on the laptop |
 | **E. B with a stricter bar for homepages** | Would cut wrong pages | No generic signal measured separates them (probabilities and price counts interleave) |
 
