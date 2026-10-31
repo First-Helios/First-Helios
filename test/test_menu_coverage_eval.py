@@ -354,7 +354,7 @@ def _collect(tmp_path: Path, name: str) -> tuple[Counter[str], list[Captured]]:
 
 # (site, pages found, states covered, captured, other-location pages captured)
 BASELINE = [
-    ("separate", 2, 2, 2, 0),  # lunch and dinner; "Drinks" is no candidate term (ADR-0022 Q3)
+    ("separate", 3, 3, 3, 0),  # lunch, dinner and drinks ("Drinks" a candidate term, ADR-0024 Q6)
     ("tabs", 1, 2, 1, 0),  # a hidden tab panel is in the HTML, so it is collected
     ("tabs_script", 1, 1, 1, 0),  # the script-loaded tab is not
     ("accordion", 1, 1, 1, 0),

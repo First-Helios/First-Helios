@@ -124,8 +124,9 @@ WITHDRAW_REASONS = frozenset(
 )
 WITHDRAW_METHOD = "menu-url-reverify"
 # Several own-site menu pages per venue (ADR-0022): at most this many, the first
-# keyed ``<gers>`` and each other ``<gers>|<path>``.
-MAX_MENU_PAGES = 3
+# keyed ``<gers>`` and each other ``<gers>|<path>``. (ADR-0024 Q5) 6, not 3: 61-71 % of
+# the 4th to 6th verified pages are distinct menus; past that, other locations' grow.
+MAX_MENU_PAGES = 6
 # Own-site payloads written by the several-pages discovery carry this marker; a
 # ``<gers>`` record without it is re-discovered once (ADR-0022 point 8).
 PAGES_VERSION = "pages-v1"

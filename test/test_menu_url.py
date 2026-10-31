@@ -374,6 +374,19 @@ def test_meal_period_links_are_candidates_but_not_page_signals() -> None:
     ) == ["https://k.com/brunch"]
 
 
+def test_drink_and_catering_links_are_candidates_but_not_page_signals() -> None:
+    # ADR-0024 Q6: candidates only; the page check still needs a menu word, and wine stays out.
+    assert looks_like_menu("Catering", "/catering")
+    assert looks_like_menu("Drinks", "/x")
+    assert looks_like_menu("", "/beverages/")
+    assert looks_like_menu("Tequila / Drinks", "/bar-and-drinks-tequila/")
+    assert not looks_like_menu("Wine List", "/wine-list")
+    assert not looks_like_menu("Catering Services", "/catering-services"), (
+        "the blocklist still vetoes"
+    )
+    assert not page_menu_signal("<title>Catering</title>", "https://k.com/catering")
+
+
 def test_a_deep_link_is_a_page_not_a_site_root() -> None:
     assert is_deep_link("https://smorefood.com/order-online/jefes-austin")
     assert is_deep_link("https://www.chain.com/locations/austin/")
