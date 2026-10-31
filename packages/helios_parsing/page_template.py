@@ -40,8 +40,10 @@ induction, with the model's accepted output as its seeds), on the ``llm`` stream
    priced inside another title's record moves onto that title, when the record passes the
    price-slot test (ADR-0021 Q3 (a)): it holds the page's price slot, or the page's records
    normally hold one and it lacks it.
-   - **Choice and label lines** become the title's variants, one row per choice; the
-     same-block seeds such lines form no longer count as an item pattern.
+   - **Choice and label lines** become the title's variants, one row per choice, only in a
+     record that prints a choice line ("Chicken / Bistec $14.99"; Amendment 33 Q1 (b)): a
+     heading card prints one dish per line, and its lines stay items. The same-block seeds
+     moved lines form no longer count as an item pattern.
    - **RE-NAME:** a row named by a description or an option list takes the title's name; a
      short line that is no description keeps its name (Q8, a brand title).
    - **ATTACH:** a labelled price in the record no accepted row cites is given to the title.
@@ -204,10 +206,41 @@ def _anchors(structure: PageStructure, record: Record) -> bool:
     return record.slot or structure.slotted
 
 
-def _anchored(structure: PageStructure | None, n: int) -> Record | None:
-    """The anchored record holding block ``n`` (not as its title), if any."""
-    record = structure.record(n) if structure is not None else None
-    return record if record is not None and _anchors(structure, record) else None  # type: ignore[arg-type]
+def _choice_card(
+    structure: PageStructure,
+    record: Record,
+    blocks: Sequence[Block],
+    prices: Sequence[Sequence[PriceToken]],
+) -> bool:
+    """(Amendment 33 Q1 (b)) The record prints a choice line: a label line whose label is a
+    choice list ("Chicken / Bistec / Pastor $14.99"). A dish with options prints its choices;
+    a heading card ("A La Carte": "• Al Pastor $3.75", "• Birria $4.00") prints one dish per
+    line, and its lines stay items."""
+    for j in record.members:
+        if structure.shapes[j] != LABEL:
+            continue
+        label = blocks[j].text[: min(t.start for t in prices[j])].strip(" -–—:|$•·")
+        if len(_choices(label)) > 1:
+            return True
+    return False
+
+
+def _anchored(
+    structure: PageStructure | None,
+    n: int,
+    blocks: Sequence[Block],
+    prices: Sequence[Sequence[PriceToken]],
+) -> Record | None:
+    """The anchored record holding block ``n`` (not as its title), if any; for a label line,
+    only a record that prints a choice line (:func:`_choice_card`)."""
+    if structure is None:
+        return None
+    record = structure.record(n)
+    if record is None or not _anchors(structure, record):
+        return None
+    if structure.shapes[n] == LABEL and not _choice_card(structure, record, blocks, prices):
+        return None
+    return record
 
 
 def _record_rewrite(
@@ -259,7 +292,7 @@ def _record_rewrite(
     for k in kept:
         v, pe = verdicts[k], verdicts[k].price_evidence
         n = _key(k, verdicts, index)[0]
-        record = _anchored(structure, n)
+        record = _anchored(structure, n, blocks, prices)
         if record is None or v.decision != "accept" or pe is None or k in keep:
             continue
         t, p = record.title, index[pe.block_id]
@@ -420,7 +453,9 @@ def induce(
         seeds = [
             (n, p)
             for n, p in seeds
-            if not (n == p and structure.shapes[n] == LABEL and _anchored(structure, n))
+            if not (
+                n == p and structure.shapes[n] == LABEL and _anchored(structure, n, blocks, prices)
+            )
         ]
     if len(seeds) < MIN_SEEDS:
         return replace(ungated, seeds=len(seeds))

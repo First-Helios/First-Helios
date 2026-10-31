@@ -2985,12 +2985,25 @@ showed on dev:
 
 ## Amendment 33 (2026-10-28, proposed): the [5d] record rewrite on the page-structure model (`resolve-v5`)
 
-**Status: Proposed 2026-10-28 (P8-21). Built on the branch for measurement (`resolve-v5`); a
-stage bar regresses, so it stops for the owner's review. Not applied to `helios_laptop` or the
-Pi.**
+**Status: Proposed 2026-10-28 (P8-21). Accepted 2026-10-30 by the owner, with the rulings below.
+`resolve-v5` is built with R2 (Q1 (b)). Not applied to `helios_laptop` or the Pi yet (Q6 runs
+from `main` after the merge).**
 Record: [2026-10-28-p8-21-page-structure.md](../reviews/2026-10-28-p8-21-page-structure.md).
 Architecture: [ADR-0021](./0021-page-structure-model-and-signal-hierarchy.md) D1 and D4 step 1
 (Q1–Q8 accepted 2026-10-26).
+
+**Owner rulings (2026-10-30, "accept all recommendations"):**
+- **Q1 (b).** Build R2: a record's label lines move onto its title only when the record prints
+  a choice line. It is built (`page_template._choice_card`), and the build equals the measured
+  patch (record section 3).
+- **Q2 (a).** The section bar's one page (held:12bf8e6a3406) is a known [5c]-gate interaction,
+  revisited in ADR-0021 step 2. It doesn't block v5.
+- **Q3.** All-or-nothing per record and no-harm stay part of `resolve-v5`.
+- **Q5.** Unlabelled multiple prices stay out (Amendment 19 2(b)).
+- **Open (no recommendation was made):**
+  - Q4: whether a later amendment brings downgraded rows into reach;
+  - Q6: the apply sequence. It writes `helios_laptop` and the Pi, which this session kept
+    read-only, so it is confirmed with the owner separately, after the merge.
 
 **Why.** ADR-0021's step 1: one record notion for [5d], and one rule family for F2 (RE-NAME),
 F4 (ATTACH) and choice lines (santopatio's Nachos).

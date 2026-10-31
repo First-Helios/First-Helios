@@ -160,6 +160,18 @@ def test_choice_lines_become_one_variant_per_choice() -> None:
     assert not any(r[0].startswith(("Chicken", "Shrimp")) for r in out)
 
 
+def test_a_heading_card_without_a_choice_line_keeps_its_items() -> None:
+    # santopatio's "A La Carte": one dish per line under a card title, on a slotted page;
+    # no line is a choice list, so the lines stay items (Amendment 33 Q1 (b))
+    card = _card("A La Carte", "• Al Pastor $3.75", "• Birria $4.00", "• Carnitas $3.75")
+    rows = [*BASE, Row("Al Pastor", "3.75"), Row("Birria", "4.00"), Row("Carnitas", "3.75")]
+    tpl, _ = _run(_page(card), rows)
+    assert tpl.anchored == ()
+    out = _final(_page(card), rows)
+    assert {r[0] for r in out if r[3] == "accept"} >= {"Al Pastor", "Birria", "Carnitas"}
+    assert not any(r[0] == "A La Carte" for r in out)
+
+
 def test_label_lines_on_a_page_whose_cards_lack_a_slot_are_left() -> None:
     # half the dish cards print their price in the slot, half in a line: the page has no
     # normal slot, so "Sauces" (no slot) may be a heading over items, and nothing moves

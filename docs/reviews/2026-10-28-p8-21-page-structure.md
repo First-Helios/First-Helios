@@ -9,6 +9,12 @@ Scope:
   `validator-v10`, `resolve-v4`. The build is `resolve-v5` (commits 290aabf, 1a3077d).
 - **Dev.** The gap audit's 793 pages (P8-16's loader). Results are reported on the 420
   item-labelled pages (ADR-0021 Q6); the 331 of them with a priced gold item are scored.
+  After P8-20's re-collection (2026-10-28/29), 29 more labelled page texts gained saved
+  answers (P5-31's census set, 3 of them scorable), so a fresh run loads 822. Every comparison
+  here uses the pages present in both runs, which is the original 793.
+- **Build check (2026-10-30).** After the owner's ruling, R2 is built into `resolve-v5`. Its
+  verdicts equal the measured R2 patch on every page (0 of 1,656 differ), and so does
+  invariance. The "v5 + R2" column below is the build.
 - **Labels.** labels-v10.2 (section 1), confirmed by the owner before measuring.
 - **Corpus.** P8-11's 863 page texts, with saved production answers.
 - **No model calls, no database, no fetch.** No §8 claim: every number is dev or corpus.
