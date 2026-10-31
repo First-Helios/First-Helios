@@ -358,7 +358,7 @@ class BrowserRenderer:
         if host not in self._public:
             try:
                 addresses = [host] if _is_ip(host) else list(self._resolve(host))
-            except OSError:
+            except (OSError, UnicodeError):  # UnicodeError: a label IDNA can't encode
                 addresses = []
             self._public[host] = bool(addresses) and all(is_public_address(a) for a in addresses)
         return self._public[host]

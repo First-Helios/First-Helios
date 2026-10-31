@@ -702,6 +702,19 @@ def test_a_non_public_page_is_refused_before_the_browser_starts() -> None:
     assert launched == []
 
 
+def test_a_host_idna_cannot_encode_is_refused_not_raised() -> None:
+    # P8-20: getaddrinfo raised UnicodeError ("label empty or too long") in a CDP callback.
+    def resolve(host: str) -> list[str]:
+        raise UnicodeError("label empty or too long")
+
+    def launch() -> BrowserSession:
+        raise AssertionError("the browser must not start")
+
+    renderer = BrowserRenderer(user_agent=_TOKEN, launch=launch, resolve=resolve)
+    result = renderer.render("https://bad..example/menu", pace=lambda _h, _d: None)
+    assert isinstance(result, CaptureFailure) and result.reason_code == "non_public_host"
+
+
 def test_headed_chromium_needs_a_display(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DISPLAY", raising=False)
     with pytest.raises(RuntimeError, match="xvfb-run"):

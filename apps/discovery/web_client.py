@@ -449,7 +449,7 @@ class SiteFetcher:
             return is_public_address(host)
         try:
             addresses = list(self._resolve(host))
-        except OSError:
+        except (OSError, UnicodeError):  # UnicodeError: a label IDNA can't encode
             return False
         return bool(addresses) and all(is_public_address(a) for a in addresses)
 
