@@ -26,6 +26,12 @@ node carries the Capture-targeted Evidence of the text it states:
   prices a variant of that label (the validator checked the label is printed
   with the price). A row without a label prices the item itself; several such
   prices stay separate price rows, since nothing on the page names them.
+- **One printed price, several choices** (ADR-0013 Amendment 34). A printed
+  price span prices an item once without a label, or once per distinct label:
+  a choice line ("Chicken, Bistec or Pastor 14.99") is one variant per choice,
+  each citing the line's one span. A span that priced the item without a label
+  prices no labelled variant, and the other way round. The price index counts
+  each printed span once (ADR-0007 Amendment 4).
 - **Prices.** Integer minor units (USD), with the price span and the name span
   as Evidence; a price [5b] accepted (``resolve.resolved``) is marked, so the
   Menu writer stores it with its own confidence.
@@ -92,7 +98,8 @@ class _Item:
     evidence: Evidence
     prices: list[ShapedPrice] = field(default_factory=list)
     variants: dict[str, tuple[str, Evidence, list[ShapedPrice]]] = field(default_factory=dict)
-    seen: set[str] = field(default_factory=set)  # price locators, one row per printed price
+    # price locator -> the variant keys it priced ("" = no label), Amendment 34
+    seen: dict[str, set[str]] = field(default_factory=dict)
 
 
 def _norm(text: str) -> str:
@@ -169,12 +176,15 @@ def shape(
         if v.decision != "accept" or v.price_evidence is None:
             continue
         amount = parse_amount(row.amount)
-        if amount is None or v.price_evidence.locator in item.seen:
-            continue
-        item.seen.add(v.price_evidence.locator)
-        price = ShapedPrice(int(amount * 100), (v.price_evidence, item.evidence), resolved(v))
         label = _clip(row.variant or "")
         variant_key = _norm(label)
+        priced = item.seen.get(v.price_evidence.locator)
+        if amount is None or (
+            priced is not None and (not variant_key or "" in priced or variant_key in priced)
+        ):
+            continue
+        item.seen.setdefault(v.price_evidence.locator, set()).add(variant_key)
+        price = ShapedPrice(int(amount * 100), (v.price_evidence, item.evidence), resolved(v))
         if not variant_key:
             item.prices.append(price)
             continue

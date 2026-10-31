@@ -64,8 +64,8 @@ no longer holds the survivor back.
 
 :func:`llm_stream` is the ``llm`` stream's whole post-model interpretation, in order:
 ``rows_of`` → [5]+[5b] → [5d] → [5]+[5b] again → duplicate removal → [5c]. Part of
-``resolve.RESOLVER_VERSION`` ("resolve-v5" = [5b] + [5c] + [5d] with the record rewrite +
-duplicate removal).
+``resolve.RESOLVER_VERSION`` ("resolve-v6" = [5b] + [5c] + [5d] with the record rewrite +
+duplicate removal, + one variant per choice in ``menu_shape``).
 """
 
 from __future__ import annotations
