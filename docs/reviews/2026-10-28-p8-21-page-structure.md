@@ -240,3 +240,45 @@ PYTHONPATH=. .venv/bin/python var/p8-21/trace.py e6942e6d1e2a 165 178   # santop
 
 `v4-final.jsonl` is `v4-l102.jsonl` plus the corpus lines of `v4-l101.jsonl` (labels don't
 touch the corpus).
+
+## 6. Applied to `helios_laptop` (2026-10-31, owner go-ahead: Amendment 33 Q6, after #138 merged)
+
+Main's code at 66d4bba (`resolve-v5`). Scripts: `var/p8-21/laptop/` (P8-16's `reinterp.py` and
+`counts.py`, with the version check set to `resolve-v5`).
+1. **Backup:** `var/laptop-run/helios_laptop-2026-10-31-pre-p8-21.dump` (74 MB, sha256
+   `2accc69f…`).
+2. **Dry run**, read-only:
+   - 3,056 pages due, all `reinterpret`, under the 127-character method version;
+   - 3,050 have saved answers.
+3. **Re-interpretation from saved answers:**
+   - 3,056 of 3,056 pages, 0 failed, **0 model calls**;
+   - 55 min, the SoC peaking at 99 °C;
+   - 205,027 items and 127,252 prices written;
+   - [5d] on 1,504 gated pages: 6,044 added, 3,809 dropped, 350 renamed, 98 attached,
+     1,081 duplicates removed.
+4. **Gold refresh** (`apps.gold.refresh`, effective 2026-10-31T04:05:35Z):
+
+   | | Before (P8-20's refresh) | After |
+   |---|---|---|
+   | `current_menu` rows | 103,563 | **104,764** |
+   | Items / variants | 95,951 / 7,612 | 96,902 / 7,862 |
+   | Distinct items | 99,949 | 100,993 |
+   | Sections / one-item sections | 15,946 / 3,238 | 16,084 / 3,241 |
+   | Venues with a menu | 1,478 | 1,483 |
+   | Price-index rows | 416 | 416 |
+
+5. **Pi timing, speed only** (`var/p8-21/pi/`; a temporary kit in `~/p8-21-timing`, deleted
+   afterwards; one A76 core, `taskset -c 4`, 2.256 GHz, 34 °C; 863 page texts, best of 3; no
+   database, no model):
+
+   | | Median | p95 | Max | Total |
+   |---|---|---|---|---|
+   | resolve-v4 (`llm_stream`, 633ac61) | 156.4 ms | 826 ms | 4.19 s | 231 s |
+   | resolve-v5 (66d4bba) | 162.1 ms | 859 ms | 4.17 s | 239 s |
+   | Added by v5 | **+4.0 ms** | +24 ms | +0.72 s | +8.5 s |
+
+   On the 478 gated pages, v5 adds a median of +5.4 ms (p95 +34.6 ms).
+
+**Not yet done:** restoring the Pi (firsthelios.com) from the laptop. That also deploys
+`main`'s backend, which includes #137's API changes (the other session's), so it waits for the
+owner's explicit go.
