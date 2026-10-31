@@ -754,8 +754,11 @@ re-runnable from stored evidence.
   - **First an ADR** (record key per page, which pages count, duplicates across pages, one
     merged menu or one per page). Stop for review before building (CLAUDE.md).
     [ADR-0022](./docs/adr/0022-several-menu-pages-per-venue.md) accepted 2026-10-27, Q1–Q9 as
-    recommended, and built (P8-20): about 600 venues gain a second page, about 800 pages at a
-    cap of 3. The re-collection on it is next.
+    recommended, built (P8-20, #136; cross-subject duplicate fix #139), and **applied**
+    2026-10-28 to 2026-10-31. The re-collection on `helios_laptop` added 907 further-page
+    records, and Gold went from 56,194 to 103,563 `current_menu` rows. The Pi now serves it.
+    Tex Mex Joe's shows its 3 pages. Jefes stays empty: its own page sits behind a bot
+    checkpoint. Figures are in the ADR's "Applied" section.
 
 **Done when:** Menu Silver and Gold can be reconstructed from replay bundles,
 Bronze provenance, and durable Identity decisions without changing those
