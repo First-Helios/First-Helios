@@ -143,6 +143,15 @@ def test_page_signals_read_links_markup_and_prices() -> None:
     assert values["log_article_tags"] == math.log1p(2)
 
 
+def test_page_signals_skip_an_href_urllib_cannot_parse() -> None:
+    # A stray "[" makes urljoin raise "Invalid IPv6 URL": page markup, never fatal.
+    html = '<p><a href="http://[broken/x">x</a> <a href="/menu/lunch">Lunch</a></p>'
+    values = dict(
+        zip(PAGE_SIGNAL_NAMES, page_signals(html, "https://k.com/menu", segment(html)), strict=True)
+    )
+    assert values["child_link_share"] == 1.0 / 2  # the parseable child link, of both anchors
+
+
 def test_page_signals_caps_and_other_markup() -> None:
     links = "".join(f'<a href="/p{i}">x</a> ' for i in range(20))
     html = (

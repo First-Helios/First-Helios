@@ -108,6 +108,16 @@ def _fetcher(
     )
 
 
+def test_a_host_idna_cannot_encode_is_not_public(tmp_path: Path) -> None:
+    # getaddrinfo raises UnicodeError, not OSError, for an empty or over-long label.
+    def resolve(host: str) -> Iterable[str]:
+        raise UnicodeError("label empty or too long")
+
+    with _fetcher(tmp_path, {}, resolve=resolve) as fetcher:
+        assert fetcher.fetch("https://bad..example/") is None
+        assert fetcher._failure_reason == "non_public_host"  # noqa: SLF001 - the reason
+
+
 # -- cache ---------------------------------------------------------------------
 
 
