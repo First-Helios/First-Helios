@@ -12,7 +12,11 @@ amounts) and section-level prices do not. Rules (ADR-0007 Amendment 1):
   is also the menu URL of another placed venue's Organization family (a shared
   chain or platform menu): those are left out, never fanned out (ADR-0005 §11).
 * **Weighting.** Each venue weighs one. Per group, a venue's sample is the median
-  of its priced rows; the percentiles are over those venue medians. Both use
+  of its printed prices: priced rows of one source record that cite the same
+  Evidence (a choice line's variants, one dish filed under two sections) count
+  once (ADR-0007 Amendment 4). ``priced_count`` still counts rows, so a drawn
+  area's items walk returns ``priced_count`` rows (ADR-0020). The percentiles are
+  over those venue medians. Both use
   ``percentile_disc``, so every statistic is an observed integer amount (the
   lower middle value for an even count); no float touches a price.
 * **Categories.** Only ``all`` today; ``course`` arrives as another
@@ -309,22 +313,35 @@ _AGGREGATE = """
     indexed AS (
         SELECT p.venue_id, p.area_key, p.cell_lat, p.cell_lon, p.via_organization,
                'all'::text AS category_kind, 'all'::text AS category_key,
-               c.currency_code, c.price_state, c.amount_minor, c.price_observed_at
+               c.currency_code, c.price_state, c.amount_minor, c.price_observed_at,
+               c.source_record_id, c.price_evidence_ids
         FROM gold.current_menu c
         JOIN placed p
           ON p.subject_id = c.subject_id AND p.subject_kind = c.subject_kind
          AND p.source_record_id = c.source_record_id
         WHERE c.target_kind IN ('item', 'variant')
     ),
-    venue AS (
+    spans AS (
+        -- One printed price once: a record's priced rows citing the same Evidence (a
+        -- choice line's variants). Their amounts are the one printed amount.
         SELECT area_key, category_kind, category_key, currency_code, venue_id,
                bool_or(via_organization) AS via_organization,
-               percentile_disc(0.5) WITHIN GROUP (ORDER BY amount_minor) AS venue_median,
-               count(*) AS priced_count,
+               min(amount_minor) AS amount_minor, count(*) AS row_count,
                min(price_observed_at) AS oldest_observed_at,
                max(price_observed_at) AS newest_observed_at
         FROM indexed
         WHERE price_state = 'priced'
+        GROUP BY area_key, category_kind, category_key, currency_code, venue_id,
+                 source_record_id, price_evidence_ids
+    ),
+    venue AS (
+        SELECT area_key, category_kind, category_key, currency_code, venue_id,
+               bool_or(via_organization) AS via_organization,
+               percentile_disc(0.5) WITHIN GROUP (ORDER BY amount_minor) AS venue_median,
+               sum(row_count) AS priced_count,
+               min(oldest_observed_at) AS oldest_observed_at,
+               max(newest_observed_at) AS newest_observed_at
+        FROM spans
         GROUP BY area_key, category_kind, category_key, currency_code, venue_id
     ),
     priced AS (

@@ -408,7 +408,8 @@ def _shop(session: Session, point: Point, amounts: list[int]) -> None:
                 "price_state": "priced",
                 "amount_minor": amount,
                 "price_observed_at": OBSERVED + timedelta(days=position),
-                "price_evidence_ids": [record.evidence_id],
+                # The record's Evidence, then a printed span of the row's own (Amendment 4).
+                "price_evidence_ids": [record.evidence_id, 10**12 + position],
                 "content_evidence_ids": [],
                 "organization_claim_count": 0,
                 "refreshed_at": E,

@@ -14,7 +14,7 @@ import json
 import os
 import re
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -314,12 +314,49 @@ def test_shape_grounds_sections_groups_variants_and_keeps_downgrades() -> None:
     ]
 
 
+def test_shape_stores_one_variant_per_choice_of_one_printed_price() -> None:
+    # Amendment 34: a choice line's labels share its one printed price span.
+    blocks = segment(
+        "<h2>Nachos</h2><p>Nachos</p><p>Chicken, Bistec or Pastor 14.99</p><p>Shrimp 16.99</p>"
+        "<h2>Sides</h2><p>Rice</p><p>Small or Large 3.00</p>"
+    )
+    ids = {b.text: b.id for b in blocks}
+
+    def row(item: str, amount: str, variant: str | None, section: str) -> Row:
+        return Row(item, amount, variant=variant, section=section, claimed_block=ids[item])
+
+    rows = [
+        *(row("Nachos", "14.99", choice, "Nachos") for choice in ("Chicken", "Bistec", "Pastor")),
+        row("Nachos", "14.99", "Chicken", "Nachos"),  # the same label again: one row
+        row("Nachos", "16.99", "Shrimp", "Nachos"),
+    ]
+    verdicts = [v for v in validate(blocks, rows).verdicts if v.decision == "accept"]
+    (nachos_section,) = shape(blocks, verdicts)
+    (nachos,) = nachos_section.items
+    assert [(v.label, [p.amount_minor for p in v.prices]) for v in nachos.variants] == [
+        ("Chicken", [1499]),
+        ("Bistec", [1499]),
+        ("Pastor", [1499]),
+        ("Shrimp", [1699]),
+    ]
+    assert len({v.prices[0].evidence for v in nachos.variants[:3]}) == 1  # one span cited
+
+    # A span never prices the item both with and without a label, in either order. The
+    # validator downgrades such a row (price_belongs_to_other_variant); shape holds anyway.
+    (small,) = validate(blocks, [row("Rice", "3.00", "Small", "Sides")]).verdicts
+    bare = replace(small, row=replace(small.row, variant=None))
+    ((labelled,),) = [s.items for s in shape(blocks, [small, bare])]
+    assert labelled.prices == () and [v.label for v in labelled.variants] == ["Small"]
+    ((unlabelled,),) = [s.items for s in shape(blocks, [bare, small])]
+    assert [p.amount_minor for p in unlabelled.prices] == [300] and unlabelled.variants == ()
+
+
 def test_pipeline_version_names_every_component_within_the_column() -> None:
     spec = load_manifest()["Qwen3-4B-Instruct-2507-Q4_0"]
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm == (
         "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;"
-        "repairs-v9;validator-v10;resolve-v5;classifier-v2"
+        "repairs-v9;validator-v10;resolve-v6;classifier-v2"
     )
     assert len(version.llm) <= 128
     assert version.jsonld == "jsonld-v1;validator-v10;segment-v2;classifier-v2"
@@ -656,7 +693,7 @@ def test_5c_files_items_under_the_pages_own_headings(
 
     report = venues.extract(_Server())
 
-    assert "resolve-v5" in report.method_version
+    assert "resolve-v6" in report.method_version
     assert (report.items_written, report.prices_written, report.unsectioned_items) == (3, 4, 0)
     (page,) = venues.pages(gers)
     with venues.factory() as session:
@@ -839,7 +876,7 @@ def test_a_resolved_price_gets_its_own_confidence_reason_and_run_share(venues: _
     assert ("3/6 Catfish Dinner", "6", 1799, RESOLVED_PRICE_CONFIDENCE) in rows
     assert ("Queso", None, 600, FLAGGED_PRICE_CONFIDENCE) in rows
     assert RESOLVED_PRICE_CONFIDENCE < FLAGGED_PRICE_CONFIDENCE < PRICE_CONFIDENCE
-    assert "resolve-v5" in page.method_version
+    assert "resolve-v6" in page.method_version
 
 
 def test_run_report_lists_pages_outside_the_tuning_range() -> None:

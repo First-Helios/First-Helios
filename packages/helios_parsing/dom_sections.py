@@ -30,7 +30,7 @@ and changes nothing but which section a kept item is filed under:
 
 Leaf sections only: no outline parent, no ``service_period``. The section shape
 (key, name, Evidence on the heading block) is ``menu_shape``'s. Part of
-``resolve.RESOLVER_VERSION`` ("resolve-v5" = [5b] + [5c] + [5d] + duplicate removal,
+``resolve.RESOLVER_VERSION`` ("resolve-v6" = [5b] + [5c] + [5d] + duplicate removal,
 ``page_template``).
 """
 

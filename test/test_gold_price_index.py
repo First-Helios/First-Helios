@@ -58,6 +58,7 @@ SINCE = datetime(2020, 1, 1, tzinfo=UTC)
 _BUSINESS_EXCLUDE = {"id", "refreshed_at"}
 
 Point = tuple[Decimal, Decimal]
+_SPAN_IDS = 10**12  # fixture span ids, above any real Evidence id the record's sorts before
 
 
 def test_grid_cell_floors_to_the_south_west_corner() -> None:
@@ -175,11 +176,18 @@ def _menu(
     amounts: list[int | None],
     *,
     target_kind: str = "item",
+    spans: list[int] | None = None,
 ) -> None:
-    """``current_menu`` rows for one family: a number is priced, ``None`` unknown."""
+    """``current_menu`` rows for one family: a number is priced, ``None`` unknown.
+
+    Each priced row cites the record's Evidence (placement reads the menu URL from
+    it) and a printed price span of its own, ``spans[position]`` when given: rows
+    sharing a span are one printed price (ADR-0007 Amendment 4).
+    """
     rows: list[dict[str, Any]] = []
     for position, amount in enumerate(amounts):
         priced = amount is not None
+        span = _SPAN_IDS + (spans[position] if spans is not None else position)
         rows.append(
             {
                 "subject_id": subject[0],
@@ -194,7 +202,7 @@ def _menu(
                 "price_state": "priced" if priced else "unknown",
                 "amount_minor": amount,
                 "price_observed_at": OBSERVED + timedelta(days=position) if priced else None,
-                "price_evidence_ids": [record.evidence_id] if priced else [],
+                "price_evidence_ids": [record.evidence_id, span] if priced else [],
                 "content_evidence_ids": [],
                 "organization_claim_count": 0,
                 "refreshed_at": E,
@@ -252,6 +260,34 @@ def test_percentiles_weigh_each_venue_once(factory: sessionmaker[Session]) -> No
     assert row.oldest_observed_at == OBSERVED
     assert row.newest_observed_at == OBSERVED + timedelta(days=49)
     assert row.effective_instant == E
+
+
+def test_a_printed_price_counts_once_however_many_rows_cite_it(
+    factory: sessionmaker[Session],
+) -> None:
+    # Amendment 4: a choice line's variants cite one printed span (as does one dish filed
+    # under two sections). The venue median is over printed prices; priced_count is rows.
+    (cell,) = _cells(1)
+    with factory.begin() as session:
+        _, venue = _venue(session, cell)
+        record = _record(session)
+        # "Chicken, Bistec, Pastor, Fajita or Combo 10.00" is one span; 20.00 and 30.00.
+        _menu(
+            session,
+            (venue, "establishment"),
+            record,
+            [1000] * 5,
+            target_kind="variant",
+            spans=[0] * 5,
+        )
+        _menu(session, (venue, "establishment"), record, [2000, 3000], spans=[1, 2])
+    with factory.begin() as session:
+        refresh_price_index(session, effective_instant=E)
+    with factory() as session:
+        row = _index(session, [cell])[_key(cell)]
+    # Over the 7 rows the median would be 1000; over the 3 printed prices it is 2000.
+    assert (row.venue_count, row.priced_count, row.median_minor) == (1, 7, 2000)
+    assert (row.min_minor, row.max_minor) == (2000, 2000)  # one venue, one venue median
 
 
 def test_small_and_unpriced_groups_are_kept_and_flagged(factory: sessionmaker[Session]) -> None:
