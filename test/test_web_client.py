@@ -1014,7 +1014,52 @@ def test_a_deep_link_website_page_is_itself_the_first_candidate(tmp_path: Path) 
         assert isinstance(recheck, MenuUrlDiscovery), "a re-check accepts the website page"
 
 
-def test_a_root_website_page_is_never_its_own_menu(tmp_path: Path) -> None:
+def test_a_root_homepage_that_prints_the_menu_is_the_last_resort(tmp_path: Path) -> None:
+    # ADR-0026: nothing else verifies, so the homepage itself is judged, from its bytes.
+    calls: list[str] = []
     routes = {"/": (200, "<title>Our Menu</title><p>Tacos $3</p>", _HTML)}
+    with _fetcher(tmp_path, routes, calls=calls) as fetcher:
+        found = _menus(fetcher, "https://k.com/")
+        assert [(m.menu_url, m.signal) for m in found] == [("https://k.com/", "homepage")]
+        assert calls.count("https://k.com/") == 1, "judged from the bytes already fetched"
+        assert found[0].page_html, "its bytes reach the pipeline's wrong-place check"
+        recheck = fetcher.verify_menu_attempt(
+            "https://k.com/", "https://k.com/", not_before=found[0].fetched_at
+        )
+        assert isinstance(recheck, MenuUrlDiscovery), "a re-check accepts the homepage itself"
+
+
+def test_the_homepage_is_not_taken_beside_a_page_that_verifies(tmp_path: Path) -> None:
+    routes = {
+        "/": (200, '<title>Our Menu</title><p>Tacos $3</p><a href="/menu">Menu</a>', _HTML),
+        "/menu": (200, "<title>Dinner Menu</title><p>Fajitas $15</p>", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        found = _menus(fetcher, "https://k.com/")
+    assert [(m.menu_url, m.signal) for m in found] == [("https://k.com/menu", "well_known")]
+
+
+def test_a_homepage_that_is_no_menu_is_not_taken(tmp_path: Path) -> None:
+    routes = {"/": (200, "<h1>Welcome</h1><p>Open daily</p>", _HTML)}
     with _fetcher(tmp_path, routes) as fetcher:
         assert _menus(fetcher, "https://k.com/") == ()
+
+
+def test_a_saved_menu_page_that_now_lands_on_the_homepage_fails(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    floor_at = datetime(2020, 1, 1, tzinfo=UTC)
+    # The menu page was removed and redirects home: not silently the homepage's record.
+    routes = {
+        "/": (200, "<title>Our Menu</title><p>Tacos $3</p>", _HTML),
+        "/menu": (301, "https://k.com/", _HTML),
+    }
+    with _fetcher(tmp_path, routes) as fetcher:
+        itself = fetcher.verify_menu_attempt(
+            "https://k.com/", "https://k.com/", not_before=floor_at
+        )
+        assert isinstance(itself, MenuUrlDiscovery), "the homepage itself verifies ..."
+        recheck = fetcher.verify_menu_attempt(
+            "https://k.com/", "https://k.com/menu", not_before=floor_at
+        )  # ... but a saved /menu that lands on it does not
+    assert not isinstance(recheck, MenuUrlDiscovery) and recheck.reason_code == "no_menu_found"

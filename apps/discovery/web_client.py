@@ -144,6 +144,8 @@ class MenuUrlDiscovery:
     # "well_known" (a known path) | "crawled" (sitemap or anchor) | "platform"
     # (the venue's own site is a shared platform host, or a homepage link
     # into one, D3.5) | "website" (a deep-link website's own page, ADR-0022)
+    # | "homepage" (a root website's homepage, when no other own-site page
+    # verified, ADR-0026)
     signal: str
     fetched_at: datetime
     content_hash: str
@@ -613,9 +615,10 @@ class SiteFetcher:
                     "failed", "network_error", datetime.fromtimestamp(self._clock(), UTC)
                 )
             result = self.fetch(menu_url)
-            if not self._verifies(result, website, homepage, platform=bool(platform)) and (
-                self._should_render(result, platform=bool(platform))
-            ):
+            itself = same_resource(menu_url, website)  # a deep link's or homepage's own page
+            if not self._verifies(
+                result, website, homepage, platform=bool(platform), itself=itself
+            ) and (self._should_render(result, platform=bool(platform))):
                 # Render before reject (ADR-0013 §7): only the rendered verdict counts.
                 result = self._render(menu_url)
                 if result is None:
@@ -624,7 +627,9 @@ class SiteFetcher:
                     )
             if result is not None and result.status == 200 and _is_html(result):  # noqa: PLR2004
                 now = datetime.fromtimestamp(self._clock(), UTC)
-                if not self._verifies(result, website, homepage, platform=bool(platform)):
+                if not self._verifies(
+                    result, website, homepage, platform=bool(platform), itself=itself
+                ):
                     return CaptureFailure("failed", "no_menu_found", now)
                 if result.fetched_at < self._not_before:
                     return CaptureFailure("failed", "network_error", now)  # no fresh bytes
@@ -643,14 +648,20 @@ class SiteFetcher:
         homepage: FetchResult | None,
         *,
         platform: bool,
+        itself: bool = False,
     ) -> bool:
-        """A saved menu URL's page still verifies (re-verification's page check)."""
+        """A saved menu URL's page still verifies (re-verification's page check).
+
+        ``itself``: the saved URL is the website. Its page is then judged on the page
+        check alone (a deep link, ADR-0022 point 7; a homepage, ADR-0026). Another
+        saved URL that now lands on the website fails, as before.
+        """
         if result is None or result.status != 200 or not _is_html(result):  # noqa: PLR2004
             return False
         if platform:
             valid = is_platform_venue_page(result.url, ordering_only=True)
-        elif is_deep_link(website) and same_resource(result.url, website):
-            valid = True  # the website page itself is the menu (ADR-0022 point 7)
+        elif (itself or is_deep_link(website)) and same_resource(result.url, website):
+            valid = True  # the website page itself is the menu (ADR-0022 point 7, ADR-0026)
         else:
             valid = homepage is not None and (
                 not same_resource(result.url, website)
@@ -756,6 +767,8 @@ class SiteFetcher:
         deep-link website whose own page passes the check comes first (signal
         ``"website"``). Only when no own-site page verified are up to
         :data:`MAX_RENDER_CANDIDATES` JavaScript-only candidates rendered.
+        Only when neither found a page is a root website's homepage itself
+        judged, from its static bytes (signal ``"homepage"``, ADR-0026).
         Then, whether or not an own-site menu
         verified, verify the homepage's links into ordering platforms (D3.5b,
         S6b): one page per platform host, :data:`MAX_PLATFORM_CANDIDATES` hosts
@@ -854,7 +867,18 @@ class SiteFetcher:
             )
         # Every verified own-site page, in rank order (ADR-0022): the pipeline drops
         # wrong-place pages and duplicates, and keeps at most MAX_MENU_PAGES.
-        found.extend(own or self._render_own_site(js_only, base, well_known, is_catch_all))
+        pages = own or self._render_own_site(js_only, base, well_known, is_catch_all)
+        if (
+            not pages
+            and homepage is not None
+            and homepage_html is not None
+            and not is_deep_link(website)
+            and self._page_check.is_menu(homepage_html, homepage.url, trust_path=False)
+        ):
+            # Nothing else verified: the homepage itself prints the menu (ADR-0026),
+            # judged from the bytes already fetched. Never rendered.
+            pages = [self._discovered(homepage, "homepage")]
+        found.extend(pages)
 
         if homepage_html is not None:
             # One page per platform host, and a redirect can't leave that host,

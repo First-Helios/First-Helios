@@ -54,6 +54,7 @@ def test_every_candidate_is_recorded_and_none_accepted(tmp_path: Path) -> None:
     assert urls == [
         "https://kitchen.example/menu",
         "https://kitchen.example/our-food",
+        "https://kitchen.example/",  # nothing verified: the homepage itself (ADR-0026)
         "https://www.toasttab.com/kitchen-123",
     ]
     assert reason == "no_menu_found"
