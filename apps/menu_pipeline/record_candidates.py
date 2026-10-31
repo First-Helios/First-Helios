@@ -4,7 +4,8 @@ For each venue (a JSON line with ``gers``, ``website`` and ``address``) it runs
 discovery's own candidate enumeration, :meth:`SiteFetcher.discover_menu_attempt`,
 with a :class:`RecordingVerifier` in place of the page check: the verifier keeps
 every page discovery checks and accepts none, so discovery fetches every candidate
-it ranks (own-site paths, sitemap and homepage links, platform pages). Each page's
+it ranks (own-site paths, sitemap and homepage links, the homepage itself when
+nothing verified (ADR-0026), platform pages). Each page's
 body and final URL are written under ``--out`` with the verdicts of the weights
 files named by ``--weights`` and of the S4 heuristic.
 
