@@ -32,8 +32,9 @@ Scope of this first full-catalog unit (deliberately bounded; see ADR-0006,
   normalized name only (:func:`dish_key`). The llm stream's other dishes stay.
 * **One dish once across a venue's own-site pages (ADR-0022 point 4).** A venue
   keeps up to three own-site menu pages, the ``menu-page`` records keyed
-  ``<gers>`` and ``<gers>|<path>``. Within one scope subject, those families are
-  ranked ``<gers>`` first, then by key; a dish on a later family whose dish key
+  ``<gers>`` and ``<gers>|<path>``. Those families are ranked ``<gers>`` first,
+  then by key, whichever subject each is scoped to (one venue's pages may sit on
+  its Organization and its Establishment); a dish on a later family whose dish key
   **and** price set equal a dish of an earlier family is not enumerated. The same
   name at other prices (lunch and dinner) stays, and platform families
   (``<gers>|<host>``) are not part of the rule.
@@ -207,7 +208,7 @@ def enumerate_current_requests(
         family_heads,
         key=lambda family: (ranks[family] or ("~", 0, ""), family[0], family[1]),
     )
-    earlier: dict[tuple[int, str, str], set[_Dish]] = {}  # (subject, kind, gers) -> dishes
+    earlier: dict[str, set[_Dish]] = {}  # gers -> dishes of its earlier own-site families
     requests: list[SelectionRequest] = []
     seen: set[
         tuple[
@@ -227,6 +228,10 @@ def enumerate_current_requests(
     for source_record_id, root_key in ordered:
         heads = family_heads[(source_record_id, root_key)]
         rank = ranks[(source_record_id, root_key)]
+        # The venue's earlier pages, whichever subject each is scoped to: one venue's
+        # pages may sit on its Organization and its Establishment.
+        prior = earlier.setdefault(rank[0], set()) if rank is not None else set()
+        family_dishes: set[_Dish] = set()
         subjects = {(page.subject_id, page.subject_kind) for page in heads.values()}
         for subject_id, subject_kind in sorted(subjects):
             owned = _subject_heads(heads, subject_id)
@@ -237,11 +242,8 @@ def enumerate_current_requests(
             repeated: frozenset[frozenset[str]] = frozenset()
             if rank is not None:
                 dishes = _family_dishes(session, owned)
-                seen_dishes = earlier.setdefault((subject_id, subject_kind, rank[0]), set())
-                repeated = frozenset(
-                    dish for dish, amounts in dishes if (dish, amounts) in seen_dishes
-                )
-                seen_dishes.update(dishes)
+                repeated = frozenset(dish for dish, amounts in dishes if (dish, amounts) in prior)
+                family_dishes.update(dishes)
             for page in owned.values():
                 if page.operation == "withdrawal":
                     continue
@@ -301,5 +303,6 @@ def enumerate_current_requests(
                             effective_instant=effective_instant,
                         )
                     )
+        prior.update(family_dishes)
     requests.sort(key=_sort_key)
     return requests

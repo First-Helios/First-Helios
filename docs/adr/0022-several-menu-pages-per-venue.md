@@ -306,9 +306,16 @@ Built 2026-10-27 (P8-20), with no migration and no API change.
 - **Gold** (`packages/helios_core/domains/menu/enumeration.py`).
   - Families are processed with each venue's own-site `menu-page` families in rank order
     (`_own_site_rank`, from the record key through `get_record_version`).
-  - Per scope subject and GERS, a later family's dish whose `dish_key` and price set
+  - Per GERS, a later family's dish whose `dish_key` and price set
     (`(amount_minor, currency)` of its priced observations) equal an earlier family's is
     skipped. Platform families are outside the rule.
+  - **Fix (2026-10-30).** The rule was built per scope subject and GERS. One venue's pages
+    can sit on its Organization and its Establishment (page-bronze scopes them separately),
+    and such pairs were never compared. After the re-collection, `helios_laptop` showed
+    1,236 dishes repeated at one price across a venue's own-site pages; 1,026 of them spanned
+    two subjects. The rule now groups by GERS alone. A family's dishes join the venue's set
+    only after the whole family is processed, so two subjects of one family never hide each
+    other. The other 210 repeats differ in their full price set and stay, by design.
 - **Site** (frontend repo, branch `p8-20-one-menu`). The venue page renders one "Menu": each
   page's sections follow a line naming its scope, price count and source page (host and
   path), with one table of contents over all sections. The API orders menus by source
@@ -321,7 +328,8 @@ Built 2026-10-27 (P8-20), with no migration and no API change.
     twice; the deep-link website page, with its re-check; a root page is never its own menu.
   - `test_menu_url.py`: meal terms are candidates, not page signals; `is_deep_link`.
   - `test_gold_catalog.py`: a later page's dish is hidden only at the same prices, ranked by
-    key, with platform pages outside the rule.
+    key, with platform pages outside the rule; and an Organization page and an Establishment
+    page of one venue are compared (the test fails on the pre-fix code).
 - **Known gap.** When a venue's website changes, path keys saved for the old website are not
   re-checked (re-verification skips another website's keys, as for platform keys today).
   They stay resolved until a human or a later unit withdraws them. No path key exists yet.
