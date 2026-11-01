@@ -3228,3 +3228,58 @@ P8-20's new page texts (34 scorable), with blind labels under the labels-v10.1 c
 The page check's precision on the draw is 0.90 (45 / 50), below its 0.95 bar as a point
 estimate. Record:
 [2026-11-01-p8-21-resolve-v6-held-out.md](../reviews/2026-11-01-p8-21-resolve-v6-held-out.md).
+
+## Amendment 35 (2026-11-01, proposed): the page check's precision on P8-20's pages, and nutrition tables
+
+**Status: Proposed 2026-11-01 (session P8-21). Measurement only; nothing built.** Owner questions
+below. Record:
+[2026-11-01-p8-21-page-check-precision.md](../reviews/2026-11-01-p8-21-page-check-precision.md).
+
+**Why.** The §8 held-out of `resolve-v6` measured the page check (`classifier-v2+v3`,
+Amendment 27) at 0.90 on 50 pages. The owner asked for a larger sample before any change
+(ADR-0025, Owner answers, Q2).
+
+**Measured** (200 of P8-20's new page texts, simple random, seed 20261102; Sonnet first pass,
+re-checked by the session):
+- **Precision 0.890 (178 / 200), Wilson [0.839, 0.926].** 0.940 [0.898, 0.965] if single-item
+  detail pages count as menus. Both below the 0.95 bar.
+- Platform pages 46 / 46; own-site pages 132 / 154 (0.857). P8-20's several-pages discovery
+  (ADR-0022) reaches deeper own-site pages.
+- The 22 false accepts: 10 single-item pages (one dish or product), 4 articles, 3 products
+  (pre-orders, tickets, appointments), 3 other, 2 hubs.
+- **19 of the 22 put no row in Gold.** They cost extraction time only.
+- **One class is harmful: nutrition tables.** The validator reads calories and servings as
+  prices: P.F. Chang's Lettuce Wraps at $330.00 (330 calories). Over Gold, pages whose path
+  names nutrition carry **1,354 priced rows on 5 records** (one P.F. Chang's table stored for 4
+  venues, 317 rows each, and an 86-row table), all false. That is a floor: only paths were
+  searched.
+
+**Proposed.**
+1. **A nutrition-table guard first** (it is the only class that harms Gold). Measure, then
+   build one of:
+   - **(a) validator (`validator-v11`, recommended):** a bare number (no currency sign, no
+     decimals) that sits in a run of bare-number cells in one row (a numeric table's row) is
+     not a price. Generic: it reads the page's shape, not its words or its site. Measure first
+     on the labelled dev and held-out sets (no recall loss allowed by the §8 rules) and on Gold
+     (the rows it would drop, and a sample of them read);
+   - **(b) page check:** reject a page whose body is mostly numeric-table rows. Coarser: it
+     also drops a priced menu laid out as a table.
+2. **No change for single-item pages, articles, products and hubs.** They add no Gold rows
+   today; a rule for them would trade recall for extraction time.
+3. **No classifier retrain.** Not proposed (the owner's approval is needed for one, and the
+   harm sits in the validator's price reading, not in which pages are read).
+4. **The §8 page bar keeps counting single-item pages as `not_menu`**, the stricter reading.
+
+### Owner questions (Amendment 35)
+
+- **Q1. The precision gap.** Accept 0.890 as a known gap (Amendment 23's form: the cost is
+  extraction time; the next verifier change re-measures on this draw), and act only on the
+  harmful class? *Recommended.*
+- **Q2. Nutrition tables.** Measure (a) the validator's numeric-row rule, then build it as
+  `validator-v11` if it loses no recall on the labelled sets? *Recommended.* Or (b) the page
+  check, or both?
+- **Q3. The 1,354 rows already in Gold.** Remove them through the rule (re-interpretation of the
+  stored pages with `validator-v11`, no model calls, then a Gold refresh, as `resolve-v6` was
+  applied)? *Recommended:* there is no per-record removal (no manual entries).
+- **Q4. Single-item pages.** Keep them `not_menu` in the §8 page bar? *Recommended*: a dish's
+  detail page is not the venue's menu, even when it prints one price.
