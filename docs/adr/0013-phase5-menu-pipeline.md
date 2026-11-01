@@ -3189,3 +3189,28 @@ database was not written):
 4. coordinate the Pi restore (check `DEPLOYED_COMMIT` first).
 
 The scratch copy is dropped once the PR is reviewed.
+
+**Applied (2026-10-31/11-01, after #148 merged; the owner's "proceed").** The code was `main`
+at 3a524d6.
+- **`helios_laptop`.**
+  - Backup `var/laptop-run/helios_laptop-2026-10-31-pre-resolve-v6.dump` (main checkout,
+    85,759,136 bytes, sha256 `b046ea0e…`).
+  - Re-interpreted from saved answers, 22:49–23:46Z: 3,056 pages, 0 model calls, 0 failures,
+    prices 127,273.
+  - Gold refreshed (effective 23:46:05Z): `current_menu` **103,697** rows; 416 price-index
+    rows, identical row for row to the scratch copy's. The citywide median is 1016.
+  - Post-apply dump: `helios_laptop-2026-11-01-resolve-v6.dump` (sha256 `bf80f534…`).
+- **The Pi** (firsthelios.com). The earlier P8-21 session confirmed it had nothing running on
+  either machine.
+  - Backup `~/helios-backups/firsthelios-20261101-p8-21-v6/`: the database (sha256
+    `baa9f420…`, 103,683 rows) and the code. The 2026-10-31 backup is kept.
+  - Backend `ab674e5` → `3a524d6` by `git archive` and `rsync --delete`, keeping `.env` and
+    `var/`, with `DEPLOYED_COMMIT` written and the API image rebuilt. There was no migration
+    (`13081a087231`).
+  - The database dropped and restored from the laptop dump (checksum checked on the Pi):
+    `pg_restore` exit 0, no errors; 103,697 rows, 416 index rows; `alembic check` clean.
+  - Downtime was **307 s**. `/`, `/healthz`, `/readyz`, `/v1/venues` and
+    `/v1/price-index/cells` return 200 over HTTPS on `firsthelios.com` and `www`. The public
+    `all` row reads 656 venues, 56,690 priced rows, median 1016. The frontend (`774776d`) is
+    unchanged.
+- The scratch copy `helios_p821q7_test` was dropped.
