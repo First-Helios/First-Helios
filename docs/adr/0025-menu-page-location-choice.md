@@ -184,7 +184,7 @@ address line (a ZIP, a state, or at most 12 words):
 
 **4. The venue's own page.**
 - Of the 36 other-location pages, the venue's own location page is on the site and was among
-  discovery's candidates for 9.
+  discovery's candidates for 12; for the other 24 it isn't in the packet.
 - For most of the rest the site has no page for the venue's location (Tino's: "menus and prices
   vary by location", two locations listed), or Overture's venue is another business (airport
   concessions under Salt Lick).
