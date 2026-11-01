@@ -29,11 +29,19 @@ the URL path does not name the metro: another location's page of a chain whose
 location list includes the metro. Wine appellations, brewery towns and chain
 location lists are many places, sit in chrome, or include the metro.
 
+**Another location's page** (ADR-0025 D2′, :func:`other_location_places`) is
+narrower and same-metro: an own-site menu page whose URL path names a place (an
+area locality or a gazetteer city, a run of up to four path tokens) that is
+neither the venue's locality nor the metro's principal city, on a URL that does
+not name the venue's locality. Salt Lick's ``/round-rock-menu`` stored for its
+airport venue is one. Suburb sites call themselves "Austin", so the principal
+city says nothing.
+
 The area (:class:`PlaceArea`) is data, never a hand-made list: the Overture POI
-localities and postcodes, a gazetteer of foreign places named on the stored menu
-pages (mostly chains' location lists), and the chain pages (one menu URL saved
-for several venues whose names share their first word). See
-:func:`load_place_area`.
+localities and postcodes, the principal city (the most common POI locality), a
+gazetteer of foreign places named on the stored menu pages (mostly chains'
+location lists), and the chain pages (one menu URL saved for several venues whose
+names share their first word). See :func:`load_place_area`.
 """
 
 from __future__ import annotations
@@ -42,7 +50,8 @@ import gzip
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
@@ -63,7 +72,8 @@ if TYPE_CHECKING:
 
     from packages.helios_parsing.segment import Block
 
-PLACE_CHECK = "place-v1"
+# place-v1 (ADR-0015 Amendment 2) plus another location's page (ADR-0025 D2′).
+PLACE_CHECK = "place-v2"
 
 # Localities need this many POIs to define the area: a typo'd or stray locality
 # would otherwise make its name "metro".
@@ -82,6 +92,9 @@ _TOKEN = re.compile(r"[a-z0-9]+")
 _MAX_URL_RUN = 4  # tokens in a URL city ("rancho-santa-margarita")
 _MAX_PLACES = 2  # more foreign places than this is a list, not this page's place
 _MIN_REPEATS = 2
+# (ADR-0025 D2′) a URL place shorter than this is too likely a word: the rule as
+# D1 measured it.
+_MIN_URL_PLACE = 4
 
 
 def slug(text: str) -> str:
@@ -107,6 +120,7 @@ class PlaceArea:
     regions: frozenset[str] = frozenset()  # the area's state codes, for the gazetteer
     gazetteer: frozenset[str] = frozenset()  # slugs of foreign cities named on stored pages
     chain_urls: frozenset[str] = frozenset()
+    principal: str | None = None  # the metro's principal city: the most common locality
 
     def names(self) -> re.Pattern[str]:
         return _names_pattern(self.localities)
@@ -231,6 +245,53 @@ def _hits(names: re.Pattern[str], text: str) -> set[str]:
     return {match.group(1).lower() for match in names.finditer(text)}
 
 
+def other_location_places(url: str, venue: VenuePlace, area: PlaceArea) -> tuple[str, ...]:
+    """ADR-0025 D2′: the places an own-site page's URL names that make it another location's.
+
+    The URL path's runs of up to four tokens that are an area locality or a
+    gazetteer city, at least :data:`_MIN_URL_PLACE` characters and not all
+    digits. Empty when the URL names none, names the venue's own locality, or
+    names only the metro's principal city. Without the venue's locality nothing
+    is judged. The caller applies it to own-site pages only: a platform page is
+    matched to its venue by address (ADR-0015 item 5).
+    """
+    own = slug(venue.locality or "")
+    if not own:
+        return ()
+    places = {slug(name) for name in area.localities} | area.gazetteer
+    tokens = _TOKEN.findall(urlsplit(url).path.lower())
+    named = {
+        run
+        for i in range(len(tokens))
+        for j in range(i + 1, min(i + _MAX_URL_RUN, len(tokens)) + 1)
+        if (run := "-".join(tokens[i:j])) in places
+        and len(run) >= _MIN_URL_PLACE
+        and not run.isdigit()
+    }
+    if own in named:
+        return ()
+    return tuple(sorted(named - {slug(area.principal or "")}))
+
+
+PlaceFailure = Literal["wrong_place", "other_location"]
+
+
+def place_failure(
+    url: str, blocks: Sequence[Block], venue: VenuePlace, area: PlaceArea, *, own_site: bool
+) -> PlaceFailure | None:
+    """The check ``place-v2``: why a verified menu page is not the venue's, or ``None``.
+
+    ``wrong_place`` when ``place-v1`` reads it as another metro's (ADR-0015
+    Amendment 2); else ``other_location`` when it is an own-site page whose URL
+    names another location of the metro (ADR-0025 D2′).
+    """
+    if place_verdict(url, blocks, venue, area).wrong:
+        return "wrong_place"
+    if own_site and other_location_places(url, venue, area):
+        return "other_location"
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # The area, from the database and the stored bundles.
 # --------------------------------------------------------------------------- #
@@ -316,10 +377,12 @@ def load_place_area(session: Session, *, base_dir: Path) -> PlaceArea:
         if place.postcode:
             postcodes.add(place.postcode[:5])
         names[gers] = str(payload.get("name") or "")
+    principal = min(localities.items(), key=lambda item: (-item[1], item[0]), default=None)
     area = PlaceArea(
         localities=frozenset(n for n, c in localities.items() if c >= MIN_LOCALITY_POIS),
         postcodes=frozenset(postcodes),
         regions=frozenset(r for r, c in regions.items() if c >= MIN_LOCALITY_POIS),
+        principal=principal[0] if principal else None,
     )
 
     by_url: dict[str, set[tuple[str, str]]] = {}
@@ -351,4 +414,5 @@ def load_place_area(session: Session, *, base_dir: Path) -> PlaceArea:
         regions=area.regions,
         gazetteer=frozenset(gazetteer),
         chain_urls=chain_urls,
+        principal=area.principal,
     )
