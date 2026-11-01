@@ -3283,3 +3283,30 @@ re-checked by the session):
   applied)? *Recommended:* there is no per-record removal (no manual entries).
 - **Q4. Single-item pages.** Keep them `not_menu` in the §8 page bar? *Recommended*: a dish's
   detail page is not the venue's menu, even when it prints one price.
+
+### Built: `validator-v11` (2026-11-01, session P8-21)
+
+Built after the owner's answers (Q1–Q4 as recommended). Record:
+[2026-11-01-p8-21-validator-v11.md](../reviews/2026-11-01-p8-21-validator-v11.md).
+- **Rule** (the shared reader, `prices.table_cells`): a block that prints only an unmarked number
+  is a numeric table's cell when it follows one label block in a run of at least 6 such blocks
+  (`TABLE_COLUMNS`), in at least 3 consecutive rows (`TABLE_ROWS`). Mark cells ("X", "✓", "-")
+  and blank blocks are skipped; a labelled run of a found table's width is one of its rows also
+  under another section heading. A cell gives no bare reading and doesn't vote in `bare_page`;
+  money (a mark or two decimals) is read as before. The rows requirement is what keeps a price
+  column printed after a section's dishes (`dev:cfb443e9b654`, runs of 6–19 gold prices) read:
+  a plain "run of K" rule would have lost it at any K up to 19.
+- **Measured, no recall or accuracy loss:** of 2,504 labelled or published texts (dev, the P8-21
+  §8 held-out, the precision draw, P8-11's corpus) the reader changes one, the precision draw's
+  P.F. Chang's nutrition table (`not_menu`). 1,685 measured pages keep every verdict; the P8-21
+  held-out's §8 report is identical; the invariance suite has 0 differences on 334 pages.
+- **Gold (read-only):** of the 2,039 stored texts behind `helios_laptop`'s Menu pages, it changes
+  two, P.F. Chang's and Brio's nutrition tables: the 5 records and 1,354 priced rows above, all
+  false. Under `validator-v11` none of their rows keeps a price (the dishes stay in Menu,
+  unpriced; Gold stores priced rows only).
+- **Versioning:** `validator-v10` → `validator-v11` names the reader change, as Amendment 15 did
+  for v7's: the reader is shared with stitch, the repairs, [5b]–[5d] and [5c], whose own rules
+  and versions (`repairs-v9`, `resolve-v6`) are unchanged. Every `llm` and `jsonld` page becomes
+  due for re-interpretation from saved answers (no model call).
+- **Apply (owner, after merge):** laptop backup → re-interpretation → Gold refresh → Pi restore,
+  as `resolve-v6` was applied.
