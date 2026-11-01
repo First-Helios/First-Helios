@@ -1,6 +1,6 @@
 # ADR-0025: Choosing the venue's own location page on multi-location sites
 
-**Status:** Proposed 2026-10-31 (session P8-21). Accepted 2026-10-31 under the owner's delegation (see [Decision](#decision-2026-10-31)). Not built: D1 measures first.
+**Status:** Proposed 2026-10-31 (session P8-21). Accepted 2026-10-31 under the owner's delegation (see [Decision](#decision-2026-10-31)). D1 measured 2026-11-01; D2 (address ranking) not built; **D2′ (a URL naming another place) accepted by the owner 2026-11-01** (see [Owner answers](#owner-answers-2026-11-01)), built in a separate PR.
 **Date:** 2026-10-31
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
 **Extends:** [ADR-0022](./0022-several-menu-pages-per-venue.md) (several own-site pages),
@@ -219,3 +219,23 @@ a gazetteer place other than the venue's locality were labelled (`first-pass-U.j
   another location: 10 moves and 16 other locations in A. They stay a review question for
   Overture data (Q3's flag has no reliable signal yet).
 - **Shared chain menus stay** (Q2).
+
+## Owner answers (2026-11-01)
+
+The owner answered the questions this session raised after D1 (#151, #152):
+
+- **Q1. D2′.** Build it and apply it: the stored-bundle withdrawal on `helios_laptop` (after a
+  backup), then the Gold refresh, then the Pi restored from that database.
+- **Q2. Page-check precision** (the held-out's finding, 0.90 on 50 pages; ADR-0013's verifier,
+  recorded here with the others). Measure a larger sample first, about 200 of P8-20's new page
+  texts at page level, before any verifier change. No learned-classifier retrain without the
+  owner's approval.
+- **Q3. Salt Lick's three airport venues and Thurman's** (a different business at the airport),
+  which hold Salt Lick's `/round-rock-menu` and `/driftwood-menu`: withdraw those pages.
+  D2′ reaches all of them (D1's `U002`, `U003`, `U009`, `U010`, `U013`, `U014`, `U033`, `U034`),
+  so no venue-specific step is needed.
+- **Q4. Next.** After D2′, menu coverage: script-shell pages the renderer doesn't reach, and image
+  and PDF menus (a new dependency, the owner's decision), measured first with the coverage
+  harness.
+
+Status after these answers: **D2′ accepted; build next.**
