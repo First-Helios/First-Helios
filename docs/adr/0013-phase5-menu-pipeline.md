@@ -3214,3 +3214,17 @@ at 3a524d6.
     `all` row reads 656 venues, 56,690 priced rows, median 1016. The frontend (`774776d`) is
     unchanged.
 - The scratch copy `helios_p821q7_test` was dropped.
+
+**§8 held-out (2026-11-01).** The re-test owed since resolve-v4 ran on a fresh draw of 50 of
+P8-20's new page texts (34 scorable), with blind labels under the labels-v10.1 conventions.
+`resolve-v6` with `validator-v10` **passes every bar**:
+- recall 0.895;
+- price accuracy 0.995;
+- gold-row FR 0.072 [0.038, 0.110];
+- catch 0.999;
+- usable prices 0.772 [0.670, 0.878];
+- [5c] gated section exact 0.940.
+
+The page check's precision on the draw is 0.90 (45 / 50), below its 0.95 bar as a point
+estimate. Record:
+[2026-11-01-p8-21-resolve-v6-held-out.md](../reviews/2026-11-01-p8-21-resolve-v6-held-out.md).
