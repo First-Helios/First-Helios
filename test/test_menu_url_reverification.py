@@ -489,3 +489,113 @@ def test_the_sweep_withdraws_saved_urls_whose_stored_page_is_elsewhere(
         "wrong_place"
     )
     assert (_latest_event(session, "p5").method) == WITHDRAW_METHOD
+
+
+# --------------------------------------------------------------------------- #
+# Another location's page (ADR-0025 D2′): an own-site URL naming another metro place.
+# --------------------------------------------------------------------------- #
+
+_METRO = PlaceArea(
+    localities=frozenset({"austin", "round rock"}),
+    postcodes=frozenset({"78701", "78664"}),
+    regions=frozenset({"TX"}),
+    principal="austin",
+)
+_PLAIN = "<h1>Menu</h1><p>Brisket $20</p><p>Ribs $24</p>"
+
+
+def test_a_recheck_of_another_locations_page_withdraws_it_and_it_recovers(
+    session: Session,
+) -> None:
+    _seed_austin(session, "Other Location", "o1", "otherloc.com")
+    resolver = _Reverifier("https://otherloc.com/round-rock-menu")
+    resolver.page_html = _PLAIN
+    _run(session, resolver, at=_NOW)
+    resolver.menu_url = None
+
+    report = _run(session, resolver, at=_NOW + REVERIFY_WINDOW, place_area=_METRO)
+
+    assert (report.menu_urls_other_location, report.menu_urls_wrong_place) == (1, 0)
+    assert report.menu_urls_withdrawn == 1
+    assert _record(session, MENU_URL_NAMESPACE, "o1").state == "needs_review"
+    assert _versions(session, MENU_URL_NAMESPACE, "o1")[-1]["verification_failure"] == (
+        "other_location"
+    )
+    assert _latest_event(session, "o1").method == WITHDRAW_METHOD
+
+    # Reversible: once the venue's own location page verifies, the record is re-assigned.
+    resolver.menu_url = "https://otherloc.com/austin-menu"
+    again = _run(session, resolver, at=_NOW + REVERIFY_WINDOW * 2, place_area=_METRO)
+
+    assert again.menu_urls_found == 1
+    assert _record(session, MENU_URL_NAMESPACE, "o1").state == "resolved"
+    assert _versions(session, MENU_URL_NAMESPACE, "o1")[-1]["place_check"] == PLACE_CHECK
+
+
+def test_discovery_drops_another_locations_page_and_keeps_the_venues_own(
+    session: Session,
+) -> None:
+    _seed_austin(session, "Two Locations", "o2", "twoloc.com")
+    resolver = _Reverifier("https://twoloc.com/round-rock/menu")
+    resolver.page_html = _PLAIN
+
+    report = _run(session, resolver, at=_NOW, place_area=_METRO)
+
+    assert (report.menu_urls_other_location, report.menu_urls_absent) == (1, 1)
+    assert _versions(session, MENU_URL_NAMESPACE, "o2") == []
+    reason = session.scalar(
+        select(Capture.reason_code)
+        .join(Source, Source.id == Capture.source_id)
+        .where(Source.namespace == MENU_URL_NAMESPACE)
+        .order_by(Capture.id.desc())
+        .limit(1)
+    )
+    assert reason == "other_location"
+
+
+def test_a_suburb_venues_page_named_for_the_principal_city_is_kept(session: Session) -> None:
+    poi = _poi("Suburb", 30.51, -97.68, gers_id="o3", websites=("suburb.com",))
+    rr = {"freeform": "1 Main St", "locality": "Round Rock", "region": "TX", "postcode": "78664"}
+    _seed(session, [replace(poi, raw={**poi.raw, "addresses": [rr]})])
+    resolver = _Reverifier("https://suburb.com/austin-round-rock-menu")
+    resolver.page_html = _PLAIN
+
+    report = _run(session, resolver, at=_NOW, place_area=_METRO)
+
+    assert (report.menu_urls_found, report.menu_urls_other_location) == (1, 0)
+
+
+def test_the_sweep_withdraws_another_locations_stored_page(
+    session: Session, tmp_path: Path
+) -> None:
+    for name, gers, url in (
+        ("Sweep Other", "o4", "https://sweepother.com/round-rock-menu"),
+        ("Sweep Own", "o5", "https://sweepown.com/menu"),
+    ):
+        host = url.split("/")[2]
+        _seed_austin(session, name, gers, host)
+        _run(session, _Reverifier(url), at=_NOW)
+        _stored_page(session, tmp_path, gers, url, _PLAIN)
+    later = _NOW + timedelta(days=1)
+
+    dry = sweep_places(
+        session,
+        place_area=_METRO,
+        base_dir=tmp_path,
+        observed_at=later,
+        decided_at=later,
+        dry_run=True,
+    )
+    assert "o4" in dry.other_location_keys and "o5" not in dry.other_location_keys
+    assert ("o4" in dry.wrong_place_keys, dry.withdrawn) == (False, 0)
+
+    report = sweep_places(
+        session, place_area=_METRO, base_dir=tmp_path, observed_at=later, decided_at=later
+    )
+
+    assert report.withdrawn == 1
+    assert _record(session, MENU_URL_NAMESPACE, "o4").state == "needs_review"
+    assert _record(session, MENU_URL_NAMESPACE, "o5").state == "resolved"
+    assert _versions(session, MENU_URL_NAMESPACE, "o4")[-1]["verification_failure"] == (
+        "other_location"
+    )
