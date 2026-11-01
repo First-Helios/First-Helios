@@ -1,16 +1,18 @@
-"""CLI: withdraw saved menu URLs whose stored page is another place's (ADR-0015 Amendment 2)::
+"""CLI: withdraw saved menu URLs whose stored page is not the venue's place::
 
     python -m apps.discovery.place_sweep [--dry-run] [--base-dir .]
 
-The wrong-place check ``place-v1`` runs on every page discovery verifies from
-now on; this applies it to the menu URLs already saved, from the stored
-``menu-page`` bundles, without fetching anything. For each resolved menu-URL
-record whose latest ``menu-page`` Version holds a bundle of the same URL, the
-venue's current Overture address is checked against that page. A page
-``place-v1`` rejects is withdrawn exactly as a failed re-verification is:
-``_withdraw_menu`` writes the ``rejected/menu_not_verified`` observation
-(``verification_failure: wrong_place``, the bundle Capture's fetch time) and the
-``menu-url-reverify`` unassignment to ``needs_review``.
+The place check ``place-v2`` runs on every page discovery verifies; this applies
+it to the menu URLs already saved, from the stored ``menu-page`` bundles,
+without fetching anything. For each resolved menu-URL record whose latest
+``menu-page`` Version holds a bundle of the same URL, the venue's current
+Overture address is checked against that page: another metro's page is
+``wrong_place`` (ADR-0015 Amendment 2), an own-site page whose URL names another
+location of the metro is ``other_location`` (ADR-0025 D2′). A rejected page is
+withdrawn exactly as a failed re-verification is: ``_withdraw_menu`` writes the
+``rejected/menu_not_verified`` observation (``verification_failure`` the reason,
+the bundle Capture's fetch time) and the ``menu-url-reverify`` unassignment to
+``needs_review``.
 
 Nothing else is written. The next ``python -m apps.menu_pipeline.rescore`` (or
 extraction run) withdraws the record's Menu streams (R4, ``menu_url_withdrawn``),
@@ -30,10 +32,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from apps.discovery.lifecycle import lock_lifecycle
+from apps.discovery.menu_url import ordering_platform_host
 from apps.discovery.place_check import (
     PlaceArea,
     load_place_area,
-    place_verdict,
+    place_failure,
     read_blocks,
     stored_pages,
 )
@@ -60,18 +63,22 @@ class PlaceSweepReport:
     pages: int = 0
     checked: int = 0
     wrong_place: int = 0
+    other_location: int = 0
     withdrawn: int = 0
     skipped: Counter[str] = field(default_factory=Counter)
     wrong_place_keys: list[str] = field(default_factory=list)
+    other_location_keys: list[str] = field(default_factory=list)
 
     def summary(self) -> dict[str, object]:
         return {
             "pages": self.pages,
             "checked": self.checked,
             "wrong_place": self.wrong_place,
+            "other_location": self.other_location,
             "withdrawn": self.withdrawn,
             "skipped": dict(sorted(self.skipped.items())),
             "wrong_place_keys": sorted(self.wrong_place_keys),
+            "other_location_keys": sorted(self.other_location_keys),
         }
 
 
@@ -85,7 +92,7 @@ def sweep_places(
     dry_run: bool = False,
     commit: Callable[[], None] | None = None,
 ) -> PlaceSweepReport:
-    """Check every saved menu URL's stored page; withdraw the wrong-place ones."""
+    """Check every saved menu URL's stored page; withdraw the ones `place-v2` rejects."""
     report = PlaceSweepReport()
     lock_lifecycle(session)
     venues = {venue.gers_id: venue for venue in iter_venues_to_resolve(session)}
@@ -113,10 +120,16 @@ def sweep_places(
             report.skipped["bundle_unreadable"] += 1
             continue
         report.checked += 1
-        if not place_verdict(url, blocks, venue.place, place_area).wrong:
+        own_site = ordering_platform_host(url) is None
+        reason = place_failure(url, blocks, venue.place, place_area, own_site=own_site)
+        if reason is None:
             continue
-        report.wrong_place += 1
-        report.wrong_place_keys.append(key)
+        if reason == "wrong_place":
+            report.wrong_place += 1
+            report.wrong_place_keys.append(key)
+        else:
+            report.other_location += 1
+            report.other_location_keys.append(key)
         if dry_run:
             continue
         withdrawals = UrlDiscoveryReport()
@@ -124,7 +137,7 @@ def sweep_places(
             session,
             venue,
             key,
-            CaptureFailure("failed", "wrong_place", fetched_at),
+            CaptureFailure("failed", reason, fetched_at),
             verifier=str(saved.payload.get("verifier")),
             observed_at=observed_at,
             decided_at=decided_at,
@@ -146,7 +159,9 @@ def main() -> None:
         help="deploy directory that bundle paths (var/replay/...) are relative to",
     )
     parser.add_argument(
-        "--dry-run", action="store_true", help="list the wrong-place pages; write nothing"
+        "--dry-run",
+        action="store_true",
+        help="list the pages the place check rejects; write nothing",
     )
     args = parser.parse_args()
     now = datetime.now(UTC)

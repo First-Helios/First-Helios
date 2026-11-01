@@ -1,4 +1,4 @@
-"""The wrong-place page check ``place-v1`` (ADR-0015 Amendment 2), pure parts.
+"""The place check: ``place-v1`` (ADR-0015 Amendment 2) and ADR-0025 D2′, pure parts.
 
 Pages are segmented HTML, as discovery and the sweep see them. The area is a
 small Austin one; the cases are the shapes the P8-18 sweep found on stored pages.
@@ -15,6 +15,8 @@ from apps.discovery.place_check import (
     VenuePlace,
     foreign_slugs,
     mentions,
+    other_location_places,
+    place_failure,
     place_verdict,
     slug,
 )
@@ -128,3 +130,57 @@ def test_the_gazetteer_takes_foreign_cities_outside_wine_lists() -> None:
     )
     assert foreign_slugs(segment(html), AREA) == {"las-vegas", "college-station"}
     assert slug("St. Louis") == "st-louis"
+
+
+# --------------------------------------------------------------------------- #
+# Another location's page (ADR-0025 D2′): the URL names another place of the metro.
+# --------------------------------------------------------------------------- #
+
+METRO = replace(
+    AREA,
+    localities=frozenset({"austin", "round rock", "driftwood", "cedar park"}),
+    principal="austin",
+)
+ROUND_ROCK = VenuePlace(locality="Round Rock", region="TX", postcode="78664")
+
+
+def test_a_url_naming_another_metro_place_is_another_locations() -> None:
+    url = "https://www.saltlickbbq.com/round-rock-menu"
+    assert other_location_places(url, VENUE, METRO) == ("round-rock",)
+    assert other_location_places("https://x.com/menus/driftwood", ROUND_ROCK, METRO) == (
+        "driftwood",
+    )
+    assert other_location_places("https://x.com/menu/las-vegas", VENUE, METRO) == ("las-vegas",)
+
+
+def test_a_url_naming_the_venues_locality_is_its_own() -> None:
+    url = "https://www.saltlickbbq.com/round-rock-menu"
+    assert other_location_places(url, ROUND_ROCK, METRO) == ()
+    assert other_location_places("https://x.com/round-rock/driftwood", ROUND_ROCK, METRO) == ()
+
+
+def test_the_principal_city_says_nothing_for_a_suburb_venue() -> None:
+    url = "https://www.flowerchild.com/austin-westlake-menu"
+    assert other_location_places(url, ROUND_ROCK, METRO) == ()
+
+
+def test_no_place_no_locality_or_a_short_run_is_not_judged() -> None:
+    assert other_location_places("https://x.com/dinner-menu", VENUE, METRO) == ()
+    nowhere = VenuePlace(locality=None, region="TX", postcode=None)
+    assert other_location_places("https://x.com/round-rock-menu", nowhere, METRO) == ()
+    short = replace(METRO, gazetteer=frozenset({"ely"}))
+    assert other_location_places("https://x.com/ely-menu", VENUE, short) == ()
+
+
+def test_only_the_path_counts_not_the_host_or_query() -> None:
+    url = "https://roundrock-bbq.com/menu?location=round-rock"
+    assert other_location_places(url, VENUE, METRO) == ()
+
+
+def test_place_failure_tells_another_metro_from_another_location() -> None:
+    blocks = segment("<p>Brisket $20</p>")
+    url = "https://www.saltlickbbq.com/round-rock-menu"
+    assert place_failure(url, blocks, VENUE, METRO, own_site=True) == "other_location"
+    assert place_failure(url, blocks, VENUE, METRO, own_site=False) is None
+    vegas = "https://tiltedkilt.com/menu/las-vegas-menu"
+    assert place_failure(vegas, blocks, VENUE, METRO, own_site=True) == "wrong_place"

@@ -56,8 +56,9 @@ from apps.discovery.models import DiscoveryLifecycleState
 from apps.discovery.place_check import (
     PLACE_CHECK,
     PlaceArea,
+    PlaceFailure,
     VenuePlace,
-    place_verdict,
+    place_failure,
     venue_place,
 )
 from apps.discovery.web_client import (
@@ -120,6 +121,7 @@ WITHDRAW_REASONS = frozenset(
         "platform_root",
         "social_link",
         "wrong_place",  # (ADR-0015 Amendment 2) another place's menu
+        "other_location",  # (ADR-0025 D2′) the URL names another location of the metro
     }
 )
 WITHDRAW_METHOD = "menu-url-reverify"
@@ -187,7 +189,8 @@ class UrlDiscoveryReport:
     menu_urls_reverified: int = 0
     menu_urls_reverify_deferred: int = 0
     menu_urls_withdrawn: int = 0
-    menu_urls_wrong_place: int = 0  # verified menu pages place-v1 rejects
+    menu_urls_wrong_place: int = 0  # verified menu pages place-v1 rejects (another metro's)
+    menu_urls_other_location: int = 0  # verified own-site pages another location's (D2′)
     menu_pages_duplicate: int = 0  # further own-site pages that repeat a kept page
     menu_pages_over_cap: int = 0  # further own-site pages beyond MAX_MENU_PAGES
     platform_ambiguous: int = 0
@@ -475,18 +478,32 @@ def _with_render(payload: dict[str, object], menu: MenuUrlDiscovery) -> dict[str
     return out
 
 
-def _wrong_place(
+def _place_failure(
     venue: VenueToResolve, menu: MenuUrlDiscovery, place_area: PlaceArea | None
-) -> bool:
-    """``place-v1`` rejects the verified page as another place's (ADR-0015 Amendment 2).
+) -> PlaceFailure | None:
+    """Why ``place-v2`` rejects a verified page (:func:`place_failure`), or ``None``.
 
-    Only a page the resolver read can be judged: a registry menu, or a result
-    without its page, passes.
+    ``wrong_place``: another metro's page (ADR-0015 Amendment 2).
+    ``other_location``: an own-site page whose URL names another location of the
+    venue's metro (ADR-0025 D2′). Only a page the resolver read can be judged: a
+    registry menu, or a result without its page, passes.
     """
     if place_area is None or venue.place is None or menu.page_html is None:
-        return False
-    blocks = segment(menu.page_html)
-    return place_verdict(menu.menu_url, blocks, venue.place, place_area).wrong
+        return None
+    return place_failure(
+        menu.menu_url,
+        segment(menu.page_html),
+        venue.place,
+        place_area,
+        own_site=ordering_platform_host(menu.menu_url) is None,
+    )
+
+
+def _count_place_failure(report: UrlDiscoveryReport, reason: PlaceFailure) -> None:
+    if reason == "wrong_place":
+        report.menu_urls_wrong_place += 1
+    else:
+        report.menu_urls_other_location += 1
 
 
 def _checked(payload: dict[str, object], place_area: PlaceArea | None) -> dict[str, object]:
@@ -723,9 +740,9 @@ def _reverify_menus(
         if not _key_accepts(venue.gers_id, key, result.menu_url):
             failed[key] = CaptureFailure("failed", "no_menu_found", result.fetched_at)
             continue
-        if _wrong_place(venue, result, place_area):
-            report.menu_urls_wrong_place += 1
-            failed[key] = CaptureFailure("failed", "wrong_place", result.fetched_at)
+        if (place_failure := _place_failure(venue, result, place_area)) is not None:
+            _count_place_failure(report, place_failure)
+            failed[key] = CaptureFailure("failed", place_failure, result.fetched_at)
             continue
         fields: dict[str, object] = {"menu_url": result.menu_url, "verifier": resolver.verifier}
         if _is_own_key(venue.gers_id, key):
@@ -958,8 +975,8 @@ def _transfer_menus(
         if not _key_accepts(venue.gers_id, key, result.menu_url):
             report.needs_review += 1
             continue
-        if _wrong_place(venue, result, place_area):
-            report.menu_urls_wrong_place += 1
+        if (place_failure := _place_failure(venue, result, place_area)) is not None:
+            _count_place_failure(report, place_failure)
             report.menu_urls_absent += 1
             continue
         payload = _with_render(
@@ -1015,8 +1032,9 @@ def _resolve_venue(
 ) -> bool:
     """Resolve one venue's website and menu-URL. True if it wrote or crawled.
 
-    With ``place_area``, a verified page ``place-v1`` rejects is another place's
-    menu: a re-check withdraws it like a failed one, and discovery drops it.
+    With ``place_area``, a verified page ``place-v2`` rejects (another metro's, or
+    an own-site page whose URL names another location) is not the venue's menu: a
+    re-check withdraws it like a failed one, and discovery drops it.
     """
     if not venue.organization_is_current:
         report.org_not_current += 1  # e.g. merged/retired; venue lifecycle fixes it
@@ -1242,8 +1260,11 @@ def _resolve_venue(
             if isinstance(discovery, CaptureFailure)
             else tuple(item for item in discovery if isinstance(item, MenuUrlDiscovery))
         )
-        acquired = tuple(m for m in verified if not _wrong_place(venue, m, place_area))
-        report.menu_urls_wrong_place += len(verified) - len(acquired)
+        place_failures = [_place_failure(venue, m, place_area) for m in verified]
+        acquired = tuple(m for m, why in zip(verified, place_failures, strict=True) if why is None)
+        for why in place_failures:
+            if why is not None:
+                _count_place_failure(report, why)
         if not isinstance(discovery, CaptureFailure):
             report.platform_ambiguous += sum(
                 isinstance(item, PlatformAmbiguous) for item in discovery
@@ -1251,8 +1272,11 @@ def _resolve_venue(
         if not acquired:
             if isinstance(discovery, CaptureFailure):
                 failure = discovery
-            elif verified:  # every verified page was another place's (ADR-0015 Amendment 2)
-                failure = CaptureFailure("failed", "wrong_place", observed_at)
+            elif verified:
+                # Every verified page was another place's (ADR-0015 Amendment 2) or
+                # another location's (ADR-0025 D2′); another metro's page decides.
+                reason = "wrong_place" if "wrong_place" in place_failures else "other_location"
+                failure = CaptureFailure("failed", reason, observed_at)
             elif any(isinstance(item, MenuPdfLinked) for item in discovery):
                 # Counted where it is seen: the venue's menu is likely PDF-only,
                 # which v1 does not read (ADR-0013 Amendment 3).
@@ -1429,7 +1453,7 @@ def _persist_menu(
         if (
             verified.fetched_at < transition_at
             or ordering_platform_host(verified.menu_url) != platform
-            or _wrong_place(venue, verified, place_area)
+            or _place_failure(venue, verified, place_area) is not None
         ):
             report.menu_urls_absent += 1
             return worked
@@ -1503,8 +1527,8 @@ def resolve_urls(
     Overture already gives a website for; supplying a website to a venue Overture
     has none for is a later unit (it needs a name/Subject key, not a host).
 
-    ``place_area`` turns on the wrong-place check ``place-v1`` (ADR-0015
-    Amendment 2; :func:`apps.discovery.place_check.load_place_area`).
+    ``place_area`` turns on the place check ``place-v2`` (ADR-0015 Amendment 2,
+    ADR-0025 D2′; :func:`apps.discovery.place_check.load_place_area`).
     """
     from apps.discovery.lifecycle import lock_lifecycle
 
