@@ -132,3 +132,21 @@ reason code is misleading, and the records will be retried on `RECRAWL_WINDOW` f
 - **Q5. Render budget.** Is about 10 minutes of headed-browser time per 40 venues on the laptop
   acceptable for M1, and later for production runs if the cap is raised? *Recommended:* yes for
   M1; production cost is decided with M1's numbers.
+
+## Built: `dns_unresolved` (Q4, 2026-11-01)
+
+Built in session P8-21 as decided (no migration: the reason codes live in the capture contract,
+ADR-0011; the DB checks only their shape).
+- **Reason.** `SiteFetcher._host_refusal` replaces `_is_public_host` and says why a host isn't
+  fetched. A name `getaddrinfo` answers with "no such name" (`EAI_NONAME`, `EAI_NODATA`) or with
+  no address is `failed/dns_unresolved`. Any other resolver failure (`EAI_AGAIN`, a timeout) is a
+  `network_error`, retried as before, so a network outage during a run can't mark live venues
+  dead. A label IDNA can't encode and a private address stay `skipped/non_public_host`.
+- **No retry.** Discovery skips a website whose latest menu-URL capture is `dns_unresolved`,
+  whatever its age (`UrlDiscoveryReport.dns_unresolved_skipped`). Captures are keyed by the
+  website URL, so a changed Overture website is a new URL and is tried on its first run.
+- **Existing records.** Nothing is rewritten. The ~960 `skipped/non_public_host` dead domains
+  are retried once when their `RECRAWL_WINDOW` cooldown ends, recorded as `dns_unresolved`
+  then, and not retried after that.
+- The renderer's sub-request policy (`render.py`, its own `non_public_host` for blocked
+  sub-requests) is unchanged: it only runs on a host the static fetch already resolved.

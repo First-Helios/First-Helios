@@ -198,6 +198,7 @@ class UrlDiscoveryReport:
     needs_review: int = 0
     org_not_current: int = 0
     cooldown_skipped: int = 0
+    dns_unresolved_skipped: int = 0  # (ADR-0027 Q4) a dead domain's website, not retried
 
 
 @dataclass(frozen=True, slots=True)
@@ -1245,6 +1246,11 @@ def _resolve_venue(
         elif saved_menu is None or saved_menu.state != "needs_review":
             # (A due rule-withdrawn record is retried whatever the cooldown.)
             latest = latest_capture_at(session, MENU_URL_NAMESPACE, website)
+            if latest and latest.reason_code == "dns_unresolved":
+                # (ADR-0027 Q4) a dead domain is not retried on the cooldown; a changed
+                # Overture website is another URL, so its first attempt is never skipped
+                report.dns_unresolved_skipped += 1
+                return worked
             if (
                 latest
                 and latest.outcome in {"failed", "skipped"}

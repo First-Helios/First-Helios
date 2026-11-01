@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import socket
 from typing import TYPE_CHECKING
 
 import httpx
@@ -115,6 +116,40 @@ def test_a_host_idna_cannot_encode_is_not_public(tmp_path: Path) -> None:
 
     with _fetcher(tmp_path, {}, resolve=resolve) as fetcher:
         assert fetcher.fetch("https://bad..example/") is None
+        assert fetcher._failure_reason == "non_public_host"  # noqa: SLF001 - the reason
+
+
+def test_a_name_that_does_not_resolve_is_a_dead_domain_not_a_private_host(tmp_path: Path) -> None:
+    # (ADR-0027 Q4) getaddrinfo's "no such name" is a dead domain: failed, not skipped
+    from apps.discovery.web_client import CaptureFailure
+
+    def resolve(host: str) -> Iterable[str]:
+        raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")
+
+    with _fetcher(tmp_path / "a", {}, resolve=resolve) as fetcher:
+        assert fetcher.fetch("https://gone.example/") is None
+        assert fetcher._failure_reason == "dns_unresolved"  # noqa: SLF001 - the reason
+    with _fetcher(tmp_path / "b", {}, resolve=resolve) as fetcher:
+        attempt = fetcher.discover_menu_attempt("https://gone.example/")
+    assert isinstance(attempt, CaptureFailure)
+    assert (attempt.outcome, attempt.reason_code) == ("failed", "dns_unresolved")
+    with _fetcher(tmp_path / "c", {}, resolve=lambda host: []) as fetcher:
+        assert fetcher.fetch("https://empty.example/") is None
+        assert fetcher._failure_reason == "dns_unresolved"  # noqa: SLF001 - the reason
+
+
+def test_a_temporary_resolver_failure_is_a_network_error(tmp_path: Path) -> None:
+    def resolve(host: str) -> Iterable[str]:
+        raise socket.gaierror(socket.EAI_AGAIN, "Temporary failure in name resolution")
+
+    with _fetcher(tmp_path, {}, resolve=resolve) as fetcher:
+        assert fetcher.fetch("https://k.com/") is None
+        assert fetcher._failure_reason == "network_error"  # noqa: SLF001 - the reason
+
+
+def test_a_private_address_stays_non_public(tmp_path: Path) -> None:
+    with _fetcher(tmp_path, {}, resolve=lambda host: ["10.0.0.7"]) as fetcher:
+        assert fetcher.fetch("https://intranet.example/") is None
         assert fetcher._failure_reason == "non_public_host"  # noqa: SLF001 - the reason
 
 
