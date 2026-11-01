@@ -1,6 +1,6 @@
 # ADR-0025: Choosing the venue's own location page on multi-location sites
 
-**Status:** Proposed 2026-10-31 (session P8-21). Accepted 2026-10-31 under the owner's delegation (see [Decision](#decision-2026-10-31)). Not built: D1 measures first.
+**Status:** Proposed 2026-10-31 (session P8-21). Accepted 2026-10-31 under the owner's delegation (see [Decision](#decision-2026-10-31)). D1 measured 2026-11-01; D2 (address ranking) not built; **D2′ (a URL naming another place) accepted by the owner 2026-11-01** (see [Owner answers](#owner-answers-2026-11-01)), built in a separate PR.
 **Date:** 2026-10-31
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
 **Extends:** [ADR-0022](./0022-several-menu-pages-per-venue.md) (several own-site pages),
