@@ -166,6 +166,7 @@ FAILURE_REASONS = frozenset(
         "render_timeout",
         "menu_pdf_only",  # no menu URL verified, but a fetched page links a menu PDF
         "wrong_place",  # every verified menu page was another place's (ADR-0015 Amendment 2)
+        "other_location",  # or another location's of the metro (ADR-0025 D2′)
     }
 )
 

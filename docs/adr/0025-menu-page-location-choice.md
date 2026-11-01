@@ -219,3 +219,47 @@ a gazetteer place other than the venue's locality were labelled (`first-pass-U.j
   another location: 10 moves and 16 other locations in A. They stay a review question for
   Overture data (Q3's flag has no reliable signal yet).
 - **Shared chain menus stay** (Q2).
+
+## D2′ build (2026-11-01)
+
+No schema change, no migration, no new dependency. The `verifier` string and the extraction
+pipeline version are unchanged, so nothing is re-extracted or forced to refetch.
+
+- **`apps/discovery/place_check.py`.**
+  - `PlaceArea.principal`: the metro's principal city, the most common locality of the
+    Overture POIs (`austin` on `helios_laptop`), loaded by `load_place_area`.
+  - `other_location_places(url, venue, area)` is D1's rule (`d1url.py`): the URL path's runs of
+    up to four tokens equal to an area locality or a gazetteer city, at least 4 characters and
+    not all digits. Nothing when the URL names the venue's own locality, or only the principal
+    city. A venue without an Overture locality is not judged.
+  - `place_failure(...)` is the combined check, now `place-v2` (`PLACE_CHECK`, recorded in
+    accepted saves): `wrong_place` when `place-v1` reads another metro; otherwise
+    `other_location` for an own-site page whose URL names another location. Platform pages keep
+    the address match (ADR-0015 item 5).
+- **`url_pipeline.py`**, as `wrong_place` (ADR-0015 Amendment 2):
+  - `other_location` joins `WITHDRAW_REASONS`: a re-check re-discovers, then withdraws through
+    `_withdraw_menu` (`verification_failure: other_location`, `menu-url-reverify`);
+  - discovery drops such a page; a site whose every verified page is rejected records
+    `failed/other_location` (`failed/wrong_place` when one was another metro's);
+  - a lifecycle transfer treats it as absent;
+  - the report counts `menu_urls_other_location`. Bronze's `FAILURE_REASONS` gains
+    `other_location`.
+- **Reversible.** A withdrawn record is retried on ADR-0015's schedule and re-assigned when a
+  page verifies again (for example the venue's own location page). R4 restores its streams.
+- **`python -m apps.discovery.place_sweep [--dry-run]`** applies `place-v2` to the stored
+  bundles, and reports `other_location` beside `wrong_place`.
+- **Tests:** `test/test_place_check.py` (the rule, pure) and
+  `test/test_menu_url_reverification.py` (a re-check withdraws and the record recovers;
+  discovery drops; a suburb venue's "austin" URL is kept; the sweep).
+
+**Measured on `helios_laptop`** (read-only dry run of the sweep, 2026-11-01; scratch
+`var/p8-21/d2prime/` in worktree `p8-21-d2prime`):
+- 3,190 stored menu pages; 3,036 checked (124 not resolved, 30 a bundle of an older URL).
+- **`other_location`: 25 records, all 25 labelled another location's in D1** (`first-pass-U.json`).
+  D1's 36 other-location URL pages are these 25, 10 that `place-v1` had already withdrawn, and
+  Uchi's Charlotte page, which `place-v1` now rejects itself.
+- **`wrong_place`: 3** new `place-v1` flags, because the gazetteer grew from 239 to 303 slugs
+  with P8-20's pages: Uchi Charlotte and Mama Bro's Katy store pages on DoorDash and Uber Eats.
+  All three are another metro's page.
+- The 28 records carry **1,895 of Gold's 103,697 `current_menu` rows**, on 14 subjects; 10 of
+  them lose their only menu.
