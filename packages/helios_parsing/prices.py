@@ -1,4 +1,4 @@
-"""Price occurrences in segmented blocks: the pipeline's price reader (v5-v7) and the frozen v4 one.
+"""Price occurrences in segmented blocks: the pipeline's price reader (v5-v7, v11) and the frozen v4 one.
 
 ``price_tokens`` is the reader the validator, stitch and the row repairs share
 (pipeline v5, ADR-0013 Amendment 11), so a printed price reads the same way at
@@ -26,6 +26,17 @@ unmarked "6.2", "0.5 pounds" or "WCAG 2.1" is not a price; (v7) except on a bare
 page, where a block's last one-decimal amount reads like its last integer ("6.5",
 "salsa roja 7.5"), unless it is a parenthesized or percent figure ("( 6.2 % ABV)")
 or a ".0" after words ("HAWAII 5.0").
+
+(v11, ``validator-v11``, ADR-0013 Amendment 35) A bare reading is never taken from a numeric
+table's cell. A block that prints only an unmarked number ("330", "4.5", "1,170") is a cell
+when it sits in a table row: a run of at least :data:`TABLE_COLUMNS` such blocks right after
+one label block, in a sequence of at least :data:`TABLE_ROWS` consecutive rows (a nutrition
+table: a dish's name, then its servings, calories, fat, ...). A price column printed apart
+from its names ("10", "19", "16" after a section's dishes) is one run per section, not rows
+that each follow one label, and a glass/bottle or size table prints fewer columns than a
+nutrition row. Blank blocks and mark cells (an allergen table's "X") neither join nor split a
+run, and a table split by section headings keeps its column count (:func:`table_cells`). Marked
+and decimal money is read as before, and cells don't vote in ``bare_page``.
 
 ``price_tokens_v4`` is the spike validator's v3 tokenizer, unchanged: the page
 classifier's layout features (``page_features``) are frozen per classifier
@@ -60,6 +71,11 @@ _BARE_INT_V6 = re.compile(r"(?:(?<=\s-)|(?<=[^\W\d_]{2}))(\d{1,3})(?![\w.,:%/])"
 # (v7) on a bare page, a block's last one-decimal amount ("6.5", "salsa roja 7.5")
 _BARE_DEC_V7 = re.compile(r"(?<![\w$.,:/(-])(\d{1,3}\.\d)(?![\w.,:%/])")
 _LETTER = re.compile(r"[^\W\d_]")
+# (v11) a block that prints only an unmarked number: a numeric table's cell candidate
+_NUMBER_ONLY = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?")
+_DIGIT = re.compile(r"\d")
+TABLE_COLUMNS = 6  # (v11) cells in a numeric table's row, at least
+TABLE_ROWS = 3  # (v11) consecutive rows that make a numeric table, at least
 
 # --- v5 additions: each pattern's groups are the whole part "w" and cents "c" ---
 _AMOUNT = r"(?P<w>\d{1,3}(?:,\d{3})+|\d+)(?:[.,](?P<c>\d{2})|\.(?P<c1>\d))?"
@@ -137,20 +153,66 @@ def _last_bare(text: str, forms: tuple[re.Pattern[str], ...]) -> re.Match[str] |
     return last if last is not None and not text[last.end() :].strip(" .-–—|") else None
 
 
-def bare_page(blocks: list[Block]) -> bool:
+def bare_page(blocks: list[Block], cells: frozenset[int] | None = None) -> bool:
     """(v6) The page prints its prices bare: more blocks end in a bare integer (any form)
-    than print a marked or decimal price, chrome included."""
+    than print a marked or decimal price, chrome included; (v11) a numeric table's cells
+    (``cells``, :func:`table_cells` when not given) don't vote."""
+    cells = table_cells(blocks) if cells is None else cells
     marked = bare = 0
-    for block in blocks:
+    for index, block in enumerate(blocks):
         if read_money(block.text):
             marked += 1
-        elif _last_bare(block.text, (_BARE_INT, _BARE_INT_V6)):
+        elif index not in cells and _last_bare(block.text, (_BARE_INT, _BARE_INT_V6)):
             bare += 1
     return bare > marked
 
 
 def _blank(block: Block) -> bool:
     return not block.text.strip(" ​ ")
+
+
+def table_cells(blocks: list[Block]) -> frozenset[int]:
+    """(v11) The indexes of the blocks that are a numeric table's cells (module docstring).
+
+    Runs are maximal sequences of number-only blocks; blank blocks and mark cells (at most two
+    characters and no digit: an allergen table's "X", a "✓", a "-") are skipped. A row is a
+    run of at least ``TABLE_COLUMNS`` with a label block before it; the next row follows when
+    exactly one other block (its label) separates the two runs. At least ``TABLE_ROWS`` rows
+    in a sequence are a table.
+    """
+    runs: list[tuple[int, list[int]]] = []  # (non-number blocks before the run, its cells)
+    gap, cells = 0, []
+    for index, block in enumerate(blocks):
+        text = block.text.replace("\u200b", "").strip()
+        if len(text) <= 2 and not _DIGIT.search(text):  # blank or a mark cell
+            continue
+        if _NUMBER_ONLY.fullmatch(text):
+            cells.append(index)
+            continue
+        if cells:
+            runs.append((gap, cells))
+            gap, cells = 0, []
+        gap += 1
+    if cells:
+        runs.append((gap, cells))
+    widths: set[int] = set()  # the column counts of the tables found
+    table: list[list[int]] = []
+    for before, run in [*runs, (0, [])]:  # the sentinel ends the last table
+        row = before >= 1 and len(run) >= TABLE_COLUMNS
+        if row and table and before == 1:
+            table.append(run)
+            continue
+        if len(table) >= TABLE_ROWS:
+            widths.update(len(row_cells) for row_cells in table)
+        table = [run] if row else []
+    # a table split by section headings keeps its column count: every labelled run of a
+    # table's width is one of its rows, also in a section of one or two rows
+    return frozenset(
+        i
+        for before, run in runs
+        if before >= 1 and len(run) >= TABLE_COLUMNS and len(run) in widths
+        for i in run
+    )
 
 
 def _neighbour(blocks: list[Block], index: int, step: int) -> str:
@@ -178,13 +240,17 @@ def _bare_decimal(blocks: list[Block], index: int) -> re.Match[str] | None:
 
 def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[list[PriceToken]]:
     out: list[list[PriceToken]] = []
-    bare = v6 and bare_page(blocks)
+    cells = table_cells(blocks) if v6 else frozenset()  # (v11) the pipeline's reader only
+    bare = v6 and bare_page(blocks, cells)
     forms = (_BARE_INT, _BARE_INT_V6) if bare else (_BARE_INT,)
     for index, block in enumerate(blocks):
         tokens = [
             PriceToken(index, start, end, amount, "money")
             for start, end, amount in money(block.text)
         ]
+        if index in cells:  # (v11) a numeric table's cell: its money only, no bare reading
+            out.append(tokens)
+            continue
         if not tokens and _BARE_PAIR.fullmatch(block.text):
             tokens.extend(
                 PriceToken(index, m.start(), m.end(), Decimal(m.group(0)), "bare")
@@ -201,7 +267,7 @@ def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[lis
 
 
 def price_tokens(blocks: list[Block]) -> list[list[PriceToken]]:
-    """Price occurrences per block, in block order (the pipeline's reader, v7)."""
+    """Price occurrences per block, in block order (the pipeline's reader, v11)."""
     return _tokens(blocks, read_money, v6=True)
 
 

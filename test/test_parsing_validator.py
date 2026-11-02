@@ -671,3 +671,41 @@ def test_v10_a_section_heading_still_ends_the_scan() -> None:
         _decide([Row("Flan", "5"), Row("Chicken Wings", "14"), Row("Pho", "13")], html)
         == ["downgrade"] * 3
     )
+
+
+def _nutrition_row(name: str, cells: list[int], marks: int = 0) -> str:
+    return f"<p>{name}</p>" + "".join(f"<td>{c}</td>" for c in cells) + "<td>X</td>" * marks
+
+
+NUTRITION = (
+    "<h2>Appetizers</h2><p>Servings</p><p>Calories</p><p>Fat (g)</p><p>Sodium (mg)</p>"
+    + _nutrition_row("Lettuce Wraps", [2, 330, 120, 13, 3, 0, 15, 920, 33, 4, 14, 19])
+    + _nutrition_row("Lettuce Wraps Half Order", [1, 440, 210, 23, 4, 0, 15, 1170, 38, 4, 17, 19])
+    + _nutrition_row("Veggie Lettuce Wraps", [2, 320, 150, 17, 2, 0, 0, 850, 38, 4, 16, 7])
+    + "<h2>Market Sides</h2><p>Servings</p><p>Calories</p>"
+    + _nutrition_row("Garlic Noodles", [2, 340, 90, 11, 4, 0, 15, 750, 53, 2, 9, 8])
+)
+
+
+def test_v11_a_numeric_tables_cells_are_no_prices() -> None:
+    rows = [
+        Row("Lettuce Wraps", "330"),  # calories, not dollars
+        Row("Veggie Lettuce Wraps", "2"),
+        Row("Garlic Noodles", "340"),  # a one-row section of the same table (same width)
+    ]
+    assert _decide(rows, NUTRITION) == ["downgrade"] * 3
+    # allergen marks between the rows don't hide the table
+    marked = "".join(
+        _nutrition_row(f"Dish {n}", [830, 55, 26, 0, 125, 2100, 53, 4, 4, 28], marks=n % 4)
+        for n in range(1, 5)
+    )
+    assert _decide([Row("Dish 2", "26")], marked) == ["downgrade"]
+
+
+def test_v11_a_size_table_still_reads() -> None:
+    # glass / half / bottle columns: fewer cells per row than a nutrition table
+    wines = "<p>Glass</p><p>Half</p><p>Bottle</p>" + "".join(
+        f"<p>{w}</p><p>{g}</p><p>{h}</p><p>{b}</p>"
+        for w, g, h, b in (("Malbec", 12, 24, 48), ("Rioja", 11, 22, 44), ("Chianti", 10, 20, 40))
+    )
+    assert _decide([Row("Rioja", "22", variant="Half")], wines) == ["accept"]

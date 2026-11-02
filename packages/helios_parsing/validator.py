@@ -1,4 +1,4 @@
-"""Stage [5] validator v10: static grounding checks on extracted rows (ADR-0013 §1, §5).
+"""Stage [5] validator v11: static grounding checks on extracted rows (ADR-0013 §1, §5).
 
 Ported from ``spikes/menu_model/validator.py`` as frozen at spike commit
 ``e6e4e1f`` with ``MENU_SPIKE_VALIDATOR=v3``; the per-row decisions are the
@@ -7,7 +7,8 @@ v5 changes tuned on the P5-8 findings (session P5-9) and the v6 changes tuned on
 the P5-10 findings (session P5-11), the v8 change (P5-15), the v9 changes
 (Amendment 30, P8-16) and the v10 change (Amendment 31, P8-16) marked below. Prices are read by
 ``prices.price_tokens`` (v5: currency words, cents, "$.40", "_12"; v6: on a page
-that prints its prices bare, "Cakes16" and "feta -13"). Every row (one item, at
+that prints its prices bare, "Cakes16" and "feta -13"; v11, Amendment 35: a numeric table's
+cells, such as a nutrition table's calories, are no bare prices). Every row (one item, at
 most one price) gets one decision:
 
 - ``accept``: the name and the price are grounded on the page, the price is
@@ -85,7 +86,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
-VALIDATOR_VERSION = "validator-v10"  # part of the pipeline version
+VALIDATOR_VERSION = "validator-v11"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})

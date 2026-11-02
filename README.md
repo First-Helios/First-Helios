@@ -137,9 +137,9 @@ This section is the single current-status page. Other docs link here.
 - **Menu parsing stages** (ADR-0013 slice 2): `packages/helios_parsing/`.
   Pure functions, called by the page classifier, `menu-page` Bronze and extraction (below): the segmented-text hash
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
-  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v10`, ADR-0013
-  Amendments 30-31: a name grounds on the print nearest its claim and on words glued at a capital, and
-  the price scan passes the dish's own headings; per-row
+  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v11`, ADR-0013
+  Amendments 30-31 and 35: a name grounds on the print nearest its claim and on words glued at a capital,
+  the price scan passes the dish's own headings, and a numeric table's cells are no bare prices; per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
   chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and
