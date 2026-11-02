@@ -3231,7 +3231,7 @@ estimate. Record:
 
 ## Amendment 35 (2026-11-01, proposed): the page check's precision on P8-20's pages, and nutrition tables
 
-**Status: Proposed 2026-11-01 (session P8-21). Measurement only; nothing built.** Owner questions
+**Status: Proposed 2026-11-01 (session P8-21); accepted by the owner the same day, all as recommended ([decision](#owner-decision-amendment-35)).** Owner questions
 below. Record:
 [2026-11-01-p8-21-page-check-precision.md](../reviews/2026-11-01-p8-21-page-check-precision.md).
 
@@ -3283,3 +3283,19 @@ re-checked by the session):
   applied)? *Recommended:* there is no per-record removal (no manual entries).
 - **Q4. Single-item pages.** Keep them `not_menu` in the §8 page bar? *Recommended*: a dish's
   detail page is not the venue's menu, even when it prints one price.
+
+### Owner decision (Amendment 35)
+
+**Answered by the owner on 2026-11-01, all as recommended:**
+- Q1: 0.890 is a known gap; only the harmful class (nutrition tables) is acted on;
+- Q2: measure the validator's numeric-row rule on the labelled sets, then build it as
+  `validator-v11` if it loses no recall;
+- Q3: the false rows already in Gold go through the rule (re-interpretation of the stored
+  pages, no model calls, then a Gold refresh);
+- Q4: single-item pages stay `not_menu` in the §8 page bar.
+
+The owner added a low-priority note: a nutrition table names a chain's dishes cleanly, so it
+could later serve as an item-name index in the scraping hierarchy (not a price source). Recorded
+in [ROADMAP §7 item 8](../../ROADMAP.md#7-open-questions); not scheduled.
+
+Status after this decision: **Accepted; measure the numeric-row rule next.**
