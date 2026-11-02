@@ -133,17 +133,20 @@ reason code is misleading, and the records will be retried on `RECRAWL_WINDOW` f
   acceptable for M1, and later for production runs if the cap is raised? *Recommended:* yes for
   M1; production cost is decided with M1's numbers.
 
-## Decision (2026-11-01)
+## Built: `dns_unresolved` (Q4, 2026-11-01)
 
-**Answered by the owner on 2026-11-01, all as recommended:**
-- Q1: M1 (render), then M2 (PDF), then M3 (image);
-- Q2: add `pypdf` for text-layer PDFs if M2 shows most menu PDFs have one (scanned PDFs stay
-  unread); the dependency PR still goes to review;
-- Q3: image menus are measured (M3) only, for now;
-- Q4: a DNS failure becomes its own reason, `dns_unresolved`, and is not retried until the
-  Overture website changes;
-- Q5: about 10 minutes of headed-browser time per 40 venues is fine for M1; production render
-  cost is decided with M1's numbers.
-
-Status after this decision: **Accepted; M1 and the `dns_unresolved` fix next**, after ADR-0013
-Amendment 35's nutrition-table rule.
+Built in session P8-21 as decided (no migration: the reason codes live in the capture contract,
+ADR-0011; the DB checks only their shape).
+- **Reason.** `SiteFetcher._host_refusal` replaces `_is_public_host` and says why a host isn't
+  fetched. A name `getaddrinfo` answers with "no such name" (`EAI_NONAME`, `EAI_NODATA`) or with
+  no address is `failed/dns_unresolved`. Any other resolver failure (`EAI_AGAIN`, a timeout) is a
+  `network_error`, retried as before, so a network outage during a run can't mark live venues
+  dead. A label IDNA can't encode and a private address stay `skipped/non_public_host`.
+- **No retry.** Discovery skips a website whose latest menu-URL capture is `dns_unresolved`,
+  whatever its age (`UrlDiscoveryReport.dns_unresolved_skipped`). Captures are keyed by the
+  website URL, so a changed Overture website is a new URL and is tried on its first run.
+- **Existing records.** Nothing is rewritten. The ~960 `skipped/non_public_host` dead domains
+  are retried once when their `RECRAWL_WINDOW` cooldown ends, recorded as `dns_unresolved`
+  then, and not retried after that.
+- The renderer's sub-request policy (`render.py`, its own `non_public_host` for blocked
+  sub-requests) is unchanged: it only runs on a host the static fetch already resolved.
