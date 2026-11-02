@@ -1,6 +1,6 @@
 # ADR-0027: Menu coverage: script-shell pages, PDF and image menus
 
-**Status:** Proposed 2026-11-01 (session P8-21). Nothing built. Measurement plan and owner
+**Status:** Proposed 2026-11-01 (session P8-21). **Accepted 2026-11-01 by the owner, all as recommended** (see [Decision](#decision-2026-11-01)). Nothing built yet. Measurement plan and owner
 questions below; PDF and image menus need a new dependency, which is the owner's decision.
 **Date:** 2026-11-01
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
@@ -132,3 +132,18 @@ reason code is misleading, and the records will be retried on `RECRAWL_WINDOW` f
 - **Q5. Render budget.** Is about 10 minutes of headed-browser time per 40 venues on the laptop
   acceptable for M1, and later for production runs if the cap is raised? *Recommended:* yes for
   M1; production cost is decided with M1's numbers.
+
+## Decision (2026-11-01)
+
+**Answered by the owner on 2026-11-01, all as recommended:**
+- Q1: M1 (render), then M2 (PDF), then M3 (image);
+- Q2: add `pypdf` for text-layer PDFs if M2 shows most menu PDFs have one (scanned PDFs stay
+  unread); the dependency PR still goes to review;
+- Q3: image menus are measured (M3) only, for now;
+- Q4: a DNS failure becomes its own reason, `dns_unresolved`, and is not retried until the
+  Overture website changes;
+- Q5: about 10 minutes of headed-browser time per 40 venues is fine for M1; production render
+  cost is decided with M1's numbers.
+
+Status after this decision: **Accepted; M1 and the `dns_unresolved` fix next**, after ADR-0013
+Amendment 35's nutrition-table rule.

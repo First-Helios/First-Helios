@@ -3231,7 +3231,7 @@ estimate. Record:
 
 ## Amendment 35 (2026-11-01, proposed): the page check's precision on P8-20's pages, and nutrition tables
 
-**Status: Proposed 2026-11-01 (session P8-21). Measurement only; nothing built.** Owner questions
+**Status: Proposed 2026-11-01 (session P8-21); accepted by the owner the same day, all as recommended ([decision](#owner-decision-amendment-35)).** Owner questions
 below. Record:
 [2026-11-01-p8-21-page-check-precision.md](../reviews/2026-11-01-p8-21-page-check-precision.md).
 
