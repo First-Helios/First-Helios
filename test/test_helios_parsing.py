@@ -199,3 +199,28 @@ def test_text_hash_ignores_markup_and_follows_text_and_structure() -> None:
     decomposed = page.replace("Carne", "Café")  # "é" as e + combining accent
     assert text_hash(segment(decomposed)) == text_hash(segment(page.replace("Carne", "Café")))
     assert SEGMENTER_VERSION == "segment-v2"
+
+
+def test_v11_table_cells_need_repeated_labelled_rows_of_six_or_more() -> None:
+    def page(rows: int, width: int, gap: str = "") -> str:
+        return "".join(
+            f"<p>Dish {chr(65 + r)}</p>{gap}"
+            + "".join(f"<p>{r * 10 + c}</p>" for c in range(width))
+            for r in range(rows)
+        )
+
+    def bare(html: str) -> int:
+        return sum(t.kind == "bare" for r in price_tokens(segment(html)) for t in r)
+
+    assert bare(page(3, 6)) == 0, "three labelled rows of six cells are a table"
+    assert bare(page(2, 6)) == 12, "two rows are not a table: every cell still reads"
+    assert bare(page(3, 5)) == 15, "five columns: a size or glass/bottle table"
+    assert bare(page(3, 6, gap="<p>served with rice and beans</p>")) == 18, "two blocks between"
+    assert bare(page(3, 6, gap="<p>✓</p><p></p>")) == 0, "a mark cell or a blank is skipped"
+    # a price column printed after its section's dishes is one run, not labelled rows
+    dishes = "".join(f"<p>Dish {n}</p><p>with ponzu</p>" for n in "ABCDEFGH")
+    column = "".join(f"<p>{p}</p>" for p in (19, 16, 8, 30, 20, 16, 14, 12))
+    assert bare(dishes + column + "<h2>Rolls</h2>" + dishes + column) == 16
+    # money in a table's cells keeps reading: only bare readings are dropped
+    money = "".join(f"<p>Wrap {n}</p>" + "<p>9.50</p>" * 6 for n in "ABC")
+    assert sum(t.kind == "money" for r in price_tokens(segment(money)) for t in r) == 18

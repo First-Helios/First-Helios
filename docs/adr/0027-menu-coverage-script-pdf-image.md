@@ -1,6 +1,6 @@
 # ADR-0027: Menu coverage: script-shell pages, PDF and image menus
 
-**Status:** Proposed 2026-11-01 (session P8-21). Nothing built. Measurement plan and owner
+**Status:** Proposed 2026-11-01 (session P8-21). **Accepted 2026-11-01 by the owner, all as recommended** (see [Decision](#decision-2026-11-01)). Nothing built yet. Measurement plan and owner
 questions below; PDF and image menus need a new dependency, which is the owner's decision.
 **Date:** 2026-11-01
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
