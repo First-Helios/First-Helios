@@ -1,0 +1,67 @@
+{
+  "source_backup": "helios_laptop-2026-11-01-d2prime.dump",
+  "database": "helios_category_benchmark_test",
+  "at": "2026-11-04T00:42:30.861189+00:00",
+  "category_rows": 21467,
+  "refresh_seconds": 1.491,
+  "venue_count": 9723,
+  "groups": {
+    "cuisine": {
+      "rows": 5136,
+      "venues": 4061
+    },
+    "place_type": {
+      "rows": 13291,
+      "venues": 9721
+    },
+    "specialty": {
+      "rows": 3040,
+      "venues": 2942
+    }
+  },
+  "deterministic_rebuild": true,
+  "filter_plan": [
+    {
+      "Plan": {
+        "Node Type": "Bitmap Heap Scan",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Relation Name": "venue_category",
+        "Alias": "venue_category",
+        "Startup Cost": 23.3,
+        "Total Cost": 826.87,
+        "Plan Rows": 672,
+        "Plan Width": 8,
+        "Actual Startup Time": 0.457,
+        "Actual Total Time": 0.838,
+        "Actual Rows": 1405,
+        "Actual Loops": 1,
+        "Recheck Cond": "(((category_group)::text = 'cuisine'::text) AND ((category_key)::text = 'mexican'::text))",
+        "Rows Removed by Index Recheck": 0,
+        "Exact Heap Blocks": 762,
+        "Lossy Heap Blocks": 0,
+        "Plans": [
+          {
+            "Node Type": "Bitmap Index Scan",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Index Name": "ix_gold_venue_category_filter",
+            "Startup Cost": 0.0,
+            "Total Cost": 23.13,
+            "Plan Rows": 672,
+            "Plan Width": 0,
+            "Actual Startup Time": 0.126,
+            "Actual Total Time": 0.127,
+            "Actual Rows": 2810,
+            "Actual Loops": 1,
+            "Index Cond": "(((category_group)::text = 'cuisine'::text) AND ((category_key)::text = 'mexican'::text))"
+          }
+        ]
+      },
+      "Planning Time": 0.052,
+      "Triggers": [],
+      "Execution Time": 0.873
+    }
+  ]
+}

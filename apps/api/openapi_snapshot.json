@@ -185,6 +185,72 @@
         "title": "AreaItemResponse",
         "type": "object"
       },
+      "CategoryFacetResponse": {
+        "properties": {
+          "group": {
+            "enum": [
+              "cuisine",
+              "specialty",
+              "place_type"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "venue_count": {
+            "title": "Venue Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group",
+          "key",
+          "label",
+          "venue_count"
+        ],
+        "title": "CategoryFacetResponse",
+        "type": "object"
+      },
+      "CategoryFacetsResponse": {
+        "description": "Complete distinct venue counts; each group applies the other groups' filters.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "groups": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/CategoryFacetResponse"
+              },
+              "type": "array"
+            },
+            "title": "Groups",
+            "type": "object"
+          }
+        },
+        "required": [
+          "as_of",
+          "groups"
+        ],
+        "title": "CategoryFacetsResponse",
+        "type": "object"
+      },
       "ErrorResponse": {
         "description": "The uniform error body returned by every non-2xx response.",
         "properties": {
@@ -1245,6 +1311,34 @@
         "title": "PriceTrailResponse",
         "type": "object"
       },
+      "VenueCategoryResponse": {
+        "properties": {
+          "group": {
+            "enum": [
+              "cuisine",
+              "specialty",
+              "place_type"
+            ],
+            "title": "Group",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "key",
+          "label"
+        ],
+        "title": "VenueCategoryResponse",
+        "type": "object"
+      },
       "VenueList": {
         "description": "A cursor-paginated page of venues; ``next_cursor`` is null on the last.",
         "properties": {
@@ -1322,6 +1416,13 @@
               }
             ],
             "title": "Address"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/VenueCategoryResponse"
+            },
+            "title": "Categories",
+            "type": "array"
           },
           "id": {
             "title": "Id",
@@ -1787,6 +1888,66 @@
               ],
               "title": "Cursor"
             }
+          },
+          {
+            "in": "query",
+            "name": "cuisine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cuisine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "specialty",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Specialty"
+            }
+          },
+          {
+            "in": "query",
+            "name": "place_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Place Type"
+            }
           }
         ],
         "responses": {
@@ -1956,6 +2117,36 @@
         "operationId": "list_venues_v1_venues_get",
         "parameters": [
           {
+            "description": "Only venues with placed priced items; requires boundary.",
+            "in": "query",
+            "name": "indexed_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only venues with placed priced items; requires boundary.",
+              "title": "Indexed Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 2,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -2080,6 +2271,66 @@
               "description": "Only venues whose point lies inside this drawn area. A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not. Not with area or area_kind.",
               "title": "Boundary"
             }
+          },
+          {
+            "in": "query",
+            "name": "cuisine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cuisine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "specialty",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Specialty"
+            }
+          },
+          {
+            "in": "query",
+            "name": "place_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Place Type"
+            }
           }
         ],
         "responses": {
@@ -2115,6 +2366,228 @@
           }
         },
         "summary": "List venues (cursor-paginated)",
+        "tags": [
+          "venues"
+        ]
+      }
+    },
+    "/v1/venues/category-facets": {
+      "get": {
+        "description": "Whole-scope distinct restaurant counts, OR within groups and AND between groups.\n\nA group's counts apply every other selected group, allowing its choices to\nexpand. An empty scope has all groups empty and as_of null. With indexed_only,\nq matches item/variant names and shared unplaced chain menus remain excluded.",
+        "operationId": "category_facets_v1_venues_category_facets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "has_menu",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Menu"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9223372036854775807,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Organization"
+            }
+          },
+          {
+            "in": "query",
+            "name": "area",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area"
+            }
+          },
+          {
+            "in": "query",
+            "name": "area_kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "latlon_grid_0p01",
+                    "latlon_grid_0p05",
+                    "all"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area Kind"
+            }
+          },
+          {
+            "description": "A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not.",
+            "in": "query",
+            "name": "boundary",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A drawn area: 3-50 corners as lat,lon pairs separated by ';' (WGS 84 degrees, plain decimals with at most 6 decimals), in any order or orientation; a final corner equal to the first is dropped. At most 1,200 characters and a bounding box of at most 2\u00b0 of latitude and of longitude. A point is inside by even-odd ray casting, so a boundary that crosses itself is accepted; on an axis-aligned rectangle the south and west edges are inside and the north and east edges are not.",
+              "title": "Boundary"
+            }
+          },
+          {
+            "in": "query",
+            "name": "indexed_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Indexed Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 2,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cuisine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cuisine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "specialty",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Specialty"
+            }
+          },
+          {
+            "in": "query",
+            "name": "place_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Place Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryFacetsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The cursor is malformed."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A query parameter failed validation, area is not a canonical area_key of area_kind, area_kind is given without area, boundary breaks a rule (the detail names it), or boundary is given with area or area_kind."
+          }
+        },
+        "summary": "Category Facets",
         "tags": [
           "venues"
         ]

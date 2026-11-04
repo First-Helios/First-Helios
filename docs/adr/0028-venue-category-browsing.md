@@ -1,6 +1,6 @@
 # ADR-0028: Venue categories for browsing without search
 
-**Status:** Proposed — schema and contract awaiting owner review.
+**Status:** Accepted 2026-11-03 by the owner; implemented on `feat/category-browsing`.
 **Date:** 2026-11-03
 **Extends:** ADR-0004 (ownership), ADR-0006 (Gold projections), ADR-0008
 (read API), ADR-0018 (venue filters), ADR-0020 (drawn areas).
@@ -23,11 +23,11 @@ Gold projection is preferable to teaching the browser to infer cuisine or making
 an API request scan raw JSON on every filter change.
 
 CLAUDE.md requires review before new schema patterns, ORM model changes and
-migrations. This proposal specifies that boundary; it does not implement it.
+migrations. The owner approved this design after the frontend slice and schema/API proposal.
 Existing-contract frontend work can proceed independently: suggested literal
 food searches and filters over a restaurant's published section headings.
 
-## Proposed decision
+## Decision
 
 ### Vocabulary and source selection
 
@@ -171,3 +171,24 @@ respectively; this table labels places only.
   create unreviewed classifications and inconsistent paginated results.
 - Training a new item classifier now would conflate restaurant labels with the
   separate dish-taxonomy decision and exceed this first browsing slice.
+
+## Implementation notes
+
+The mapping is checked in as `CATEGORY_OPTIONS` in
+`packages/helios_core/gold/categories.py`, version `overture-venue-v1`.
+Revision `73b0e3dba421` adds the projection. Source selection is composed from
+Identity and provenance contracts; only the refresh reads source payloads.
+Categories appear on venue responses in one batched read per page.
+
+`indexed_only` and `q` are also supported by the venue list so that the map's
+restaurant list, dots, item results and facet scope can agree. `indexed_only`
+requires a boundary; `q` on venue/facet endpoints requires `indexed_only`.
+Map category counts always cover indexed prices. Without search/category choices,
+the map preserves its existing broader venue list. The standalone venue list
+continues to include eligible venues beyond index placement.
+
+The area median remains unfiltered. Frontend text identifies it as all indexed
+items; specialty labels refer to places, while the separate suggested buttons
+retain literal food-name search semantics. No item taxonomy or course classifier
+is introduced. See [the implementation review](../reviews/2026-11-03-venue-category-browsing.md)
+for measured coverage and checks.

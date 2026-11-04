@@ -356,3 +356,51 @@ class PriceIndexPlacement(Base):
     effective_instant: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # Refresh-run metadata: excluded from rebuild-equality comparison.
     refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class VenueCategory(Base):
+    """Rebuildable source-backed labels for a venue (ADR-0028)."""
+
+    __tablename__ = "venue_category"
+    __table_args__: Any = (
+        ForeignKeyConstraint(
+            ["venue_id"],
+            ["identity.establishment.subject_id"],
+            name="fk_gold_venue_category_venue",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_record_version_id"],
+            ["bronze.source_record_version.id"],
+            name="fk_gold_venue_category_version",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "category_group IN ('cuisine', 'specialty', 'place_type')",
+            name="ck_gold_venue_category_group",
+        ),
+        CheckConstraint("category_key ~ '^[a-z][a-z0-9_]*$'", name="ck_gold_venue_category_key"),
+        CheckConstraint(
+            "cardinality(source_categories) > 0 AND array_ndims(source_categories) = 1 "
+            "AND array_position(source_categories, NULL) IS NULL",
+            name="ck_gold_venue_category_sources",
+        ),
+        CheckConstraint(
+            "length(btrim(mapping_version)) > 0", name="ck_gold_venue_category_mapping"
+        ),
+        CheckConstraint(
+            "isfinite(observed_at) AND isfinite(refreshed_at)", name="ck_gold_venue_category_times"
+        ),
+        Index("ix_gold_venue_category_filter", "category_group", "category_key", "venue_id"),
+        Index("ix_gold_venue_category_version", "source_record_version_id"),
+        {"schema": SCHEMA_GOLD},
+    )
+
+    venue_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    category_group: Mapped[str] = mapped_column(String(32), primary_key=True)
+    category_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source_record_version_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_categories: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+    mapping_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
