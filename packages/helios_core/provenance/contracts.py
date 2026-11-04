@@ -35,7 +35,7 @@ from packages.helios_core.provenance.validation import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Collection, Iterable, Mapping
     from datetime import datetime
 
     from sqlalchemy.orm import Session
@@ -694,3 +694,49 @@ def record_capture_evidence(
         session.add(evidence)
         session.flush()
         return evidence.id
+
+
+@dataclass(frozen=True, slots=True)
+class RecordCategories:
+    """Latest source-asserted category tags of a record, including an empty assertion."""
+
+    source_record_id: int
+    source_record_version_id: int
+    observed_at: datetime
+    categories: tuple[str, ...]
+
+
+def latest_record_categories(
+    session: Session, record_ids: Collection[int], *, namespace: str, at: datetime
+) -> dict[int, RecordCategories]:
+    """Latest version at ``at`` per record; read tags only after choosing the version.
+
+    Missing or malformed category fields yield no tags, so a newer empty claim
+    cannot resurrect an older category. Namespace and all keys are bound values.
+    """
+    if not record_ids:
+        return {}
+    rows = session.execute(
+        text("""
+        SELECT DISTINCT ON (v.source_record_id)
+               v.source_record_id, v.id, v.observed_at, v.source_payload
+        FROM bronze.source_record_version v
+        JOIN bronze.source_record r ON r.id = v.source_record_id
+        JOIN bronze.source s ON s.id = r.source_id
+        WHERE v.source_record_id = ANY(CAST(:records AS bigint[]))
+          AND s.namespace = :namespace AND v.observed_at <= :at
+        ORDER BY v.source_record_id, v.observed_at DESC, v.id DESC
+    """),
+        {"records": sorted(set(record_ids)), "namespace": namespace, "at": at},
+    )
+    result = {}
+    for record, version, observed, payload in rows:
+        primary = payload.get("primary_category")
+        alternate = payload.get("alternate_categories")
+        tags = ([primary] if isinstance(primary, str) else []) + (
+            [tag for tag in alternate if isinstance(tag, str)]
+            if isinstance(alternate, list)
+            else []
+        )
+        result[record] = RecordCategories(record, version, observed, tuple(sorted(set(tags))))
+    return result

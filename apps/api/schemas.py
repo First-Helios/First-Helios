@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, WithJsonSchema, field_serializer
+from pydantic import BaseModel, Field, WithJsonSchema, field_serializer
 
 #: A custom serializer's own return-type annotation drives the published
 #: schema for that field in serialization mode (pydantic ignores the field's
@@ -44,6 +44,27 @@ def _utc_iso(value: datetime) -> str:
     return aware.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
+class VenueCategoryResponse(BaseModel):
+    group: Literal["cuisine", "specialty", "place_type"]
+    key: str
+    label: str
+
+
+class CategoryFacetResponse(VenueCategoryResponse):
+    venue_count: int
+
+
+class CategoryFacetsResponse(BaseModel):
+    """Complete distinct venue counts; each group applies the other groups' filters."""
+
+    as_of: datetime | None
+    groups: dict[str, list[CategoryFacetResponse]]
+
+    @field_serializer("as_of")
+    def _serialize_as_of(self, value: datetime | None) -> _DateTimeStr | None:
+        return _utc_iso(value) if value is not None else None
+
+
 class VenueResponse(BaseModel):
     """A venue: one Organization operating at one Place (an Establishment).
 
@@ -55,6 +76,7 @@ class VenueResponse(BaseModel):
     name: str | None
     organization_id: int
     organization_kind: str
+    categories: list[VenueCategoryResponse] = Field(default_factory=list)
     address: str | None
     latitude: float | None
     longitude: float | None

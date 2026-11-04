@@ -16,6 +16,7 @@ decision 7) is a bbox range on that index, then exact ray casting in Python.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Annotated, Any, cast
@@ -29,21 +30,30 @@ from sqlalchemy.orm import (
 
 from apps.api.boundaries import BOUNDARY_DESCRIPTION, InvalidBoundaryError, boundary_param
 from apps.api.cache_validation import ValidatedRoute
+from apps.api.categories import category_filters
 from apps.api.db import get_session
 from apps.api.errors import ApiError, NotFoundError
 from apps.api.item_ids import ItemId, encode_item_id
 from apps.api.pagination import BIGINT_MAX, DEFAULT_LIMIT, MAX_LIMIT, decode_cursor, encode_cursor
 from apps.api.schemas import (
     AreaKind,
+    CategoryFacetResponse,
+    CategoryFacetsResponse,
     ErrorResponse,
     MenuItemResponse,
     MenuOptionResponse,
     MenuPriceResponse,
     MenuResponse,
     MenuSectionResponse,
+    VenueCategoryResponse,
     VenueList,
     VenueMenuResponse,
     VenueResponse,
+)
+from packages.helios_core.gold.categories import (
+    category_predicates,
+    venue_categories,
+    venue_category_facets,
 )
 from packages.helios_core.gold.menu_read import (
     CurrentMenuRow,
@@ -54,6 +64,7 @@ from packages.helios_core.gold.menu_read import (
     menu_source_urls,
 )
 from packages.helios_core.gold.price_index import ALL_AREA, AREA_KIND, GRID_STEPS, grid_cell
+from packages.helios_core.gold.price_index_read import indexed_area_venue_ids
 from packages.helios_core.identity.models import (
     Establishment,
     Organization,
@@ -104,6 +115,54 @@ def _to_venue(
         valid_from=establishment.valid_from,
         valid_to=establishment.valid_to,
     )
+
+
+def _venue_responses(
+    session: Session, rows: Sequence[tuple[Establishment, Organization, Place]]
+) -> list[VenueResponse]:
+    labels = venue_categories(session, [row[0].subject_id for row in rows])
+    result = []
+    for establishment, organization, place in rows:
+        venue = _to_venue(establishment, organization, place)
+        venue.categories = [
+            VenueCategoryResponse(**asdict(label)) for label in labels.get(venue.id, [])
+        ]
+        result.append(venue)
+    return result
+
+
+def _venue_scope(
+    session: Session,
+    *,
+    has_menu: bool | None,
+    organization: int | None,
+    area: str | None,
+    area_kind: str | None,
+    boundary: str | None,
+    indexed_only: bool = False,
+    q: str | None = None,
+) -> tuple[Select[tuple[Establishment, Organization, Place]], Boundary | None]:
+    if boundary is not None and (area is not None or area_kind is not None):
+        raise InvalidBoundaryError("boundary cannot be combined with area or area_kind")
+    if area_kind is not None and area is None:
+        raise InvalidAreaError("area_kind requires area")
+    if indexed_only and boundary is None:
+        raise InvalidBoundaryError("indexed_only requires boundary")
+    if q is not None and not indexed_only:
+        raise InvalidBoundaryError("q requires indexed_only")
+    shape = boundary_param(boundary) if boundary is not None else None
+    statement = _current_venue_select()
+    if has_menu is not None:
+        statement = statement.where(_has_menu() if has_menu else not_(_has_menu()))
+    if organization is not None:
+        statement = statement.where(Establishment.organization_subject_id == organization)
+    if area is not None:
+        statement = statement.where(_in_area(area_kind or AREA_KIND, area))
+    if indexed_only and shape is not None:
+        statement = statement.where(
+            Establishment.subject_id.in_(indexed_area_venue_ids(session, shape, name=q))
+        )
+    return statement, shape
 
 
 def _current_venue_select(
@@ -253,6 +312,11 @@ def _ids_inside(
 )
 def list_venues(
     session: Annotated[Session, Depends(get_session)],
+    categories: Annotated[dict[str, tuple[str, ...]], Depends(category_filters)],
+    indexed_only: Annotated[
+        bool, Query(description="Only venues with placed priced items; requires boundary.")
+    ] = False,
+    q: Annotated[str | None, Query(min_length=2, max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
     has_menu: Annotated[
@@ -300,19 +364,18 @@ def list_venues(
     geographic filter at a time: ``boundary`` with ``area`` or ``area_kind`` is
     ``422``.
     """
-    if boundary is not None and (area is not None or area_kind is not None):
-        raise InvalidBoundaryError("boundary cannot be combined with area or area_kind")
-    if area_kind is not None and area is None:
-        raise InvalidAreaError("area_kind requires area")
-    shape = boundary_param(boundary) if boundary is not None else None
+    statement, shape = _venue_scope(
+        session,
+        has_menu=has_menu,
+        organization=organization,
+        area=area,
+        area_kind=area_kind,
+        boundary=boundary,
+        indexed_only=indexed_only,
+        q=q,
+    )
+    statement = statement.where(*category_predicates(Establishment.subject_id, categories))
     after = decode_cursor(cursor) if cursor is not None else None
-    statement = _current_venue_select()
-    if has_menu is not None:
-        statement = statement.where(_has_menu() if has_menu else not_(_has_menu()))
-    if organization is not None:
-        statement = statement.where(Establishment.organization_subject_id == organization)
-    if area is not None:
-        statement = statement.where(_in_area(area_kind or AREA_KIND, area))
     if shape is not None:
         ids = _ids_inside(session, statement, shape, after, limit + 1)
         statement = statement.where(Establishment.subject_id.in_(ids))
@@ -323,11 +386,52 @@ def list_venues(
 
     has_more = len(rows) > limit
     page = rows[:limit]
-    items = [
-        _to_venue(establishment, organization, place) for establishment, organization, place in page
-    ]
+    items = _venue_responses(session, page)
     next_cursor = encode_cursor(page[-1][0].subject_id) if has_more and page else None
     return VenueList(items=items, next_cursor=next_cursor)
+
+
+@router.get("/category-facets", response_model=CategoryFacetsResponse, responses=_LIST_RESPONSES)
+def category_facets(
+    session: Annotated[Session, Depends(get_session)],
+    categories: Annotated[dict[str, tuple[str, ...]], Depends(category_filters)],
+    has_menu: Annotated[bool | None, Query()] = None,
+    organization: Annotated[int | None, Query(ge=0, le=BIGINT_MAX)] = None,
+    area: Annotated[str | None, Query(max_length=64)] = None,
+    area_kind: Annotated[AreaKind | None, Query()] = None,
+    boundary: Annotated[str | None, Query(description=BOUNDARY_DESCRIPTION)] = None,
+    indexed_only: Annotated[bool, Query()] = False,
+    q: Annotated[str | None, Query(min_length=2, max_length=100)] = None,
+) -> CategoryFacetsResponse:
+    """Whole-scope distinct restaurant counts, OR within groups and AND between groups.
+
+    A group's counts apply every other selected group, allowing its choices to
+    expand. An empty scope has all groups empty and as_of null. With indexed_only,
+    q matches item/variant names and shared unplaced chain menus remain excluded.
+    """
+    statement, shape = _venue_scope(
+        session,
+        has_menu=has_menu,
+        organization=organization,
+        area=area,
+        area_kind=area_kind,
+        boundary=boundary,
+        indexed_only=indexed_only,
+        q=q,
+    )
+    if shape is not None:
+        ids = _ids_inside(session, statement, shape, None, BIGINT_MAX)
+        statement = statement.where(Establishment.subject_id.in_(ids))
+    as_of, groups = venue_category_facets(
+        session, statement.with_only_columns(Establishment.subject_id), categories
+    )
+    return CategoryFacetsResponse(
+        as_of=as_of,
+        groups={
+            group: [CategoryFacetResponse(**asdict(entry)) for entry in entries]
+            for group, entries in groups.items()
+        },
+    )
 
 
 @router.get(
@@ -346,7 +450,7 @@ def get_venue(
     if row is None:
         raise NotFoundError(f"venue {venue_id} not found")
     establishment, organization, place = row
-    return _to_venue(establishment, organization, place)
+    return _venue_responses(session, [(establishment, organization, place)])[0]
 
 
 _MENU_RESPONSES: dict[int | str, dict[str, Any]] = {

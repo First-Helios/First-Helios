@@ -1,6 +1,6 @@
-"""Rebuild Gold: the whole ``current_menu`` catalog, then the price index, in one transaction.
+"""Rebuild Gold: the whole ``current_menu`` catalog, then the price index and venue categories, in one transaction.
 
-``python -m apps.gold.refresh [--as-of ISO-8601]``. Both projections are full
+``python -m apps.gold.refresh [--as-of ISO-8601]``. All projections are full
 deterministic rebuilds at the same instant (default: now), so the index's
 as-of matches the menu rows it aggregates (ADR-0006, ADR-0007 Amendment 1).
 Run it after an extraction run; scheduling stays with ROADMAP Phase 6. Writes
@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from packages.helios_core.db.session import get_sessionmaker
 from packages.helios_core.gold.catalog import refresh_full_catalog
+from packages.helios_core.gold.categories import refresh_venue_categories
 from packages.helios_core.gold.price_index import refresh_price_index
 
 if TYPE_CHECKING:
@@ -32,13 +33,15 @@ def _instant(value: str) -> datetime:
 
 
 def refresh_gold(session: Session, *, effective_instant: datetime) -> dict[str, Any]:
-    """Both rebuilds at ``effective_instant`` with one ``refreshed_at``; flushes, no commit."""
+    """All rebuilds at ``effective_instant`` with one ``refreshed_at``; flushes, no commit."""
     stamp = datetime.now(UTC)
     menu_rows = refresh_full_catalog(
         session, effective_instant=effective_instant, refreshed_at=stamp
     )
     index = refresh_price_index(session, effective_instant=effective_instant, refreshed_at=stamp)
+    category_rows = refresh_venue_categories(session, at=effective_instant, refreshed_at=stamp)
     return {
+        "venue_category_rows": category_rows,
         "effective_instant": effective_instant.isoformat(),
         "current_menu_rows": menu_rows,
         "price_index": index.summary(),
