@@ -693,6 +693,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0019](./docs/adr/0019-public-v1-site.md) | The path to a public v1 site: frontend, page set, area UX, public deploy | Accepted in part (Q1–Q3, Q6c, Q7, Q9; public deploy deferred); steps 1–6 (local v1) built, the frontend PRs awaiting merge |
 | [0020](./docs/adr/0020-drawn-areas-in-the-read-api.md) | Drawn areas in the read API: `boundary=` polygons, a Gold placement table, area price summary and items | Accepted (OQ1–OQ6, OQ8 as recommended; OQ7 changed: `boundary` on `/v1/venues` too); not built yet |
 | [0021](./docs/adr/0021-page-structure-model-and-signal-hierarchy.md) | One page-structure model and a decision hierarchy for structural signals | Accepted (Q1–Q8 as recommended); not built (step 1 = ADR-0013 Amendment 33) |
+| [0028](./docs/adr/0028-venue-category-browsing.md) | Venue categories for browsing without search | Proposed |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the
