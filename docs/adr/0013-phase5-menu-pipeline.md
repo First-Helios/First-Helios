@@ -3310,3 +3310,37 @@ Built after the owner's answers (Q1–Q4 as recommended). Record:
   due for re-interpretation from saved answers (no model call).
 - **Apply (owner, after merge):** laptop backup → re-interpretation → Gold refresh → Pi restore,
   as `resolve-v6` was applied.
+
+## Amendment 36 (2026-11-18): a number after a calorie marker is no price (`validator-v12`)
+
+**Status: Accepted under the owner's delegation (2026-11-17, session P8-22); the owner may
+overturn it before merge.** Built in the same PR. Record:
+[2026-11-18-p8-22-validator-v12.md](../reviews/2026-11-18-p8-22-validator-v12.md).
+
+**Why.** Chains print calories under an item's name, often with no price on the page
+("SPICY AHI" / "cal 400-800"; "calories: 180"). The reader took the calorie number as the
+block's bare price, the model copied it, and the validator accepted it: **143 Gold rows on
+`helios_laptop` carry a calorie count as their price** (Pokeworks on 5 venues, 135 rows: "Poke
+Bomb $320"; Quiznos, 8 rows: "Chipotle Chicken Zlider $180"). Found while measuring PDF menus
+(ADR-0029: Torchy's "CAL 643").
+
+**Rule** (the shared reader, `prices._calorie`): a bare reading is not taken when a calorie
+marker ("cal", "cals", "calorie(s)", "kcal", optionally ":" and a range's first number) comes
+right before it in its block, and such a number doesn't vote in `bare_page`. Marked money reads
+as before. The frozen v4 reader (classifier-v2, chunk-v2.3) is unchanged.
+
+**Measured:**
+- **Labelled sets:** 11 of 2,504 texts change, 0 tokens added; every lost token is a calorie
+  count (read in full). The P8-21 held-out's §8 report and [5c] section report are identical.
+  Verdict measurement on dev and the corpus (1,685 pages): 1,680 identical, invariance
+  unchanged; the 5 that change are unscorable Quiznos and Pokeworks texts losing only their
+  wrong (calorie) accepts.
+- **Gold (read-only, saved answers):** of 2,039 stored texts, 10 change; Pokeworks loses 27
+  accepted rows and Quiznos 8, all calories; Boston Market and Saxbys, which print calories next
+  to real prices, keep every price. Expected apply: `current_menu` 100,448 → **100,305**.
+
+**Versioning:** `validator-v11` → `validator-v12` (Amendments 15 and 35's precedent); every `llm`
+and `jsonld` page becomes due for re-interpretation from saved answers, no model call.
+
+**Apply (owner, after merge):** laptop backup → re-interpretation → Gold refresh → Pi restore,
+as `validator-v11` was applied.

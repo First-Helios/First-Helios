@@ -709,3 +709,23 @@ def test_v11_a_size_table_still_reads() -> None:
         for w, g, h, b in (("Malbec", 12, 24, 48), ("Rioja", 11, 22, 44), ("Chianti", 10, 20, 40))
     )
     assert _decide([Row("Rioja", "22", variant="Half")], wines) == ["accept"]
+
+
+def test_v12_a_calorie_count_is_no_price() -> None:
+    # pokeworks.com/menu: each bowl prints a calorie range and no price
+    bowls = (
+        "<h3>Spicy Ahi</h3><p>cal 400-800</p><p>Ahi tuna, cucumber, sliced onion.</p>"
+        "<h3>Poke Bombs</h3><p>cal 320</p><p>Crispy rice, spicy tuna.</p>"
+    )
+    rows = [Row("Spicy Ahi", "400"), Row("Poke Bombs", "320")]
+    assert _decide(rows, bowls) == ["downgrade", "downgrade"]
+    # quiznos.com/menu: "calories: 180" (or a range) under the item's name
+    sub = (
+        "<p>Chipotle Chicken Zlider</p><p>calories: 180</p><p>Chicken, chipotle mayo.</p>"
+        "<p>BBQ Smokehouse</p><p>calories: 310 – 420</p><p>Pulled pork, BBQ sauce.</p>"
+    )
+    rows = [Row("Chipotle Chicken Zlider", "180"), Row("BBQ Smokehouse", "420")]
+    assert _decide(rows, sub) == ["downgrade", "downgrade"]
+    # a calorie line between a dish and its printed price doesn't hide the price
+    priced = "<p>Burger</p><p>Calories: 650</p><p>$12</p><p>Taco</p><p>cal 320</p><p>9.50</p>"
+    assert _decide([Row("Burger", "12"), Row("Taco", "9.50")], priced) == ["accept", "accept"]

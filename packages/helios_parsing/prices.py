@@ -1,4 +1,4 @@
-"""Price occurrences in segmented blocks: the pipeline's price reader (v5-v7, v11) and the frozen v4 one.
+"""Price occurrences in segmented blocks: the pipeline's price reader (v5-v7, v11, v12) and the frozen v4 one.
 
 ``price_tokens`` is the reader the validator, stitch and the row repairs share
 (pipeline v5, ADR-0013 Amendment 11), so a printed price reads the same way at
@@ -38,6 +38,11 @@ nutrition row. Blank blocks and mark cells (an allergen table's "X") neither joi
 run, and a table split by section headings keeps its column count (:func:`table_cells`). Marked
 and decimal money is read as before, and cells don't vote in ``bare_page``.
 
+(v12, ``validator-v12``, ADR-0013 Amendment 36) A bare reading is never taken right after a
+calorie marker in its block: "cal 320", "Calories: 180", "kcal 450", "cal 400-800" and
+"calories: 610 – 920" print energy, not a price. Such a number doesn't vote in ``bare_page``
+either. Marked money is read as before ("Calories 320 $12.50" still reads $12.50).
+
 ``price_tokens_v4`` is the spike validator's v3 tokenizer, unchanged: the page
 classifier's layout features (``page_features``) are frozen per classifier
 version and still read prices that way.
@@ -74,6 +79,11 @@ _LETTER = re.compile(r"[^\W\d_]")
 # (v11) a block that prints only an unmarked number: a numeric table's cell candidate
 _NUMBER_ONLY = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?")
 _DIGIT = re.compile(r"\d")
+# (v12) a calorie marker right before a number, optionally a range's first number between them:
+# "cal 320", "Calories: 180", "kcal 450", "cal 400-", "calories: 610 – "
+_CALORIE_BEFORE = re.compile(
+    r"(?<![^\W\d_])(?i:k?cals?|calories|calorie)\.?\s*:?\s*(?:\d{1,4}\s*[-–/]\s*)?$"
+)
 TABLE_COLUMNS = 6  # (v11) cells in a numeric table's row, at least
 TABLE_ROWS = 3  # (v11) consecutive rows that make a numeric table, at least
 
@@ -153,6 +163,11 @@ def _last_bare(text: str, forms: tuple[re.Pattern[str], ...]) -> re.Match[str] |
     return last if last is not None and not text[last.end() :].strip(" .-–—|") else None
 
 
+def _calorie(text: str, match: re.Match[str]) -> bool:
+    """(v12) A calorie marker comes right before this number in its block ("cal 320")."""
+    return bool(_CALORIE_BEFORE.search(text[: match.start()]))
+
+
 def bare_page(blocks: list[Block], cells: frozenset[int] | None = None) -> bool:
     """(v6) The page prints its prices bare: more blocks end in a bare integer (any form)
     than print a marked or decimal price, chrome included; (v11) a numeric table's cells
@@ -162,7 +177,11 @@ def bare_page(blocks: list[Block], cells: frozenset[int] | None = None) -> bool:
     for index, block in enumerate(blocks):
         if read_money(block.text):
             marked += 1
-        elif index not in cells and _last_bare(block.text, (_BARE_INT, _BARE_INT_V6)):
+        elif (
+            index not in cells
+            and (last := _last_bare(block.text, (_BARE_INT, _BARE_INT_V6)))
+            and not _calorie(block.text, last)
+        ):
             bare += 1
     return bare > marked
 
@@ -229,7 +248,7 @@ def _bare_decimal(blocks: list[Block], index: int) -> re.Match[str] | None:
     after words ("HAWAII 5.0", a name; a sole "12.0" line still reads)."""
     text = blocks[index].text
     last = _last_bare(text, (_BARE_DEC_V7,))
-    if last is None or text[last.end() :].lstrip().startswith("%"):
+    if last is None or text[last.end() :].lstrip().startswith("%") or _calorie(text, last):
         return None
     if _neighbour(blocks, index, 1).startswith("%") or _neighbour(blocks, index, -1).endswith("("):
         return None
@@ -256,7 +275,11 @@ def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[lis
                 PriceToken(index, m.start(), m.end(), Decimal(m.group(0)), "bare")
                 for m in re.finditer(r"\d{1,3}", block.text)
             )
-        if not tokens and (last := _last_bare(block.text, forms)):
+        if (
+            not tokens
+            and (last := _last_bare(block.text, forms))
+            and not (v6 and _calorie(block.text, last))  # (v12) the pipeline's reader only
+        ):
             tokens.append(
                 PriceToken(index, last.start(), last.end(), Decimal(last.group(1)), "bare")
             )
