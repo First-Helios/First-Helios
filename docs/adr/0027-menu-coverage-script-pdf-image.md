@@ -150,3 +150,11 @@ ADR-0011; the DB checks only their shape).
   then, and not retried after that.
 - The renderer's sub-request policy (`render.py`, its own `non_public_host` for blocked
   sub-requests) is unchanged: it only runs on a host the static fetch already resolved.
+
+## Sized: `robots_unavailable` (2026-11-18, session P8-22)
+
+Record: [2026-11-18-p8-22-robots-unavailable.md](../reviews/2026-11-18-p8-22-robots-unavailable.md).
+80 of the 664 websites, re-fetched politely: 34 moved to another host (about 14 of them expired
+or hijacked domains), 32 unreachable (17 TLS failures, which plain `http://` doesn't fix), 6
+broken (5xx), 8 work now. No fix in reading robots.txt differently; two follow-ups for the owner
+(an honest reason code; moved websites as an identity question), neither built.
