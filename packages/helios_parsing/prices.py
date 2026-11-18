@@ -41,7 +41,10 @@ and decimal money is read as before, and cells don't vote in ``bare_page``.
 (v12, ``validator-v12``, ADR-0013 Amendment 36) A bare reading is never taken right after a
 calorie marker in its block: "cal 320", "Calories: 180", "kcal 450", "cal 400-800" and
 "calories: 610 – 920" print energy, not a price. Such a number doesn't vote in ``bare_page``
-either. Marked money is read as before ("Calories 320 $12.50" still reads $12.50).
+either. Marked money is read as before ("Calories 320 $12.50" still reads $12.50). Nor is a
+position counter a glass/bottle pair: a "k/n" block is a counter when its page prints "1/n",
+"2/n" and "3/n" as blocks of their own (a carousel's "3/7", every k at most n;
+:func:`position_counters`), while a pair repeated as "9/36" or "12/48" still reads.
 
 ``price_tokens_v4`` is the spike validator's v3 tokenizer, unchanged: the page
 classifier's layout features (``page_features``) are frozen per classifier
@@ -84,6 +87,8 @@ _DIGIT = re.compile(r"\d")
 _CALORIE_BEFORE = re.compile(
     r"(?<![^\W\d_])(?i:k?cals?|calories|calorie)\.?\s*:?\s*(?:\d{1,4}\s*[-–/]\s*)?$"
 )
+# (v12) a block that prints one "k/n": a position counter candidate ("3/7")
+_COUNTER = re.compile(r"\s*(\d{1,3})\s*/\s*(\d{1,3})\s*")
 TABLE_COLUMNS = 6  # (v11) cells in a numeric table's row, at least
 TABLE_ROWS = 3  # (v11) consecutive rows that make a numeric table, at least
 
@@ -234,6 +239,19 @@ def table_cells(blocks: list[Block]) -> frozenset[int]:
     )
 
 
+def position_counters(blocks: list[Block]) -> frozenset[int]:
+    """(v12) The indexes of a page's position-counter blocks: "k/n" blocks (k at most n) whose
+    n the page also prints as "1/n", "2/n" and "3/n" blocks (a carousel's slide numbers)."""
+    seen: dict[int, set[int]] = {}
+    found: list[tuple[int, int]] = []
+    for index, block in enumerate(blocks):
+        if (m := _COUNTER.fullmatch(block.text)) and int(m.group(1)) <= int(m.group(2)):
+            seen.setdefault(int(m.group(2)), set()).add(int(m.group(1)))
+            found.append((index, int(m.group(2))))
+    counted = {n for n, ks in seen.items() if {1, 2, 3} <= ks}
+    return frozenset(index for index, n in found if n in counted)
+
+
 def _neighbour(blocks: list[Block], index: int, step: int) -> str:
     """The nearest non-blank block's text before (step -1) or after (step 1) ``index``."""
     index += step
@@ -260,6 +278,7 @@ def _bare_decimal(blocks: list[Block], index: int) -> re.Match[str] | None:
 def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[list[PriceToken]]:
     out: list[list[PriceToken]] = []
     cells = table_cells(blocks) if v6 else frozenset()  # (v11) the pipeline's reader only
+    counters = position_counters(blocks) if v6 else frozenset()  # (v12) likewise
     bare = v6 and bare_page(blocks, cells)
     forms = (_BARE_INT, _BARE_INT_V6) if bare else (_BARE_INT,)
     for index, block in enumerate(blocks):
@@ -270,7 +289,7 @@ def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[lis
         if index in cells:  # (v11) a numeric table's cell: its money only, no bare reading
             out.append(tokens)
             continue
-        if not tokens and _BARE_PAIR.fullmatch(block.text):
+        if not tokens and index not in counters and _BARE_PAIR.fullmatch(block.text):
             tokens.extend(
                 PriceToken(index, m.start(), m.end(), Decimal(m.group(0)), "bare")
                 for m in re.finditer(r"\d{1,3}", block.text)

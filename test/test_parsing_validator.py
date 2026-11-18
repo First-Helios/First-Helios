@@ -729,3 +729,13 @@ def test_v12_a_calorie_count_is_no_price() -> None:
     # a calorie line between a dish and its printed price doesn't hide the price
     priced = "<p>Burger</p><p>Calories: 650</p><p>$12</p><p>Taco</p><p>cal 320</p><p>9.50</p>"
     assert _decide([Row("Burger", "12"), Row("Taco", "9.50")], priced) == ["accept", "accept"]
+
+
+def test_v12_a_carousel_position_is_no_price() -> None:
+    # pfchangs.com/menu: dish cards with no price, each ending with "k/n"
+    cards = "".join(
+        f"<h3>{name}</h3><div>Order Now See Details</div><div>{n}/4</div>"
+        for n, name in enumerate(("Duck Wings", "Wagyu Eggroll", "Duck Fried Rice", "Cake"), 1)
+    )
+    rows = [Row("Duck Wings", "4"), Row("Wagyu Eggroll", "2")]
+    assert _decide(rows, cards) == ["downgrade", "downgrade"]

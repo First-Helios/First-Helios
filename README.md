@@ -147,8 +147,8 @@ This section is the single current-status page. Other docs link here.
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
   JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v12`, ADR-0013
   Amendments 30-31, 35 and 36: a name grounds on the print nearest its claim and on words glued at a capital,
-  the price scan passes the dish's own headings, and a numeric table's cells and a number after a calorie
-  marker are no bare prices; per-row
+  the price scan passes the dish's own headings, and a numeric table's cells, a number after a calorie
+  marker and a carousel's "3/7" are no bare prices; per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
   chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and

@@ -244,3 +244,20 @@ def test_v12_a_number_after_a_calorie_marker_is_no_bare_price() -> None:
         f"<p>Bowl {c}</p><p>cal {300 + n}</p><p>${10 + n}</p>" for n, c in enumerate("ABC")
     )
     assert all(t.kind == "money" for r in price_tokens(segment(page)) for t in r)
+
+
+def test_v12_a_position_counter_is_no_glass_bottle_pair() -> None:
+    def amounts(html: str) -> list[str]:
+        return [str(t.amount) for r in price_tokens(segment(html)) for t in r]
+
+    # pfchangs.com/menu: each dish card ends with its carousel position
+    cards = "".join(f"<h3>Dish {c}</h3><div>{n}/4</div>" for n, c in enumerate("ABCD", 1))
+    assert amounts(cards) == []
+    assert amounts(cards.replace("<div>4/4</div>", "")) == [], "1/4..3/4 are enough"
+    # glass / bottle pairs, repeated or not, still read
+    wines = "<p>Malbec</p><p>12/48</p><p>Rioja</p><p>12/48</p><p>Cava</p><p>9/36</p>"
+    assert amounts(wines) == ["12", "48", "12", "48", "9", "36"]
+    # two positions are not a sequence
+    assert amounts("<p>Dish A</p><p>1/2</p><p>Dish B</p><p>2/2</p>") == ["1", "2", "2", "2"]
+    # the v4 reader is frozen
+    assert len([t for r in price_tokens_v4(segment(cards)) for t in r]) == 8
