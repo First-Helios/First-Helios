@@ -50,6 +50,9 @@ This section is the single current-status page. Other docs link here.
   a citywide `all` row (NULL coordinates), rebuilt in the same refresh. After the P8-5 refresh
   on `helios_laptop`: 267 cells at 0.01°, 83 at 0.05° (71.1% `low_sample`, 357 of 472 venues
   in cells with ≥ 5), and `all` over 472 venues, median 1100 (USD 11.00).
+- **Venue categories** (ADR-0028): `gold.venue_category`, rebuilt by the Gold refresh from
+  the latest resolved Overture assertions. A reviewed mapping separates cuisine,
+  specialty places, and place type; labels retain their source version and observation time.
 - **Read API**: `apps/api/`. FastAPI, conventions per ADR-0008:
   - `GET /healthz`: liveness, no database.
   - `GET /readyz`: readiness, checks the database.
@@ -59,7 +62,12 @@ This section is the single current-status page. Other docs link here.
     `area` (a price-index `area_key`, the 0.01° cell; with `area_kind` a 0.05°
     cell, or `area_kind=all&area=all` for every venue with a point). Each is
     index-backed (ADR-0018, ADR-0007 Amendment 3).
-  - `GET /v1/venues/{venue_id}`: one current venue.
+  - `GET /v1/venues/{venue_id}`: one current venue, including its category labels.
+  - `GET /v1/venues/category-facets`: complete-scope distinct venue counts, applying
+    all other category groups. Repeatable `cuisine`, `specialty`, `place_type` filters
+    work on venue lists and area item lists, OR within groups and AND between them.
+    `indexed_only=true&boundary=…` scopes venues/facets to placed priced items, with
+    optional `q` for item/variant names. Categories filter before cursor pagination.
   - `GET /v1/venues/{venue_id}/menu`: the venue's current menu from
     `gold.current_menu`. Each price carries `observed_at`, its age at request
     time and its source kind. The menu nests sections → items →
@@ -137,9 +145,9 @@ This section is the single current-status page. Other docs link here.
 - **Menu parsing stages** (ADR-0013 slice 2): `packages/helios_parsing/`.
   Pure functions, called by the page classifier, `menu-page` Bronze and extraction (below): the segmented-text hash
   and `SEGMENTER_VERSION` (`segment.py`, the §5 change signal), the schema.org
-  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v10`, ADR-0013
-  Amendments 30-31: a name grounds on the print nearest its claim and on words glued at a capital, and
-  the price scan passes the dish's own headings; per-row
+  JSON-LD menu reader (`jsonld.py`), and the validator (`validator.py`, now `validator-v11`, ADR-0013
+  Amendments 30-31 and 35: a name grounds on the print nearest its claim and on words glued at a capital,
+  the price scan passes the dish's own headings, and a numeric table's cells are no bare prices; per-row
   accept / downgrade / reject, Capture-targeted `blocks:` locators with excerpt
   hashes, the `unlabeled_price_runs` page flag). The extractor's input and output:
   chunking (`chunking.py`), the prompt (now `prompt-v2.4`) with its GBNF grammar, token cap and
@@ -693,6 +701,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0019](./docs/adr/0019-public-v1-site.md) | The path to a public v1 site: frontend, page set, area UX, public deploy | Accepted in part (Q1–Q3, Q6c, Q7, Q9; public deploy deferred); steps 1–6 (local v1) built, the frontend PRs awaiting merge |
 | [0020](./docs/adr/0020-drawn-areas-in-the-read-api.md) | Drawn areas in the read API: `boundary=` polygons, a Gold placement table, area price summary and items | Accepted (OQ1–OQ6, OQ8 as recommended; OQ7 changed: `boundary` on `/v1/venues` too); not built yet |
 | [0021](./docs/adr/0021-page-structure-model-and-signal-hierarchy.md) | One page-structure model and a decision hierarchy for structural signals | Accepted (Q1–Q8 as recommended); not built (step 1 = ADR-0013 Amendment 33) |
+| [0028](./docs/adr/0028-venue-category-browsing.md) | Venue categories for browsing without search | Accepted; implemented (ADR-0028) |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the

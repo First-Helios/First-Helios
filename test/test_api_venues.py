@@ -132,6 +132,7 @@ def test_list_returns_seeded_venues(client: TestClient, session: Session) -> Non
         "name",
         "organization_id",
         "organization_kind",
+        "categories",
         "address",
         "latitude",
         "longitude",

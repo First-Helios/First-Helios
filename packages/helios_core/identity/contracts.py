@@ -342,3 +342,30 @@ def current_venue_locations(
         _VENUE_LOCATIONS_SQL, {"subjects": sorted(set(subject_ids)), "at": at}
     ).mappings()
     return {row["subject_id"]: VenueLocation(**row) for row in rows}
+
+
+def current_venue_record_links(session: Session, *, at: datetime) -> dict[int, tuple[int, ...]]:
+    """Current operating venues' resolved source-record links, without reading Bronze.
+
+    Categories are location-specific; organization resolutions never fan out to
+    locations. Parent currentness and the effective interval match Gold placement.
+    """
+    rows = session.execute(
+        text("""
+        SELECT e.subject_id, r.source_record_id
+        FROM identity.establishment e
+        JOIN identity.current_resolution r ON r.subject_id = e.subject_id
+        JOIN identity.subject_currentness ec ON ec.subject_id = e.subject_id
+        JOIN identity.subject_currentness oc ON oc.subject_id = e.organization_subject_id
+        JOIN identity.subject_currentness pc ON pc.subject_id = e.place_subject_id
+        WHERE r.state = 'resolved' AND ec.is_current AND oc.is_current AND pc.is_current
+          AND e.operating_status <> 'closed' AND e.valid_from <= :at
+          AND (e.valid_to IS NULL OR e.valid_to > :at)
+        ORDER BY e.subject_id, r.source_record_id
+    """),
+        {"at": at},
+    )
+    links: dict[int, list[int]] = {}
+    for venue, record in rows:
+        links.setdefault(venue, []).append(record)
+    return {venue: tuple(records) for venue, records in links.items()}

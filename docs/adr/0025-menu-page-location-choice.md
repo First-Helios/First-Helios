@@ -220,6 +220,27 @@ a gazetteer place other than the venue's locality were labelled (`first-pass-U.j
   Overture data (Q3's flag has no reliable signal yet).
 - **Shared chain menus stay** (Q2).
 
+## Owner answers (2026-11-01)
+
+The owner answered the questions this session raised after D1 (#151, #152):
+
+- **Q1. D2′.** Build it and apply it: the stored-bundle withdrawal on `helios_laptop` (after a
+  backup), then the Gold refresh, then the Pi restored from that database.
+- **Q2. Page-check precision** (the held-out's finding, 0.90 on 50 pages; ADR-0013's verifier,
+  recorded here with the others). Measure a larger sample first, about 200 of P8-20's new page
+  texts at page level, before any verifier change. No learned-classifier retrain without the
+  owner's approval.
+- **Q3. Salt Lick's three airport venues and Thurman's** (a different business at the airport),
+  which hold Salt Lick's `/round-rock-menu` and `/driftwood-menu`: withdraw those pages.
+  D2′ reaches all of them (D1's `U002`, `U003`, `U009`, `U010`, `U013`, `U014`, `U033`, `U034`),
+  so no venue-specific step is needed.
+- **Q4. Next.** After D2′, menu coverage: script-shell pages the renderer doesn't reach, and image
+  and PDF menus (a new dependency, the owner's decision), measured first with the coverage
+  harness.
+
+Status after these answers: **D2′ accepted; build next.** (This section was dropped when #154
+merged and is restored here.)
+
 ## D2′ build (2026-11-01)
 
 No schema change, no migration, no new dependency. The `verifier` string and the extraction
@@ -263,3 +284,31 @@ pipeline version are unchanged, so nothing is re-extracted or forced to refetch.
   All three are another metro's page.
 - The 28 records carry **1,895 of Gold's 103,697 `current_menu` rows**, on 14 subjects; 10 of
   them lose their only menu.
+
+## D2′ applied (2026-11-01)
+
+Owner Q1, after #154 merged (`main` 7b2b9db). No other session was running.
+
+**`helios_laptop`:**
+1. **Backup:** `var/laptop-run/helios_laptop-2026-11-01-pre-d2prime.dump` (sha256 `03189176…`).
+2. **`python -m apps.discovery.place_sweep`:** the dry run matched the measured sets exactly, then
+   the live run withdrew **28 records** (25 `other_location`, 3 `wrong_place`) to
+   `needs_review` (`menu-url-reverify`).
+3. **`python -m apps.menu_pipeline.rescore`** (R4): withdrew the 28 records' Menu streams
+   (28 LLM pages, 2 JSON-LD); nothing due, nothing rescored.
+4. **`python -m apps.gold.refresh`:** `current_menu` **103,697 → 101,802** (−1,895, as measured);
+   no row left on the 28 records. Price index 417 rows. Citywide median **1016 → 1049** on
+   656 → 657 venues; p25 and p75 unchanged (700, 1400). A page shared by several venues no longer
+   blocks one venue's own placement, hence +1 venue.
+5. **Dump for the Pi:** `var/laptop-run/helios_laptop-2026-11-01-d2prime.dump` (sha256
+   `9ce2dc4e…`).
+
+**Pi** (procedure scripts and backups in `~/helios-backups/firsthelios-20261101-p8-21-d2prime/`;
+older backups kept):
+- Backup of the database (`pi-helios-pre.dump`, sha256 `5e2fc0a7…`) and the `3a524d6` code.
+- Backend `3a524d6 → 7b2b9db` (git archive, `rsync --delete` keeping `.env` and `var/`; no infra,
+  dependency or migration change), API rebuilt: restart 15 s, migrate exit 0.
+- Database dropped, recreated and restored from the laptop dump: `pg_restore` with no stderr,
+  309 s downtime, 101,802 Gold rows, median 1049, alembic `13081a087231`, `alembic check` clean.
+- HTTPS smoke checks on `firsthelios.com` and `www`: `/`, `/healthz`, `/readyz`, `/v1/venues`,
+  `/v1/price-index/cells` all 200.

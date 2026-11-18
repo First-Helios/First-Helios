@@ -22,6 +22,7 @@ from apps.discovery.pipeline import run_discovery
 from apps.discovery.registry import RegistryEntry
 from apps.discovery.url_pipeline import (
     MENU_URL_NAMESPACE,
+    RECRAWL_WINDOW,
     WEBSITE_NAMESPACE,
     UrlDiscoveryReport,
     _coerce_website,
@@ -488,6 +489,33 @@ def test_website_change_rediscovers_the_menu_url(session: Session) -> None:
     menus = [payload["menu_url"] for payload in _versions(session, MENU_URL_NAMESPACE, "r5")]
     assert menus == ["https://old-veracruz.com/menu", "https://veracruz.com/menu"]
     assert _record(session, MENU_URL_NAMESPACE, "r5").state == "resolved"
+
+
+class _DeadDomainResolver(_FakeResolver):
+    """Every website's host name doesn't resolve (ADR-0027 Q4)."""
+
+    def discover_menu_attempt(
+        self, website: str, *, address: str | None = None
+    ) -> tuple[MenuUrlDiscovery, ...] | CaptureFailure:
+        self.calls.append(website)
+        return CaptureFailure("failed", "dns_unresolved", _NOW)
+
+
+def test_a_dead_domain_waits_for_a_new_website_not_the_cooldown(session: Session) -> None:
+    _seed_website(session, "r12", "https://gone-veracruz.com", at=_NOW)
+    dead = _DeadDomainResolver(None)
+    _resolve_at(session, dead, at=_NOW)
+    assert dead.calls == ["https://gone-veracruz.com/"]
+
+    long_after = _resolve_at(session, dead, at=_NOW + RECRAWL_WINDOW + timedelta(days=5))
+    assert dead.calls == ["https://gone-veracruz.com/"], "past the cooldown, still not retried"
+    assert (long_after.dns_unresolved_skipped, long_after.cooldown_skipped) == (1, 0)
+
+    _seed_website(session, "r12", "https://veracruz-new.com", at=_LATER)
+    resolver = _FakeResolver("https://veracruz-new.com/menu")
+    report = _resolve_at(session, resolver, at=_LATER)
+    assert resolver.calls == ["https://veracruz-new.com/"], "a changed website is tried"
+    assert (report.menu_urls_found, report.dns_unresolved_skipped) == (1, 0)
 
 
 def test_website_change_keeps_old_menu_url_when_rediscovery_finds_none(session: Session) -> None:

@@ -287,7 +287,9 @@ def test_establishment_grain_references_and_typed_row_are_immutable(
     create_place(session)
     _check_deferred(session)
     with pytest.raises(DBAPIError, match="typed grains cannot be truncated"):
-        session.execute(text("TRUNCATE identity.establishment"))
+        # Include the rebuildable category child so the Identity guard, rather
+        # than PostgreSQL's preliminary FK check, is what rejects truncation.
+        session.execute(text("TRUNCATE identity.establishment CASCADE"))
     session.rollback()
 
 

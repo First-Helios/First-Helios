@@ -160,6 +160,7 @@ SKIP_REASONS = frozenset(
 FAILURE_REASONS = frozenset(
     {
         "network_error",
+        "dns_unresolved",  # the website's host name doesn't exist (ADR-0027 Q4)
         "too_large",
         "not_html",
         "no_menu_found",

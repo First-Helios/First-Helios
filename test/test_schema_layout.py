@@ -136,11 +136,11 @@ def test_identity_owns_exactly_the_step_two_tables() -> None:
 
 def test_gold_owns_exactly_its_read_models() -> None:
     """``current_menu`` (ADR-0006), ``price_index`` (ADR-0007) and its placements
-    (ADR-0020), nothing else."""
+    (ADR-0020), and venue categories (ADR-0028), nothing else."""
     gold_tables = {
         table.name for table in Base.metadata.sorted_tables if table.schema == SCHEMA_GOLD
     }
-    assert gold_tables == {"current_menu", "price_index", "price_index_placement"}
+    assert gold_tables == {"current_menu", "price_index", "price_index_placement", "venue_category"}
 
 
 def test_gold_foreign_keys_only_reference_lower_layers_without_cascade() -> None:

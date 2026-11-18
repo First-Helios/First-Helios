@@ -1050,6 +1050,13 @@ Phase 5's open questions were answered at ADR-0013's acceptance ([Amendment 3](.
    Next step: size both on the corpus (how many venues have several menu-classified pages,
    and how many menu URLs are script shells). Then write an ADR proposing the record change
    and, if rendering, the dependency. Stop for review before building (CLAUDE.md).
+8. **Nutrition tables as a menu-item index** (owner, 2026-11-01: low priority, a note for
+   later). A chain's nutrition or allergen table names every dish once, cleanly, in table rows
+   (P.F. Chang's "Menu Nutritionals To Go": 205 items). It is no price source: the validator
+   read its calories as prices ([ADR-0013 Amendment 35](./docs/adr/0013-phase5-menu-pipeline.md#amendment-35-2026-11-01-proposed-the-page-checks-precision-on-p8-20s-pages-and-nutrition-tables)).
+   But it could sit in the scraping hierarchy as an item-name index for the venue's menu: a
+   check on extraction recall, or names that match one dish across a chain's pages. Few venues
+   have one (5 records in Gold on 2026-11-01), so the value is small. Not scheduled.
 
 ---
 

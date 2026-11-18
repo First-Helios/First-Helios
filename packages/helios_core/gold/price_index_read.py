@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import literal, select, text, tuple_
 
+from packages.helios_core.gold.categories import CategoryFilters, category_predicates
 from packages.helios_core.gold.models import PriceIndex, PriceIndexPlacement
 from packages.helios_core.gold.price_index import (
     AGGREGATE_SQL,
@@ -423,6 +424,7 @@ def price_index_area_items(
     *,
     currency_code: str | None = None,
     name: str | None = None,
+    categories: CategoryFilters | None = None,
     after: AreaItemKey | None = None,
     limit: int,
 ) -> list[AreaItemRow]:
@@ -436,6 +438,16 @@ def price_index_area_items(
     index on names. Read-only; takes no locks.
     """
     placements, _ = _placements_inside(session, boundary)
+    if categories and placements:
+        allowed = set(
+            session.scalars(
+                select(PriceIndexPlacement.venue_id).where(
+                    PriceIndexPlacement.venue_id.in_({p.venue_id for p in placements}),
+                    *category_predicates(PriceIndexPlacement.venue_id, categories),
+                )
+            )
+        )
+        placements = [p for p in placements if p.venue_id in allowed]
     if not placements:
         return []
     params: dict[str, Any] = {
@@ -457,3 +469,23 @@ def price_index_area_items(
         params |= dict(zip(_AFTER_PARAMS, after, strict=True))
     sql += f"ORDER BY {_ITEM_ORDER}\nLIMIT :limit"
     return [AreaItemRow(**row) for row in session.execute(text(sql), params).mappings()]
+
+
+def indexed_area_venue_ids(
+    session: Session, boundary: Boundary, *, name: str | None = None
+) -> set[int]:
+    """Complete placed venue set with a priced item matching the optional name."""
+    placements, _ = _placements_inside(session, boundary)
+    if not placements:
+        return set()
+    sql = _ITEMS_SQL + (_ITEM_NAME if name is not None else "")
+    sql = "SELECT DISTINCT venue_id FROM (" + sql + ") matching"  # noqa: S608 - static fragments; name is bound
+    params: dict[str, Any] = {
+        "subjects": [p.subject_id for p in placements],
+        "subject_kinds": [p.subject_kind for p in placements],
+        "records": [p.source_record_id for p in placements],
+        "venues": [p.venue_id for p in placements],
+    }
+    if name is not None:
+        params["pattern"] = like_pattern(name)
+    return set(session.scalars(text(sql), params))

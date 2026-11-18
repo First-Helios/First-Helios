@@ -227,6 +227,13 @@ def _is_html(result: FetchResult) -> bool:
     return "html" in ctype or ctype == ""
 
 
+# getaddrinfo's "this name has no address" answers (ADR-0027 Q4: a dead domain), as opposed
+# to EAI_AGAIN and other failures of the resolver itself
+_NAME_NOT_FOUND = frozenset(
+    getattr(socket, name) for name in ("EAI_NONAME", "EAI_NODATA") if hasattr(socket, name)
+)
+
+
 def _resolve_host(host: str) -> list[str]:
     return [str(info[4][0]) for info in socket.getaddrinfo(host, None)]
 
@@ -426,8 +433,8 @@ class SiteFetcher:
                 return None
             if split.scheme not in {"http", "https"} or not same_site(current, url):
                 return None
-            if not self._is_public_host(split.hostname or ""):
-                self._failure_reason = "non_public_host"
+            if (refused := self._host_refusal(split.hostname or "")) is not None:
+                self._failure_reason = refused
                 return None
             if obey_robots and not self.allowed(current):
                 return _BLOCKED
@@ -440,20 +447,32 @@ class SiteFetcher:
                 return None
         return None
 
-    def _is_public_host(self, host: str) -> bool:
+    def _host_refusal(self, host: str) -> str | None:
+        """Why ``host`` isn't fetched, or None for a public host.
+
+        ``non_public_host``: no host, a label IDNA can't encode, or an address that isn't
+        public. (ADR-0027 Q4) ``dns_unresolved``: the name doesn't exist (a dead domain);
+        ``network_error``: any other resolver failure (a temporary one is retried as one).
+        """
         if not host:
-            return False
+            return "non_public_host"
         try:
             ipaddress.ip_address(host)
         except ValueError:
             pass
         else:
-            return is_public_address(host)
+            return None if is_public_address(host) else "non_public_host"
         try:
             addresses = list(self._resolve(host))
-        except (OSError, UnicodeError):  # UnicodeError: a label IDNA can't encode
-            return False
-        return bool(addresses) and all(is_public_address(a) for a in addresses)
+        except UnicodeError:  # a label IDNA can't encode
+            return "non_public_host"
+        except socket.gaierror as error:
+            return "dns_unresolved" if error.errno in _NAME_NOT_FOUND else "network_error"
+        except OSError:
+            return "network_error"
+        if not addresses:
+            return "dns_unresolved"
+        return None if all(is_public_address(a) for a in addresses) else "non_public_host"
 
     def _throttle(self, host: str) -> None:
         last = self._last_request_at.get(host)

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session  # noqa: TC002 - FastAPI resolves this at run
 
 from apps.api.boundaries import BoundaryQuery, boundary_param
 from apps.api.cache_validation import ValidatedRoute
+from apps.api.categories import category_filters
 from apps.api.db import get_session
 from apps.api.item_ids import ItemId, encode_item_id
 from apps.api.pagination import (
@@ -301,6 +302,7 @@ def _area_item(row: AreaItemRow, venue_name: str | None, now: datetime) -> AreaI
 def list_price_index_area_items(
     session: Annotated[Session, Depends(get_session)],
     boundary: BoundaryQuery,
+    categories: Annotated[dict[str, tuple[str, ...]], Depends(category_filters)],
     currency: Annotated[CurrencyCode | None, Query()] = None,
     q: Annotated[
         str | None,
@@ -327,7 +329,13 @@ def list_price_index_area_items(
     shape = boundary_param(boundary)
     after = decode_area_item_cursor(cursor) if cursor is not None else None
     rows = price_index_area_items(
-        session, shape, currency_code=currency, name=q, after=after, limit=limit + 1
+        session,
+        shape,
+        currency_code=currency,
+        name=q,
+        categories=categories,
+        after=after,
+        limit=limit + 1,
     )
     page = rows[:limit]
     names = _venue_names(session, {row.venue_id for row in page})
