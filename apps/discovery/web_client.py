@@ -99,6 +99,7 @@ from apps.discovery.menu_url import (
     same_site,
     sitemap_index_children,
 )
+from packages.helios_parsing.pdf import is_pdf, read_pdf
 from packages.helios_parsing.segment import segment
 
 if TYPE_CHECKING:
@@ -145,7 +146,8 @@ class MenuUrlDiscovery:
     # (the venue's own site is a shared platform host, or a homepage link
     # into one, D3.5) | "website" (a deep-link website's own page, ADR-0022)
     # | "homepage" (a root website's homepage, when no other own-site page
-    # verified, ADR-0026)
+    # verified, ADR-0026) | "pdf" (a linked menu PDF read by ``pdf-v1``, when no
+    # page verified, ADR-0029 D2)
     signal: str
     fetched_at: datetime
     content_hash: str
@@ -165,10 +167,15 @@ class CaptureFailure:
 
 @dataclass(frozen=True, slots=True)
 class MenuPdfLinked:
-    """No menu page verified, but a fetched page links a menu-named PDF: the venue's
-    menu is likely PDF-only, which v1 does not read (ADR-0013 Amendment 3)."""
+    """No menu page verified, but a fetched page links a menu-named PDF (ADR-0013 Amendment 3)
+    that discovery could not take as the menu (ADR-0029 D2).
+
+    ``reason``: ``menu_pdf_only`` when the PDF couldn't be fetched or the page check rejected
+    its text; ``not_pdf``, ``pdf_unreadable`` or ``pdf_no_text`` when it was fetched but not read.
+    """
 
     pdf_url: str
+    reason: str = "menu_pdf_only"
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +232,14 @@ class HeuristicVerifier:
 def _is_html(result: FetchResult) -> bool:
     ctype = result.content_type.lower()
     return "html" in ctype or ctype == ""
+
+
+def is_pdf_link(url: str) -> bool:
+    """A link to a PDF: its path ends in ``.pdf`` (:func:`menu_pdf_links`'s rule)."""
+    try:
+        return urlsplit(url).path.lower().endswith(".pdf")
+    except ValueError:
+        return False
 
 
 # getaddrinfo's "this name has no address" answers (ADR-0027 Q4: a dead domain), as opposed
@@ -300,6 +315,7 @@ class SiteFetcher:
         self._site_failure: CaptureFailure | None = None
         self._found_via: dict[str, str] = {}
         self._menu_pdf: str | None = None  # a menu-named PDF link seen by discovery
+        self._menu_pdf_via: str | None = None  # the page that linked it
         self._not_before: float = 0.0
 
     @property
@@ -423,15 +439,21 @@ class SiteFetcher:
         return outcome
 
     def _follow(self, url: str, *, obey_robots: bool) -> FetchResult | None | _Blocked:
-        """Follow redirects by hand under the same-site, public-address policy."""
+        """Follow redirects by hand under the same-site, public-address policy.
+
+        (ADR-0029 D2) A PDF link may redirect to another host (a site builder's file CDN), if
+        it ends in a PDF there; every hop still obeys its host's robots.txt and must resolve to
+        public addresses.
+        """
         current = url
+        any_host = is_pdf_link(url)
         self._failure_reason = "redirect_refused"
         for _ in range(MAX_REDIRECTS + 1):
             try:
                 split = urlsplit(current)
             except ValueError:  # malformed URL or Location header
                 return None
-            if split.scheme not in {"http", "https"} or not same_site(current, url):
+            if split.scheme not in {"http", "https"} or not (any_host or same_site(current, url)):
                 return None
             if (refused := self._host_refusal(split.hostname or "")) is not None:
                 self._failure_reason = refused
@@ -440,6 +462,13 @@ class SiteFetcher:
                 return _BLOCKED
             response = self._request(current)
             if not isinstance(response, _Redirect):
+                if (
+                    any_host
+                    and response is not None
+                    and not same_site(current, url)
+                    and not is_pdf(response.content_type, response.body)
+                ):
+                    return None  # a PDF link that left its site must end in a PDF
                 return response
             try:
                 current = urljoin(current, response.location)
@@ -591,7 +620,16 @@ class SiteFetcher:
         if self._menu_pdf is not None and not any(
             isinstance(item, MenuUrlDiscovery) for item in found
         ):
-            found = (*found, MenuPdfLinked(self._menu_pdf))
+            # (ADR-0029 D2) nothing verified: the first linked menu PDF, read as a page
+            site_failure = self._site_failure
+            pdf = self._pdf_menu(self._menu_pdf, found_via=self._menu_pdf_via)
+            self._site_failure = site_failure  # the PDF's fetch says nothing about the site
+            if isinstance(pdf, MenuUrlDiscovery):
+                found = (pdf, *found)
+            else:
+                read = pdf.reason_code in {"not_pdf", "pdf_unreadable", "pdf_no_text"}
+                reason = pdf.reason_code if read else "menu_pdf_only"
+                found = (*found, MenuPdfLinked(self._menu_pdf, reason))
         return (
             found
             or self._site_failure
@@ -601,6 +639,35 @@ class SiteFetcher:
     def _note_menu_pdf(self, html: str, url: str) -> None:
         if self._menu_pdf is None:
             self._menu_pdf = next(iter(menu_pdf_links(html, url)), None)
+            self._menu_pdf_via = url
+
+    def _pdf_menu(
+        self, pdf_url: str, *, found_via: str | None
+    ) -> MenuUrlDiscovery | CaptureFailure:
+        """A PDF link as the menu (ADR-0029 D2-D4): fetched under the fetch rules (a PDF link
+        may redirect to another host), read with ``pdf-v1`` and judged by the page check on
+        the derived HTML. The link itself is the menu URL, as a page's would be."""
+        result = self.fetch(pdf_url)
+        now = datetime.fromtimestamp(self._clock(), UTC)
+        if result is None or result.status != 200:  # noqa: PLR2004
+            self._note_failure(result)
+            return self._site_failure or CaptureFailure("failed", "network_error", now)
+        if not is_pdf(result.content_type, result.body):
+            return CaptureFailure("failed", "not_pdf", now)
+        document = read_pdf(result.body or b"")
+        if isinstance(document, str):
+            return CaptureFailure("failed", document, now)
+        if not self._page_check.is_menu(document.html, pdf_url, trust_path=False):
+            return CaptureFailure("failed", "no_menu_found", now)
+        return MenuUrlDiscovery(
+            pdf_url,
+            "pdf",
+            datetime.fromtimestamp(result.fetched_at, UTC),
+            result.content_hash,
+            found_via,
+            None,
+            document.html,
+        )
 
     def verify_menu_attempt(
         self, website: str, menu_url: str, *, not_before: datetime
@@ -618,6 +685,16 @@ class SiteFetcher:
         # Re-evaluate robots under the same freshness floor.
         self._robots.clear()
         try:
+            if is_pdf_link(menu_url):  # (ADR-0029 D2) a PDF menu: its own fresh read
+                pdf = self._pdf_menu(menu_url, found_via=None)
+                if (
+                    isinstance(pdf, MenuUrlDiscovery)
+                    and pdf.fetched_at.timestamp() < self._not_before
+                ):
+                    return CaptureFailure(
+                        "failed", "network_error", pdf.fetched_at
+                    )  # no fresh bytes
+                return pdf
             platform = ordering_platform_host(menu_url)
             if platform and not is_platform_venue_page(menu_url, ordering_only=True):
                 return CaptureFailure(
@@ -802,7 +879,7 @@ class SiteFetcher:
         Returns the own-site results first, in rank order, then platform results
         in homepage order; empty when nothing verified.
         """
-        self._menu_pdf = None
+        self._menu_pdf = self._menu_pdf_via = None
         if platform_signal(website):
             if ordering_platform_host(website) is None:
                 self._failure_reason = "social_link"

@@ -196,8 +196,9 @@ def collect_site(
     Discovery (``SiteFetcher.discover_menu_attempt``) as the URL pipeline runs it, with no
     saved keys: own-site pages in rank order, a page that is the same resource as or a near
     copy of one already taken dropped, at most ``MAX_MENU_PAGES``; every verified platform
-    page. A menu-named PDF is counted (``pdf_linked``), not read (ADR-0013 Amendment 3). The
-    cost counts renders, and network requests as ``requests`` (the caller's counter, e.g. a
+    page. When nothing verifies, discovery reads the first menu-named PDF (ADR-0029 D2): a PDF
+    it takes is a captured page; one it doesn't is counted (``pdf_linked``). The cost counts
+    renders, and network requests as ``requests`` (the caller's counter, e.g. a
     counting transport) reports them."""
     calls_before = requests()
     found = fetcher.discover_menu_attempt(fixture.website, address=fixture.address)
