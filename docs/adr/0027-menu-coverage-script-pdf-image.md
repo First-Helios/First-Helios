@@ -133,6 +133,21 @@ reason code is misleading, and the records will be retried on `RECRAWL_WINDOW` f
   acceptable for M1, and later for production runs if the cap is raised? *Recommended:* yes for
   M1; production cost is decided with M1's numbers.
 
+## Measured: M1–M3, and the decisions on them (2026-11-18)
+
+Record: [2026-11-01-p8-21-coverage-m1-m3.md](../reviews/2026-11-01-p8-21-coverage-m1-m3.md).
+- **M1:** 132 renders on 40 venues, 0 verified at any rank: the cap stays 2 and M1 is closed.
+- **M2:** 9 of the 10 distinct menu PDFs downloaded have a text layer (Q2's condition holds),
+  but 18 of 37 linked PDFs redirect to a site builder's file CDN on another host and are refused.
+- **M3:** at most 318 of 2,432 `no_menu_found` venues (13 %) show an image-menu signal; about
+  120–150 (5–6 %) likely have an image menu.
+
+Decided as recommended, **accepted under the owner's delegation (2026-11-17)**; the owner may
+overturn any of them before the record merges: M1 closed at cap 2; a PDF link may follow a
+cross-host redirect (PDF links only; robots, public address and the cap kept), built with the
+reader; the 3 MB cap stays; the `pypdf` dependency PR (ADR, `pyproject.toml`, lockfile) opens
+next and is reviewed before any build; nutrition PDFs are noted for the PDF ADR.
+
 ## Built: `dns_unresolved` (Q4, 2026-11-01)
 
 Built in session P8-21 as decided (no migration: the reason codes live in the capture contract,
