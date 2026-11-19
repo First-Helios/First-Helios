@@ -3326,3 +3326,32 @@ Built after the owner's answers (Q1–Q4 as recommended). Record:
   due for re-interpretation from saved answers (no model call).
 - **Apply (owner, after merge):** laptop backup → re-interpretation → Gold refresh → Pi restore,
   as `resolve-v6` was applied.
+
+### Applied: `validator-v11` (2026-11-18)
+
+Owner go-ahead 2026-11-17, after #159 merged (`main` 75884a6, already deployed on the Pi with
+#162's migration `73b0e3dba421`). No other session was running.
+
+**`helios_laptop`:**
+1. **Backup:** `var/laptop-run/helios_laptop-2026-11-17-pre-v11.dump` (sha256 `1838437c…`).
+2. **`alembic upgrade head`:** `13081a087231 → 73b0e3dba421` (#162's additive
+   `gold.venue_category`), so that the Pi restore keeps the deployed schema.
+3. **Re-interpretation from saved answers** (P8-21's apply script, the extractor refusing every
+   model call): 3,028 pages due (`reinterpret`), 3,028 extracted (346 JSON-LD), 0 failed,
+   0 model calls, 1.87 h.
+4. **`python -m apps.gold.refresh`:** `current_menu` **101,802 → 100,448** (−1,354, as
+   measured); no P.F. Chang's lettuce-wrap row left. Price index 417 rows. Citywide median
+   **1049 → 1031** on 657 → 656 venues; p25 and p75 unchanged (700, 1400). `venue_category`
+   21,467 rows on 9,723 venues, equal to the Pi's.
+5. **Dump for the Pi:** `var/laptop-run/helios_laptop-2026-11-18-v11.dump` (sha256
+   `a1699a67…`).
+
+**Pi** (scripts and backups in `~/helios-backups/firsthelios-20261117-p8-21-v11/`; older backups
+kept). Code unchanged at `75884a6`; Bronze equal to the laptop's (28,359 record versions) before
+the restore.
+- Backup of the database (`pi-helios-pre.dump`, sha256 `5b93eaf2…`).
+- Database dropped, recreated and restored from the laptop dump: `pg_restore` with no stderr,
+  353 s downtime, 100,448 Gold rows, alembic `73b0e3dba421`, migrate exit 0, `alembic check`
+  clean.
+- HTTPS smoke checks on `firsthelios.com` and `www`: `/`, `/healthz`, `/readyz`, `/v1/venues`,
+  a `cuisine` filter, `/v1/venues/category-facets` and `/v1/price-index/cells` all 200.
