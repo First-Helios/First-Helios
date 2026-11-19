@@ -3355,3 +3355,45 @@ the restore.
   clean.
 - HTTPS smoke checks on `firsthelios.com` and `www`: `/`, `/healthz`, `/readyz`, `/v1/venues`,
   a `cuisine` filter, `/v1/venues/category-facets` and `/v1/price-index/cells` all 200.
+
+## Amendment 36 (2026-11-18): `validator-v12`, calorie counts and carousel positions are no prices
+
+Recorded here in session P8-23 (2026-11-19): #167 merged the code and its review
+([2026-11-18-p8-22-validator-v12.md](../reviews/2026-11-18-p8-22-validator-v12.md)), but this ADR
+had no section for it (doc drift). Decided in session P8-22 under the owner's delegation.
+
+- **Rule 1:** a bare reading is not taken right after a calorie marker in its block ("cal 320",
+  "Calories: 180", "kcal 450", a range's last number); such a number doesn't vote in `bare_page`.
+- **Rule 2:** a "k/n" block is not a glass/bottle pair when its page also prints "1/n", "2/n" and
+  "3/n" as blocks of their own (a carousel's slide numbers).
+- `validator-v11` → `validator-v12`; the frozen v4 reader (classifier-v2, chunk-v2.3) unchanged.
+  Labelled sets: 14 of 2,504 texts change, every lost token a calorie count or a slide number; §8
+  and section reports identical. Expected Gold 100,448 → 100,009 (Pokeworks 135, Quiznos 8, P.F.
+  Chang's carousel 296 rows), rehearsed exactly on a scratch copy.
+
+### Applied: `validator-v12` (2026-11-19, session P8-23)
+
+Owner go-ahead in the P8-23 plan ("I approve every data write below"), after #167 merged (`main`
+8a168de).
+
+**`helios_laptop`:**
+1. **Backup:** `var/laptop-run/helios_laptop-2026-11-18-pre-v12.dump` (sha256 `c5436b91…`).
+2. **Re-interpretation from saved answers** (P8-22's rehearsal script, the extractor refusing
+   every model call): 3,028 pages due (`reinterpret`), 3,028 extracted (all from saved answers),
+   0 failed, 0 model calls, 84 min (the rehearsal took 52; the laptop shared its CPU with the
+   PDF-reader build).
+3. **`python -m apps.gold.refresh`:** `current_menu` **100,448 → 100,009**, exactly as rehearsed.
+   Price index 417 → 416 rows; citywide median 1031 (p25 700, p75 1400) on 656 → 655 venues;
+   `venue_category` 21,467 rows, unchanged.
+4. **Dump for the Pi:** `var/laptop-run/helios_laptop-2026-11-19-v12.dump` (sha256 `cb8b74e2…`).
+   The rehearsal copy `helios_p822_test` was dropped.
+
+**Pi** (backups and scripts in `~/helios-backups/firsthelios-20261118-p8-23/`):
+- Backup of the database (`pi-helios-pre.dump`, sha256 `23a7bd0d…`, 100,448 rows) and of the
+  deployed code (`First-Helios-code-75884a6.tgz`).
+- Backend `75884a6` → **`8a168de`** (git archive + rsync, `.env` and `var/` kept; API image
+  rebuilt; migrate exit 0; same alembic head `73b0e3dba421`).
+- Database dropped, recreated and restored from the laptop dump: `pg_restore` with no stderr,
+  394 s downtime, 100,009 Gold rows, 416 price-index rows. Local and `firsthelios.com` checks
+  (`/`, `/healthz`, `/readyz`, `/v1/venues`, a `cuisine` filter, category facets, price-index
+  cells) all 200.
