@@ -3311,41 +3311,31 @@ Built after the owner's answers (Q1–Q4 as recommended). Record:
 - **Apply (owner, after merge):** laptop backup → re-interpretation → Gold refresh → Pi restore,
   as `resolve-v6` was applied.
 
-## Amendment 36 (2026-11-18): calorie counts and carousel positions are no prices (`validator-v12`)
+### Applied: `validator-v11` (2026-11-18)
 
-**Status: Accepted under the owner's delegation (2026-11-17, session P8-22); the owner may
-overturn it before merge.** Built in the same PR. Record:
-[2026-11-18-p8-22-validator-v12.md](../reviews/2026-11-18-p8-22-validator-v12.md).
+Owner go-ahead 2026-11-17, after #159 merged (`main` 75884a6, already deployed on the Pi with
+#162's migration `73b0e3dba421`). No other session was running.
 
-**Why.** Chains print calories under an item's name, often with no price on the page
-("SPICY AHI" / "cal 400-800"; "calories: 180"). The reader took the calorie number as the
-block's bare price, the model copied it, and the validator accepted it: **143 Gold rows on
-`helios_laptop` carry a calorie count as their price** (Pokeworks on 5 venues, 135 rows: "Poke
-Bomb $320"; Quiznos, 8 rows: "Chipotle Chicken Zlider $180"). Found while measuring PDF menus
-(ADR-0029: Torchy's "CAL 643").
+**`helios_laptop`:**
+1. **Backup:** `var/laptop-run/helios_laptop-2026-11-17-pre-v11.dump` (sha256 `1838437c…`).
+2. **`alembic upgrade head`:** `13081a087231 → 73b0e3dba421` (#162's additive
+   `gold.venue_category`), so that the Pi restore keeps the deployed schema.
+3. **Re-interpretation from saved answers** (P8-21's apply script, the extractor refusing every
+   model call): 3,028 pages due (`reinterpret`), 3,028 extracted (346 JSON-LD), 0 failed,
+   0 model calls, 1.87 h.
+4. **`python -m apps.gold.refresh`:** `current_menu` **101,802 → 100,448** (−1,354, as
+   measured); no P.F. Chang's lettuce-wrap row left. Price index 417 rows. Citywide median
+   **1049 → 1031** on 657 → 656 venues; p25 and p75 unchanged (700, 1400). `venue_category`
+   21,467 rows on 9,723 venues, equal to the Pi's.
+5. **Dump for the Pi:** `var/laptop-run/helios_laptop-2026-11-18-v11.dump` (sha256
+   `a1699a67…`).
 
-**Rule** (the shared reader, `prices._calorie`): a bare reading is not taken when a calorie
-marker ("cal", "cals", "calorie(s)", "kcal", optionally ":" and a range's first number) comes
-right before it in its block, and such a number doesn't vote in `bare_page`. Marked money reads
-as before. **Second rule** (`prices.position_counters`): a "k/n" block (k at most n) is no
-glass/bottle pair when its page also prints "1/n", "2/n" and "3/n" as blocks: a carousel's slide
-numbers. P.F. Chang's `/menu` (4 venues) prints no price, and the model priced each dish from its
-card's "5/7": **296 more false Gold rows**, found by tracing every Gold price to its block. The
-frozen v4 reader (classifier-v2, chunk-v2.3) is unchanged.
-
-**Measured:**
-- **Labelled sets:** 14 of 2,504 texts change, 0 tokens added; every lost token is a calorie
-  count or a carousel position (read in full). The P8-21 held-out's §8 report and [5c] section report are identical.
-  Verdict measurement on dev and the corpus (1,685 pages): 1,678 identical, invariance
-  unchanged; the 7 that change are unscorable Quiznos, Pokeworks and P.F. Chang's texts losing
-  only their wrong accepts.
-- **Gold (read-only, saved answers):** of 2,039 stored texts, 10 change; Pokeworks loses 27
-  accepted rows and Quiznos 8, all calories; Boston Market and Saxbys, which print calories next
-  to real prices, keep every price; P.F. Chang's 74 → 0. Expected apply: `current_menu` 100,448
-  → **100,009** (−439).
-
-**Versioning:** `validator-v11` → `validator-v12` (Amendments 15 and 35's precedent); every `llm`
-and `jsonld` page becomes due for re-interpretation from saved answers, no model call.
-
-**Apply (owner, after merge):** laptop backup → re-interpretation → Gold refresh → Pi restore,
-as `validator-v11` was applied.
+**Pi** (scripts and backups in `~/helios-backups/firsthelios-20261117-p8-21-v11/`; older backups
+kept). Code unchanged at `75884a6`; Bronze equal to the laptop's (28,359 record versions) before
+the restore.
+- Backup of the database (`pi-helios-pre.dump`, sha256 `5b93eaf2…`).
+- Database dropped, recreated and restored from the laptop dump: `pg_restore` with no stderr,
+  353 s downtime, 100,448 Gold rows, alembic `73b0e3dba421`, migrate exit 0, `alembic check`
+  clean.
+- HTTPS smoke checks on `firsthelios.com` and `www`: `/`, `/healthz`, `/readyz`, `/v1/venues`,
+  a `cuisine` filter, `/v1/venues/category-facets` and `/v1/price-index/cells` all 200.
