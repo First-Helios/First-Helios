@@ -3397,3 +3397,26 @@ Owner go-ahead in the P8-23 plan ("I approve every data write below"), after #16
   394 s downtime, 100,009 Gold rows, 416 price-index rows. Local and `firsthelios.com` checks
   (`/`, `/healthz`, `/readyz`, `/v1/venues`, a `cuisine` filter, category facets, price-index
   cells) all 200.
+
+## Run record: P8-23, the Orange Pi as pipeline host (2026-11-19)
+
+Owner plan with every data write approved; decisions within it delegated. Record:
+[2026-11-19-p8-23-pi-long-run.md](../reviews/2026-11-19-p8-23-pi-long-run.md).
+
+- The Pi ran `main` 8a168de as the pipeline host against a work database (`helios_work`): worker
+  image (Chromium works on arm64), `llama-server` on the A76 cores, no thermal pause (owner).
+- **20-page check:** 6.1 pages/h (39.9 chunks/h) on CPU; the Pi accepted 944 prices against the
+  laptop GPU's 961 on the same texts (0.982; 870 identical rows). Peak RAM 4.6 GB, SoC 86.7 °C.
+- **Recrawl:** 2 batches of 50 menu URLs (100 of 1,746 due), `--render`; 105 pages extracted, 54
+  of them by the model (412 chunks), 0 failed. Stopped between batches to fit the wrap-up.
+- **Swap:** Gold 100,009 → 99,553 rows (−0.46%), venues with a menu 1,214 → 1,216, citywide median
+  1031 → 1050; one venue lost its menu by an R4 withdrawal (its Uber Eats page failed the page
+  check). Restored into the public database (399 s) and into `helios_laptop`.
+- **Finding (owner question):** `pg_restore` carries `menu.admission_fence`, so a dump restored
+  onto a cluster with a lower transaction counter refuses every Menu write until the fence is reset
+  (`setval('menu.admission_fence', txid_current())`); done by hand on `helios_work`. Options: a
+  documented restore step (as now), or `lock_admission()` treating a fence from the future as stale
+  and resetting it (a migration).
+- **Finding:** refetched pages change often (62 and 43 changed or new of 92 and 66 records), and a
+  changed text is extracted whole; reusing saved answers per chunk would have saved 21% of chunks
+  on the measured pairs.
