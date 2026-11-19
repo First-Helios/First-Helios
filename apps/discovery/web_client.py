@@ -74,7 +74,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 from protego import Protego
@@ -118,6 +118,8 @@ JS_ONLY_TEXT_CHARS = 300
 CACHE_TTL_S = 7 * 24 * 60 * 60
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+# Reserved and unreserved URL characters plus "%": what a menu PDF link keeps unescaped
+_URL_SAFE = ":/?#[]@!$&'()*+,;=~%"
 
 
 @dataclass(frozen=True, slots=True)
@@ -638,7 +640,10 @@ class SiteFetcher:
 
     def _note_menu_pdf(self, html: str, url: str) -> None:
         if self._menu_pdf is None:
-            self._menu_pdf = next(iter(menu_pdf_links(html, url)), None)
+            link = next(iter(menu_pdf_links(html, url)), None)
+            # a file name printed with spaces ("menu nutritional information.pdf"): the menu
+            # URL must be a canonical one, so unsafe characters are percent-encoded
+            self._menu_pdf = None if link is None else quote(link, safe=_URL_SAFE)
             self._menu_pdf_via = url
 
     def _pdf_menu(

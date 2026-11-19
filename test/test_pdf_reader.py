@@ -239,6 +239,20 @@ def test_discovery_takes_a_linked_menu_pdf_through_a_cdn_redirect(tmp_path: Path
     assert menu.page_html is not None and "<p>Carne Asada Plate $24</p>" in menu.page_html
 
 
+def test_a_pdf_link_with_spaces_is_percent_encoded(tmp_path: Path) -> None:
+    pdf = pdf_bytes([MENU_LINES]).decode("ascii")
+    routes = {
+        "https://k.com/": (200, '<a href="/menu nutritional info.pdf">Menu</a>', "text/html"),
+        "https://k.com/menu%20nutritional%20info.pdf": (200, pdf, "application/pdf"),
+    }
+    with _fetcher(tmp_path, routes, page_check=_WordVerifier()) as fetcher:
+        found = fetcher.discover_menu_attempt("https://k.com/")
+    assert isinstance(found, tuple)
+    (menu,) = found
+    assert isinstance(menu, MenuUrlDiscovery)
+    assert menu.menu_url == "https://k.com/menu%20nutritional%20info.pdf"
+
+
 def test_a_pdf_link_obeys_the_cdn_hosts_robots(tmp_path: Path) -> None:
     pdf = pdf_bytes([MENU_LINES]).decode("ascii")
     routes = {
