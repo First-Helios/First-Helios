@@ -700,8 +700,15 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0017](./docs/adr/0017-extraction-harness-generalization.md) | Extraction harness generalization: invariance, multi-model acceptance, per-model configuration | Accepted (items 1–2; items 3–4 deferred) |
 | [0018](./docs/adr/0018-venue-filters-and-item-price-history.md) | Venue filters and item price history (Phase 7 API remainder) | Accepted (built, P7-2) |
 | [0019](./docs/adr/0019-public-v1-site.md) | The path to a public v1 site: frontend, page set, area UX, public deploy | Accepted in part (Q1–Q3, Q6c, Q7, Q9; public deploy deferred); steps 1–6 (local v1) built, the frontend PRs awaiting merge |
-| [0020](./docs/adr/0020-drawn-areas-in-the-read-api.md) | Drawn areas in the read API: `boundary=` polygons, a Gold placement table, area price summary and items | Accepted (OQ1–OQ6, OQ8 as recommended; OQ7 changed: `boundary` on `/v1/venues` too); not built yet |
+| [0020](./docs/adr/0020-drawn-areas-in-the-read-api.md) | Drawn areas in the read API: `boundary=` polygons, a Gold placement table, area price summary and items | Accepted (OQ1–OQ6, OQ8 as recommended; OQ7 changed: `boundary` on `/v1/venues` too); built (#119) |
 | [0021](./docs/adr/0021-page-structure-model-and-signal-hierarchy.md) | One page-structure model and a decision hierarchy for structural signals | Accepted (Q1–Q8 as recommended); not built (step 1 = ADR-0013 Amendment 33) |
+| [0022](./docs/adr/0022-several-menu-pages-per-venue.md) | Several own-site menu pages per venue | Accepted (Q1–Q9 as recommended); built in P8-20 (#139); cap raised to 6 by ADR-0024 |
+| [0023](./docs/adr/0023-menu-browsing-and-http-validation.md) | Bounded menu browsing cache and HTTP validation | Accepted (first slice, then the remaining application slice); API side built (#137) |
+| [0023](./docs/adr/0023-render-state-exploration.md) | Render-state exploration: menu states behind tabs, accordions and script (shares the number above) | Accepted (Q1–Q5); step 0 measured, D2 not built |
+| [0024](./docs/adr/0024-further-menu-page-discovery.md) | Further menu-page discovery: the page cap and the candidate terms | Accepted; D2 built (cap 6, drinks/catering terms, #142) |
+| [0025](./docs/adr/0025-menu-page-location-choice.md) | Choosing the venue's own location page on multi-location sites | Accepted (under the owner's delegation); D1 measured, D2 not built, D2′ built (#154) |
+| [0026](./docs/adr/0026-homepage-as-menu-page.md) | The homepage as the venue's menu page, as a last resort | Accepted (under the owner's delegation); built (#149) |
+| [0027](./docs/adr/0027-menu-coverage-script-pdf-image.md) | Menu coverage: script-shell pages, PDF and image menus | Accepted; Q4 `dns_unresolved` built (#160); M1–M3 measured; PDF reading proposed as ADR-0029 |
 | [0028](./docs/adr/0028-venue-category-browsing.md) | Venue categories for browsing without search | Accepted; implemented (ADR-0028) |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first

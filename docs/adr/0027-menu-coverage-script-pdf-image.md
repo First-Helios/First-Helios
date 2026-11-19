@@ -1,6 +1,6 @@
 # ADR-0027: Menu coverage: script-shell pages, PDF and image menus
 
-**Status:** Proposed 2026-11-01 (session P8-21). **Accepted 2026-11-01 by the owner, all as recommended** (see [Decision](#decision-2026-11-01)). Nothing built yet. Measurement plan and owner
+**Status:** Proposed 2026-11-01 (session P8-21). **Accepted 2026-11-01 by the owner, all as recommended** (see [Decision](#decision-2026-11-01)). Q4 (`dns_unresolved`) built (#160); M1–M3 measured. Measurement plan and owner
 questions below; PDF and image menus need a new dependency, which is the owner's decision.
 **Date:** 2026-11-01
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
@@ -133,20 +133,20 @@ reason code is misleading, and the records will be retried on `RECRAWL_WINDOW` f
   acceptable for M1, and later for production runs if the cap is raised? *Recommended:* yes for
   M1; production cost is decided with M1's numbers.
 
-## Measured: M1–M3, and the decisions on them (2026-11-18)
+## Decision (2026-11-01)
 
-Record: [2026-11-01-p8-21-coverage-m1-m3.md](../reviews/2026-11-01-p8-21-coverage-m1-m3.md).
-- **M1:** 132 renders on 40 venues, 0 verified at any rank: the cap stays 2 and M1 is closed.
-- **M2:** 9 of the 10 distinct menu PDFs downloaded have a text layer (Q2's condition holds),
-  but 18 of 37 linked PDFs redirect to a site builder's file CDN on another host and are refused.
-- **M3:** at most 318 of 2,432 `no_menu_found` venues (13 %) show an image-menu signal; about
-  120–150 (5–6 %) likely have an image menu.
+**Answered by the owner on 2026-11-01, all as recommended:**
+- Q1: M1 (render), then M2 (PDF), then M3 (image);
+- Q2: add `pypdf` for text-layer PDFs if M2 shows most menu PDFs have one (scanned PDFs stay
+  unread); the dependency PR still goes to review;
+- Q3: image menus are measured (M3) only, for now;
+- Q4: a DNS failure becomes its own reason, `dns_unresolved`, and is not retried until the
+  Overture website changes;
+- Q5: about 10 minutes of headed-browser time per 40 venues is fine for M1; production render
+  cost is decided with M1's numbers.
 
-Decided as recommended, **accepted under the owner's delegation (2026-11-17)**; the owner may
-overturn any of them before the record merges: M1 closed at cap 2; a PDF link may follow a
-cross-host redirect (PDF links only; robots, public address and the cap kept), built with the
-reader; the 3 MB cap stays; the `pypdf` dependency PR (ADR, `pyproject.toml`, lockfile) opens
-next and is reviewed before any build; nutrition PDFs are noted for the PDF ADR.
+Status after this decision: **Accepted; M1 and the `dns_unresolved` fix next**, after ADR-0013
+Amendment 35's nutrition-table rule.
 
 ## Built: `dns_unresolved` (Q4, 2026-11-01)
 
