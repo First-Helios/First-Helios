@@ -1,7 +1,8 @@
 # ADR-0029: Reading PDF menus with `pypdf`
 
-**Status:** Proposed 2026-11-18 (session P8-22). **Nothing is built.** This PR adds the
-dependency only (this ADR, `pyproject.toml`, `uv.lock`); the reader is built after it merges.
+**Status:** Accepted 2026-11-20 (owner: "all as recommended"); proposed 2026-11-18 (P8-22).
+The dependency PR (#164, merged) added the dependency only (this ADR, `pyproject.toml`,
+`uv.lock`); the reader is built in a later PR (2026-11-19, P8-23, see "Built").
 **Date:** 2026-11-18
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
 **Extends:** [ADR-0027](./0027-menu-coverage-script-pdf-image.md) (M2 and the decisions on it),
@@ -146,3 +147,38 @@ The build re-measures it on every PDF the coverage harness and M2 hold.
 - **Q3. Build order.** After this merges: reader + fetch branch + D5's rule in one PR, measured on
   the coverage harness and M2's PDFs, then a laptop discovery re-run of the 164 `menu_pdf_only`
   venues? *Recommended.*
+
+## Built (2026-11-19, session P8-23; stacked on this ADR's dependency PR, not merged)
+
+Built under the owner's delegation for the decisions within the P8-23 plan; the record is
+[2026-11-19-p8-23-pdf-reader.md](../reviews/2026-11-19-p8-23-pdf-reader.md). The owner merges
+the dependency (#164) and the build; no PDF data reaches the public database before that.
+
+- **D3** `packages/helios_parsing/pdf.py` (`pdf-v1`), as decided: plain extraction, at most 40
+  pages, one `<p>` per line, `<hr>` between pages, `pdf_unreadable` (encrypted or unopenable) and
+  `pdf_no_text` (< 200 characters). **Change from the text above:** Evidence locators keep
+  `segment-v2`, the segmenter that makes the blocks from pdf-v1's document (a bundle's locators
+  must name its segmenter); `pdf-v1` is recorded in the menu-page Version payload (`reader`), and
+  the bundle holds the PDF's bytes (`body`) and the document (`rendered_dom`).
+- **D2** discovery reads the first linked menu PDF when nothing verifies; a PDF link may redirect
+  to another host when it ends in a PDF there (robots.txt per hop, public addresses, the 3 MB
+  cap). The link is the menu URL (signal `pdf`); a saved PDF menu is re-verified by a fresh read.
+  Site Captures: `menu_pdf_only` (unfetched or rejected by the page check), `not_pdf`,
+  `pdf_unreadable`, `pdf_no_text` (the last three also withdraw a saved PDF menu, as `not_html`
+  does). Later fetches (`page_bronze`) read a PDF response the same way; a `.pdf` link that
+  answers otherwise is `failed/not_pdf`.
+- **D4** the production verifier on the derived HTML: 10 of M2's 11 distinct text PDFs accepted
+  (every text menu, plus Pizza Twist's nutrition PDF); Olive Garden's nutrition PDF rejected.
+- **D5** `validator-v13`: a block of at least 6 number-only tokens that are at least two thirds of
+  its tokens is a numeric table's row (no bare reading, no `bare_page` vote; money still reads).
+  Olive Garden 282 bare readings → 0; 0 of 2,504 labelled or published texts change; on
+  `helios_laptop`'s stored texts 2 of 2,010 change (one accepted row becomes unpriced).
+
+### Owner decision (2026-11-20)
+
+"All as recommended": Q1–Q3 as recommended (#164 merged: `pypdf` in the main dependency list,
+build order as above), and the build's decisions above accepted (locators keep `segment-v2`; the
+PDF link is the menu URL; a PDF link that leaves its site must end in a PDF; D5's two-thirds rule;
+layout mode for a page plain mode breaks into one word per line). After this build merges,
+validator-v13 is applied on the laptop (re-interpretation from saved answers), then discovery
+re-tries the 164 `menu_pdf_only` venues on their cooldown.

@@ -12,10 +12,14 @@ current venue has saved (resolved ``menu-url-discovery`` records), one run:
    render it (a platform page, or an own-site page that looks
    JavaScript-only), else ``not_menu``. With a renderer (``--render``, off by
    default) a ``js_only`` page, or a platform page answering ``403``, is
-   rendered once and classified again; the render is its own Capture. A PDF
-   response is skipped ``pdf``; other non-HTML is ``failed/not_html``.
+   rendered once and classified again; the render is its own Capture. (ADR-0029
+   D3) A PDF response is read by ``pdf-v1`` into an HTML document, segmented and
+   classified the same way (``failed/pdf_unreadable`` or ``pdf_no_text`` when it
+   can't be read); a ``.pdf`` link that answers with anything else is
+   ``failed/not_pdf``; other non-HTML is ``failed/not_html``.
 3. **Writes** a menu page per record: the Version payload is the menu URL,
-   ``render``, the segmenter version and the text hash. A payload equal to the
+   ``render``, the segmenter version and the text hash (and ``reader``:
+   ``pdf-v1`` for a PDF). A payload equal to the
    record's latest Version writes a ``succeeded`` Capture with no Version
    (Amendment 4); otherwise a new Version, so "changed" means a new Version.
    Every Capture that read a body has a durable bundle (:mod:`.bundle`).
@@ -52,7 +56,7 @@ from sqlalchemy.orm import aliased
 
 from apps.discovery.menu_url import menu_pdf_links, ordering_platform_host
 from apps.discovery.url_pipeline import MENU_URL_NAMESPACE
-from apps.discovery.web_client import CaptureFailure, FetchResult, looks_js_only
+from apps.discovery.web_client import CaptureFailure, FetchResult, is_pdf_link, looks_js_only
 from apps.menu_pipeline.bundle import Bundle, BundleStore
 from packages.helios_core.identity.commands import (
     DecisionMetadata,
@@ -79,6 +83,7 @@ from packages.helios_core.provenance.models import (
     SourceRecord,
     SourceRecordVersion,
 )
+from packages.helios_parsing.pdf import PDF_READER_VERSION, is_pdf, read_pdf
 from packages.helios_parsing.segment import SEGMENTER_VERSION, Block, segment, text_hash
 
 if TYPE_CHECKING:
@@ -331,10 +336,6 @@ def page_targets(
     return targets
 
 
-def _is_pdf(result: FetchResult) -> bool:
-    return "pdf" in result.content_type.lower() or (result.body or b"").startswith(b"%PDF-")
-
-
 def _is_html(result: FetchResult) -> bool:
     content_type = result.content_type.lower()
     return "html" in content_type or content_type == ""
@@ -373,8 +374,14 @@ class MenuPageWriter:
             self._attempt(target.url, static)
             if self._renderer is not None and target.platform and static.reason_code == "http_403":
                 self._render(target)  # Amendment 1: a refused platform page is rendered
-        elif _is_pdf(static):
-            self._skip(static, "pdf", bundle=None)
+        elif is_pdf(static.content_type, static.body):
+            self._pdf(target, static)
+        elif is_pdf_link(target.url):  # (ADR-0029 D2) a PDF link that now answers otherwise
+            self._attempt(
+                target.url,
+                CaptureFailure("failed", "not_pdf", _at(static)),
+                content_hash=static.content_hash,
+            )
         elif not _is_html(static):
             self._attempt(
                 target.url,
@@ -401,6 +408,31 @@ class MenuPageWriter:
                     self._render(target)
         if self._pdf_linked:
             self._report.linking_menu_pdf += 1
+
+    def _pdf(self, target: PageTarget, static: FetchResult) -> None:
+        """(ADR-0029 D3) A PDF: its ``pdf-v1`` document is the page; the bundle keeps the PDF's
+        bytes as ``body`` and the document as ``rendered_dom`` (what the pipeline reads)."""
+        document = read_pdf(static.body or b"")
+        if isinstance(document, str):
+            self._attempt(
+                target.url,
+                CaptureFailure("failed", document, _at(static)),
+                content_hash=static.content_hash,
+            )
+            return
+        blocks = segment(document.html)
+        bundle = Bundle(
+            url=static.url,
+            content_type=static.content_type,
+            body=static.body,
+            rendered_dom=document.html,
+            segmenter=SEGMENTER_VERSION,
+            blocks=tuple(blocks),
+        )
+        if self._verifier.is_menu(document.html, static.url, trust_path=False):
+            self._succeeded(target, static, blocks, bundle, render=None, reader=PDF_READER_VERSION)
+        else:
+            self._skip(static, "not_menu", bundle)
 
     def _render(self, target: PageTarget) -> None:
         assert self._renderer is not None  # noqa: S101 - callers check
@@ -467,6 +499,7 @@ class MenuPageWriter:
         bundle: Bundle,
         *,
         render: str | None,
+        reader: str | None = None,
     ) -> None:
         fetched_at = _at(result)
         bundle_path = self._bundles.write(bundle, fetched_at=fetched_at)
@@ -476,6 +509,8 @@ class MenuPageWriter:
             "segmenter": SEGMENTER_VERSION,
             "text_hash": text_hash(blocks),
         }
+        if reader is not None:  # (ADR-0029 D3) a PDF read by pdf-v1; HTML payloads unchanged
+            payload["reader"] = reader
         wrote_version = False
         for record in target.records:
             scope = target.scope_subject_id(record)

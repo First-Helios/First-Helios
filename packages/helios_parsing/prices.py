@@ -1,4 +1,4 @@
-"""Price occurrences in segmented blocks: the pipeline's price reader (v5-v7, v11, v12) and the frozen v4 one.
+"""Price occurrences in segmented blocks: the pipeline's price reader (v5-v7, v11-v13) and the frozen v4 one.
 
 ``price_tokens`` is the reader the validator, stitch and the row repairs share
 (pipeline v5, ADR-0013 Amendment 11), so a printed price reads the same way at
@@ -45,6 +45,14 @@ either. Marked money is read as before ("Calories 320 $12.50" still reads $12.50
 position counter a glass/bottle pair: a "k/n" block is a counter when its page prints "1/n",
 "2/n" and "3/n" as blocks of their own (a carousel's "3/7", every k at most n;
 :func:`position_counters`), while a pair repeated as "9/36" or "12/48" still reads.
+
+(v13, ``validator-v13``, ADR-0029 D5) Nor from a numeric table's row
+printed as one block: a block of at least :data:`TABLE_COLUMNS` number-only tokens that are at
+least two thirds of its tokens ("670 380 42 3.5 0 300 1600 48 2 3 24" and "240 230 26 4.5 0 15
+740 2 0 less than 1 g 1", a nutrition PDF's rows; mark tokens such as "-" or "X" don't count)
+gives no bare reading and doesn't vote in ``bare_page`` (:func:`table_rows`). Its marked and
+decimal money is read as before; a priced line with a few counts in it ("Party Pack 12 tacos 2
+queso 1 rice 1 beans 1 salsa 45") still reads its last number.
 
 ``price_tokens_v4`` is the spike validator's v3 tokenizer, unchanged: the page
 classifier's layout features (``page_features``) are frozen per classifier
@@ -175,9 +183,9 @@ def _calorie(text: str, match: re.Match[str]) -> bool:
 
 def bare_page(blocks: list[Block], cells: frozenset[int] | None = None) -> bool:
     """(v6) The page prints its prices bare: more blocks end in a bare integer (any form)
-    than print a marked or decimal price, chrome included; (v11) a numeric table's cells
-    (``cells``, :func:`table_cells` when not given) don't vote."""
-    cells = table_cells(blocks) if cells is None else cells
+    than print a marked or decimal price, chrome included; (v11, v13) a numeric table's cells
+    and rows (``cells``, :func:`numeric_cells` when not given) don't vote."""
+    cells = numeric_cells(blocks) if cells is None else cells
     marked = bare = 0
     for index, block in enumerate(blocks):
         if read_money(block.text):
@@ -239,6 +247,28 @@ def table_cells(blocks: list[Block]) -> frozenset[int]:
     )
 
 
+def _number_row(text: str) -> bool:
+    """(v13) ``text`` prints at least ``TABLE_COLUMNS`` number-only tokens, and they are at
+    least two thirds of its tokens; mark tokens (at most two characters, no digit) don't count."""
+    numbers = others = 0
+    for part in text.replace("\u200b", " ").split():
+        if _NUMBER_ONLY.fullmatch(part):
+            numbers += 1
+        elif len(part) > 2 or _DIGIT.search(part):
+            others += 1
+    return numbers >= TABLE_COLUMNS and numbers >= 2 * others
+
+
+def table_rows(blocks: list[Block]) -> frozenset[int]:
+    """(v13) The indexes of the blocks that print a numeric table's row on their own."""
+    return frozenset(index for index, block in enumerate(blocks) if _number_row(block.text))
+
+
+def numeric_cells(blocks: list[Block]) -> frozenset[int]:
+    """(v11, v13) The blocks that give no bare reading: table cells and one-block table rows."""
+    return table_cells(blocks) | table_rows(blocks)
+
+
 def position_counters(blocks: list[Block]) -> frozenset[int]:
     """(v12) The indexes of a page's position-counter blocks: "k/n" blocks (k at most n) whose
     n the page also prints as "1/n", "2/n" and "3/n" blocks (a carousel's slide numbers)."""
@@ -277,7 +307,7 @@ def _bare_decimal(blocks: list[Block], index: int) -> re.Match[str] | None:
 
 def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[list[PriceToken]]:
     out: list[list[PriceToken]] = []
-    cells = table_cells(blocks) if v6 else frozenset()  # (v11) the pipeline's reader only
+    cells = numeric_cells(blocks) if v6 else frozenset()  # (v11, v13) the pipeline's reader only
     counters = position_counters(blocks) if v6 else frozenset()  # (v12) likewise
     bare = v6 and bare_page(blocks, cells)
     forms = (_BARE_INT, _BARE_INT_V6) if bare else (_BARE_INT,)
@@ -286,7 +316,7 @@ def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[lis
             PriceToken(index, start, end, amount, "money")
             for start, end, amount in money(block.text)
         ]
-        if index in cells:  # (v11) a numeric table's cell: its money only, no bare reading
+        if index in cells:  # (v11, v13) a numeric table's cell or row: its money only
             out.append(tokens)
             continue
         if not tokens and index not in counters and _BARE_PAIR.fullmatch(block.text):
@@ -309,7 +339,7 @@ def _tokens(blocks: list[Block], money: Reader, *, v6: bool = False) -> list[lis
 
 
 def price_tokens(blocks: list[Block]) -> list[list[PriceToken]]:
-    """Price occurrences per block, in block order (the pipeline's reader, v11)."""
+    """Price occurrences per block, in block order (the pipeline's reader, v13)."""
     return _tokens(blocks, read_money, v6=True)
 
 
