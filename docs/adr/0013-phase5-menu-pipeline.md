@@ -3420,3 +3420,6 @@ Owner plan with every data write approved; decisions within it delegated. Record
 - **Finding:** refetched pages change often (62 and 43 changed or new of 92 and 66 records), and a
   changed text is extracted whole; reusing saved answers per chunk would have saved 21% of chunks
   on the measured pairs.
+- **Owner answers (2026-11-20, all as recommended):** swap about every 10 batches while the recrawl
+  continues; the fence reset stays a documented restore step; catalogs go to the page check (next
+  precision sample); article pages get a re-verification withdrawal rule (ADR-0015 amendment).
