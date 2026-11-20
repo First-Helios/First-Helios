@@ -122,6 +122,7 @@ WITHDRAW_REASONS = frozenset(
         "social_link",
         "wrong_place",  # (ADR-0015 Amendment 2) another place's menu
         "other_location",  # (ADR-0025 D2′) the URL names another location of the metro
+        "article_page",  # (ADR-0015 Amendment 3) a blog post, news item or attachment page
     }
 )
 WITHDRAW_METHOD = "menu-url-reverify"

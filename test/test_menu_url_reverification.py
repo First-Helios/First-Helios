@@ -491,6 +491,29 @@ def test_the_sweep_withdraws_saved_urls_whose_stored_page_is_elsewhere(
     assert (_latest_event(session, "p5").method) == WITHDRAW_METHOD
 
 
+def test_the_sweep_withdraws_saved_article_pages(session: Session, tmp_path: Path) -> None:
+    """(ADR-0015 Amendment 3) A saved own-site blog post is withdrawn as ``article_page``."""
+    for name, gers, host, path in (
+        ("Sweep Story", "p7", "sweepstory.com", "/stories/9-menu-picks"),
+        ("Sweep Menu", "p8", "sweepmenu.com", "/menu"),
+    ):
+        _seed_austin(session, name, gers, host)
+        _run(session, _Reverifier(f"https://{host}{path}"), at=_NOW)
+        _stored_page(session, tmp_path, gers, f"https://{host}{path}", _HERE)
+    later = _NOW + timedelta(days=1)
+
+    report = sweep_places(
+        session, place_area=_AREA, base_dir=tmp_path, observed_at=later, decided_at=later
+    )
+
+    assert report.article_page_keys == ["p7"]
+    assert _record(session, MENU_URL_NAMESPACE, "p7").state == "needs_review"
+    assert _record(session, MENU_URL_NAMESPACE, "p8").state == "resolved"
+    assert _versions(session, MENU_URL_NAMESPACE, "p7")[-1]["verification_failure"] == (
+        "article_page"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Another location's page (ADR-0025 D2′): an own-site URL naming another metro place.
 # --------------------------------------------------------------------------- #

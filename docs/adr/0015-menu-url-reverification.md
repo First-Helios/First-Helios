@@ -387,3 +387,35 @@ on these labels. So this is a census of the stored corpus, not an estimate for n
 - **Jefes (21183):** firsthelios.com now shows no menu.
 
 The record's §3 has the figures.
+
+## Amendment 3 (2026-11-20): article pages are no menus
+
+Owner decision 2026-11-20 (P8-23, "all as recommended"), on the finding in
+[2026-11-19-p8-23-pi-long-run.md](../reviews/2026-11-19-p8-23-pi-long-run.md) (appendix):
+59 own-site menu records were blog or news posts, among them Chick-fil-A's "9 nutritious
+Chick-fil-A menu picks" for 34 venues. The page check accepts them (they name menu items), so
+the rule is on the URL.
+
+- **The rule.** A URL path with a segment in `menu_url.ARTICLE_SEGMENTS` (`blog`, `blogs`, `news`,
+  `stories`, `story`, `article`, `articles`, `press`, `_posts`, `attachment`; whole segments, any
+  case) is an article page. It is generic (no host list) and own-site only: platform venue pages
+  keep their own rules.
+- **Discovery:** an article page is never a candidate (`ordered_menu_candidates`).
+- **Re-verification:** a saved own-site article page fails with `failed/article_page`, decided from
+  the URL without a fetch; `article_page` is a withdrawal reason (`WITHDRAW_REASONS`), so the record
+  goes to `needs_review` and re-discovery runs, as for `not_html`. It is reversible: a real menu
+  page that verifies later takes the key.
+- **Saved records:** re-verification runs only every 90 days, so `python -m apps.discovery.place_sweep`
+  (Amendment 2's sweep) also withdraws saved own-site article pages, from the URL alone; R4 then
+  withdraws their Menu streams and Gold drops their rows.
+
+**Measured** (dry run on a scratch copy of `helios_laptop`, post-validator-v12): the sweep
+withdraws **58 records** (13 distinct URLs; the other 13 of the 71 found were already withdrawn or
+their stored page is an older URL); place checks unchanged (0 `wrong_place`, 0 `other_location`).
+Gold cost: Cotton Patch's "daily lunch specials" post (24 rows with real prices) and The Human
+Bean's Shopify drink list (`/blogs/drink-menu/…`, items without prices, 0 rows): the two article
+paths that are menus. Venues whose only menu was an article lose their menu until re-discovery
+finds a real page (a venue with a platform page keeps that menu).
+
+**Apply** (after merge, with the owner's go-ahead): `place_sweep` then `rescore` then
+`apps.gold.refresh` on `helios_laptop`, then the Pi restore, as for D2′.
