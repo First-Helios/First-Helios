@@ -1,8 +1,8 @@
 # ADR-0029: Reading PDF menus with `pypdf`
 
-**Status:** Proposed 2026-11-18 (session P8-22). The dependency PR (#164) adds the dependency
-only (this ADR, `pyproject.toml`, `uv.lock`); the reader is built in a PR stacked on it
-(2026-11-19, P8-23, see "Built").
+**Status:** Accepted 2026-11-20 (owner: "all as recommended"); proposed 2026-11-18 (P8-22).
+The dependency PR (#164, merged) added the dependency only (this ADR, `pyproject.toml`,
+`uv.lock`); the reader is built in a later PR (2026-11-19, P8-23, see "Built").
 **Date:** 2026-11-18
 **Phase:** 6 / 8 (menu coverage; ROADMAP §7 item 7)
 **Extends:** [ADR-0027](./0027-menu-coverage-script-pdf-image.md) (M2 and the decisions on it),
@@ -173,3 +173,12 @@ the dependency (#164) and the build; no PDF data reaches the public database bef
   its tokens is a numeric table's row (no bare reading, no `bare_page` vote; money still reads).
   Olive Garden 282 bare readings → 0; 0 of 2,504 labelled or published texts change; on
   `helios_laptop`'s stored texts 2 of 2,010 change (one accepted row becomes unpriced).
+
+### Owner decision (2026-11-20)
+
+"All as recommended": Q1–Q3 as recommended (#164 merged: `pypdf` in the main dependency list,
+build order as above), and the build's decisions above accepted (locators keep `segment-v2`; the
+PDF link is the menu URL; a PDF link that leaves its site must end in a PDF; D5's two-thirds rule;
+layout mode for a page plain mode breaks into one word per line). After this build merges,
+validator-v13 is applied on the laptop (re-interpretation from saved answers), then discovery
+re-tries the 164 `menu_pdf_only` venues on their cooldown.
