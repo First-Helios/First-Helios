@@ -3358,9 +3358,9 @@ the restore.
 
 ## Amendment 37 (2026-11-20, proposed): reuse saved answers per chunk, not only per page
 
-**Status: Proposed 2026-11-20 (session P8-24). Not built: owner review first. Stage 1 keeps
-the chunker and needs a quality check of reused answers (Q3). Stage 3 changes the chunker and
-would need the §8 check on the laptop GPU.** Record:
+**Status: Proposed 2026-11-20 (session P8-24). Accepted 2026-11-20 by the owner, Q1–Q4 as
+recommended (see [Owner decision](#owner-decision-amendment-37)): stage 1 is to be built,
+behind the laptop-GPU quality gate of Q3; stages 2 and 3 are not adopted.** Record:
 [2026-11-20-p8-24-catalogs-and-chunk-reuse.md](../reviews/2026-11-20-p8-24-catalogs-and-chunk-reuse.md)
 §2 (data, every figure below, the scripts).
 
@@ -3464,3 +3464,16 @@ and page-level reuse handled those with no model call.
     the same);
   - a marker in the `llm` stream's method version. That bumps the pipeline version and
     re-interprets every page once (0 model calls, about 84 min on the laptop).
+
+### Owner decision (Amendment 37)
+
+**Answered by the owner on 2026-11-20, all as recommended:**
+- **Q1:** build stage 1 (chunk-answer reuse keyed by the chunk text with renumbered block ids).
+  Stages 2 and 3 are not adopted.
+- **Q2:** a per-chunk record written next to each page record, plus a one-time backfill from the
+  existing page records and their bundles.
+- **Q3:** before stage 1 runs on the Pi, the laptop-GPU gate: every chunk stage 1 would reuse on
+  the P8-23 pages is re-extracted fresh twice; reused-vs-fresh accepted rows must differ no more
+  than fresh-vs-fresh.
+- **Q4:** a count in the extraction report only; no method-version marker. Revisit if the Q3
+  gate shows reused answers differing beyond the noise floor.

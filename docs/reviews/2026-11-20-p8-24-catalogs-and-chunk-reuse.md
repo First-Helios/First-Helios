@@ -204,8 +204,9 @@ Owner questions Q1–Q4 are in the amendment.
 
 ## 3. Decisions
 
-None were delegated for this session's design questions. Every choice below is listed for
-the owner, with the session's default:
+None were delegated for this session's design questions. Every choice below was listed for
+the owner, with the session's default. **The owner accepted all of them as recommended on
+2026-11-20**, including ADR-0015 Amendment 4 Q1–Q4 (#171) and ADR-0013 Amendment 37 Q1–Q4:
 - **"Recent" texts:** read as the unlabelled live set (§1.1).
 - **Two re-check label changes** (§1.2).
 - **Catalog rule placement** (place check, not the classifier) and its threshold of 3:
