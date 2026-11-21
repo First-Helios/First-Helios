@@ -122,6 +122,7 @@ WITHDRAW_REASONS = frozenset(
         "social_link",
         "wrong_place",  # (ADR-0015 Amendment 2) another place's menu
         "other_location",  # (ADR-0025 D2′) the URL names another location of the metro
+        "store_catalog",  # (ADR-0015 Amendment 4) a store's product listing
     }
 )
 WITHDRAW_METHOD = "menu-url-reverify"
@@ -191,6 +192,7 @@ class UrlDiscoveryReport:
     menu_urls_withdrawn: int = 0
     menu_urls_wrong_place: int = 0  # verified menu pages place-v1 rejects (another metro's)
     menu_urls_other_location: int = 0  # verified own-site pages another location's (D2′)
+    menu_urls_store_catalog: int = 0  # verified pages that are store catalogs (Amendment 4)
     menu_pages_duplicate: int = 0  # further own-site pages that repeat a kept page
     menu_pages_over_cap: int = 0  # further own-site pages beyond MAX_MENU_PAGES
     platform_ambiguous: int = 0
@@ -482,8 +484,9 @@ def _with_render(payload: dict[str, object], menu: MenuUrlDiscovery) -> dict[str
 def _place_failure(
     venue: VenueToResolve, menu: MenuUrlDiscovery, place_area: PlaceArea | None
 ) -> PlaceFailure | None:
-    """Why ``place-v2`` rejects a verified page (:func:`place_failure`), or ``None``.
+    """Why ``place-v3`` rejects a verified page (:func:`place_failure`), or ``None``.
 
+    ``store_catalog``: a store's product listing (ADR-0015 Amendment 4).
     ``wrong_place``: another metro's page (ADR-0015 Amendment 2).
     ``other_location``: an own-site page whose URL names another location of the
     venue's metro (ADR-0025 D2′). Only a page the resolver read can be judged: a
@@ -503,6 +506,8 @@ def _place_failure(
 def _count_place_failure(report: UrlDiscoveryReport, reason: PlaceFailure) -> None:
     if reason == "wrong_place":
         report.menu_urls_wrong_place += 1
+    elif reason == "store_catalog":
+        report.menu_urls_store_catalog += 1
     else:
         report.menu_urls_other_location += 1
 
@@ -1033,8 +1038,8 @@ def _resolve_venue(
 ) -> bool:
     """Resolve one venue's website and menu-URL. True if it wrote or crawled.
 
-    With ``place_area``, a verified page ``place-v2`` rejects (another metro's, or
-    an own-site page whose URL names another location) is not the venue's menu: a
+    With ``place_area``, a verified page ``place-v3`` rejects (a store catalog, another
+    metro's, or an own-site page whose URL names another location) is not the venue's menu: a
     re-check withdraws it like a failed one, and discovery drops it.
     """
     if not venue.organization_is_current:
@@ -1279,9 +1284,14 @@ def _resolve_venue(
             if isinstance(discovery, CaptureFailure):
                 failure = discovery
             elif verified:
-                # Every verified page was another place's (ADR-0015 Amendment 2) or
-                # another location's (ADR-0025 D2′); another metro's page decides.
-                reason = "wrong_place" if "wrong_place" in place_failures else "other_location"
+                # Every verified page was another place's (ADR-0015 Amendment 2),
+                # another location's (ADR-0025 D2′) or a store catalog (Amendment 4);
+                # another metro's page decides, then a catalog.
+                reason = next(
+                    r
+                    for r in ("wrong_place", "store_catalog", "other_location")
+                    if r in place_failures
+                )
                 failure = CaptureFailure("failed", reason, observed_at)
             elif any(isinstance(item, MenuPdfLinked) for item in discovery):
                 # Counted where it is seen: the venue's menu is likely PDF-only,
@@ -1533,7 +1543,7 @@ def resolve_urls(
     Overture already gives a website for; supplying a website to a venue Overture
     has none for is a later unit (it needs a name/Subject key, not a host).
 
-    ``place_area`` turns on the place check ``place-v2`` (ADR-0015 Amendment 2,
+    ``place_area`` turns on the place check ``place-v3`` (ADR-0015 Amendments 2 and 4,
     ADR-0025 D2′; :func:`apps.discovery.place_check.load_place_area`).
     """
     from apps.discovery.lifecycle import lock_lifecycle
