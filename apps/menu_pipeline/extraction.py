@@ -13,9 +13,8 @@ ADR-0013 implementation slice 5 (session P5-4). For each due Version
    is not sent again. So a repairs, validator or classifier bump re-validates
    saved answers in minutes, and only a model, prompt, chunking or segmenter
    bump runs the model again (X2). (Amendment 37) Each answered chunk is also
-   saved on its own, keyed by its text with chunk-local block ids
-   (:mod:`.chunk_answers`): a changed page sends only the chunks not answered
-   before, and a reused answer's block ids are mapped to the new page's.
+   saved on its own, keyed by its exact text (:mod:`.chunk_answers`): a changed
+   page sends only the chunks not answered before word for word.
 2. **Validate.** The answers are parsed, repaired and stitched
    (``output.rows_of``), the validator decides every row, and [5b] price
    resolution (``resolve.judge``, Amendment 19) re-judges its no-match
@@ -73,7 +72,7 @@ from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Protocol
 
-from apps.menu_pipeline.chunk_answers import CHUNK_FORMAT, block_ids, chunk_key, remap
+from apps.menu_pipeline.chunk_answers import CHUNK_FORMAT, chunk_key
 from apps.menu_pipeline.llama_client import SLOTS, ChunkFailed, ChunkResult
 from apps.menu_pipeline.menu_writes import (
     Withdrawals,
@@ -198,8 +197,7 @@ class OutputStore:
     (no timings: the model did not run).
 
     (Amendment 37) Beside them, ``chunks/<chunk key>.json.gz``: one record per
-    chunk the model answered (:mod:`.chunk_answers`), with the chunk's block ids,
-    written with its page record (or by ``apps.menu_pipeline.backfill_chunks``);
+    chunk the model answered (:mod:`.chunk_answers`), written with its page record (or by ``apps.menu_pipeline.backfill_chunks``);
     never rewritten.
     """
 
@@ -251,15 +249,14 @@ class OutputStore:
         )
 
     def read_chunk(self, extractor: str, chunk: str) -> str | None:
-        """(Amendment 37) The saved answer to an equal chunk (block ids aside), its ids
-        mapped to ``chunk``'s; ``None`` when there is none or it can't be mapped."""
+        """(Amendment 37) The saved answer to this exact chunk text, or ``None``."""
         path = self._chunk_path(extractor, chunk_key(chunk))
         if not path.is_file():
             return None
         record = json.loads(gzip.decompress(path.read_bytes()))
         if record.get("format") != CHUNK_FORMAT or record.get("extractor") != extractor:
             raise ValueError(f"{path} is not a {CHUNK_FORMAT} record for {extractor}")
-        return remap(str(record["chunk"]["raw"]), list(record["ids"]), block_ids(chunk))
+        return str(record["chunk"]["raw"])
 
     def write_chunk(
         self, extractor: str, chunk: str, answer: Mapping[str, object], *, page_text_hash: str
@@ -276,7 +273,6 @@ class OutputStore:
                 "format": CHUNK_FORMAT,
                 "extractor": extractor,
                 "key": key,
-                "ids": block_ids(chunk),
                 "text_hash": page_text_hash,  # the page it was answered on
                 "chunk": dict(answer),
             },
@@ -435,7 +431,7 @@ class _Pending:
     rejected: bool = False  # the verifier rejects the bundle (R4): nothing is extracted
     saved: list[str] | None = None
     texts: list[str] = field(default_factory=list)  # the page's chunks
-    # one per chunk: a saved chunk answer (block ids mapped) or the model's request
+    # one per chunk: a saved chunk answer or the model's request
     parts: list[str | Future[ChunkResult]] = field(default_factory=list)
 
 
