@@ -393,8 +393,9 @@ The record's §3 has the figures.
 **Status: Proposed 2026-11-20 (session P8-24) and built in the same PR, on the owner's decision
 of 2026-11-20 (#169, Q2: "catalogs → page check, measured on the next precision sample") and
 their instruction for this session: "build only if the fix is a small generic rule". Nothing
-applied. The owner questions below are open.** Amendment 3 (article pages) is #170, still open;
-this one is numbered after it.
+applied. Accepted 2026-11-20 by the owner, Q1–Q4 as recommended (see
+[Owner decision](#owner-decision-amendment-4)).** Amendment 3 (article pages) is #170; this one
+is numbered after it.
 
 Record:
 [2026-11-20-p8-24-catalogs-and-chunk-reuse.md](../reviews/2026-11-20-p8-24-catalogs-and-chunk-reuse.md)
@@ -467,3 +468,17 @@ price per product); a catalog that prints them in fewer than 3 blocks.
 - **Q4. Merge order with #170.** Both add a withdrawal reason and touch `place_sweep`; the
   second to merge needs a small conflict resolution. No preference; I'll resolve whichever is
   second.
+
+### Owner decision (Amendment 4)
+
+**Answered by the owner on 2026-11-20, all as recommended:**
+- **Q1:** the place check (`place-v3`), as built. The verifier is not renamed, so nothing
+  refetches.
+- **Q2:** the threshold stays at 3 struck-price blocks.
+- **Q3:** applied on the Pi's `helios_work`, before the next swap, after merge: rebuild the worker
+  image with this code, then (between batches, the loop stopped) `place_sweep` → `rescore` →
+  `apps.gold.refresh`, then the swap carries it to public and to `helios_laptop`. Expected:
+  Gold −98 rows, venues with a menu −3. Merged together with Amendment 3, one sweep withdraws
+  both kinds.
+- **Q4:** #170 (Amendment 3) merges first; this PR is then rebased onto it and the conflict in
+  `WITHDRAW_REASONS`, `FAILURE_REASONS` and `place_sweep` resolved.
