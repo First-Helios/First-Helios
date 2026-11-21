@@ -367,7 +367,7 @@ def test_output_store_round_trip(tmp_path: Path) -> None:
     store = OutputStore(tmp_path)
     result = _client(_Server()).extract_chunk(_chunk())
     assert store.read("x", "sha256:ab") is None
-    store.write("x", "sha256:ab", [result])
+    store.write("x", "sha256:ab", [result.record()])
     assert store.read("x", "sha256:ab") == [result.attempt.raw]
     assert store.read("y", "sha256:ab") is None  # another extractor version: not reused
     (path,) = tmp_path.glob("var/replay/menu-extract/*/ab.json.gz")
@@ -681,6 +681,45 @@ def test_version_bump_reinterprets_from_saved_output_and_new_text_is_an_observat
             select(MenuItem).where(MenuItem.page_id == third.id, MenuItem.name == "Elote")
         )
         assert elote is not None and elote.source_native_key is None  # Unsectioned: not in Gold
+
+
+def test_a_changed_page_sends_only_its_new_chunks_and_maps_reused_block_ids(
+    venues: _Venues,
+) -> None:
+    """(Amendment 37) A block inserted on top renumbers every line; the chunks equal up
+    to block ids reuse their saved answers, ids mapped, and only the changed one is sent."""
+    gers = venues.add("Kerbey Lane")
+    venues.resolve()
+    filler = "".join(f"<p>{'Slow-cooked brisket and sides ' * 6}{n}</p>" for n in range(20))
+    menu = _MENU.replace("</body>", f"{filler}</body>")
+    venues.fetch({gers: menu}, at=_T1)
+    server = _Server()
+    first = venues.extract(server)
+    sent = len(server.bodies)
+    assert first.chunks == sent >= 3 and first.reused_chunks == 0
+    assert len(list(venues.tmp_path.glob("var/replay/menu-extract/*/chunks/*.json.gz"))) == sent
+
+    later = _T1 + REFETCH_WINDOW + timedelta(minutes=1)
+    changed_html = menu.replace("<nav>", "<nav>Order online</nav><nav>").replace(
+        "sides 19</p>", "sides 19, now with pickles</p>"
+    )
+    venues.fetch({gers: changed_html}, at=later)
+    changed = venues.extract(server)
+
+    assert changed.due_by_reason == {"changed": 1}
+    assert (changed.chunks, changed.reused_chunks) == (1, sent - 1)
+    assert len(server.bodies) == sent + 1  # only the last chunk went to the model
+    assert changed.rows == {"llm:accept": 4}  # the reused rows ground on the new blocks
+    old_page, new_page = venues.pages(gers)
+    with venues.factory() as session:
+        assert _rows(session, new_page.id) == _rows(session, old_page.id)
+    records = [
+        json.loads(gzip.decompress(p.read_bytes()))
+        for p in venues.tmp_path.glob("var/replay/menu-extract/*/*.json.gz")
+    ]
+    (reused,) = [r for r in records if any("reused" in c for c in r["chunks"])]
+    assert ["reused" in c for c in reused["chunks"]] == [True] * (sent - 1) + [False]
+    assert '"b":"b0006"' in reused["chunks"][0]["raw"]  # Carne Asada Taco, one block lower
 
 
 def test_5c_files_items_under_the_pages_own_headings(
