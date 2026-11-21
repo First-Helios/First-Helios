@@ -12,7 +12,10 @@ ADR-0013 implementation slice 5 (session P5-4). For each due Version
    segmenter) and the page's text hash: a page whose answers are already saved
    is not sent again. So a repairs, validator or classifier bump re-validates
    saved answers in minutes, and only a model, prompt, chunking or segmenter
-   bump runs the model again (X2).
+   bump runs the model again (X2). (Amendment 37) Each answered chunk is also
+   saved on its own, keyed by its text with chunk-local block ids
+   (:mod:`.chunk_answers`): a changed page sends only the chunks not answered
+   before, and a reused answer's block ids are mapped to the new page's.
 2. **Validate.** The answers are parsed, repaired and stitched
    (``output.rows_of``), the validator decides every row, and [5b] price
    resolution (``resolve.judge``, Amendment 19) re-judges its no-match
@@ -68,8 +71,9 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
+from apps.menu_pipeline.chunk_answers import CHUNK_FORMAT, block_ids, chunk_key, remap
 from apps.menu_pipeline.llama_client import SLOTS, ChunkFailed, ChunkResult
 from apps.menu_pipeline.menu_writes import (
     Withdrawals,
@@ -92,7 +96,7 @@ from packages.helios_parsing.segment import SEGMENTER_VERSION, text_hash
 from packages.helios_parsing.validator import VALIDATOR_VERSION, validate
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from sqlalchemy.orm import Session
 
@@ -141,6 +145,11 @@ def model_tag(spec: ModelSpec) -> str:
     return f"{spec.name.lower()}@{file.sha256[:12]}"
 
 
+def extractor_version(model: str) -> str:
+    """:attr:`PipelineVersion.extractor` for a ``model_tag``."""
+    return f"{model};{PROMPT_VERSION};{CHUNKER_VERSION};{SEGMENTER_VERSION}"
+
+
 @dataclass(frozen=True, slots=True)
 class PipelineVersion:
     """The components of an interpretation; their strings are ``method_version``."""
@@ -151,7 +160,7 @@ class PipelineVersion:
     @property
     def extractor(self) -> str:
         """What the model's answers depend on: the key of saved raw outputs."""
-        return f"{self.model};{PROMPT_VERSION};{CHUNKER_VERSION};{SEGMENTER_VERSION}"
+        return extractor_version(self.model)
 
     @property
     def llm(self) -> str:
@@ -184,47 +193,109 @@ class OutputStore:
     ``var/replay/menu-extract/<sha256(extractor)[:16]>/<text hash>.json.gz``: one
     record per page text, in the harness's format (``{"chunks": [{"raw": …}]}``),
     so ``apps.menu_pipeline.evaluate`` can score what production extracted.
-    Written only when every chunk answered; never rewritten.
+    Written only when every chunk answered; never rewritten. A chunk answered from
+    a saved chunk answer is recorded as ``{"raw": …, "reused": <chunk key>}``
+    (no timings: the model did not run).
+
+    (Amendment 37) Beside them, ``chunks/<chunk key>.json.gz``: one record per
+    chunk the model answered (:mod:`.chunk_answers`), with the chunk's block ids,
+    written with its page record (or by ``apps.menu_pipeline.backfill_chunks``);
+    never rewritten.
     """
 
     def __init__(self, base_dir: Path) -> None:
         self._base_dir = base_dir
 
+    def folder(self, extractor: str) -> Path:
+        """Where one extractor version's records live."""
+        name = hashlib.sha256(extractor.encode("utf-8")).hexdigest()[:16]
+        return self._base_dir / OUTPUT_PREFIX / name
+
     def _path(self, extractor: str, page_text_hash: str) -> Path:
-        folder = hashlib.sha256(extractor.encode("utf-8")).hexdigest()[:16]
         digest = page_text_hash.removeprefix("sha256:")
-        return self._base_dir / OUTPUT_PREFIX / folder / f"{digest}.json.gz"
+        return self.folder(extractor) / f"{digest}.json.gz"
+
+    def _chunk_path(self, extractor: str, key: str) -> Path:
+        return self.folder(extractor) / "chunks" / f"{key}.json.gz"
 
     def read(self, extractor: str, page_text_hash: str) -> list[str] | None:
         """The saved raw answers, one per chunk, or ``None``."""
+        record = self.read_record(extractor, page_text_hash)
+        return None if record is None else [str(chunk["raw"]) for chunk in record["chunks"]]
+
+    def read_record(self, extractor: str, page_text_hash: str) -> dict[str, Any] | None:
+        """The whole saved page record, or ``None``."""
         path = self._path(extractor, page_text_hash)
         if not path.is_file():
             return None
-        record = json.loads(gzip.decompress(path.read_bytes()))
+        record: dict[str, Any] = json.loads(gzip.decompress(path.read_bytes()))
         if record.get("format") != OUTPUT_FORMAT or record.get("extractor") != extractor:
             raise ValueError(f"{path} is not a {OUTPUT_FORMAT} record for {extractor}")
-        return [str(chunk["raw"]) for chunk in record["chunks"]]
+        return record
 
-    def write(self, extractor: str, page_text_hash: str, results: Sequence[ChunkResult]) -> None:
+    def write(
+        self, extractor: str, page_text_hash: str, chunks: Sequence[Mapping[str, object]]
+    ) -> None:
+        """Save a page's chunk records (``ChunkResult.record()``, or a reused answer)."""
         path = self._path(extractor, page_text_hash)
         if path.exists():
             return
-        record = {
-            "format": OUTPUT_FORMAT,
-            "extractor": extractor,
-            "text_hash": page_text_hash,
-            "chunks": [result.record() for result in results],
-        }
-        data = json.dumps(record, sort_keys=True, ensure_ascii=False).encode("utf-8")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "wb") as handle:
-                handle.write(gzip.compress(data, mtime=0))
-            Path(tmp_name).replace(path)
-        except BaseException:
-            Path(tmp_name).unlink(missing_ok=True)
-            raise
+        _write_gz(
+            path,
+            {
+                "format": OUTPUT_FORMAT,
+                "extractor": extractor,
+                "text_hash": page_text_hash,
+                "chunks": list(chunks),
+            },
+        )
+
+    def read_chunk(self, extractor: str, chunk: str) -> str | None:
+        """(Amendment 37) The saved answer to an equal chunk (block ids aside), its ids
+        mapped to ``chunk``'s; ``None`` when there is none or it can't be mapped."""
+        path = self._chunk_path(extractor, chunk_key(chunk))
+        if not path.is_file():
+            return None
+        record = json.loads(gzip.decompress(path.read_bytes()))
+        if record.get("format") != CHUNK_FORMAT or record.get("extractor") != extractor:
+            raise ValueError(f"{path} is not a {CHUNK_FORMAT} record for {extractor}")
+        return remap(str(record["chunk"]["raw"]), list(record["ids"]), block_ids(chunk))
+
+    def write_chunk(
+        self, extractor: str, chunk: str, answer: Mapping[str, object], *, page_text_hash: str
+    ) -> bool:
+        """Save one model-answered chunk's record (``{"raw": …}`` and its timings) unless
+        its key is saved already; whether it was written."""
+        key = chunk_key(chunk)
+        path = self._chunk_path(extractor, key)
+        if path.exists():
+            return False
+        _write_gz(
+            path,
+            {
+                "format": CHUNK_FORMAT,
+                "extractor": extractor,
+                "key": key,
+                "ids": block_ids(chunk),
+                "text_hash": page_text_hash,  # the page it was answered on
+                "chunk": dict(answer),
+            },
+        )
+        return True
+
+
+def _write_gz(path: Path, record: Mapping[str, object]) -> None:
+    """``record`` as gzipped JSON, written atomically (a temp file, then a rename)."""
+    data = json.dumps(record, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(gzip.compress(data, mtime=0))
+        Path(tmp_name).replace(path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
 
 
 @dataclass(slots=True)
@@ -308,6 +379,7 @@ class ExtractionReport:
     attempted: int = 0  # pages taken this run (``--limit`` counts these)
     extracted: int = 0  # pages written (an llm page, maybe a jsonld one)
     reused_outputs: int = 0  # pages validated from saved answers, no model call
+    reused_chunks: int = 0  # (Amendment 37) chunks answered from a saved chunk answer
     empty: int = 0  # llm pages with no item
     flagged: int = 0  # pages with unlabeled_price_runs
     jsonld_pages: int = 0
@@ -362,7 +434,9 @@ class _Pending:
     failure: str | None = None
     rejected: bool = False  # the verifier rejects the bundle (R4): nothing is extracted
     saved: list[str] | None = None
-    futures: list[Future[ChunkResult]] = field(default_factory=list)
+    texts: list[str] = field(default_factory=list)  # the page's chunks
+    # one per chunk: a saved chunk answer (block ids mapped) or the model's request
+    parts: list[str | Future[ChunkResult]] = field(default_factory=list)
 
 
 def _charset(content_type: str) -> str:
@@ -447,11 +521,15 @@ class _Run:
         if rejects(self._scorer, pending.bundle):
             pending.rejected = True
             return pending
-        pending.saved = self._outputs.read(self._version.extractor, due.text_hash)
+        extractor = self._version.extractor
+        pending.saved = self._outputs.read(extractor, due.text_hash)
         if pending.saved is None:
-            pending.futures = [
-                pool.submit(self._extractor.extract_chunk, c) for c in chunks(blocks)
-            ]
+            pending.texts = chunks(blocks)
+            for text in pending.texts:
+                reused = self._outputs.read_chunk(extractor, text)
+                pending.parts.append(
+                    pool.submit(self._extractor.extract_chunk, text) if reused is None else reused
+                )
         return pending
 
     def finish(self, pending: _Pending) -> None:
@@ -475,24 +553,45 @@ class _Run:
             raws = pending.saved
             report.reused_outputs += 1
         else:
-            try:
-                results = [future.result() for future in pending.futures]
-            except ChunkFailed:
-                for future in pending.futures:
-                    future.cancel()
-                report.failed["chunk_failed"] += 1
-                self._consecutive_failures += 1
+            answered = self._answers(pending)
+            if answered is None:
                 return
-            for result in results:
-                report.chunks += 1
-                report.sparse_retries += result.first is not None
-                report.truncated_chunks += result.truncated
-                report.resent_requests += result.resent
-            self._outputs.write(self._version.extractor, due.text_hash, results)
-            raws = [result.attempt.raw for result in results]
+            raws = answered
         self._consecutive_failures = 0
         self._write(due, bundle, raws)
         self._soc.sample()
+
+    def _answers(self, pending: _Pending) -> list[str] | None:
+        """The page's chunk answers, saved ones and the model's, with its page record and
+        the model's chunk records written; ``None`` (counted) when a chunk failed."""
+        report, extractor, page_hash = self._report, self._version.extractor, pending.due.text_hash
+        try:
+            answers = [p if isinstance(p, str) else p.result() for p in pending.parts]
+        except ChunkFailed:
+            for part in pending.parts:
+                if isinstance(part, Future):
+                    part.cancel()
+            report.failed["chunk_failed"] += 1
+            self._consecutive_failures += 1
+            return None
+        records: list[Mapping[str, object]] = []
+        for text, answer in zip(pending.texts, answers, strict=True):
+            if isinstance(answer, str):
+                report.reused_chunks += 1
+                records.append({"raw": answer, "reused": chunk_key(text)})
+                continue
+            report.chunks += 1
+            report.sparse_retries += answer.first is not None
+            report.truncated_chunks += answer.truncated
+            report.resent_requests += answer.resent
+            records.append(answer.record())
+        self._outputs.write(extractor, page_hash, records)
+        for text, answer in zip(pending.texts, answers, strict=True):
+            if not isinstance(answer, str):
+                self._outputs.write_chunk(
+                    extractor, text, answer.record(), page_text_hash=page_hash
+                )
+        return [str(record["raw"]) for record in records]
 
     def _write(self, due: DuePage, bundle: Bundle, raws: list[str]) -> None:
         report = self._report
