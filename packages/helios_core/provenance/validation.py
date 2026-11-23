@@ -169,6 +169,7 @@ FAILURE_REASONS = frozenset(
         "wrong_place",  # every verified menu page was another place's (ADR-0015 Amendment 2)
         "other_location",  # or another location's of the metro (ADR-0025 D2′)
         "article_page",  # a saved menu URL that is an article page (ADR-0015 Amendment 3)
+        "store_catalog",  # or a store's product listing (ADR-0015 Amendment 4)
     }
 )
 

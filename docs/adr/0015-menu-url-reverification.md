@@ -419,3 +419,98 @@ finds a real page (a venue with a platform page keeps that menu).
 
 **Apply** (after merge, with the owner's go-ahead): `place_sweep` then `rescore` then
 `apps.gold.refresh` on `helios_laptop`, then the Pi restore, as for D2′.
+
+## Amendment 4 (2026-11-20, proposed and built): a store catalog is no venue's menu (`place-v3`)
+
+**Status: Proposed 2026-11-20 (session P8-24) and built in the same PR, on the owner's decision
+of 2026-11-20 (#169, Q2: "catalogs → page check, measured on the next precision sample") and
+their instruction for this session: "build only if the fix is a small generic rule". Nothing
+applied. Accepted 2026-11-20 by the owner, Q1–Q4 as recommended (see
+[Owner decision](#owner-decision-amendment-4)).** Amendment 3 (article pages) is #170; this one
+is numbered after it.
+
+Record:
+[2026-11-20-p8-24-catalogs-and-chunk-reuse.md](../reviews/2026-11-20-p8-24-catalogs-and-chunk-reuse.md)
+§1 (the precision sample, the labels, the signal survey).
+
+**The gap.** The verifier decides whether a page is a menu, and grocery listings look like one:
+item names, prices, sections. Two venues whose Overture website is an Amazon storefront
+(Skyrocket Coffee, Prime Tea Shop) hold Amazon's grocery aisle as their menu (42 Gold rows
+each), and "Walmart Bakery" holds Walmart's meal-planning page (14 rows). The P8-24 precision
+sample found the Walmart page at random (1 catalog in 200 accepted pages). The four venue- and
+URL-level rules measured in P8-23 (#169, appendix) all cost real menus.
+
+1. **The rule, `store_catalog`.** A page is a store catalog when at least
+   `CATALOG_STRUCK_MIN` = 3 of its body blocks (chrome excluded) print a list or struck-through
+   price: `List Price`, `Typical price`, `Was $N`, `Compare at $N` (case-insensitive). Retail
+   listings print these; menus and ordering pages don't. No store's own words (Walmart's
+   "Rollback"), no host, platform or venue list.
+2. **Where it runs: the place check, now `place-v3`** (`apps/discovery/place_check.py`). The
+   page is not the venue's menu, which is what the place check answers, and its plumbing is
+   what this needs:
+   - `place_failure` returns `store_catalog` before `wrong_place` and `other_location`;
+   - discovery and re-verification drop or withdraw such a page as they do a wrong-place one
+     (`CaptureFailure("failed", "store_catalog")`, a `WITHDRAW_REASONS` member, a capture
+     contract failure reason, the `menu_urls_store_catalog` count);
+   - accepted saves record `place_check: "place-v3"`.
+
+   The `verifier` string (`classifier-v2+v3`) and the extraction pipeline version are
+   unchanged: nothing is re-extracted, and nothing is forced to refetch.
+3. **Applying it to the saved URLs: `place_sweep`**, unchanged apart from counting the new
+   reason (`store_catalog`, `store_catalog_keys`). Then `rescore` (R4) and `apps.gold.refresh`,
+   as for Amendment 2.
+
+**Measured** (record §1; read-only, `helios_p824_test` restored from
+`helios_work-2026-11-19-p8-23.dump`):
+- **Every distinct live text (1,692):** the rule fires on 2 texts, 3 records: the Amazon
+  grocery aisle (2 records) and the Walmart page. Both are labelled `catalog`. Precision **2/2**;
+  recall **2/2** of the catalogs known (the P8-22 finding and the sample's). No other text
+  reaches the bar: one DoorDash menu prints one "Was $" block, every other text none.
+- **Every stored menu-page bundle** (2,951 distinct, laptop and Pi, withdrawn and older Versions
+  included): it fires on the same two pages' Versions only.
+- **`place_sweep --dry-run`:** 3,012 checked, `store_catalog` 3 (the records above),
+  `wrong_place` 0, `other_location` 0.
+- **Cost:** 98 Gold rows (42 + 42 + 14), all priced catalog products; the 3 venues have no
+  other menu, so venues with a menu fall by 3.
+- **The precision sample's other false accepts are untouched by design** (single-item pages,
+  hubs, articles, empty platform pages; record §1.3).
+
+The rule was chosen after looking at the two known catalogs, so recall on catalogs not seen
+yet is unmeasured: the corpus holds no third one. Unit prices (`$2.23/lb`), pack sizes
+(`Pack of 12`), net quantities, star ratings and "Add to cart" were measured too and rejected:
+the first three fire on BBQ, beer and taco-box menus, the last two on one page each.
+
+**Known misses (not proposed).** A catalog without list or struck prices (a shop grid with one
+price per product); a catalog that prints them in fewer than 3 blocks.
+
+**No new dependency, no schema change, no migration.**
+
+### Owner questions (Amendment 4)
+
+- **Q1. Where.** In the place check as `place-v3` (built; recommended: a stored-bundle sweep
+  withdraws the 3 records, nothing refetches)? Or inside the verifier, which renames it
+  (`classifier-v2+v3` → a new name) and so re-verifies every saved menu URL against the live
+  page (about 3 hours on the laptop in P5-33) and re-scores every stored page, for 3 records?
+- **Q2. Threshold.** 3 struck-price blocks (built)? 2 also catches exactly these 3 records on
+  today's corpus; 3 keeps a margin over a menu or ordering page with a promotion or two.
+- **Q3. Apply.** After merge and your go-ahead: where, given the Pi is the data master during
+  the P8-23 recrawl? Recommended: `place_sweep` → `rescore` → `apps.gold.refresh` on the Pi's
+  `helios_work` before the next swap (expected Gold −98, venues with a menu −3), so the swap
+  carries it to public and the laptop. Or on `helios_laptop` first, as for Amendment 2.
+- **Q4. Merge order with #170.** Both add a withdrawal reason and touch `place_sweep`; the
+  second to merge needs a small conflict resolution. No preference; I'll resolve whichever is
+  second.
+
+### Owner decision (Amendment 4)
+
+**Answered by the owner on 2026-11-20, all as recommended:**
+- **Q1:** the place check (`place-v3`), as built. The verifier is not renamed, so nothing
+  refetches.
+- **Q2:** the threshold stays at 3 struck-price blocks.
+- **Q3:** applied on the Pi's `helios_work`, before the next swap, after merge: rebuild the worker
+  image with this code, then (between batches, the loop stopped) `place_sweep` → `rescore` →
+  `apps.gold.refresh`, then the swap carries it to public and to `helios_laptop`. Expected:
+  Gold −98 rows, venues with a menu −3. Merged together with Amendment 3, one sweep withdraws
+  both kinds.
+- **Q4:** #170 (Amendment 3) merges first; this PR is then rebased onto it and the conflict in
+  `WITHDRAW_REASONS`, `FAILURE_REASONS` and `place_sweep` resolved.

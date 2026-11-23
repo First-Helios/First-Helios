@@ -42,6 +42,13 @@ localities and postcodes, the principal city (the most common POI locality), a
 gazetteer of foreign places named on the stored menu pages (mostly chains'
 location lists), and the chain pages (one menu URL saved for several venues whose
 names share their first word). See :func:`load_place_area`.
+
+**A store catalog** (ADR-0015 Amendment 4, :func:`store_catalog`, ``place-v3``) is
+no venue's menu either: a grocery or retail product listing that prints list or
+struck-through prices ("List Price:", "Typical price:", "Was $12.85", "Compare at
+$9") in at least :data:`CATALOG_STRUCK_MIN` body blocks. Restaurant menus and
+ordering pages don't print them; Amazon's grocery aisle and Walmart's
+meal-planning page, saved as two venues' menus, do.
 """
 
 from __future__ import annotations
@@ -72,8 +79,15 @@ if TYPE_CHECKING:
 
     from packages.helios_parsing.segment import Block
 
-# place-v1 (ADR-0015 Amendment 2) plus another location's page (ADR-0025 D2′).
-PLACE_CHECK = "place-v2"
+# place-v1 (ADR-0015 Amendment 2) plus another location's page (ADR-0025 D2′),
+# plus (v3, ADR-0015 Amendment 4) a store catalog.
+PLACE_CHECK = "place-v3"
+
+# (ADR-0015 Amendment 4) a list or struck-through price, as retail listings print them
+STRUCK_PRICE = re.compile(
+    r"\blist price\b|\btypical price\b|\bwas:? \$\s?\d|\bcompare at:? \$\s?\d", re.IGNORECASE
+)
+CATALOG_STRUCK_MIN = 3  # body blocks with one; a menu page has at most one
 
 # Localities need this many POIs to define the area: a typo'd or stray locality
 # would otherwise make its name "metro".
@@ -273,18 +287,33 @@ def other_location_places(url: str, venue: VenuePlace, area: PlaceArea) -> tuple
     return tuple(sorted(named - {slug(area.principal or "")}))
 
 
-PlaceFailure = Literal["wrong_place", "other_location"]
+def store_catalog(blocks: Sequence[Block]) -> bool:
+    """(ADR-0015 Amendment 4) Whether the page is a store's product listing: at least
+    :data:`CATALOG_STRUCK_MIN` body blocks print a list or struck-through price."""
+    struck = 0
+    for block in blocks:
+        if not block.in_chrome and STRUCK_PRICE.search(block.text):
+            struck += 1
+            if struck >= CATALOG_STRUCK_MIN:
+                return True
+    return False
+
+
+PlaceFailure = Literal["wrong_place", "other_location", "store_catalog"]
 
 
 def place_failure(
     url: str, blocks: Sequence[Block], venue: VenuePlace, area: PlaceArea, *, own_site: bool
 ) -> PlaceFailure | None:
-    """The check ``place-v2``: why a verified menu page is not the venue's, or ``None``.
+    """The check ``place-v3``: why a verified menu page is not the venue's, or ``None``.
 
-    ``wrong_place`` when ``place-v1`` reads it as another metro's (ADR-0015
+    ``store_catalog`` when it is a store's product listing (ADR-0015 Amendment 4);
+    else ``wrong_place`` when ``place-v1`` reads it as another metro's (ADR-0015
     Amendment 2); else ``other_location`` when it is an own-site page whose URL
     names another location of the metro (ADR-0025 D2′).
     """
+    if store_catalog(blocks):
+        return "store_catalog"
     if place_verdict(url, blocks, venue, area).wrong:
         return "wrong_place"
     if own_site and other_location_places(url, venue, area):
