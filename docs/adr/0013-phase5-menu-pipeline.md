@@ -3355,3 +3355,193 @@ the restore.
   clean.
 - HTTPS smoke checks on `firsthelios.com` and `www`: `/`, `/healthz`, `/readyz`, `/v1/venues`,
   a `cuisine` filter, `/v1/venues/category-facets` and `/v1/price-index/cells` all 200.
+
+## Amendment 36 (2026-11-18): `validator-v12`, calorie counts and carousel positions are no prices
+
+Recorded here in session P8-23 (2026-11-19): #167 merged the code and its review
+([2026-11-18-p8-22-validator-v12.md](../reviews/2026-11-18-p8-22-validator-v12.md)), but this ADR
+had no section for it (doc drift). Decided in session P8-22 under the owner's delegation.
+
+- **Rule 1:** a bare reading is not taken right after a calorie marker in its block ("cal 320",
+  "Calories: 180", "kcal 450", a range's last number); such a number doesn't vote in `bare_page`.
+- **Rule 2:** a "k/n" block is not a glass/bottle pair when its page also prints "1/n", "2/n" and
+  "3/n" as blocks of their own (a carousel's slide numbers).
+- `validator-v11` → `validator-v12`; the frozen v4 reader (classifier-v2, chunk-v2.3) unchanged.
+  Labelled sets: 14 of 2,504 texts change, every lost token a calorie count or a slide number; §8
+  and section reports identical. Expected Gold 100,448 → 100,009 (Pokeworks 135, Quiznos 8, P.F.
+  Chang's carousel 296 rows), rehearsed exactly on a scratch copy.
+
+### Applied: `validator-v12` (2026-11-19, session P8-23)
+
+Owner go-ahead in the P8-23 plan ("I approve every data write below"), after #167 merged (`main`
+8a168de).
+
+**`helios_laptop`:**
+1. **Backup:** `var/laptop-run/helios_laptop-2026-11-18-pre-v12.dump` (sha256 `c5436b91…`).
+2. **Re-interpretation from saved answers** (P8-22's rehearsal script, the extractor refusing
+   every model call): 3,028 pages due (`reinterpret`), 3,028 extracted (all from saved answers),
+   0 failed, 0 model calls, 84 min (the rehearsal took 52; the laptop shared its CPU with the
+   PDF-reader build).
+3. **`python -m apps.gold.refresh`:** `current_menu` **100,448 → 100,009**, exactly as rehearsed.
+   Price index 417 → 416 rows; citywide median 1031 (p25 700, p75 1400) on 656 → 655 venues;
+   `venue_category` 21,467 rows, unchanged.
+4. **Dump for the Pi:** `var/laptop-run/helios_laptop-2026-11-19-v12.dump` (sha256 `cb8b74e2…`).
+   The rehearsal copy `helios_p822_test` was dropped.
+
+**Pi** (backups and scripts in `~/helios-backups/firsthelios-20261118-p8-23/`):
+- Backup of the database (`pi-helios-pre.dump`, sha256 `23a7bd0d…`, 100,448 rows) and of the
+  deployed code (`First-Helios-code-75884a6.tgz`).
+- Backend `75884a6` → **`8a168de`** (git archive + rsync, `.env` and `var/` kept; API image
+  rebuilt; migrate exit 0; same alembic head `73b0e3dba421`).
+- Database dropped, recreated and restored from the laptop dump: `pg_restore` with no stderr,
+  394 s downtime, 100,009 Gold rows, 416 price-index rows. Local and `firsthelios.com` checks
+  (`/`, `/healthz`, `/readyz`, `/v1/venues`, a `cuisine` filter, category facets, price-index
+  cells) all 200.
+
+## Run record: P8-23, the Orange Pi as pipeline host (2026-11-19)
+
+Owner plan with every data write approved; decisions within it delegated. Record:
+[2026-11-19-p8-23-pi-long-run.md](../reviews/2026-11-19-p8-23-pi-long-run.md).
+
+- The Pi ran `main` 8a168de as the pipeline host against a work database (`helios_work`): worker
+  image (Chromium works on arm64), `llama-server` on the A76 cores, no thermal pause (owner).
+- **20-page check:** 6.1 pages/h (39.9 chunks/h) on CPU; the Pi accepted 944 prices against the
+  laptop GPU's 961 on the same texts (0.982; 870 identical rows). Peak RAM 4.6 GB, SoC 86.7 °C.
+- **Recrawl:** 2 batches of 50 menu URLs (100 of 1,746 due), `--render`; 105 pages extracted, 54
+  of them by the model (412 chunks), 0 failed. Stopped between batches to fit the wrap-up.
+- **Swap:** Gold 100,009 → 99,553 rows (−0.46%), venues with a menu 1,214 → 1,216, citywide median
+  1031 → 1050; one venue lost its menu by an R4 withdrawal (its Uber Eats page failed the page
+  check). Restored into the public database (399 s) and into `helios_laptop`.
+- **Finding (owner question):** `pg_restore` carries `menu.admission_fence`, so a dump restored
+  onto a cluster with a lower transaction counter refuses every Menu write until the fence is reset
+  (`setval('menu.admission_fence', txid_current())`); done by hand on `helios_work`. Options: a
+  documented restore step (as now), or `lock_admission()` treating a fence from the future as stale
+  and resetting it (a migration).
+- **Finding:** refetched pages change often (62 and 43 changed or new of 92 and 66 records), and a
+  changed text is extracted whole; reusing saved answers per chunk would have saved 21% of chunks
+  on the measured pairs.
+- **Owner answers (2026-11-20, all as recommended):** swap about every 10 batches while the recrawl
+  continues; the fence reset stays a documented restore step; catalogs go to the page check (next
+  precision sample); article pages get a re-verification withdrawal rule (ADR-0015 amendment).
+
+## Amendment 37 (2026-11-20, proposed): reuse saved answers per chunk, not only per page
+
+**Status: Proposed 2026-11-20 (session P8-24). Accepted 2026-11-20 by the owner, Q1–Q4 as
+recommended (see [Owner decision](#owner-decision-amendment-37)): stage 1 is to be built,
+behind the laptop-GPU quality gate of Q3; stages 2 and 3 are not adopted.** Record:
+[2026-11-20-p8-24-catalogs-and-chunk-reuse.md](../reviews/2026-11-20-p8-24-catalogs-and-chunk-reuse.md)
+§2 (data, every figure below, the scripts).
+
+**The gap.** A page's saved answers are reused only when its whole text comes back
+(`OutputStore`, keyed by extractor version and text hash). Any change sends the whole text to
+the model, and most refetched pages change (P8-23 run record). On the Pi's CPU a chunk costs
+about 90 s, so this is where the recrawl's time goes. Measured on the P8-23 recrawl's batches
+1–6 (read-only copies of the Pi's `var/replay`, its Version list and its logs): **112 pages
+went to the model, 918 chunks, 117,175 slot-seconds** (two `llama-server` slots, so about 16 h
+of wall time). The run's own logs count 121 pages and 987 chunks; the reconstruction from
+the Version list finds 9 pages fewer (not traced; within 8%).
+
+**Why exact chunk matching finds little.** Re-matching the same chunks reproduces P8-23's
+figure: 23% of the model's time went to chunks already answered word for word. Three causes,
+measured on the 108 pages that have an older Version:
+- **Block ids.** Every chunk line starts with its page-wide block id (`b0123 | …`). One block
+  inserted near the top renumbers every later line, so equal text no longer matches. 21 of 80
+  own-site pages changed **only in chrome lines**, which the model is never sent. Exact
+  matching reuses 41 of their 88 chunks; matching with renumbered ids reuses all 88.
+- **Size-cut boundaries.** Chunks are cut by size, so an early insertion can move later cuts.
+- **Delivery-platform churn.** Of the changed lines sent to the model on platform pages
+  (28 pages, 5,531 lines):
+  - 48.5% are volatile tokens: ratings, "Preorder for 5:00pm", delivery fees, distances,
+    opening hours, "Sold Out";
+  - 38.9% moved, or changed only their volatile part (`$5.69 • 93% (108)` → `• 94% (110)`);
+  - 12.6% changed otherwise, mostly nearby-restaurant carousels and dated customer reviews.
+
+  **Only 78 lines (1.4%) are new or removed priced content.** Own-site pages are the reverse:
+  75% of their changed sent lines are content.
+
+**Measured options** (model time from each chunk's saved `wall_s`; character shares where the
+boundaries differ from chunk-v2.3's, since those chunks were never timed):
+
+| Scheme | Chunks | Model time reused | Platform | Own-site | Characters reused |
+|---|---|---|---|---|---|
+| Today's page-level reuse plus exact chunk match | 918 | 0.231 | 0.090 | 0.269 | 0.228 |
+| **Stage 1:** chunk-v2.3 chunks, block ids renumbered | 918 | **0.410** | 0.156 | 0.479 | 0.385 |
+| Stage 2: stage 1, volatile text out of the key | 918 | 0.414 | 0.175 | 0.479 | 0.406 |
+| Stage 3: content-defined cuts (~1,000 characters) + stage 2 | 1,118 | n/a | 0.284¹ | 0.531¹ | 0.483 |
+| Stage 3 at ~625-character chunks | 2,015 | n/a | 0.404¹ | 0.567¹ | 0.546 |
+| Content-defined cuts at today's size (~1,140 characters), ids renumbered | 980 | n/a | n/a | n/a | 0.399 |
+
+¹ chunk shares, not time.
+
+The reuse source barely matters: the record's own previous Version gives 0.382 under stage 1,
+and every text answered before (a global cache, chains included) gives 0.383. Prompt tokens
+average 475 per chunk, so the system prompt is served from `llama-server`'s prefix cache, and
+time follows generated tokens: stage 1 saves 0.443 of them.
+
+**Proposal.**
+1. **Stage 1: a chunk-answer store keyed by renumbered chunk text (recommended).** For a page
+   with no saved page answer:
+   - chunk it as today (chunk-v2.3, unchanged);
+   - look up each chunk by (extractor version, sha256 of the chunk with its block ids replaced
+     by chunk-local ones, `k0`, `k1`, …, in order of first appearance);
+   - on a hit, map the saved answer's `"b"` ids back through the two chunks' id lists. The
+     n-th distinct id of the saved chunk becomes the n-th of the new one: the renumbered texts
+     are equal, so the map is one-to-one;
+   - send only the misses to the model;
+   - assemble the page's answers in chunk order and validate as today. The validator grounds
+     every row in the new page's blocks, so a reused row whose name or price is gone is
+     dropped.
+
+   The extractor's input for a miss is unchanged, so the extractor version and every saved
+   page answer stay valid. No schema change, no new dependency.
+2. **Stage 2 (volatile text out of the key): not proposed.** It adds 0.004 of model time.
+   Platform churn is mostly reordering and carousels, which no generic token list removes, and
+   anything platform-specific is ruled out (universal extraction).
+3. **Stage 3 (content-defined chunk boundaries, a chunk-v2.4): not proposed now.**
+   - At today's chunk size it adds little (0.399 vs 0.385). The bigger shares come from smaller
+     chunks, which change what the model sees: that needs the §8 quality check on the laptop
+     GPU.
+   - A new chunker is a new extractor version: every saved answer is invalidated, and all
+     2,016 answered texts must be re-extracted once (about 14,000 chunks, some 350 Pi-hours,
+     or a laptop GPU pass).
+   - Revisit only if stage 1 is not enough.
+
+**What stage 1 is worth.** In batches 2–6 the Pi spent 18.9 h extracting (logs). Stage 1
+would have removed about 41% of the model's time on changed pages, roughly 7–8 h over those
+five batches. The recrawl's other saving is already in place: 279 of the 346 changed records
+in batches 3–6 returned to a text answered before (a page alternating between known states),
+and page-level reuse handled those with no model call.
+
+### Owner questions (Amendment 37)
+
+- **Q1. Build stage 1?** (recommended)
+- **Q2. Where the chunk answers live.**
+  - A small per-chunk record written next to each page record, plus a one-time backfill from
+    the existing records and their bundles (recommended: lookups are a file check, like
+    `OutputStore`).
+  - Or an index rebuilt at each run's start from the page records and bundles: no new files,
+    but it reads every answered bundle (about 2,000).
+- **Q3. Quality check before it runs on the Pi.** A reused answer was generated for a chunk
+  equal only up to block ids, and the model reads ids as tokens.
+  - Recommended: on the laptop GPU, re-extract fresh every chunk stage 1 would reuse on the
+    P8-23 pages. Compare the accepted rows page by page against the reused answers, with
+    the same pages re-extracted fresh twice as the noise floor.
+  - Accept if reused-vs-fresh differs no more than fresh-vs-fresh.
+- **Q4. Provenance.** Should a page assembled from reused chunk answers say so? Options:
+  - a count in the extraction report only (recommended: the inputs and the validator are
+    the same);
+  - a marker in the `llm` stream's method version. That bumps the pipeline version and
+    re-interprets every page once (0 model calls, about 84 min on the laptop).
+
+### Owner decision (Amendment 37)
+
+**Answered by the owner on 2026-11-20, all as recommended:**
+- **Q1:** build stage 1 (chunk-answer reuse keyed by the chunk text with renumbered block ids).
+  Stages 2 and 3 are not adopted.
+- **Q2:** a per-chunk record written next to each page record, plus a one-time backfill from the
+  existing page records and their bundles.
+- **Q3:** before stage 1 runs on the Pi, the laptop-GPU gate: every chunk stage 1 would reuse on
+  the P8-23 pages is re-extracted fresh twice; reused-vs-fresh accepted rows must differ no more
+  than fresh-vs-fresh.
+- **Q4:** a count in the extraction report only; no method-version marker. Revisit if the Q3
+  gate shows reused answers differing beyond the noise floor.
