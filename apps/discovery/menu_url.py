@@ -93,6 +93,23 @@ _BLOCKLIST_TERMS: frozenset[str] = frozenset(
     },
 )
 
+# (ADR-0015 Amendment 3) Path segments of article pages: a blog post, a news item or a CMS
+# attachment page that talks about the menu is not the menu, even when it names menu items.
+ARTICLE_SEGMENTS: frozenset[str] = frozenset(
+    {
+        "blog",
+        "blogs",
+        "news",
+        "stories",
+        "story",
+        "article",
+        "articles",
+        "press",
+        "_posts",
+        "attachment",
+    }
+)
+
 # Paths that name a site's root page under another name (:func:`is_deep_link`).
 _ROOT_PAGES: frozenset[str] = frozenset(
     {"index.html", "index.htm", "index.php", "home", "home.html", "en", "en-us"}
@@ -612,6 +629,15 @@ def path_candidates(base_url: str) -> list[str]:
     return [urljoin(base_url, path) for path in MENU_PATHS]
 
 
+def is_article_path(url: str) -> bool:
+    """Whether ``url``'s path has an article segment (:data:`ARTICLE_SEGMENTS`)."""
+    try:
+        path = urlsplit(url).path
+    except ValueError:
+        return False
+    return any(segment.lower() in ARTICLE_SEGMENTS for segment in path.split("/"))
+
+
 def ordered_menu_candidates(
     base_url: str,
     *,
@@ -631,6 +657,8 @@ def ordered_menu_candidates(
     (R75) via ``extra_sitemap_matches`` — already extracted through
     :func:`menu_links_from_sitemap`, so this function only merges and ranks.
 
+    An article page (:func:`is_article_path`) is never a candidate (ADR-0015 Amendment 3).
+
     Sitemap and anchor matches are interleaved rather than concatenated: a
     site with many sitemap matches (e.g. a blog's tagged posts) would
     otherwise fill every slot under :data:`MAX_CANDIDATES` before a homepage
@@ -642,7 +670,7 @@ def ordered_menu_candidates(
 
     def add(url: str) -> None:
         key = _dedupe_key(url)
-        if key in seen or key == home_key:
+        if key in seen or key == home_key or is_article_path(url):  # (ADR-0015 Amendment 3)
             return
         seen.add(key)
         ordered.append(url)
