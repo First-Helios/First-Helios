@@ -51,8 +51,10 @@ from packages.helios_core.provenance.validation import (
     parse_capture_locator,
     validate_outcome,
 )
+from packages.helios_parsing.pdf import PDF_READER_VERSION
 from packages.helios_parsing.segment import SEGMENTER_VERSION, segment
 from packages.helios_parsing.validator import Row, validate
+from test.test_pdf_reader import MENU_LINES, pdf_bytes
 from test.test_url_pipeline import (
     _NOW,
     _FakeResolver,
@@ -152,6 +154,9 @@ def test_new_reason_codes_are_valid_and_scheme_maps_to_redirect_refused() -> Non
         ("failed", "menu_pdf_only"),
         ("failed", "wrong_place"),
         ("failed", "other_location"),
+        ("failed", "not_pdf"),
+        ("failed", "pdf_unreadable"),
+        ("failed", "pdf_no_text"),
     ):
         validate_outcome(outcome, reason)
     with pytest.raises(ValueError, match="outcome/reason"):
@@ -241,7 +246,8 @@ def test_discovery_reports_a_menu_pdf_when_no_menu_page_verifies(tmp_path: Path)
     }
     with _fetcher(tmp_path, routes) as fetcher:
         found = fetcher.discover_menu_attempt("https://k.com/")
-    assert found == (MenuPdfLinked("https://k.com/files/dinner-menu.pdf"),)
+    # (ADR-0029 D2) the PDF is fetched and read; a truncated file is unreadable
+    assert found == (MenuPdfLinked("https://k.com/files/dinner-menu.pdf", "pdf_unreadable"),)
 
 
 # -- database: discovery counts PDF-only venues ------------------------------------------
@@ -533,12 +539,12 @@ def test_skipped_and_failed_pages(session: Session, tmp_path: Path) -> None:
 
     report = _run(session, tmp_path, pages)
 
-    assert report.outcomes == {"not_menu": 1, "js_only": 1, "pdf": 1, "http_404": 1}
+    assert report.outcomes == {"not_menu": 1, "js_only": 1, "pdf_unreadable": 1, "http_404": 1}
     assert report.versions_new == 0
     for key, reason, bundled in (
         ("mp4a", "not_menu", True),
         ("mp4b", "js_only", True),
-        ("mp4c", "pdf", False),
+        ("mp4c", "pdf_unreadable", False),
         ("mp4d", "http_404", False),
     ):
         (capture,) = _captures(session, sites[key][1])
@@ -547,6 +553,99 @@ def test_skipped_and_failed_pages(session: Session, tmp_path: Path) -> None:
     # A failed or skipped URL isn't fetched again inside the window.
     report = _run(session, tmp_path, pages, now=_T1 + timedelta(days=1))
     assert (report.fetched, report.not_due) == (0, 4)
+
+
+def test_a_pdf_menu_page_is_read_into_a_version(session: Session, tmp_path: Path) -> None:
+    """(ADR-0029 D3) A PDF menu URL: its pdf-v1 document is the page; the bundle keeps the bytes."""
+    url = "https://pdf.cafe/files/menu.pdf"
+    _seed(session, [_poi("Pdf Cafe", 30.30, -97.75, gers_id="mp6", websites=("https://pdf.cafe",))])
+    _resolve(session, _FakeResolver(url))
+    data = pdf_bytes([["MENU", *MENU_LINES]])
+    pdf = FetchResult(
+        url=url,
+        status=200,
+        text=data.decode("latin-1"),
+        content_type="application/pdf",
+        fetched_at=_T1.timestamp(),
+        content_hash="sha256:" + hashlib.sha256(data).hexdigest(),
+        body=data,
+        encoding=None,
+    )
+
+    report = _run(session, tmp_path, _Pages({url: pdf}))
+
+    assert (report.versions_new, report.outcomes) == (1, {"succeeded": 1})
+    (version,) = _versions(session, "mp6")
+    assert version.source_payload["reader"] == PDF_READER_VERSION
+    assert version.source_payload["segmenter"] == SEGMENTER_VERSION
+    capture = session.get(Capture, version.capture_id)
+    assert capture is not None and capture.bundle_path is not None
+    bundle = BundleStore(tmp_path).read(capture.bundle_path)
+    assert (bundle.body, bundle.content_type) == (data, "application/pdf")
+    assert bundle.rendered_dom is not None and "<p>Carne Asada Plate $24</p>" in bundle.rendered_dom
+    block = next(b for b in bundle.blocks if b.text == "Carne Asada Plate $24")
+    start = block.text.index("$24")
+    assert excerpt(bundle, f"blocks:{SEGMENTER_VERSION}:{block.id}[{start}:{start + 3}]") == "$24"
+
+    # a later fetch that answers with something else than a PDF is not_pdf, not an HTML page
+    later = _T1 + REFETCH_WINDOW
+    moved = _Pages({url: _page(url, _MENU, at=later)})
+    report = _run(session, tmp_path, moved, now=later)
+    assert (report.outcomes, report.versions_changed) == ({"not_pdf": 1}, 0)
+
+
+def test_discovery_persists_a_read_pdf_and_why_another_was_not_read(session: Session) -> None:
+    class _PdfResolver:
+        verifier = "s4-v1"
+
+        def discover_menu_attempt(
+            self, website: str, *, address: str | None = None
+        ) -> tuple[MenuUrlDiscovery | PlatformAmbiguous | MenuPdfLinked, ...] | CaptureFailure:
+            del address
+            if website == "https://read.cafe/":
+                html = "<p>MENU</p><p>Tacos $3</p>"
+                return (
+                    MenuUrlDiscovery(
+                        website + "menu.pdf", "pdf", _NOW, "sha256:x", website, None, html
+                    ),
+                )
+            return (MenuPdfLinked(website + "menu.pdf", "pdf_no_text"),)
+
+        def verify_menu_attempt(
+            self, website: str, menu_url: str, *, not_before: datetime
+        ) -> MenuUrlDiscovery | CaptureFailure:
+            raise AssertionError("nothing is re-verified in one run")
+
+    _seed(
+        session,
+        [
+            _poi("Read Cafe", 30.30, -97.75, gers_id="pdf2", websites=("https://read.cafe",)),
+            _poi("Scan Cafe", 30.40, -97.70, gers_id="pdf3", websites=("https://scan.cafe",)),
+        ],
+    )
+
+    report = resolve_urls(
+        session, resolver=_PdfResolver(), registry={}, decided_at=_NOW, observed_at=_NOW
+    )
+
+    assert (report.menu_pdf_read, report.menu_pdf_unread, report.menu_pdf_only) == (1, 1, 0)
+    saved = session.scalars(
+        select(SourceRecordVersion.source_payload)
+        .join(SourceRecord, SourceRecord.id == SourceRecordVersion.source_record_id)
+        .join(Source, Source.id == SourceRecord.source_id)
+        .where(Source.namespace == MENU_URL_NAMESPACE, SourceRecord.external_key == "pdf2")
+    ).all()
+    assert [p["menu_url"] for p in saved] == ["https://read.cafe/menu.pdf"]
+    reasons = session.scalars(
+        select(Capture.reason_code)
+        .join(SourceEndpoint, SourceEndpoint.id == Capture.source_endpoint_id)
+        .join(Source, Source.id == Capture.source_id)
+        .where(
+            Source.namespace == MENU_URL_NAMESPACE,
+            SourceEndpoint.canonical_uri == "https://scan.cafe/",
+        )
+    ).all()
+    assert reasons == ["pdf_no_text"]
 
 
 def test_render_after_js_only_and_menu_pdf_link_count(session: Session, tmp_path: Path) -> None:

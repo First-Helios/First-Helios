@@ -170,6 +170,11 @@ FAILURE_REASONS = frozenset(
         "other_location",  # or another location's of the metro (ADR-0025 D2′)
         "article_page",  # a saved menu URL that is an article page (ADR-0015 Amendment 3)
         "store_catalog",  # or a store's product listing (ADR-0015 Amendment 4)
+        # (ADR-0029 D2-D3) a menu PDF link fetched but not read: not a PDF, a file pypdf can't
+        # open (or an encrypted one), or one with almost no text (an image-only menu)
+        "not_pdf",
+        "pdf_unreadable",
+        "pdf_no_text",
     }
 )
 

@@ -30,8 +30,10 @@ An unchanged website/menu-URL is not re-persisted, a record a human put in
 ``needs_review`` is never re-assigned, and a venue whose Organization is no
 longer current is counted and skipped. A chain homepage's platform links count
 as ``platform_ambiguous`` unless exactly one shows the venue's address. A site
-where no menu page verifies but a fetched page links a menu-named PDF is recorded
-as ``failed/menu_pdf_only`` (ADR-0013 Amendments 3-4).
+where no menu page verifies but a fetched page links a menu-named PDF has that PDF
+read (ADR-0029 D2): a PDF the page check accepts is the menu URL; otherwise the site
+is recorded as ``failed/menu_pdf_only`` (ADR-0013 Amendments 3-4), or as
+``failed/not_pdf``, ``pdf_unreadable`` or ``pdf_no_text`` when it was fetched but not read.
 
 Every write reuses the published Identity/Bronze commands (ADR-0011).
 The menu-URL resolver is injected as a Protocol, so tests supply a fake and CI
@@ -124,6 +126,10 @@ WITHDRAW_REASONS = frozenset(
         "other_location",  # (ADR-0025 D2′) the URL names another location of the metro
         "article_page",  # (ADR-0015 Amendment 3) a blog post, news item or attachment page
         "store_catalog",  # (ADR-0015 Amendment 4) a store's product listing
+        # (ADR-0029 D2) a saved PDF menu that is no longer a readable PDF
+        "not_pdf",
+        "pdf_unreadable",
+        "pdf_no_text",
     }
 )
 WITHDRAW_METHOD = "menu-url-reverify"
@@ -198,6 +204,8 @@ class UrlDiscoveryReport:
     menu_pages_over_cap: int = 0  # further own-site pages beyond MAX_MENU_PAGES
     platform_ambiguous: int = 0
     menu_pdf_only: int = 0
+    menu_pdf_read: int = 0  # (ADR-0029 D2) a linked menu PDF taken as the menu
+    menu_pdf_unread: int = 0  # a linked menu PDF fetched but not read (not_pdf, pdf_*)
     needs_review: int = 0
     org_not_current: int = 0
     cooldown_skipped: int = 0
@@ -1277,6 +1285,7 @@ def _resolve_venue(
         for why in place_failures:
             if why is not None:
                 _count_place_failure(report, why)
+        report.menu_pdf_read += sum(m.signal == "pdf" for m in acquired)
         if not isinstance(discovery, CaptureFailure):
             report.platform_ambiguous += sum(
                 isinstance(item, PlatformAmbiguous) for item in discovery
@@ -1294,11 +1303,15 @@ def _resolve_venue(
                     if r in place_failures
                 )
                 failure = CaptureFailure("failed", reason, observed_at)
-            elif any(isinstance(item, MenuPdfLinked) for item in discovery):
-                # Counted where it is seen: the venue's menu is likely PDF-only,
-                # which v1 does not read (ADR-0013 Amendment 3).
-                failure = CaptureFailure("failed", "menu_pdf_only", observed_at)
-                report.menu_pdf_only += 1
+            elif linked := [item for item in discovery if isinstance(item, MenuPdfLinked)]:
+                # Counted where it is seen: the venue's menu is likely PDF-only (ADR-0013
+                # Amendment 3) and its PDF wasn't taken (ADR-0029 D2): unfetched or rejected
+                # (menu_pdf_only), or fetched but not read (not_pdf, pdf_unreadable, pdf_no_text).
+                failure = CaptureFailure("failed", linked[0].reason, observed_at)
+                if linked[0].reason == "menu_pdf_only":
+                    report.menu_pdf_only += 1
+                else:
+                    report.menu_pdf_unread += 1
             else:
                 failure = CaptureFailure("failed", "no_menu_found", observed_at)
             page_verdict = failure

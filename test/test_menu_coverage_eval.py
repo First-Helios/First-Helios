@@ -360,7 +360,7 @@ BASELINE = [
     ("accordion", 1, 1, 1, 0),
     ("table", 1, 1, 1, 0),
     ("shared_price", 1, 1, 1, 0),
-    ("pdf", 0, 0, 0, 0),  # a PDF menu is linked, never read (ADR-0013 Amendment 3)
+    ("pdf", 0, 0, 0, 0),  # the linked PDF is read (ADR-0029), but this stub is unreadable
     ("multi_location", 1, 1, 2, 1),  # both locations' menus are collected
     ("homepage_menu", 1, 1, 1, 0),  # the homepage, as nothing else verifies (ADR-0026)
     ("no_menu", 0, 0, 0, 0),
