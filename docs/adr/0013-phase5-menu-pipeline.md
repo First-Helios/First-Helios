@@ -3423,6 +3423,17 @@ Owner plan with every data write approved; decisions within it delegated. Record
 - **Owner answers (2026-11-20, all as recommended):** swap about every 10 batches while the recrawl
   continues; the fence reset stays a documented restore step; catalogs go to the page check (next
   precision sample); article pages get a re-verification withdrawal rule (ADR-0015 amendment).
+- **Swaps 2–4 (2026-11-21 to 11-23):** the recrawl finished all 1,746 due URLs.
+  - Gold went 98,961 → 98,699 → **98,499**; venues with a menu 1,183 → 1,178 → **1,221**.
+  - The last stretch ran on `main` 5b8f62a. A no-model pass re-interpreted 2,579 pages from saved
+    answers (532 pages/h). The laptop GPU, called over the LAN by the Pi, ran the 265 model pages
+    at **180.5 pages/h**.
+  - `place_sweep` withdrew 61 records (#170, #171). The swap took 458 s.
+  - Two bugs found here are fixed in P8-27:
+    - redirected targets that never stop being due (#175, with replay files at 0644);
+    - jsonld precedence hiding llm dishes that the jsonld stream cannot project (#176; Gold
+      +909 rows, +12 venues when applied).
+  - Details: the record's "Swap 4" section.
 
 ## Amendment 37 (2026-11-20, proposed): reuse saved answers per chunk, not only per page
 
