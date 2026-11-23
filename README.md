@@ -23,7 +23,7 @@ This section is the single current-status page. Other docs link here.
 - **Menu**: `packages/helios_core/domains/menu/`. Immutable Menu snapshots and
   their writer, plus the pure current/history price selector
   (`menu` schema, ADR-0005). The menu pipeline's extraction writes them
-  (below); not yet run on the Pi.
+  (below); first run on the Pi 2026-11-19 (P8-23, against the work database).
 - **Gold read models**: `packages/helios_core/gold/`. `gold.current_menu`, a
   rebuildable projection of the Menu selector, with bounded per-scope and
   full-catalog refresh (ADR-0006). `gold.price_index` (ADR-0007
@@ -175,7 +175,8 @@ This section is the single current-status page. Other docs link here.
   Captures with a reason code. Platform pages take the venue's Establishment scope
   (Organization when several venues share the URL), own-site pages the
   Organization's. Discovery records `menu_pdf_only` for venues whose only menu
-  looks like a PDF. No extraction yet; not yet run on the Pi.
+  looks like a PDF. Extraction follows in `apps/menu_pipeline/extract.py`. First run on the Pi
+  2026-11-19 (P8-23), with `--render`.
 - **`llama-server`** (ADR-0013 slice 1, Amendment 6): the extraction model's
   server, a Compose service behind the `menu` profile with no host port
   (`http://llama-server:8080` on the Compose network). Upstream llama.cpp image
@@ -600,24 +601,23 @@ server gets the A76 cores (4-7) and Postgres and the API the A55s.
 
 ### Staging (Pi)
 
-- An Orange Pi 5 Plus (ARM64) on the owner's LAN runs the `helios` Compose
-  stack from `infra/docker-compose.yml` (`postgres`, one-shot `migrate`, `api`),
-  bound to 127.0.0.1. Discovery CLIs run inside the API container:
-  `docker compose -f infra/docker-compose.yml --env-file .env exec api python -m apps.discovery ...`.
-- The deploy directory is a source snapshot of one merged commit (`git archive`),
-  with a `DEPLOYED_COMMIT` file recording its SHA; `var/` is a host bind mount
-  (caches, audit packets under `var/audits/`).
-- Database volume `helios_postgres_data`. The pre-ADR-0011 volume
-  `infra_postgres_data` is kept offline: never attach it to the current image.
-  Backups are custom-format `pg_dump` files under `~/helios-backups/<run>/`; no
-  restore has been rehearsed.
-- Rebuild outline: stop runs and back up; deploy the commit; `down`; remove
-  `helios_postgres_data` only after confirming it belongs to this stack;
-  `up -d --build` (`migrate` exits 0 at head); check `alembic check`, `/healthz`,
-  `/readyz`; run discovery (`--expected-predecessor` once a completed release
-  exists); re-export and re-audit.
-- Last rebuild: 2026-09-28 at `3faae15` (migration `c91a6f02de73`), before the
-  S13 lifecycle migration; no completed discovery baseline yet.
+- An Orange Pi 5 Plus (ARM64, 192.168.1.191) on the owner's LAN runs the `helios` Compose stack
+  from `infra/docker-compose.yml` plus `infra/docker-compose.pi.yml` (`postgres`, one-shot
+  `migrate`, `api`), bound to 127.0.0.1; it also serves `firsthelios.com` through a Cloudflare
+  Tunnel ([ADR-0019 Amendment 1](./docs/adr/0019-public-v1-site.md)).
+- The deploy directory is a source snapshot of one merged commit (`git archive` + rsync, `.env`
+  and `var/` kept), with a `DEPLOYED_COMMIT` file recording its SHA; `var/` is a host bind mount
+  (caches, models, replay bundles, audit packets).
+- Data: the public database is replaced by a `pg_dump` restore after each owner-approved apply
+  (custom-format dumps and the pre-restore backup under `~/helios-backups/<run>/`). Last:
+  2026-11-19, backend `8a168de`, validator-v12 data (100,009 `current_menu` rows).
+- Pipeline host (P8-23): the `worker` image (Chromium renders work on arm64) and `llama-server`
+  (`--profile menu`, A76 cores 4–7) run the menu pipeline against a separate work database
+  (`helios_work`), swapped into the public one after a run
+  ([record](./docs/reviews/2026-11-19-p8-23-pi-long-run.md)). After restoring a dump made on
+  another cluster, reset `menu.admission_fence` before any Menu write (the record explains why).
+- Database volume `helios_postgres_data`. The pre-ADR-0011 volume `infra_postgres_data` is kept
+  offline: never attach it to the current image.
 
 ### Database acceptance
 

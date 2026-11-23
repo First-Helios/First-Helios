@@ -559,3 +559,25 @@ priced row in the group, which with `category_kind = 'all'` and USD only is the 
   (third-party; check Hetzner's own price list)
 - CARTO basemaps: [API key page](https://www.carto.com/basemaps/apikey/),
   [terms](https://carto.com/legal/basemap-terms/)
+
+## Amendment 1 (2026-11-19): what runs today (doc drift, no decision)
+
+Recorded in session P8-23 because this ADR still reads "Q4 hosting: deferred" and "the Pi stays
+staging". The facts, not a hosting decision (Q4, Q5, Q6a, Q6b and Q8 stay open):
+
+- **Public site:** since 2026-10-26 `firsthelios.com` (and `www`) is served from the Orange Pi
+  through a remotely managed Cloudflare Tunnel (`cloudflared` as a systemd service), set up by the
+  owner, who wants it public for demos (no access gate). The tunnel routes to the frontend's
+  `dev_server.py` on `localhost:8080`, which calls the API on `127.0.0.1:8000`. This is this ADR's
+  "Public on the Pi" alternative (Q4b), not the VPS it proposed.
+- **Data:** the Pi's database is replaced by a `pg_dump` restore after each owner-approved apply;
+  backups in `~/helios-backups/<date>/` on the Pi. Backend code is deployed by git archive +
+  rsync with a `DEPLOYED_COMMIT` file; the frontend by the owner's `helios-deploy-frontend` script.
+- **Pipeline host:** from P8-23 (2026-11-19) the Pi also runs the menu pipeline (worker image,
+  `llama-server` on the A76 cores) against a separate work database, swapped into the public one
+  after a run ([2026-11-19-p8-23-pi-long-run.md](../reviews/2026-11-19-p8-23-pi-long-run.md)). The
+  CPU-sharing risk this ADR listed for "Public on the Pi" applies: the API stays on cores 0–3.
+- **Boot:** `helios-frontend.service` and `docker` are enabled (checked 2026-11-19), so the site
+  comes back after a power cut.
+- **Open:** "Always Use HTTPS" and a rate limit at the edge (this ADR's Q4/Q5 public-launch items)
+  are not known to be set.
