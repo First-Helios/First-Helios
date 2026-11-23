@@ -557,6 +557,28 @@ has the figures.
 by key. A dish on a later family whose `dish_key` and price set equal an earlier family's is
 not enumerated; the same name at other prices stays. Platform families are outside the rule.
 
+**Fix (2026-11-23, P8-27): only a jsonld dish that reaches Gold hides its llm copy.** Since
+P8-18, `_jsonld_dishes` took every priced dish on the jsonld head, including prices that
+enumeration never projects. The common case is an **Unsectioned** jsonld item: it has no native
+key (`menu_writes`: "Unsectioned has none (not in Gold)"), so it has no path. Such a dish hid the
+llm stream's sectioned copy, and neither stream reached Gold. P8-23 swap 4 lost three Chick-fil-A
+DoorDash menus this way, and swap 3 lost Bottega's. Now a jsonld price hides its dish only when
+enumeration would project it itself: it has a canonical native path, and its effective window
+contains `E`. That is the amendment's intent, "the jsonld stream wins a dish it prices", so it
+was **decided under the owner's delegation** without a new question.
+- **Test:** `test_a_jsonld_dish_that_cannot_reach_gold_hides_nothing`. It fails on the P8-18
+  rule.
+- **Measured** on a copy of P8-23's swap-4 data, both refreshes at its effective instant
+  (2026-11-23T12:31:56.897887Z). Unchanged code reproduces 98,499 rows. The fix gives
+  **99,408 rows (+909, 0 removed, 0 changed)**, every added row an `llm` price.
+  - Venues with a menu: 1,221 → **1,233 (+12, 0 lost)**. 75 more subjects regain llm dishes
+    the bug hid.
+  - Index all/all: priced 57,630 → 58,317, venues 683 → 693. The median moves one
+    `percentile_disc` step, 1050 → 1095: in Gold, the 49th percentile is 1050 and the 49.5th is
+    1095.
+  - Record:
+    [2026-11-19-p8-23-pi-long-run.md](../reviews/2026-11-19-p8-23-pi-long-run.md), "Swap 4".
+
 ## Implementation notes (2026-09-28)
 
 - Point 4 `as_of`: `gold.current_menu` has no `as_of` column; `effective_instant` plays that role,
