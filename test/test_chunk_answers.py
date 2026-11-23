@@ -43,6 +43,7 @@ def test_chunk_records_round_trip(tmp_path: Path) -> None:
     assert store.read_chunk("x", _CHUNK.replace("b0007", "b0008")) is None
     assert store.read_chunk("y", _CHUNK) is None  # another extractor version: not reused
     (path,) = tmp_path.glob("var/replay/menu-extract/*/chunks/*.json.gz")
+    assert path.stat().st_mode & 0o777 == 0o644  # readable for rsync (ADR-0030 Q6)
     record = json.loads(gzip.decompress(path.read_bytes()))
     assert (record["key"], record["text_hash"], record["chunk"]) == (
         chunk_key(_CHUNK),
