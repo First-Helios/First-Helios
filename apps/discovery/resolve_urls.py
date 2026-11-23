@@ -26,9 +26,9 @@ JavaScript-only own-site pages with headed Chromium (ADR-0013 §4, session S6f);
 it needs the worker image and a display, so run it under ``xvfb-run -a``. It
 stays off for Pi runs until the Pi measurement is recorded (ADR-0013 §4).
 
-Every verified page also passes the place check ``place-v2``: not another metro's
-page (``place-v1``, ADR-0015 Amendment 2), and for an own-site page, not a URL
-naming another location of the metro (ADR-0025 D2′). Its area is read at the
+Every verified page also passes the place check ``place-v3``: not a store catalog
+(ADR-0015 Amendment 4), not another metro's page (``place-v1``, ADR-0015 Amendment 2),
+and for an own-site page, not a URL naming another location of the metro (ADR-0025 D2′). Its area is read at the
 start of the run from the Overture records and the stored menu-page bundles under
 ``--base-dir`` (the deploy directory). A re-checked URL it rejects is withdrawn
 like one that fails the verifier (``menu_urls_wrong_place``,

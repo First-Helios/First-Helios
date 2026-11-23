@@ -11,6 +11,7 @@ from dataclasses import replace
 import pytest
 
 from apps.discovery.place_check import (
+    STRUCK_PRICE,
     PlaceArea,
     VenuePlace,
     foreign_slugs,
@@ -19,6 +20,7 @@ from apps.discovery.place_check import (
     place_failure,
     place_verdict,
     slug,
+    store_catalog,
 )
 from packages.helios_parsing.segment import segment
 
@@ -184,3 +186,47 @@ def test_place_failure_tells_another_metro_from_another_location() -> None:
     assert place_failure(url, blocks, VENUE, METRO, own_site=False) is None
     vegas = "https://tiltedkilt.com/menu/las-vegas-menu"
     assert place_failure(vegas, blocks, VENUE, METRO, own_site=True) == "wrong_place"
+
+
+# (ADR-0015 Amendment 4, place-v3) a store catalog, in the shapes P8-24 found stored
+
+
+def _items(n: int, struck: str) -> str:
+    return "".join(
+        f"<div><p>Organic Chia Seeds 32 Oz (Pack of {k})</p><p>$14.12</p><p>{struck}</p>"
+        "<p>Add to cart</p></div>"
+        for k in range(n)
+    )
+
+
+def test_a_grocery_listing_with_list_prices_is_a_store_catalog() -> None:
+    assert store_catalog(segment(_items(3, "Typical price:$27.94")))
+    assert store_catalog(segment(_items(3, "List Price:$10.99")))
+    assert store_catalog(segment(_items(3, "current price $11.15, Was $12.85")))
+    assert store_catalog(segment(_items(3, "Compare at $9.00")))
+
+
+def test_one_or_two_struck_prices_or_chrome_ones_are_no_catalog() -> None:
+    assert not store_catalog(segment(_items(2, "Was $12.85")))  # a menu's one promo
+    chrome = "".join(f"<footer><p>List Price: ${k}</p></footer>" for k in range(5))
+    assert not store_catalog(segment("<p>Brisket $20</p>" + chrome))
+
+
+def test_unit_prices_packs_and_a_stray_marker_on_a_menu_stay_below_the_bar() -> None:
+    # unit prices and pack sizes are menu shapes too (BBQ by the pound, beer six-packs);
+    # "Regular Price" without an amount is a specials table's header, not a struck price
+    menu = (
+        "<h2>Daily specials</h2><p>Regular Price</p><p>Chicken Fried Steak</p><p>$14.99</p>"
+        "<p>Brisket (by the lb) $24.99/lb</p><p>Beer 6-pack $12</p>"
+        "<p>It was $9.99 on Monday</p><p>The list price of wine varies</p>"
+    )
+    blocks = segment(menu)
+    assert sum(1 for b in blocks if STRUCK_PRICE.search(b.text)) == 2  # the last two
+    assert not store_catalog(blocks)
+
+
+def test_place_failure_names_a_store_catalog_first() -> None:
+    blocks = segment(_items(3, "Typical price:$27.94"))
+    url = "https://www.amazon.com/fmc/everyday-essentials-category"
+    assert place_failure(url, blocks, VENUE, METRO, own_site=True) == "store_catalog"
+    assert place_failure(url, blocks, VENUE, METRO, own_site=False) == "store_catalog"

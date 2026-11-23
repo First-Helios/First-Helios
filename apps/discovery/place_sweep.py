@@ -2,13 +2,16 @@
 
     python -m apps.discovery.place_sweep [--dry-run] [--base-dir .]
 
-The place check ``place-v2`` runs on every page discovery verifies; this applies
+The place check ``place-v3`` runs on every page discovery verifies; this applies
 it to the menu URLs already saved, from the stored ``menu-page`` bundles,
 without fetching anything. For each resolved menu-URL record whose latest
 ``menu-page`` Version holds a bundle of the same URL, the venue's current
 Overture address is checked against that page: another metro's page is
 ``wrong_place`` (ADR-0015 Amendment 2), an own-site page whose URL names another
-location of the metro is ``other_location`` (ADR-0025 D2′). A rejected page is
+location of the metro is ``other_location`` (ADR-0025 D2′), (``place-v3``, ADR-0015
+Amendment 4) a store's product listing is ``store_catalog``, and (ADR-0015 Amendment 3)
+an own-site menu URL with an article path (a blog post, news item or attachment page,
+``is_article_path``) is ``article_page``. A rejected page is
 withdrawn exactly as a failed re-verification is: ``_withdraw_menu`` writes the
 ``rejected/menu_not_verified`` observation (``verification_failure`` the reason,
 the bundle Capture's fetch time) and the ``menu-url-reverify`` unassignment to
@@ -32,7 +35,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from apps.discovery.lifecycle import lock_lifecycle
-from apps.discovery.menu_url import ordering_platform_host
+from apps.discovery.menu_url import is_article_path, ordering_platform_host
 from apps.discovery.place_check import (
     PlaceArea,
     load_place_area,
@@ -64,10 +67,14 @@ class PlaceSweepReport:
     checked: int = 0
     wrong_place: int = 0
     other_location: int = 0
+    article_page: int = 0  # (ADR-0015 Amendment 3)
+    store_catalog: int = 0  # (ADR-0015 Amendment 4)
     withdrawn: int = 0
     skipped: Counter[str] = field(default_factory=Counter)
     wrong_place_keys: list[str] = field(default_factory=list)
     other_location_keys: list[str] = field(default_factory=list)
+    article_page_keys: list[str] = field(default_factory=list)
+    store_catalog_keys: list[str] = field(default_factory=list)
 
     def summary(self) -> dict[str, object]:
         return {
@@ -75,10 +82,14 @@ class PlaceSweepReport:
             "checked": self.checked,
             "wrong_place": self.wrong_place,
             "other_location": self.other_location,
+            "article_page": self.article_page,
+            "store_catalog": self.store_catalog,
             "withdrawn": self.withdrawn,
             "skipped": dict(sorted(self.skipped.items())),
             "wrong_place_keys": sorted(self.wrong_place_keys),
             "other_location_keys": sorted(self.other_location_keys),
+            "article_page_keys": sorted(self.article_page_keys),
+            "store_catalog_keys": sorted(self.store_catalog_keys),
         }
 
 
@@ -92,7 +103,8 @@ def sweep_places(
     dry_run: bool = False,
     commit: Callable[[], None] | None = None,
 ) -> PlaceSweepReport:
-    """Check every saved menu URL's stored page; withdraw the ones `place-v2` rejects."""
+    """Check every saved menu URL's stored page; withdraw the ones `place-v3` rejects and the
+    own-site article pages (ADR-0015 Amendment 3)."""
     report = PlaceSweepReport()
     lock_lifecycle(session)
     venues = {venue.gers_id: venue for venue in iter_venues_to_resolve(session)}
@@ -115,18 +127,29 @@ def sweep_places(
         if saved.subject_id != venue.organization_subject_id:
             report.skipped["other_organization"] += 1
             continue
-        blocks = read_blocks(base_dir, bundle_path)
-        if blocks is None:
-            report.skipped["bundle_unreadable"] += 1
-            continue
-        report.checked += 1
         own_site = ordering_platform_host(url) is None
-        reason = place_failure(url, blocks, venue.place, place_area, own_site=own_site)
+        reason: str | None
+        if own_site and is_article_path(url):
+            report.checked += 1
+            reason = "article_page"  # decided from the URL alone
+        else:
+            blocks = read_blocks(base_dir, bundle_path)
+            if blocks is None:
+                report.skipped["bundle_unreadable"] += 1
+                continue
+            report.checked += 1
+            reason = place_failure(url, blocks, venue.place, place_area, own_site=own_site)
         if reason is None:
             continue
-        if reason == "wrong_place":
+        if reason == "article_page":
+            report.article_page += 1
+            report.article_page_keys.append(key)
+        elif reason == "wrong_place":
             report.wrong_place += 1
             report.wrong_place_keys.append(key)
+        elif reason == "store_catalog":
+            report.store_catalog += 1
+            report.store_catalog_keys.append(key)
         else:
             report.other_location += 1
             report.other_location_keys.append(key)

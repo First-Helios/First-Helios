@@ -491,6 +491,29 @@ def test_the_sweep_withdraws_saved_urls_whose_stored_page_is_elsewhere(
     assert (_latest_event(session, "p5").method) == WITHDRAW_METHOD
 
 
+def test_the_sweep_withdraws_saved_article_pages(session: Session, tmp_path: Path) -> None:
+    """(ADR-0015 Amendment 3) A saved own-site blog post is withdrawn as ``article_page``."""
+    for name, gers, host, path in (
+        ("Sweep Story", "p7", "sweepstory.com", "/stories/9-menu-picks"),
+        ("Sweep Menu", "p8", "sweepmenu.com", "/menu"),
+    ):
+        _seed_austin(session, name, gers, host)
+        _run(session, _Reverifier(f"https://{host}{path}"), at=_NOW)
+        _stored_page(session, tmp_path, gers, f"https://{host}{path}", _HERE)
+    later = _NOW + timedelta(days=1)
+
+    report = sweep_places(
+        session, place_area=_AREA, base_dir=tmp_path, observed_at=later, decided_at=later
+    )
+
+    assert report.article_page_keys == ["p7"]
+    assert _record(session, MENU_URL_NAMESPACE, "p7").state == "needs_review"
+    assert _record(session, MENU_URL_NAMESPACE, "p8").state == "resolved"
+    assert _versions(session, MENU_URL_NAMESPACE, "p7")[-1]["verification_failure"] == (
+        "article_page"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Another location's page (ADR-0025 D2′): an own-site URL naming another metro place.
 # --------------------------------------------------------------------------- #
@@ -598,4 +621,62 @@ def test_the_sweep_withdraws_another_locations_stored_page(
     assert _record(session, MENU_URL_NAMESPACE, "o5").state == "resolved"
     assert _versions(session, MENU_URL_NAMESPACE, "o4")[-1]["verification_failure"] == (
         "other_location"
+    )
+
+
+_CATALOG = "".join(
+    f"<div><p>Organic Olive Oil, 1 L (Pack of {k})</p><p>$23.75</p><p>Typical price:$27.94</p>"
+    "<p>Add to cart</p></div>"
+    for k in range(4)
+)
+
+
+def test_the_sweep_withdraws_a_stored_store_catalog(session: Session, tmp_path: Path) -> None:
+    """(ADR-0015 Amendment 4, place-v3) a store's product listing is no venue's menu."""
+    for name, gers, url in (
+        ("Sweep Catalog", "c1", "https://sweepcatalog.com/grocery-category"),
+        ("Sweep Menu", "c2", "https://sweepmenu.com/menu"),
+    ):
+        host = url.split("/")[2]
+        _seed_austin(session, name, gers, host)
+        _run(session, _Reverifier(url), at=_NOW)
+        _stored_page(session, tmp_path, gers, url, _CATALOG if gers == "c1" else _PLAIN)
+    later = _NOW + timedelta(days=1)
+
+    dry = sweep_places(
+        session,
+        place_area=_METRO,
+        base_dir=tmp_path,
+        observed_at=later,
+        decided_at=later,
+        dry_run=True,
+    )
+    assert (dry.store_catalog_keys, dry.withdrawn) == (["c1"], 0)
+
+    report = sweep_places(
+        session, place_area=_METRO, base_dir=tmp_path, observed_at=later, decided_at=later
+    )
+
+    assert report.withdrawn == 1
+    assert _record(session, MENU_URL_NAMESPACE, "c1").state == "needs_review"
+    assert _record(session, MENU_URL_NAMESPACE, "c2").state == "resolved"
+    assert _versions(session, MENU_URL_NAMESPACE, "c1")[-1]["verification_failure"] == (
+        "store_catalog"
+    )
+
+
+def test_a_recheck_of_a_store_catalog_withdraws_it(session: Session) -> None:
+    """(ADR-0015 Amendment 4) re-verification fails a saved catalog with ``store_catalog``."""
+    _seed_austin(session, "Recheck Catalog", "c3", "recheckcatalog.com")
+    resolver = _Reverifier("https://recheckcatalog.com/grocery")
+    resolver.page_html = _CATALOG
+    _run(session, resolver, at=_NOW)  # saved before place-v3 ran
+    resolver.menu_url = None  # re-discovery finds nothing else
+
+    report = _run(session, resolver, at=_NOW + REVERIFY_WINDOW, place_area=_METRO)
+
+    assert (report.menu_urls_store_catalog, report.menu_urls_withdrawn) == (1, 1)
+    assert _record(session, MENU_URL_NAMESPACE, "c3").state == "needs_review"
+    assert _versions(session, MENU_URL_NAMESPACE, "c3")[-1]["verification_failure"] == (
+        "store_catalog"
     )

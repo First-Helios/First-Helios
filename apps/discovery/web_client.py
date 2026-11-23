@@ -84,6 +84,7 @@ from apps.discovery.menu_url import (
     MAX_PLATFORM_CANDIDATES,
     MAX_SITEMAP_CHILDREN,
     address_on_page,
+    is_article_path,
     is_deep_link,
     is_platform_venue_page,
     menu_links_from_sitemap,
@@ -708,6 +709,11 @@ class SiteFetcher:
             if not platform and not same_site(website, menu_url):
                 return CaptureFailure(
                     "failed", "no_menu_found", datetime.fromtimestamp(self._clock(), UTC)
+                )
+            if not platform and is_article_path(menu_url):
+                # (ADR-0015 Amendment 3) a saved blog post or news item is withdrawn, unread
+                return CaptureFailure(
+                    "failed", "article_page", datetime.fromtimestamp(self._clock(), UTC)
                 )
             homepage = None if platform else self.fetch(website)
             if not platform and (homepage is None or homepage.status != 200):  # noqa: PLR2004
