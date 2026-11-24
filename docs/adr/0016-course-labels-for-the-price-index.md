@@ -1,7 +1,9 @@
 # ADR-0016: Course labels for the price index
 
 **Status:** Accepted 2026-09-30 (owner, session G-3), as amended by
-[Amendment 1](#amendment-1-2026-09-30-accepted-slice-1a-decisions). The open
+[Amendment 1](#amendment-1-2026-09-30-accepted-slice-1a-decisions) and
+[Amendment 2](#amendment-2-2026-11-24-slice-1b-checked-against-the-real-data)
+(decided under the owner's delegation, P8-30). The open
 questions were answered in session G-2 before the text was written
 ([Owner decisions](#owner-decisions-session-g-2-2026-09-30)).
 **Date:** 2026-09-30
@@ -451,6 +453,149 @@ recommended.
       Menu pages → candidates JSONL; its Menu read path is decided then), the
       lexicon, the training script and weights, the labelling, the evaluation
       and its `docs/reviews/` write-up.
+
+## Amendment 2 (2026-11-24): slice 1b checked against the real data
+
+**Status: decided under the owner's delegation** (session P8-30; owner, 2026-11-24: "I
+delegate the design within ADR-0016"). The owner may overturn any item before the slice-1b
+PR merges.
+
+This ADR was written before any extraction. The figures below were measured on a scratch
+copy of the swap-5 data: `helios_work-2026-11-24-p8-23-swap5.dump`, sha256 `a9af1391…`,
+the data that `helios`, `helios_work` and `helios_laptop` all hold.
+
+| Measure (swap-5) | Value |
+|---|---|
+| `gold.current_menu` rows: priced items / priced variants | 91,909 / 7,499 |
+| Venues with a Gold row; families (scope subject, record) | 1,233; 1,815 (479 Establishment-scoped, 1,336 Organization-scoped) |
+| Gold-reaching named sections | 15,121 (median 8 per venue, p90 27, max 143) |
+| Priced rows per section | median 5, p90 14, max 172 |
+| Gold target paths | all `section/item` or `section/item/variant`: no nested section reaches Gold |
+| Sections whose name and item set also occur at another venue | 7,006 (46%), in 2,085 groups |
+| Current Menu page method versions | llm `…;validator-v13;resolve-v6;classifier-v2+v3` (1,774 pages), jsonld `jsonld-v1;validator-v13;…` (172) |
+
+Each item below names the text it amends.
+
+1. **The section unit (amends §2, Amendment 1 item 4).** A candidate section is one
+   Gold section: the first element of a `gold.current_menu` row's target path. Its fields:
+   - `section_key`: the native key, `v<Bronze record version id>:<block>:<normalized
+     name>`. For llm pages the section comes from [5c] DOM assignment and [5d] page
+     templates (ADR-0013 Amendments 28 and 29, resolve-v3 and later). For JSON-LD pages it
+     is the source's own section.
+   - `name`: the row's `section_name` (ADR-0006 Amendment 1). Every one of the 15,121 is
+     non-null.
+   - `name_path`: `[name]`. Nesting is still allowed, but nothing nested reaches Gold today.
+   - `items`: the section's distinct `item_name`s, in item-key (page) order.
+   - `priced_items`: the section's priced item and variant rows.
+
+   Gold applies every rule that decides what is current before a row exists: `Unsectioned`
+   never reaches it, a dish that a venue's JSON-LD head also prices is hidden from its llm
+   head (ADR-0006 Amendment 2), and an earlier own-site page's same dish at the same
+   prices hides later copies (ADR-0022 point 4). So the candidates are exactly the
+   sections slice 3 would tag.
+
+   Gold holds no unpriced item. The guide's "count unpriced items only when the section
+   has no priced item" therefore never applies, and the agent sees priced items only.
+   `priced_items` stays a row count, as Amendment 1 item 4 says. ADR-0007 Amendment 4's
+   one-sample-per-Evidence rule applies to venue medians, not to this weighting.
+2. **Venue and scope (amends Amendment 1 item 5).**
+   - The venue is still the GERS id before `|` in the page record's key (`<gers>`,
+     `<gers>|<path>`, `<gers>|<host>`). It applies to both scopes, and it covers
+     ADR-0022's several own-site pages and platform pages alike.
+   - A venue's several pages contribute their sections separately, and they share the
+     venue's split.
+   - Labels belong to sections, not to scopes. Slice 3 tags every `current_menu` row
+     under a labelled section, whatever its scope, and the index's placement rule decides
+     which rows are aggregated.
+3. **Menu groups: one venue per group (new; amends Amendment 1 items 5 and 6).**
+   - *The problem.* Identity gives each of the 1,233 venues its own Organization, so the
+     locations of a chain are separate venues. 46% of sections are exact copies of a
+     section at another venue. A plain venue split would put copies of one menu in both
+     train and test, and ten locations of one chain would satisfy the "10 venues" rule
+     with one menu's evidence.
+   - *The rule (`menu-groups-v1`).* Two venues are linked when they share at least
+     **3** sections with the same normalized name (lowercase, collapsed whitespace) and
+     the same set of normalized item names, each with at least **2** items. A group is a
+     connected component of these links, and a venue with no links is its own group.
+     A shared name or item set seen at more than 60 venues is too generic to link
+     anything ("Soft Drinks: Coke, Sprite"), so it doesn't count. On swap-5 this gives
+     949 groups, 124 of them with more than one venue (408 venues; the largest have 47
+     and 27).
+   - *Draw.* A group with an excluded venue is excluded whole (item 4). Every other
+     group contributes one representative venue, the member with the lowest
+     `sha256("<seed>:rep:<venue>")`. The draw samples among the representatives.
+   - *Effect.* The split never separates copies of a menu, and the readability rule's
+     "10 venues" means 10 independent menus. The cost is that a chain counts once in
+     the test, not once per location as it does in the index. The gate measures how well
+     a labeller reads a menu, and a chain's error still shows, once.
+   - *Harness.* `course_eval sample` computes the groups from the candidates and records
+     the grouping version and its counts in the manifest.
+4. **Exclusions (amends §4 "Excluded", §5's bump rule, Amendment 1 item 5).**
+   - *What stays blind.* Every ADR-0013 §8 draw up to P5-26, and the later P8 held-out
+     sets ([5c] P8-12, [5d] P8-14, resolve-v6 P8-21), has been scored once, and the
+     earlier ones have since been tuned on. None of them is blind any more, so excluding
+     them can't keep them blind. Only a drawn but unscored evaluation set must stay
+     blind, and none exists. The reserved next §8 draw (seed 20261016, ADR-0013
+     Amendment 22 item 5) hasn't been drawn, so there are no venues to hold back. P5-5,
+     the one set §4 names, has been tuning data since v4.
+   - *What is excluded anyway, and why.* The venues of every held-out set, each with its
+     menu group:
+     - the seven §8 draws: 450 venues,
+       `var/menu-eval/p5-26/next-draw-exclusions-p5-27.json` `gers`, sha256 `3439a961…`;
+     - P8-12 [5c]: 69 venues;
+     - P8-14 [5d]: 127 venues;
+     - P8-21 resolve-v6: 52 venues.
+
+     Together that is 634 venues, 426 of which have Gold rows. After each score, the
+     failures in these sets were traced page by page and the pages became tuning pages,
+     so their sections are cleaner than the population's. A test containing them would
+     overstate precision, and the gate is a precision floor.
+
+     The list is `var/course-labels/exclusions-heldout-v1.txt`, sha256 `96b74ee1…` (the
+     harness digest). On swap-5 it leaves 554 eligible menu groups, covering 679 venues.
+   - *Not excluded: dev sets.* The [5c] dev set (714 pages, 633 venues) and the [5d] and
+     labels-v10 dev sets tuned generic rules over a random half of the corpus, without
+     page-level fixes. Excluding them as well would leave only 314 groups, mostly venues
+     added after 2026-10-24 (later recrawls, PDFs, homepages). That pool is a worse sample
+     of the index than the bias it would remove.
+   - *Not excluded: page-classifier sets* (P5-27 to P5-32, P8-24, P8-27). They judged
+     whether a page is a menu, never its sections.
+   - *The other direction.* Labelling reads extracted sections, so it can see extraction
+     errors. The write-up records them as counts by kind, never as page-level fixes, so
+     no course set feeds extraction tuning, and later §8 draws need not exclude course
+     venues.
+   - *Later course sets* exclude every venue of earlier course sets, with its group (§5's
+     bump rule).
+5. **Read path (decides Amendment 1 item 10's open question).** The exporter
+   (`apps/menu_pipeline/course_candidates.py`) reads through three published contracts,
+   inside ADR-0004 §7's import directions:
+   - **Gold** (`packages/helios_core/gold/menu_read.py`, a new `current_sections`):
+     sections, names, items and priced rows, plus the refresh's `effective_instant`.
+     This is the population defined in item 1.
+   - **Provenance** (`get_record_version`): a Version's record key, and from it the
+     venue.
+   - **Menu** (`packages/helios_core/domains/menu/enumeration.py`, a new
+     `current_page_summaries`): each current head page's record version, source kind,
+     `method_version` and its priced item and variant prices under `Unsectioned`, using
+     the selector's own heads and live-Identity gate at Gold's instant.
+
+   No Gold module gains an import. The exporter is an app, and apps may read Gold, Menu
+   and provenance contracts. Two alternatives were rejected:
+   - reading sections from Menu would re-implement the precedence and dedupe rules that
+     Gold already applies;
+   - joining `bronze` tables directly would bypass the contracts.
+6. **Label-set size (amends §4 "Sample").** The sample stays at **120 venues**, now one
+   per menu group. Readability is counted in venues (Amendment 1 item 6), and at a 0.4
+   test share 120 venues leave about 48 test venues. At swap-5's ~12 sections per venue
+   that is about 1,450 sections, not ~900. The sections are labelled by agents, and the
+   owner reviews only test disagreements.
+7. **`method_version` (Amendment 1 item 4).** A set can come from two streams, so the
+   manifest's `method_version` lists each `source_kind=method_version` carried by the
+   current pages behind the candidates, sorted and joined with ` | `. The exporter's
+   `meta.json` records the pages per stream.
+8. **Unchanged.** The vocabulary, the guide (`course-guide-v1`), the split hash, the gate
+   (0.95, 20 sections / 10 venues), the winner rule, the metrics and slices 2–3. The
+   Unsectioned share is still recorded, from item 5's Menu read.
 
 ## Implementation notes (2026-10-21)
 
