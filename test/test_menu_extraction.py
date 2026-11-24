@@ -41,6 +41,8 @@ from apps.discovery.pipeline import run_discovery
 from apps.discovery.url_pipeline import resolve_urls
 from apps.gold.refresh import refresh_gold
 from apps.menu_pipeline.bundle import BundleStore, excerpt
+from apps.menu_pipeline.classifier import VERIFIER_NAME
+from apps.menu_pipeline.extract import EXTRACTION_MODEL
 from apps.menu_pipeline.extraction import (
     TUNING_MIN_ROWS,
     TUNING_RESOLVED_SHARE_MAX,
@@ -513,6 +515,7 @@ class _Venues:
         server: _Server | None,
         *,
         scorer: _Scorer | None = None,
+        model: str = "test-model@0123456789ab",
         limit: int | None = None,
         no_model: extraction.NoModel | None = None,
     ) -> extraction.ExtractionReport:
@@ -523,7 +526,7 @@ class _Venues:
                 scorer=scorer or _Scorer(),
                 bundles=BundleStore(self.tmp_path),
                 outputs=OutputStore(self.tmp_path),
-                model="test-model@0123456789ab",
+                model=model,
                 limit=limit,
                 commit=session.commit,
                 soc=SocProbe(root=self.tmp_path / "no-sys"),
@@ -686,7 +689,9 @@ def test_a_rerun_against_unchanged_pages_adds_no_observation_and_no_extraction(
     first_started = datetime.now(UTC)
     venues.fetch({gers: _MENU}, at=_T1)
     server = _Server()
-    assert venues.extract(server).extracted == 1
+    model = model_tag(load_manifest()[EXTRACTION_MODEL])
+    scorer = _Scorer(name=VERIFIER_NAME)
+    assert venues.extract(server, model=model, scorer=scorer).extracted == 1
     first_ended = datetime.now(UTC)
     stored = _stored(venues, gers)
     (page,) = venues.pages(gers)
@@ -712,7 +717,7 @@ def test_a_rerun_against_unchanged_pages_adds_no_observation_and_no_extraction(
             on_page=session.commit,
         )
         session.commit()
-    rerun = venues.extract(server)
+    rerun = venues.extract(server, model=model, scorer=scorer)
 
     assert (fetched.fetched, fetched.unchanged) == (1, 1)
     assert (fetched.versions_new, fetched.versions_changed) == (0, 0)
@@ -1075,6 +1080,10 @@ def test_jsonld_stream_beside_llm_and_its_empty_successor(venues: _Venues) -> No
     assert jsonld.method_version == "jsonld-v1;validator-v13;segment-v2;word-v1"
     with venues.factory() as session:
         assert _rows(session, jsonld.id) == [("Queso", None, 600, PRICE_CONFIDENCE)]
+        refresh_gold(session, effective_instant=datetime.now(UTC))
+        assert session.scalars(
+            select(CurrentMenu.amount_minor).where(CurrentMenu.price_page_id == jsonld.id)
+        ).all() == [600]
 
     # JSON-LD gone with identical visible text: an empty successor, so its prices stop being current
     later = _T1 + REFETCH_WINDOW + timedelta(minutes=1)
@@ -1085,6 +1094,15 @@ def test_jsonld_stream_beside_llm_and_its_empty_successor(venues: _Venues) -> No
     assert [p.operation for p in heads] == ["initial", "observation"]
     with venues.factory() as session:
         assert session.scalar(select(func.count()).where(MenuItem.page_id == heads[-1].id)) == 0
+        refresh_gold(session, effective_instant=datetime.now(UTC))
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(CurrentMenu)
+                .where(CurrentMenu.price_page_id == jsonld.id)
+            )
+            == 0
+        )
 
 
 def test_a_page_with_nothing_extracted_writes_an_empty_llm_page(venues: _Venues) -> None:
