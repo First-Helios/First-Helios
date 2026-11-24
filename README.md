@@ -296,10 +296,11 @@ This section is the single current-status page. Other docs link here.
 - The rendered-page quality bars (ADR-0013 slice 6).
 - The price index's `course` category
   ([ADR-0016](./docs/adr/0016-course-labels-for-the-price-index.md), Accepted):
-  slice 1a (labelling guide and comparison harness) is built; slice 1b (labels,
-  the course projection, then its rows in `GET /v1/price-index`) is not started. The real
-  extraction it waited for has existed since 2026-10-20. This is the one item left in Phase 7's
-  "done when".
+  slices 1a (labelling guide and comparison harness) and 1b's code (candidates exporter,
+  menu groups, lexicon and embedding + LR arms; Amendment 2) are built. Label set `set-1` is
+  labelled; scoring waits for the owner's review of its test disagreements. The Silver
+  labels, the course projection and its rows in `GET /v1/price-index` are not built. This is
+  the one item left in Phase 7's "done when".
 - Price history across captures: a trail ends `absent` at the next Bronze
   Version, because native keys are version-local (ADR-0013 N1). Cross-Version
   correspondence is a separate ADR-0005/ADR-0013 question
