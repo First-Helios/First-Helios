@@ -277,26 +277,42 @@ This section is the single current-status page. Other docs link here.
   owner's laptop against a persistent local database; the Pi hosts long-term.
   Done up to the fetch (2026-10-02): 9,996 venues seeded from Overture
   `2026-08-19.0`, 8,085 with a website, 1,635 menu-URL records on 894 distinct
-  URLs, 1,632 `menu-page` Versions (static only). Extraction waits for a version
-  that passes §8.
+  URLs, 1,632 `menu-page` Versions (static only). Extracted 2026-10-20 with v9 on the
+  laptop GPU after v9 passed §8: 1,632 pages, 120,816 items and 67,305 prices (ADR-0013
+  Amendment 22). The data has since moved on through the re-collections, the P8-23 recrawl
+  and swap 5 (Staging below).
 - **Migrations**: `alembic/`. `alembic upgrade head` builds the schema from
   scratch.
 
 **Not built yet** (phases in [ROADMAP.md](./ROADMAP.md)):
 
-- The first extraction pass (laptop) with v9, the version that passes ADR-0013 §8
-  (P5-26, Amendment 22; the slice-5 version and v4 to v8 failed), and the rendered-page
-  quality bars (slice 6).
+- Phase 6, still open:
+  - **The first scheduled monthly run** (2026-12-10, ADR-0030 Amendment 1), and its labelled
+    spot check.
+  - **The rest of Phase 6's "done when":** rebuilding Menu Silver and Gold from the replay
+    bundles alone. The re-run against an unchanged site is proven (#182).
+  - **Freshness in the API:** freshness is measured in each run report but not served.
+  - **Scheduled discovery** (ADR-0009 §3).
+- The rendered-page quality bars (ADR-0013 slice 6).
 - The price index's `course` category
   ([ADR-0016](./docs/adr/0016-course-labels-for-the-price-index.md), Accepted):
   slice 1a (labelling guide and comparison harness) is built; slice 1b (labels,
-  the course projection, then its rows in `GET /v1/price-index`) waits for the
-  first real extraction.
+  the course projection, then its rows in `GET /v1/price-index`) is not started. The real
+  extraction it waited for has existed since 2026-10-20. This is the one item left in Phase 7's
+  "done when".
 - Price history across captures: a trail ends `absent` at the next Bronze
   Version, because native keys are version-local (ADR-0013 N1). Cross-Version
   correspondence is a separate ADR-0005/ADR-0013 question
   ([ADR-0018](./docs/adr/0018-venue-filters-and-item-price-history.md) Q8).
-- The staging deploy (ADR-0008 Unit B), production, and the deals layer.
+- Production (ROADMAP Phase 8):
+  - a hosting decision;
+  - secrets handling;
+  - rate limiting;
+  - off-box backups and a restore drill;
+  - observability.
+
+  The staging Pi already serves `firsthelios.com` (Staging below).
+- The deals layer (ROADMAP Phase 10).
 
 ## Gates
 
@@ -360,7 +376,9 @@ This section is the single current-status page. Other docs link here.
   - [ ] the owner authorizes the run. After it: record website/menu-URL
     coverage (the last Phase 4 "done when" item) and a hand-checked precision
     sample of saved menu URLs.
-- **Phase 5 extraction gate (ADR-0013 §8): closed.** Extraction runs (the laptop
+- **Phase 5 extraction gate (ADR-0013 §8): open since 2026-10-20.** Both items below hold:
+  v9 passed (Amendment 22, accepted; #93 merged as `75feffb`). Extraction has run since then
+  on the laptop and, from P8-23 (2026-11-19), on the Pi. The history that led here: extraction runs (the laptop
   first pass and any Pi run) need a pipeline version with a recorded passing
   held-out evaluation. The first one (slice-5 version, 2026-10-03,
   [record](./docs/reviews/2026-09-30-p5-held-out-evaluation.md)) fails price
@@ -405,7 +423,7 @@ This section is the single current-status page. Other docs link here.
     not near Amendment 19 item 7's 0.05
     ([P5-25 record](./docs/reviews/2026-10-20-p5-25-invariance-debt.md), Amendment 21).
     v9 is primary-only, with both `llama-server` slots at 6,144 tokens (`--ctx-size 12288`).
-    It is unmerged (PR #93) until the owner merges;
+    Merged 2026-10-20 (#93, `75feffb`);
   - [x] the Menu-write commit cost is fixed (Amendment 8 item 6): ADR-0005
     Amendment 1, revision `db40e9424cba` (a 100-item page commits in under 1 s,
     was 226 s); the owner-run laptop re-time
@@ -467,7 +485,15 @@ This section is the single current-status page. Other docs link here.
   ([record](./docs/reviews/2026-10-20-p5-23-fallback-routing.md)), so **no fallback
   ships** and v9 is primary-only. Integration of these findings:
   [P5-23 register](./docs/reviews/2026-10-20-p5-23-findings-integration.md).
-- **Pi check, `llama-server` image: pending.** Before the first Pi extraction
+- **Pi check, `llama-server` image: never recorded as written, superseded in practice.** The
+  tokens/s comparison below was never run (its record still says *pending*). P8-23 instead ran a
+  20-page end-to-end check on the Pi with the upstream image
+  ([record](./docs/reviews/2026-11-19-p8-23-pi-long-run.md)):
+  - 6.1 pages/h;
+  - 944 accepted prices against the laptop's 961 (0.982);
+  - accepted under the owner's delegation.
+
+  The Pi has extracted with that image since 2026-11-19. The original text: before the first Pi extraction
   run, the owner runs the
   [image check](./docs/reviews/2026-09-29-llama-server-pi-check.md): the upstream
   image's prompt and generation tokens/s must each be ≥ 95% of the spike's own
@@ -610,10 +636,19 @@ server gets the A76 cores (4-7) and Postgres and the API the A55s.
   (caches, models, replay bundles, audit packets).
 - Data: the public database is replaced by a `pg_dump` restore after each owner-approved apply
   (custom-format dumps and the pre-restore backup under `~/helios-backups/<run>/`). Last:
-  2026-11-24 (P8-23 swap 5, #175/#176 applied), backend `87108bb`, validator-v13 data (99,408
-  `current_menu` rows; `helios_work` and the laptop hold the same). Code since 2026-11-24: `d2cadea`
-  (ADR-0030 stage 1, worker image rebuilt, no data change); the pipeline-host runbook is
-  [`infra/pipeline-host/README.md`](./infra/pipeline-host/README.md), with the Pi marked as master.
+  2026-11-24 (P8-23 swap 5, #175/#176 applied), validator-v13 data: 99,408 `current_menu` rows
+  and 1,233 venues with a menu. `helios_work` and the laptop hold the same
+  ([record](./docs/reviews/2026-11-19-p8-23-pi-long-run.md#swap-5-2026-11-24-175-and-176-applied)).
+  Code since 2026-11-24 is `7070251` (ADR-0030 stage 1 and Amendment 1). Only the worker image
+  was rebuilt after swap 5, so the API image is still the one built from `87108bb`, and there was
+  no data change.
+- Pipeline runs follow the runbook,
+  [`infra/pipeline-host/README.md`](./infra/pipeline-host/README.md), with the Pi marked as
+  master.
+  - `helios-pipeline-monthly.timer` starts the batch loop on the 10th of each month at 18:00 UTC
+    (ADR-0030 Amendment 1). The first run is 2026-12-10.
+  - A run ends at the swap gate with a report in `var/pipeline-host/reports/<run>/` and waits for
+    a reader. It never swaps on its own.
 - Pipeline host (P8-23): the `worker` image (Chromium renders work on arm64) and `llama-server`
   (`--profile menu`, A76 cores 4–7) run the menu pipeline against a separate work database
   (`helios_work`), swapped into the public one after a run
