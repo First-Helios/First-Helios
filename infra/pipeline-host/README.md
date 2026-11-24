@@ -63,8 +63,9 @@ B=~/helios-backups/<run>
 $DC --profile menu run --rm --no-deps -T worker $W -m apps.discovery.place_sweep  # only with new withdrawal rules
 $DC --profile menu run --rm --no-deps -T worker $W -m apps.menu_pipeline.rescore
 $DC --profile menu run --rm --no-deps -T worker $W -m apps.gold.refresh
+# stdout, redirected by the host shell: the worker runs as uid 999 and can't write var/pipeline-host/
 $DC --profile menu run --rm --no-deps -T worker python -m apps.menu_pipeline.swap_gate \
-  --public helios --master helios_work --out var/pipeline-host/gate.json
+  --public helios --master helios_work > var/pipeline-host/gate.json
 bash infra/pipeline-host/dump.sh pi helios_work $B/helios_work-swapN.dump
 bash infra/pipeline-host/swap.sh var/pipeline-host/gate.json $B/helios_work-swapN.dump $B
 ```
