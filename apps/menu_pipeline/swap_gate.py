@@ -18,7 +18,9 @@ read in the master. Each record gets the first kind that fits, in this order:
 1. ``r4_withdrawal``: the newest llm page is a withdrawal (R4: not a menu, JavaScript
    only, a withdrawal rule);
 2. ``site_change``: the newest llm page has no priced row and the record has more Versions
-   than in public (the site's text changed);
+   than in public (the site's text changed). The rule can't tell a site that stopped printing
+   prices from an extraction that lost them on new text: a page check can (swap 4's
+   Shahghouse, which the run record calls an extraction loss, lands here);
 3. ``re_extracted_to_zero``: the newest llm page has no priced row on unchanged text;
 4. ``unsectioned``: every priced row of the newest llm page is Unsectioned, which never
    reaches Gold (a design rule, #177 Q1);
