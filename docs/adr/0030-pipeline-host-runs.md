@@ -3,6 +3,9 @@
 **Status:** Accepted 2026-11-24 under the owner's delegation (session P8-28; owner: "I defer to
 your answers"). Proposed 2026-11-22 (session P8-26). Q1–Q8 all take the recommendation; see
 [Decisions](#decisions-2026-11-24). Stage 1 (the tooling) is built in a separate PR.
+[Amendment 1](#amendment-1-2026-11-24-phase-6-monthly-runs) (Phase 6 monthly runs: the timer, the
+stop at the gate, the run report and the spot check) accepted 2026-11-24 under the owner's
+delegation (session P8-29).
 **Date:** 2026-11-22
 
 ## Context
@@ -459,3 +462,182 @@ takes its recommendation.
   `helios_next` swap, and a systemd unit for manual starts.
 
 Stage 1 is deployed by the owner; no host runs it before then.
+
+## Amendment 1 (2026-11-24): Phase 6 monthly runs
+
+**Status:** Accepted 2026-11-24, decided under the owner's delegation (session P8-29; owner: "I
+delegate the design. Take the recommended option"). The owner may overturn any item before the
+build PR merges. Built in a separate PR.
+
+ROADMAP Phase 6 asks for a monthly run on the Pi after discovery, a run report, and the monthly
+spot check (ADR-0013 §8, Amendment 3). Decision 2 above left the timer for this point: "a timer
+only when Phase 6's monthly cadence starts, with `OnCalendar` in UTC". This amendment says when
+the timer fires, what a scheduled run does when it reaches the gate, and what the run report
+holds and where it lives.
+
+### A1. The timer
+
+- **`infra/pipeline-host/helios-pipeline-monthly.timer`** starts the existing
+  `helios-pipeline-loop.service`:
+  - `OnCalendar=*-*-10 18:00:00 UTC`. The Pi's clock is Asia/Shanghai, so the time zone is
+    named. That is 02:00 on the Pi and 12:00 in Austin.
+  - `Persistent=true`: a firing missed while the Pi was off runs at the next boot.
+  - The owner enables it once with `sudo systemctl enable --now helios-pipeline-monthly.timer`.
+    The service keeps no `[Install]` section, so manual starts work as before.
+- **One unit for both kinds of start.** systemd never runs a second copy of an active service.
+  A firing while a manual run is going does nothing, so two loops cannot write the master at
+  once.
+- **Why the 10th.** The first firing is 2026-12-10 18:00 UTC, the day after most menu URLs come
+  due again (20-day refetch window after the 2026-11-19…23 recrawl). After that the day does not
+  matter: each run fetches every due URL once, and the 20-day window is shorter than the ~30 days
+  between runs, so every URL is due again at the next firing. On the Pi (systemd 249),
+  `systemd-analyze calendar "*-*-10 18:00:00 UTC"` gives its next run as Thu 2026-12-10
+  18:00:00 UTC.
+- **"After discovery."** Discovery is not scheduled. ADR-0030 left that out, and a discovery run
+  needs a downloaded Overture release and writes the master. The month's discovery (an Overture
+  refresh when a new release exists, then `resolve_urls`) stays an owner or agent step against
+  the master, done before the 10th. The run that follows fetches whichever menu URLs exist by
+  then. A month without discovery still refetches every saved URL, and that is the freshness
+  job. Scheduling discovery belongs in its own amendment (ADR-0009 §3).
+- **`loop.env` for monthly runs: `--stop-every 0`.** A monthly run goes to the end of the due
+  URLs and stops once, at one gate. The 10-batch cadence was for the 1,746-URL recrawl, when
+  public lagged by days. With `--stop-every 10`, a scheduled run would stop after batch 10 and
+  leave the rest due until a reader swapped and restarted it. The owner may keep 10;
+  `loop.env.example` shows both.
+
+### A2. What a run does at the gate: it stops and waits for a reader
+
+No run swaps on its own. ADR-0030 rules out "a swap with no human or agent reading the gate
+report". A passing gate still leaves judgement to the reader: the median shift has no bar, gained
+venues are not checked, and a swap may need a deploy first. So a run ends the same way whether the
+gate passes or stops.
+
+**When the loop ends normally** (a fetch took fewer URLs than `--batch` ("done"), `--stop-every`
+was reached ("swap due"), or an `extract` / `extract-no-model` phase exited 0):
+
+1. **Wrap on the master:** `apps.menu_pipeline.rescore`, then `apps.gold.refresh`, then
+   `apps.menu_pipeline.swap_gate --public helios --master <db>`, saved as the run's `gate.json`.
+   `place_sweep` is not part of the automatic wrap. It runs only when the code has new
+   withdrawal rules, and the reader runs it before regating.
+2. **The spot-check packet** (A4).
+3. **The run report** (A3), which carries the gate's verdict and the spot check's seed.
+4. **The `var/pipeline-host/AWAITING_SWAP` marker**, holding the run id, the gate's exit status
+   and the time.
+
+No dump is taken and nothing is restored. The swap stays the README's manual sequence (`dump.sh`,
+then `swap.sh`).
+
+**When the loop ends otherwise** (the `STOP` file, or a failed CLI): only the run report, with
+the end reason. There is no wrap, gate, packet or marker. `STOP` means a person ended the run on
+purpose, and a failed CLI needs a reader anyway. Both cases leave pages due for the next run.
+
+**A wrap step that fails** (rescore or Gold refresh non-zero, or the gate exiting with anything
+other than 0 or 1): the loop still writes the report and the marker, records the failed step,
+and exits 1.
+
+**The marker blocks the next start.** While `AWAITING_SWAP` exists, the loop refuses to start
+(exit 2, logged with the run it waits for). This applies to a timer firing as well; the refusal
+is in the journal, and the next report's freshness shows what the wait cost. The marker is
+removed in one of two ways:
+
+- `swap.sh`, after a successful swap;
+- by hand (`rm var/pipeline-host/AWAITING_SWAP`), when the reader decides to continue without a
+  swap (for example, a stopped gate that needs more batches first).
+
+### A3. The run report
+
+**`python -m apps.menu_pipeline.run_report`** runs in the worker image (it needs the master
+database). The loop runs it at every loop end except a refusal. It reads:
+
+- the run's lines in `var/pipeline-host/logs/progress.log` (from the last `loop start`);
+- each batch's CLI summary (`batch-NNN-{fetch,extract,extract-only}.out`, the
+  `menu-page run complete:` and `extraction run complete:` lines);
+- the run's `gate.json`, when there is one;
+- the master database, for freshness.
+
+**Where it lives.** `var/pipeline-host/reports/<run-id>/` on the master's host, where `<run-id>` is
+the loop start in UTC (`20261210T180002Z`). The folder holds:
+
+- `run-report.json` and `run-report.md` (a short summary for people);
+- `gate.json`;
+- `spot-check/`.
+
+The loop creates `reports/<run-id>/` with mode 0777, because the worker runs as uid 999 and
+cannot write `var/pipeline-host/` (P8-28, #180). `var/replay/` and `var/site-cache/` are already
+set up the same way. Reports are a few kilobytes and are never pruned. They are not committed: at
+the swap, the reader copies the figures into the run record in `docs/reviews/`, as P8-23 did.
+
+**Contents:**
+
+| Section | Fields |
+|---|---|
+| Run | id, host, phase, database, commit (`DEPLOYED_COMMIT`), start and end (UTC), end reason, batches |
+| Pages | URLs fetched, renders, records with a new or changed Version, unchanged re-reads, URLs not yet due after the last batch; pages extracted, of those from saved answers, model pages, chunks sent and chunks reused, items and prices written |
+| Outcomes by reason code | Capture outcomes and reason codes (fetch), extraction failures by reason, due pages by reason, R4 withdrawals |
+| Model | model pages, extraction hours, model pages/h, all extracted pages/h |
+| Thermal (ADR-0013 §3) | SoC peak: the highest of each extraction's probe and the loop's end-of-batch readings. Lowest CPU frequency cap (`scaling_max_freq / cpuinfo_max_freq`). `throttled` = a cap below 1.0. All per batch as well |
+| Freshness (ROADMAP §2) | as of the report's time, in the master: covered venues (venues with a menu, the API's `_has_menu`), venues observed within 45 days, their share against the 80% target, and venues by age of their newest observation (≤ 20 d, 21–45 d, > 45 d, never) |
+| Gate | passed, stop reasons, row and venue change, median shift, lost venues by kind |
+| Spot check | seed, candidate pages, pages drawn, packet path |
+
+**A venue's newest observation** is the newest `succeeded` `menu-page` Capture at an endpoint of
+any record behind the venue's Gold rows (Establishment or Organization scope, as the gate reads
+them). An unchanged re-read writes such a Capture without a Version (ADR-0013 Amendment 4), so a
+venue whose menu did not change is still fresh. Freshness is measured in the master, not public:
+public lags until the swap, and the swap makes it equal to the master.
+
+### A4. The monthly spot check (ADR-0013 §8, Amendment 3 item 4)
+
+**`python -m apps.menu_pipeline.spot_check`** runs in the worker image, at a normal loop end, after
+the gate and before the report.
+
+**What it draws:** 10 of the run's newly extracted pages, or all of them if there are fewer. A
+page qualifies when all of these hold:
+
+- it is a published `llm` Menu page;
+- it was accepted between the run's start and end;
+- it is the first `llm` page of its Version, meaning new or changed text.
+
+Re-interpretations after a pipeline bump repeat known text, so they are not drawn; new layouts
+come with new text.
+
+**Seed:** the run id's digits (`20261210180002`), unless `--seed` is given. It is recorded in the
+packet's manifest and the run report.
+
+**The packet,** `reports/<run-id>/spot-check/`, is laid out the way `apps.menu_pipeline.evaluate`
+reads it:
+
+- `pages/<page_id>.html` (`.pdf` for a PDF page): the Capture bundle's rendered DOM or raw body,
+  which is what the labeller reads;
+- `labels/`: empty, for the gold-label files;
+- `extract/run-<run-id>/<page_id>.json`: the run's saved page answers, kept for scoring;
+- `manifest.json`: seed, window, candidate count, and per page the Menu page id, record key, URL,
+  venue, Version and bundle path;
+- `README.md`: the labelling brief.
+
+**Blind labelling.** The labeller gets `pages/` and the brief only. Opening `extract/` before the
+labels are frozen breaks the blind rule. After that, scoring is
+`evaluate report run-<run-id> --data <packet> --labels <packet>/labels`.
+
+**Who labels, and what a failure triggers,** stay as in Amendment 3: an agent labels, the owner
+confirms disagreements, and a failure makes the pages the next held-out set without blocking the
+run. Labelling is not automated, and the loop only writes the packet.
+
+### A5. Phase 6 "done when": a re-run against unchanged data
+
+Phase 6's "done when" clause includes "a re-run against an unchanged site produces zero new
+observations and no extraction". The build PR proves it two ways:
+
+- **An automated database test:** fetch, extract, then fetch again past the refetch window with
+  the same bytes, served from the replay bundle with no network, then extract again. Expected:
+  no new Version, Menu page or price observation, and no model call. The second fetch writes one
+  `succeeded` Capture per URL; that Capture is the freshness signal (A3).
+- **A recorded measurement on a scratch copy** of the swap-5 dump: `extract --no-model`
+  against unchanged stored data finds no page due.
+
+### Not in this amendment
+
+- Scheduling discovery (ADR-0009 §3).
+- An unattended swap, or a dump taken before a reader asks for one.
+- Labelling the spot check automatically.
+- Off-box copies of reports or dumps (Phase 8).
