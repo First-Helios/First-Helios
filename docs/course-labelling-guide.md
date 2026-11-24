@@ -129,6 +129,23 @@ prices.
   allergen notice, a promo banner) → `other`.
 - Write it down as a finding, because it points at an extraction error.
 
+**Found while labelling set-1's training split (2026-11-24, before any test label).**
+- Sushi: nigiri, sashimi, rolls and hand rolls → `entree`. Edamame, miso soup and
+  seaweed salad stay `appetizer`.
+- Breakfast sides in a breakfast or brunch menu (one egg, bacon, toast, hash browns)
+  → `breakfast`. Precedence puts breakfast before the dish course.
+- Brunch headings: label each dish by what it is. Eggs Benedict → `breakfast`; a
+  burger on the brunch menu → `entree`.
+- Frozen and house drinks: a cocktail by name (margarita, daiquiri, piña colada,
+  mimosa) → `alcohol` unless it is marked virgin, N/A or mocktail. A "Frozens" list
+  takes the strict majority.
+- Nachos, wings and fries: nachos and wings sold as starters → `appetizer`; fries
+  and tots → `side`. A plate that comes with sides (a wing dinner) → `entree`.
+- Catering trays, "serves N" and boxes by the dozen → `other` (bulk).
+- Extraction misalignment: when the heading is clearly another item's name, or the
+  items don't match the heading, label by the items. When the "items" aren't dishes
+  at all (bare prices, sizes, dietary tags, filler text) → `other`, and note it.
+
 When an edge case isn't covered here, choose the label that keeps the index's
 medians honest. While labelling the training split, add the case to this list;
 during the test split, label it `other` and note it for the write-up.
