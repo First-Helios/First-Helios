@@ -1,4 +1,4 @@
-"""PDF menus as HTML: the ``pdf-v1`` reader (ADR-0029 D3).
+"""PDF menus as HTML: the ``pdf-v2`` reader (ADR-0029 D3).
 
 A PDF with a text layer is read page by page with ``pypdf``'s plain extraction (plain keeps a
 multi-column menu's reading order; layout mode sets the columns side by side on one line), except
@@ -10,8 +10,8 @@ extraction, the validator, [5b]-[5d] and Gold.
 
 ``PDF_READER_VERSION`` names this output: a change to the document ``read_pdf`` returns for the
 same bytes needs a new version. A file ``pypdf`` can't open, or an encrypted one, is
-``pdf_unreadable``; one with under :data:`MIN_TEXT_CHARS` characters of text (an image-only
-menu: no OCR, ADR-0029 D1) is ``pdf_no_text``. Only the first :data:`MAX_PAGES` pages are read;
+``pdf_unreadable``; a short text layer is accepted when a page has letters and a marked price. Other
+short documents are ``pdf_no_text``. Only the first :data:`MAX_PAGES` pages are read;
 the fetch's body cap (3 MB) bounds the input.
 """
 
@@ -19,13 +19,15 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Literal
 
 from pypdf import PageObject, PdfReader
 
-PDF_READER_VERSION = "pdf-v1"
+PDF_READER_VERSION = "pdf-v2"
+_MARKED_PRICE = re.compile(r"\$\s*\d")
 MAX_PAGES = 40
 MIN_TEXT_CHARS = 200
 # A page whose plain text is mostly one word per line (a file that places every word on its own)
@@ -93,6 +95,10 @@ def read_pdf(body: bytes) -> PdfDocument | PdfFailure:
     except Exception:  # noqa: BLE001 - a malformed file raises anything; it is unreadable
         return "pdf_unreadable"
     chars = sum(len("".join(line.split())) for lines in pages for line in lines)
-    if chars < MIN_TEXT_CHARS:
+    if chars < MIN_TEXT_CHARS and not any(
+        any(_MARKED_PRICE.search(line) for line in lines)
+        and any(any(c.isalpha() for c in line) for line in lines)
+        for lines in pages
+    ):
         return "pdf_no_text"
     return PdfDocument(html=pdf_html(pages), pages=len(pages), chars=chars)

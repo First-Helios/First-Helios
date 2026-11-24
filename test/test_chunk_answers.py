@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import gzip
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from threading import Barrier
 from typing import TYPE_CHECKING
-
-import pytest
 
 from apps.menu_pipeline.backfill_chunks import backfill
 from apps.menu_pipeline.bundle import Bundle, BundleStore
@@ -51,8 +51,8 @@ def test_chunk_records_round_trip(tmp_path: Path) -> None:
         answer,
     )
     path.write_bytes(gzip.compress(b'{"format": "other"}'))
-    with pytest.raises(ValueError, match="menu-chunk-v1"):
-        store.read_chunk("x", _CHUNK)
+    assert store.read_chunk("x", _CHUNK) is None
+    assert list(path.parent.glob("*.corrupt"))
 
 
 def test_backfill_writes_the_model_answered_chunks_of_saved_page_records(tmp_path: Path) -> None:
@@ -85,3 +85,26 @@ def test_backfill_writes_the_model_answered_chunks_of_saved_page_records(tmp_pat
     again = backfill(tmp_path, "x")
     assert again["chunks_already_saved"] == len(texts) - 1
     assert "chunk_records_written" not in again
+
+
+def test_concurrent_recovery_publishes_one_complete_answer(tmp_path: Path) -> None:
+    store = OutputStore(tmp_path)
+    workers = 6
+    start = Barrier(workers)
+
+    def write(answer: str) -> bool:
+        start.wait(timeout=10)
+        return store.write_chunk("x", _CHUNK, {"raw": answer}, page_text_hash="sha256:ab")
+
+    answers = [str(i) for i in range(workers)]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        written = list(pool.map(write, answers))
+    assert sum(written) == 1
+    assert store.read_chunk("x", _CHUNK) == answers[written.index(True)]
+
+
+def test_page_record_requires_all_expected_chunks(tmp_path: Path) -> None:
+    store = OutputStore(tmp_path)
+    store.write("x", "sha256:ab", [{"raw": "first"}])
+    assert store.read("x", "sha256:ab", expected_chunks=2) is None
+    assert len(list(store.folder("x").glob("*.corrupt"))) == 1

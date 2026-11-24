@@ -1,0 +1,8 @@
+{
+  "page_id": "cards", "reviewed": true, "page_label": "menu", "format": "html_cards",
+  "items": [
+    {"name":"Bean Taco","prices":[{"amount":"3.50"}]},
+    {"name":"Potato Taco","prices":[{"amount":"4.00"}]},
+    {"name":"Lime Soda","prices":[{"variant":"Small","amount":"2.00"},{"variant":"Large","amount":"3.00"}]}
+  ]
+}
