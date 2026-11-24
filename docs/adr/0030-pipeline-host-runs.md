@@ -609,8 +609,10 @@ packet's manifest and the run report.
 **The packet,** `reports/<run-id>/spot-check/`, is laid out the way `apps.menu_pipeline.evaluate`
 reads it:
 
-- `pages/<page_id>.html` (`.pdf` for a PDF page): the Capture bundle's rendered DOM or raw body,
-  which is what the labeller reads;
+- `pages/<page_id>.html` and `pages/<page_id>.blocks.json`: the Capture bundle as production
+  read it (`page_html` and the bundle's segmented blocks). The harness prefers the stored blocks
+  over re-segmenting, so a page scores on what production read even after a segmenter change.
+  A PDF page also keeps `<page_id>.pdf`, which is what its labeller reads (as built, P8-29);
 - `labels/`: empty, for the gold-label files;
 - `extract/run-<run-id>/<page_id>.json`: the run's saved page answers, kept for scoring;
 - `manifest.json`: seed, window, candidate count, and per page the Menu page id, record key, URL,
@@ -636,6 +638,35 @@ observations and no extraction". The build PR proves it two ways:
   `succeeded` Capture per URL; that Capture is the freshness signal (A3).
 - **A recorded measurement on a scratch copy** of the swap-5 dump: `extract --no-model`
   against unchanged stored data finds no page due.
+
+### Built (P8-29, 2026-11-24)
+
+- **Code:** `apps/menu_pipeline/run_report.py`, `apps/menu_pipeline/spot_check.py`, the run's end
+  steps in `batch_loop.py` (`--public` names the gate's comparison; a laptop master passes
+  `helios_laptop`), `infra/pipeline-host/helios-pipeline-monthly.timer`, and `swap.sh` removing
+  `AWAITING_SWAP`. Not deployed: the Pi runs `d2cadea` until the owner deploys.
+- **A5, the test:** `test_a_rerun_against_unchanged_pages_adds_no_observation_and_no_extraction`
+  (strict database suite). After the re-fetch: 1 URL fetched, 1 unchanged, 0 new or changed
+  Versions, an extraction with 0 due and 0 chunks, the model called once in total (the first
+  pass), and Versions, Menu pages and price observations unchanged, with Captures +1. The same
+  test draws the first pass's page as the only spot-check candidate, scores its packet's blocks
+  as the bundle's, and finds the re-read as the venue's newest observation.
+- **A5, the measurement:** a scratch restore of the swap-5 dump (`helios_work-2026-11-24-p8-23-swap5.dump`,
+  99,408 `current_menu` rows), with a hard-linked copy of the laptop's `var/replay` (26,176
+  files). `extract --no-model`: due 0, up to date 2,863, extracted 0, chunks 0, refused model
+  calls 0, 1.9 s. Versions (29,874), Captures (44,876), Menu pages (31,372), price observations
+  (1,165,814) and replay files were unchanged afterwards.
+- **The report on real data** (same copy, 2026-11-24 06:46 UTC):
+  - **Freshness:** 1,214 of 1,233 covered venues observed within 45 days, 98.5%, which meets
+    the 80% target. By age: 1,107 within 20 days, 107 at 21–45 days, 19 over 45 days.
+  - **Why the 126 venues older than 20 days are stale:** 123 of them got a recrawl fetch after
+    2026-11-19 that failed: 97 × `http_403`, 10 × `http_429`, 7 × `http_404`, 5 ×
+    `robots_unavailable`, 2 × `http_500`, 1 × `redirect_refused`, 1 × `robots_disallowed`.
+    The other 3 were not refetched. Their menus stay in Gold, because a failed fetch withdraws
+    nothing.
+  - **The spot check:** the P8-23 window of 2026-11-23 has 374 candidates. Seed 20261123000000
+    drew 10 pages, 6 of them PDF menus. Every page's saved answers are present, and its stored
+    blocks chunk into exactly as many chunks as it has answers.
 
 ### Not in this amendment
 
