@@ -610,7 +610,8 @@ server gets the A76 cores (4-7) and Postgres and the API the A55s.
   (caches, models, replay bundles, audit packets).
 - Data: the public database is replaced by a `pg_dump` restore after each owner-approved apply
   (custom-format dumps and the pre-restore backup under `~/helios-backups/<run>/`). Last:
-  2026-11-19, backend `8a168de`, validator-v12 data (100,009 `current_menu` rows).
+  2026-11-24 (P8-23 swap 5, #175/#176 applied), backend `87108bb`, validator-v13 data (99,408
+  `current_menu` rows; `helios_work` and the laptop hold the same).
 - Pipeline host (P8-23): the `worker` image (Chromium renders work on arm64) and `llama-server`
   (`--profile menu`, A76 cores 4–7) run the menu pipeline against a separate work database
   (`helios_work`), swapped into the public one after a run
@@ -710,6 +711,8 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0026](./docs/adr/0026-homepage-as-menu-page.md) | The homepage as the venue's menu page, as a last resort | Accepted (under the owner's delegation); built (#149) |
 | [0027](./docs/adr/0027-menu-coverage-script-pdf-image.md) | Menu coverage: script-shell pages, PDF and image menus | Accepted; Q4 `dns_unresolved` built (#160); M1–M3 measured; PDF reading proposed as ADR-0029 |
 | [0028](./docs/adr/0028-venue-category-browsing.md) | Venue categories for browsing without search | Accepted; implemented (ADR-0028) |
+| [0029](./docs/adr/0029-pdf-menus.md) | Reading PDF menus with `pypdf` | Accepted (all as recommended); dependency #164, reader built (#168) |
+| [0030](./docs/adr/0030-pipeline-host-runs.md) | Repeatable pipeline-host runs: one master database, a batch loop and a gated swap | Accepted (P8-28, under the owner's delegation; stage 1 built separately) |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the
