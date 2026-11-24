@@ -12,6 +12,7 @@ import pytest
 
 from apps.menu_pipeline import batch_loop
 from apps.menu_pipeline.batch_loop import (
+    CONTAINER_PREFIX,
     COOL_TO,
     EXTRACT,
     FETCH,
@@ -225,12 +226,15 @@ def test_same_commit_accepts_abbreviations_only() -> None:
 
 def test_pi_commands_run_in_the_worker_against_the_master(tmp_path: Path) -> None:
     config = _config(tmp_path)
-    fetch, env = cli_command(config, FETCH, ["--limit", "50", "--render"], render=True)
-    extract, _ = cli_command(config, EXTRACT, [], render=False)
+    fetch, env = cli_command(
+        config, FETCH, ["--limit", "50", "--render"], render=True, name="007-fetch"
+    )
+    extract, _ = cli_command(config, EXTRACT, [], render=False, name="007-extract")
 
     assert env is None
     assert fetch[:3] == ["docker", "compose", "-f"] and "worker" in fetch
     worker = fetch.index("worker")
+    assert fetch[worker - 2 : worker] == ["--name", f"{CONTAINER_PREFIX}007-fetch"]
     assert fetch[worker + 1 : worker + 3] == ["xvfb-run", "-a"]
     assert fetch[worker + 3 :] == [
         *("python", "-m", "apps.menu_pipeline.with_db", "helios_work"),
@@ -246,8 +250,11 @@ def test_laptop_commands_use_uv_and_the_data_dir(
     data = tmp_path / "data"
     config = _config(tmp_path, host="laptop", data_dir=data)
 
-    fetch, env = cli_command(config, FETCH, ["--limit", "50", "--render"], render=True)
+    fetch, env = cli_command(
+        config, FETCH, ["--limit", "50", "--render"], render=True, name="001-fetch"
+    )
 
+    assert "--name" not in fetch
     assert fetch[:6] == ["xvfb-run", "-a", "uv", "run", "--extra", "menu"]
     assert f"{data}/.env" in fetch
     assert fetch[-6:] == [
