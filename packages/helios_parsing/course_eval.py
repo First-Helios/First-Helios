@@ -67,6 +67,11 @@ TEST_SHARE = 0.4
 MIN_PRECISION = 0.95
 MIN_SECTIONS = 20  # predicted test sections a course needs to be read at all
 MIN_VENUES = 10  # ... from at least this many venues
+# Menu groups (ADR-0016 Amendment 2 item 3): venues sharing copies of one menu.
+GROUPING_VERSION = "menu-groups-v1"
+GROUP_MIN_SHARED = 3  # identical sections two venues must share to be linked
+GROUP_MIN_ITEMS = 2  # ... each with at least this many items
+GROUP_MAX_VENUES = 60  # a section seen at more venues is too generic to link anything
 
 Split = Literal["train", "test"]
 SPLITS: tuple[Split, ...] = ("train", "test")
@@ -74,6 +79,10 @@ SPLITS: tuple[Split, ...] = ("train", "test")
 
 class LabelSetError(ValueError):
     """A label set, exclusion list or predictions file that the harness refuses."""
+
+
+def _optional_int(value: object) -> int | None:
+    return None if value is None else int(str(value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +99,12 @@ class Manifest:
     guide: str
     method_version: str  # the extraction's method_version the sections come from
     unsectioned_priced_items: dict[str, int] | None  # per sampled venue, if exported
+    grouping: str | None = None  # the menu-group rule the draw used (None: venues, pre-Am. 2)
+    groups: int | None = None  # menu groups among the candidates
+    eligible_groups: int | None = None  # groups with no excluded venue
+    group_excluded_venues: int | None = (
+        None  # candidate venues out because a group-mate is excluded
+    )
 
     @classmethod
     def from_json(cls, raw: Mapping[str, Any]) -> Manifest:
@@ -107,6 +122,10 @@ class Manifest:
             unsectioned_priced_items=(
                 None if unsectioned is None else {str(k): int(v) for k, v in unsectioned.items()}
             ),
+            grouping=None if raw.get("grouping") is None else str(raw["grouping"]),
+            groups=_optional_int(raw.get("groups")),
+            eligible_groups=_optional_int(raw.get("eligible_groups")),
+            group_excluded_venues=_optional_int(raw.get("group_excluded_venues")),
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -215,6 +234,69 @@ def sample_venues(
     return sorted(rng.sample(pool, min(n, len(pool))))
 
 
+def _norm(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def menu_groups(candidates: Iterable[Section]) -> dict[str, str]:
+    """Each candidate venue's menu group, named by its smallest venue id (``menu-groups-v1``).
+
+    Two venues are linked when they share at least :data:`GROUP_MIN_SHARED`
+    sections with the same normalized name and the same set of normalized item
+    names, each with at least :data:`GROUP_MIN_ITEMS` items; a section seen at
+    more than :data:`GROUP_MAX_VENUES` venues links nothing. A group is a
+    connected component; an unlinked venue is its own group.
+    """
+    venues_of: dict[tuple[str, frozenset[str]], set[str]] = {}
+    venues: set[str] = set()
+    for c in candidates:
+        venues.add(c.venue)
+        items = frozenset(_norm(i) for i in c.items)
+        if len(items) >= GROUP_MIN_ITEMS:
+            venues_of.setdefault((_norm(c.name), items), set()).add(c.venue)
+    shared: Counter[tuple[str, str]] = Counter()
+    for members in venues_of.values():
+        if 1 < len(members) <= GROUP_MAX_VENUES:
+            ordered = sorted(members)
+            shared.update((a, b) for i, a in enumerate(ordered) for b in ordered[i + 1 :])
+    parent = {venue: venue for venue in venues}
+
+    def root(venue: str) -> str:
+        while parent[venue] != venue:
+            parent[venue] = parent[parent[venue]]
+            venue = parent[venue]
+        return venue
+
+    for (a, b), n in shared.items():
+        if n >= GROUP_MIN_SHARED:
+            ra, rb = root(a), root(b)
+            parent[max(ra, rb)] = min(ra, rb)  # the smaller id names the group
+    return {venue: root(venue) for venue in venues}
+
+
+def representatives(
+    groups: Mapping[str, str], excluded: frozenset[str], seed: int
+) -> tuple[list[str], int]:
+    """One seeded venue per group with no excluded member, and the venues dropped with them.
+
+    The representative is the member with the lowest ``sha256("<seed>:rep:<venue>")``;
+    a group holding an excluded venue is excluded whole.
+    """
+    members: dict[str, list[str]] = {}
+    for venue, group in groups.items():
+        members.setdefault(group, []).append(venue)
+    chosen: list[str] = []
+    dropped = 0
+    for venues in members.values():
+        if excluded.intersection(venues):
+            dropped += sum(1 for v in venues if v not in excluded)
+            continue
+        chosen.append(
+            min(venues, key=lambda v: hashlib.sha256(f"{seed}:rep:{v}".encode()).digest())
+        )
+    return sorted(chosen), dropped
+
+
 def draw_label_set(
     candidates: Sequence[Section],
     excluded: frozenset[str],
@@ -230,7 +312,9 @@ def draw_label_set(
     keys = Counter(c.section_key for c in candidates)
     if duplicate := next((k for k, n in keys.items() if n > 1), None):
         raise LabelSetError(f"candidate section {duplicate!r} appears twice")
-    chosen = sample_venues((c.venue for c in candidates), excluded, seed, venues)
+    groups = menu_groups(candidates)
+    eligible, dropped = representatives(groups, excluded, seed)
+    chosen = sample_venues(eligible, excluded, seed, venues)
     split = {venue: split_of(seed, venue, test_share) for venue in chosen}
     rows = [
         Section(
@@ -259,6 +343,10 @@ def draw_label_set(
         unsectioned_priced_items=(
             None if unsectioned is None else {v: int(unsectioned.get(v, 0)) for v in chosen}
         ),
+        grouping=GROUPING_VERSION,
+        groups=len(set(groups.values())),
+        eligible_groups=len(eligible),
+        group_excluded_venues=dropped,
     )
     return manifest, rows
 

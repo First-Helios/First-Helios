@@ -46,11 +46,18 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from packages.helios_core.domains.menu.models import MenuPage, PriceObservation
+from packages.helios_core.domains.menu.models import (
+    MenuItem,
+    MenuPage,
+    MenuSection,
+    MenuVariant,
+    PriceObservation,
+)
 from packages.helios_core.domains.menu.selection import (
     ContextRef,
     SelectionRequest,
@@ -84,6 +91,7 @@ _IGNORED = frozenset({"and", "the", "a", "of", "with", "w", "n"})
 # ``apps.menu_pipeline.page_bronze.MENU_PAGE_NAMESPACE``, restated: helios_core does
 # not import apps. Its keys are the menu-URL keys (ADR-0011 §7, ADR-0022 point 1).
 MENU_PAGE_NAMESPACE = "menu-page"
+UNSECTIONED = "Unsectioned"  # the structural section key (``ck_menu_section_shape``)
 
 
 def dish_key(name: str | None) -> frozenset[str] | None:
@@ -321,3 +329,77 @@ def enumerate_current_requests(
         prior.update(family_dishes)
     requests.sort(key=_sort_key)
     return requests
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentPageSummary:
+    """One current head page, as the course candidates exporter needs it (ADR-0016 Am. 2)."""
+
+    page_id: int
+    source_record_version_id: int
+    source_kind: str
+    method_version: str
+    unsectioned_priced: int  # priced item/variant observations under ``Unsectioned``
+
+
+def _unsectioned_priced(session: Session, page_id: int) -> int:
+    variant_item = select(MenuVariant.item_id).where(MenuVariant.id == PriceObservation.variant_id)
+    statement = (
+        select(func.count())
+        .select_from(PriceObservation)
+        .join(
+            MenuItem,
+            MenuItem.id == func.coalesce(PriceObservation.item_id, variant_item.scalar_subquery()),
+        )
+        .join(MenuSection, MenuSection.id == MenuItem.section_id)
+        .where(
+            PriceObservation.page_id == page_id,
+            PriceObservation.price_state == "priced",
+            PriceObservation.modifier_id.is_(None),
+            PriceObservation.section_id.is_(None),
+            MenuItem.effect != "suppress",
+            MenuSection.section_key == UNSECTIONED,
+            MenuSection.support_kind == "structural",
+        )
+    )
+    return int(session.execute(statement).scalar_one())
+
+
+def current_page_summaries(
+    session: Session, *, effective_instant: datetime
+) -> list[CurrentPageSummary]:
+    """Every live head page of a scope the selector admits at ``E``, with its Unsectioned count.
+
+    The same families, stream heads and live-Identity/operating gate as
+    :func:`enumerate_current_requests`, so "current page" means what it means for
+    Gold. ``unsectioned_priced`` counts the page's priced item and variant
+    observations under the structural ``Unsectioned`` section: prices that never
+    reach Gold (no native path), which bound what a section labeller can cover
+    (ADR-0016 §4). Read-only; ordered by page id.
+    """
+    session.flush()
+    families = (
+        session.execute(select(MenuPage.source_record_id, MenuPage.root_key).distinct())
+        .tuples()
+        .all()
+    )
+    pages: dict[int, MenuPage] = {}
+    for source_record_id, root_key in families:
+        heads = _stream_heads(session, source_record_id, root_key, None)
+        for subject_id in sorted({page.subject_id for page in heads.values()}):
+            owned = _subject_heads(heads, subject_id)
+            if _current_gate(session, owned, effective_instant) is not None:
+                continue
+            pages.update(
+                (page.id, page) for page in owned.values() if page.operation != "withdrawal"
+            )
+    return [
+        CurrentPageSummary(
+            page_id=page.id,
+            source_record_version_id=page.source_record_version_id,
+            source_kind=page.source_kind,
+            method_version=page.method_version,
+            unsectioned_priced=_unsectioned_priced(session, page.id),
+        )
+        for _, page in sorted(pages.items())
+    ]
