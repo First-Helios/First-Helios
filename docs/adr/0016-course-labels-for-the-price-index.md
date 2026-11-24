@@ -3,7 +3,9 @@
 **Status:** Accepted 2026-09-30 (owner, session G-3), as amended by
 [Amendment 1](#amendment-1-2026-09-30-accepted-slice-1a-decisions) and
 [Amendment 2](#amendment-2-2026-11-24-slice-1b-checked-against-the-real-data)
-(decided under the owner's delegation, P8-30). The open
+(decided under the owner's delegation, P8-30) and
+[Amendment 3](#amendment-3-2026-11-24-slice-1s-result-and-the-plan-for-slices-23)
+(slice 1's result; slices 2–3 proposed). The open
 questions were answered in session G-2 before the text was written
 ([Owner decisions](#owner-decisions-session-g-2-2026-09-30)).
 **Date:** 2026-09-30
@@ -596,6 +598,120 @@ Each item below names the text it amends.
 8. **Unchanged.** The vocabulary, the guide (`course-guide-v1`), the split hash, the gate
    (0.95, 20 sections / 10 venues), the winner rule, the metrics and slices 2–3. The
    Unsectioned share is still recorded, from item 5's Menu read.
+
+## Amendment 3 (2026-11-24): slice 1's result, and the plan for slices 2–3
+
+**Status:**
+- Items 1–2 record the evaluation.
+- Items 3–6 are **proposed** for the owner's review (session P8-30). They are the
+  stop-and-ask path: models and migrations (CLAUDE.md). Nothing in them is built.
+
+1. **Result** ([2026-11-24-course-labeller-set-1.md](../reviews/2026-11-24-course-labeller-set-1.md)).
+   - On `set-1`'s test split (46 venues, 589 sections, 3,254 priced items), the lexicon
+     `course-lexicon-v1@63ed037341a4` passes `drink` (0.967), `alcohol` (0.996) and
+     `breakfast` (0.977), covering 876 items (0.269).
+   - The embedding + LR `course-labeller-v1@8e861ccdb519` passes `drink` only, covering 317
+     items.
+   - The lexicon wins (§5), so no model ships.
+   - `appetizer` (0.946), `entree` (0.920), `side` (0.608) and `dessert` (0.868) fail.
+     `kids` (0.980) is not readable: 6 test venues.
+2. **Owner review as done (amends Amendment 1 item 8's procedure; the rule is unchanged).**
+   1. The owner approved the 104 test disagreements on the condition of an extra validation
+      pass.
+   2. An independent second agent relabelled them blind.
+   3. Reconciliation:
+      - the second label matched the agent's: the agent's label stands (95);
+      - it matched an arm's prediction: the label changed (4);
+      - all three differed: decided by the guide's item count (5, of which 2 changed).
+   4. `course_eval confirm` applied them.
+
+   6 labels changed in all. The validation file and the reconciliation inputs are in
+   `var/course-eval/set-1/`.
+3. **The pin is its own file (amends §5 "the weights or lexicon file carries it").**
+   - The version string hashes the lexicon or weights file. Writing the passing list into
+     that file would change the version it names.
+   - The pin is therefore `config/course_pin.json`: `{"labeller":
+     "course-lexicon-v1@63ed037341a4", "file": "course_lexicon_v1.json", "sha256": "<full
+     file hash>", "passing": ["alcohol", "breakfast", "drink"], "evaluation":
+     "docs/reviews/2026-11-24-course-labeller-set-1.md"}`.
+   - The labeller CLI refuses a pin whose file hash differs. The Gold refresh reads only
+     `labeller` and `passing` (§5).
+4. **Slice 2 plan: the Silver table, contract and CLI.** ⚠ menu model plus migration.
+   - *Migration* (one revision on the current head, hand-reviewed, synchronized
+     upgrade/downgrade), `menu.section_course`:
+
+     | Column | Type | Rule |
+     |---|---|---|
+     | `id` | `BIGINT` identity | PK |
+     | `section_id` | `BIGINT NOT NULL` | FK `menu.menu_section(id)` `ON DELETE RESTRICT` |
+     | `labeller_version` | `VARCHAR(128) NOT NULL` | trimmed, non-empty (`menu.whitespace()`, as other keys) |
+     | `course` | `VARCHAR(16)` NULL | `CHECK (course IN (<the 9 labels>))`; NULL = abstained |
+     | `confidence` | `NUMERIC(5,4)` NULL | `CHECK (confidence BETWEEN 0 AND 1)` |
+     | `labelled_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | `isfinite` |
+
+     - `uq_section_course` on `(section_id, labeller_version)`.
+     - `ix_section_course_version` on `(labeller_version, section_id)`, for Gold's read.
+     - Insert-only: `trg_menu_immutable` (`BEFORE UPDATE OR DELETE`) and
+       `trg_menu_no_truncate` on `menu.reject_mutation()`, as on the other Menu tables
+       (`d83f0a21c592`).
+     - A structural `Unsectioned` section must never get a row. A CHECK can't see the
+       section, so a `BEFORE INSERT` trigger refuses a `section_id` whose section is
+       `support_kind = 'structural'`.
+     - No existing table or column changes.
+   - *Model:* `MenuSectionCourse` in `packages/helios_core/domains/menu/models.py`,
+     registered in `db/model_registry.py`.
+   - *Contract* (`domains/menu/courses.py`):
+     - `record_section_courses(session, rows)` inserts with `ON CONFLICT DO NOTHING` on the
+       unique key.
+     - `section_courses(session, labeller_version, page_ids)` returns
+       `{(page_id, section native key): course | None}`, the key Gold already holds
+       (`price_page_id`, the target path's section key).
+   - *CLI:* `python -m apps.menu_pipeline.label_courses [--commit]`.
+     - It labels every named, non-structural section of `current_page_summaries` pages
+       that has no row at the pinned version.
+     - It writes nothing without `--commit`, and prints the counts by course and
+       abstained.
+     - The lexicon is pure Python, so the CLI runs in the plain runtime image.
+     - It runs after extraction and before `apps.gold.refresh`. For the monthly loop
+       (ADR-0030), the step slots in before the run's Gold refresh, which needs an
+       ADR-0030 note when it is built.
+   - *Tests:* DB tests for insert-only, the uniqueness rule, the structural refusal and
+     the CLI's idempotence; `alembic check`; the strict suite.
+5. **Slice 3 plan: Gold columns and course rows.** ⚠ Gold model plus migration.
+   - *Migration* (hand-reviewed; Gold is rebuilt by its refresh, so nothing with data is
+     altered in place):
+     - `gold.current_menu` gains `course VARCHAR(16)` and `course_labeller VARCHAR(128)`,
+       both nullable.
+     - `ck_gold_course` limits `course` to the 9 labels.
+     - `ck_gold_course_labeller` requires both columns to be NULL or both set (an abstained
+       or unlabelled row has neither).
+     - `ck_gold_price_index_category_kind` is dropped and recreated over `('all',
+       'course')`, and `CATEGORY_KINDS` becomes `("all", "course")`.
+   - *Refresh:*
+     - `refresh_current_menu` fills both columns from `section_courses` at the pin, for
+       item, variant and section rows under a labelled section.
+     - The price-index aggregate's `indexed` step gains a second branch:
+       `'course' AS category_kind, c.course AS category_key` for rows whose `course` is in
+       the pin's `passing` list.
+     - Placement, venue medians, percentiles and `low_sample` are untouched. Drawn areas
+       (ADR-0020) share the same SQL, so they get course rows with no change of their own.
+   - *Refresh report:* `course_unlabelled`, `course_abstained`, `course_other` and
+     `course_not_indexed`, as §6 says.
+   - *Tests:* the rebuild-equality and no-seq-scan tests extended to course rows, plus a
+     test that a failing course never becomes a row.
+6. **Questions for the owner.** The recommendations come first.
+   - **Q1.** Ship course rows for the three passing courses now? The alternative is to wait
+     for the item-level v2 (§2) so `entree` can pass. *Recommended: ship now.* The rows are
+     cheap and honest, they meet Phase 7's "area and course" bar, and v2 adds courses
+     later through the same pin.
+   - **Q2.** Table name `menu.section_course` and the pin file as in item 3?
+     *Recommended: yes.*
+   - **Q3.** The API: `category_kind=course` needs the `CategoryKind` enum in
+     `apps/api` and the OpenAPI snapshot widened. That is an ADR-0007 amendment, built
+     after slice 3. *Recommended: a short amendment once slice 3 has merged.*
+   - **Q4.** Applying slices 2–3 to `helios_laptop`, the Pi and `helios_work` is a
+     separate go-ahead with backups. The CLI writes only `menu.section_course` (new
+     rows), and the Gold refresh is rebuildable.
 
 ## Implementation notes (2026-10-21)
 
