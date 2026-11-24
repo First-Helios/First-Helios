@@ -590,8 +590,9 @@ Each item below names the text it amends.
    that is about 1,450 sections, not ~900. The sections are labelled by agents, and the
    owner reviews only test disagreements.
 7. **`method_version` (Amendment 1 item 4).** A set can come from two streams, so the
-   manifest's `method_version` lists each `source_kind=method_version` that the sampled
-   sections' pages carry, sorted and joined with ` | `.
+   manifest's `method_version` lists each `source_kind=method_version` carried by the
+   current pages behind the candidates, sorted and joined with ` | `. The exporter's
+   `meta.json` records the pages per stream.
 8. **Unchanged.** The vocabulary, the guide (`course-guide-v1`), the split hash, the gate
    (0.95, 20 sections / 10 venues), the winner rule, the metrics and slices 2–3. The
    Unsectioned share is still recorded, from item 5's Menu read.
