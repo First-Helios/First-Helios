@@ -513,7 +513,9 @@ venues are not checked, and a swap may need a deploy first. So a run ends the sa
 gate passes or stops.
 
 **When the loop ends normally** (a fetch took fewer URLs than `--batch` ("done"), `--stop-every`
-was reached ("swap due"), or an `extract` / `extract-no-model` phase exited 0):
+was reached ("swap due"), or an `extract` / `extract-no-model` phase exited 0). A `fetch`-phase
+run is the exception and gets the report only: its pages are not extracted yet, and a marker
+would block the extraction phase that follows (P8-23's fetch-then-extract pattern).
 
 1. **Wrap on the master:** `apps.menu_pipeline.rescore`, then `apps.gold.refresh`, then
    `apps.menu_pipeline.swap_gate --public helios --master <db>`, saved as the run's `gate.json`.
