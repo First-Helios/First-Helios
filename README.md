@@ -711,7 +711,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0027](./docs/adr/0027-menu-coverage-script-pdf-image.md) | Menu coverage: script-shell pages, PDF and image menus | Accepted; Q4 `dns_unresolved` built (#160); M1–M3 measured; PDF reading proposed as ADR-0029 |
 | [0028](./docs/adr/0028-venue-category-browsing.md) | Venue categories for browsing without search | Accepted; implemented (ADR-0028) |
 | [0029](./docs/adr/0029-pdf-menus.md) | Reading PDF menus with `pypdf` | Accepted (all as recommended); dependency #164, reader built (#168) |
-| [0030](./docs/adr/0030-pipeline-host-runs.md) | Repeatable pipeline-host runs: one master database, a batch loop and a gated swap | Proposed (P8-26; owner questions 1–8 open; nothing built) |
+| [0030](./docs/adr/0030-pipeline-host-runs.md) | Repeatable pipeline-host runs: one master database, a batch loop and a gated swap | Accepted (P8-28, under the owner's delegation; stage 1 built separately) |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the

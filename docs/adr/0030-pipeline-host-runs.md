@@ -1,7 +1,8 @@
 # ADR-0030: Repeatable pipeline-host runs: one master database, a batch loop and a gated swap
 
-**Status:** Proposed 2026-11-22 (session P8-26). Docs only: nothing is built, and no host was
-written. Owner questions at the end; stop for review before building (CLAUDE.md).
+**Status:** Accepted 2026-11-24 under the owner's delegation (session P8-28; owner: "I defer to
+your answers"). Proposed 2026-11-22 (session P8-26). Q1–Q8 all take the recommendation; see
+[Decisions](#decisions-2026-11-24). Stage 1 (the tooling) is built in a separate PR.
 **Date:** 2026-11-22
 
 ## Context
@@ -33,7 +34,8 @@ What happened, in order:
 | 11-22 | **Swap 3** after batch 26 (1,300 URLs) | 98,961 → 98,699 (−0.26%), 416 s |
 | 11-23 | Pi loop stopped mid-batch 29 (01:05). Master moved Pi → laptop (GPU), then back to the Pi (01:56) when the owner needed the GPU | under an hour on the laptop, 1 GPU batch (68 pages extracted, restarted once for the thermal cutoff), 2 restores, 2 replay syncs (23,640 files the second time) |
 | 11-23 | Pi deployed to `main` 5b8f62a; `pi-phase.sh`: fetch-only batches, then no-model extraction; model pages wait for the GPU | running at the time of writing (batch 030, P8-23 owns it) |
-| later | **Swap 4** (planned) | P8-23 records it |
+| 11-23 | **Swap 4** at the recrawl's end; model pages ran on the laptop GPU over the LAN (D2 (b)) | 98,699 → 98,499 (−0.20%), venues 1,178 → 1,221, 458 s; GPU 180.5 pages/h |
+| 11-24 | **Swap 5**: #175/#176 applied (Gold refresh only) | 98,499 → 99,408, venues 1,221 → 1,233 (0 lost), 456 s |
 
 What it cost in time, and the lessons:
 
@@ -65,7 +67,7 @@ Amendment 1 records that the Pi now hosts both the public site and the pipeline.
 says how a run moves data into the public database. This ADR proposes that procedure. It does not
 change pipeline stages, the schema, the fence function or the hosting decision (ADR-0019 Q4).
 
-## Decision (proposed)
+## Decision
 
 Pipeline runs follow one procedure:
 
@@ -412,3 +414,48 @@ Each has a recommendation. Nothing is built until these are answered.
    - *Recommended:* keep restoring `helios_laptop` after every swap. It is the only copy of the
      data off the Pi until Phase 8's off-box backups, and it keeps dev equal to public.
    - The alternative is to restore it only on demand.
+
+## Decisions (2026-11-24)
+
+Decided under the owner's delegation (owner, 2026-11-24: "I defer to your answers"). Each question
+takes its recommendation.
+
+1. **Tooling: hybrid.** Database-facing code in `apps/` under test; host glue in
+   `infra/pipeline-host/`. The batch loop itself is an `apps/` CLI (it calls only the pipeline
+   CLIs, the thermal sensors and `docker`), so its stop rules are tested.
+2. **Scheduling: manual starts under a systemd unit** (not `setsid nohup`). A timer only when
+   Phase 6's monthly cadence starts, with `OnCalendar` in UTC.
+3. **Model pages: the Pi stays master** and its extract calls the laptop's `llama-server` over the
+   LAN. P8-23 already ran this way for swap 4: 265 pages at 180.5 pages/h, 0 failed. Moving the
+   master (a) stays for when the Pi is down.
+4. **Swap gate additions:** venues with a menu must fall less than 5% (stop-and-ask above it), and
+   the gate report classifies each lost venue automatically into the kinds seen in swaps 1–4:
+   - **R4 withdrawal** (the record's newest capture is `not_menu`, `js_only` or a withdrawal rule);
+   - **site change** (a newer capture with changed text and no priced Menu page since);
+   - **JSON-LD precedence** (a newer jsonld page that hides the llm page; #176 fixed the bug, the
+     kind stays so a regression shows);
+   - **Unsectioned** (the newest llm page prices only Unsectioned items, which never reach Gold:
+     #177 Q1 keeps that rule);
+   - **re-extraction to zero** (the newest llm page of an unchanged record has no priced row).
+
+   A venue that fits none is **unclassified** and blocks the gate until a page check explains it.
+   The median shift is reported without a bar.
+5. **Swap mechanism: restore into `helios_next`, then rename** (`helios` → `helios_prev`,
+   `helios_next` → `helios`). Rollback is the reverse rename.
+6. **0600 replay files: done** in #175 (`chmod(0o644)` before the rename).
+7. **Retention: 3 dumps per run** once the run record merges: the pre-run public dump, the last
+   pre-swap dump and the last swapped master dump.
+8. **Laptop mirror: keep restoring `helios_laptop` after every swap.**
+
+**Stage 1 (the build):**
+
+- `apps/menu_pipeline/swap_gate.py`: the comparison, the two bars, the lost-venue kinds and a JSON
+  verdict.
+- `apps/menu_pipeline/batch_loop.py`: phases `full`, `fetch`, `extract`, `extract-no-model`, an
+  optional `--server` for a remote `llama-server`, `pi`/`laptop` thermal modes, the `STOP` file,
+  `--stop-every`, the `MASTER` marker check, and "done when a fetch takes fewer URLs than the
+  limit" (P8-23's runaway loop: four redirecting URLs stayed due, so "fetched == 0" never came).
+- `infra/pipeline-host/`: the master move (dump, restore, fence reset, replay sync), the
+  `helios_next` swap, and a systemd unit for manual starts.
+
+Stage 1 is deployed by the owner; no host runs it before then.
