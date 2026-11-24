@@ -129,6 +129,23 @@ prices.
   allergen notice, a promo banner) → `other`.
 - Write it down as a finding, because it points at an extraction error.
 
+**Found while labelling set-1's training split (2026-11-24, before any test label).**
+- Sushi: nigiri, sashimi, rolls and hand rolls → `entree`. Edamame, miso soup and
+  seaweed salad stay `appetizer`.
+- Breakfast sides in a breakfast or brunch menu (one egg, bacon, toast, hash browns)
+  → `breakfast`. Precedence puts breakfast before the dish course.
+- Brunch headings: label each dish by what it is. Eggs Benedict → `breakfast`; a
+  burger on the brunch menu → `entree`.
+- Frozen and house drinks: a cocktail by name (margarita, daiquiri, piña colada,
+  mimosa) → `alcohol` unless it is marked virgin, N/A or mocktail. A "Frozens" list
+  takes the strict majority.
+- Nachos, wings and fries: nachos and wings sold as starters → `appetizer`; fries
+  and tots → `side`. A plate that comes with sides (a wing dinner) → `entree`.
+- Catering trays, "serves N" and boxes by the dozen → `other` (bulk).
+- Extraction misalignment: when the heading is clearly another item's name, or the
+  items don't match the heading, label by the items. When the "items" aren't dishes
+  at all (bare prices, sizes, dietary tags, filler text) → `other`, and note it.
+
 When an edge case isn't covered here, choose the label that keeps the index's
 medians honest. While labelling the training split, add the case to this list;
 during the test split, label it `other` and note it for the write-up.
@@ -139,12 +156,13 @@ Each `course_eval <subcommand>` below runs as
 `uv run python -m apps.menu_pipeline.course_eval <subcommand> ...`.
 
 1. **Exclusions.** Build the exclusion file: one GERS id per line, `#` for
-   comments. It holds the venues of the P5-5 held-out pages, plus every venue
-   in an earlier label set when this is a later version's fresh sample. Never
-   open those venues' pages or sections.
+   comments. It holds the venues of the ADR-0013 held-out sets (ADR-0016
+   Amendment 2 item 4), plus every venue in an earlier label set when this is a
+   later version's fresh sample. A venue's whole menu group is excluded with it.
+   Never open those venues' pages or sections.
 2. **Draw** (`course_eval sample`): from the candidates file (every Gold-reaching
-   named section of current Menu pages, exported in slice 1b), with a recorded
-   seed and ~120 venues. The venue's split (~60% train / ~40% test) comes from
+   named section of current Menu pages, from `course_candidates`), with a
+   recorded seed and ~120 venues, one per menu group (Amendment 2 item 3). The venue's split (~60% train / ~40% test) comes from
    a seeded hash and is written into each row. A drawn set is never redrawn
    over; the loader refuses a row whose split has moved.
 3. **Label** (agent, blind). Set `agent_label` and `label` to the same course,
