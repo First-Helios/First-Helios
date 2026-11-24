@@ -43,7 +43,9 @@ extracted. ``apps.menu_pipeline.rescore`` runs both without the model.
 A chunk that still fails after its retry fails its page: nothing is written,
 the page stays due and is retried next run; after
 :data:`MAX_CONSECUTIVE_FAILURES` failed pages in a row the run stops (the
-server is likely gone) and says so.
+server is likely gone) and says so. (ADR-0030) A run with :class:`NoModel` uses
+saved answers only and has no such stop: a page that needs the model is expected
+to fail and stays due.
 
 **Pipeline version** (X2): ``method_version`` names every component of the
 interpretation (:class:`PipelineVersion`); a page is up to date when its
@@ -64,6 +66,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 import time
 from collections import Counter, deque
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -124,6 +127,23 @@ class ChunkExtractor(Protocol):
     """What the run needs from :class:`~apps.menu_pipeline.llama_client.LlamaClient`."""
 
     def extract_chunk(self, chunk: str) -> ChunkResult: ...
+
+
+class NoModel:
+    """(ADR-0030) An extractor that refuses every call, for a run on saved answers only.
+
+    A chunk with no saved answer fails its page, which stays due for a run with the
+    model. ``refused`` counts the refused calls (the pool calls from several threads).
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.refused = 0
+
+    def extract_chunk(self, chunk: str) -> ChunkResult:
+        with self._lock:
+            self.refused += 1
+        raise ChunkFailed("no model in this run: the page stays due")
 
 
 class PageScorer(Protocol):
@@ -492,6 +512,7 @@ class _Run:
         report: ExtractionReport,
         on_commit: Callable[[], None] | None,
         soc: SocProbe,
+        stop_after: int | None,
     ) -> None:
         self._session = session
         self._extractor = extractor
@@ -502,6 +523,7 @@ class _Run:
         self._report = report
         self._on_commit = on_commit
         self._soc = soc
+        self._stop_after = stop_after
         self._consecutive_failures = 0
 
     def start(self, due: DuePage, pool: ThreadPoolExecutor) -> _Pending:
@@ -660,7 +682,7 @@ class _Run:
 
     @property
     def should_abort(self) -> bool:
-        return self._consecutive_failures >= MAX_CONSECUTIVE_FAILURES
+        return self._stop_after is not None and self._consecutive_failures >= self._stop_after
 
 
 def run_extraction(  # noqa: PLR0913 - the run's collaborators, injected for tests
@@ -674,8 +696,12 @@ def run_extraction(  # noqa: PLR0913 - the run's collaborators, injected for tes
     limit: int | None = None,
     commit: Callable[[], None] | None = None,
     soc: SocProbe | None = None,
+    stop_after: int | None = MAX_CONSECUTIVE_FAILURES,
 ) -> ExtractionReport:
     """Extract and write every due page (at most ``limit``); the caller's ``commit`` ends each step.
+
+    ``stop_after`` failed pages in a row stop the run; ``None`` never stops (a
+    :class:`NoModel` run, where failing pages are the ones left for the model).
 
     ``commit`` runs after a page's Evidence and again after its Menu pages (the
     CLI passes ``session.commit``): Menu admission accepts only committed input.
@@ -702,6 +728,7 @@ def run_extraction(  # noqa: PLR0913 - the run's collaborators, injected for tes
         report=report,
         on_commit=commit,
         soc=probe,
+        stop_after=stop_after,
     )
     pool = ThreadPoolExecutor(max_workers=SLOTS, thread_name_prefix="llama")
     window: deque[_Pending] = deque()
