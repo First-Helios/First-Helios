@@ -371,7 +371,7 @@ def test_shape_stores_one_variant_per_choice_of_one_printed_price() -> None:
 def test_pipeline_version_names_every_component_within_the_column() -> None:
     spec = load_manifest()["Qwen3-4B-Instruct-2507-Q4_0"]
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
-    assert version.llm.endswith("jsonld-v1;repairs-v9;validator-v13;resolve-v6;classifier-v2")
+    assert version.llm.startswith(version.extractor + ";")
     assert len(version.llm) <= 128
     assert version.jsonld == "jsonld-v1;validator-v13;segment-v2;classifier-v2"
     assert model_tag(spec) in version.extractor

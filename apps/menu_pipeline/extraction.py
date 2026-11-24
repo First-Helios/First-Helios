@@ -188,12 +188,16 @@ class PipelineVersion:
     def llm(self) -> str:
         # Both streams finish in one transaction, including an empty JSON-LD read.
         # Its version belongs in the completion marker used by due_pages.
-        model_id = hashlib.sha256(self.model.encode()).hexdigest()[:20]
-        return _checked(
-            f"{model_id};{PROMPT_VERSION};{CHUNKER_VERSION};{SEGMENTER_VERSION};"
+        interpretation = (
             f"{JSONLD_VERSION};{REPAIRS_VERSION};{VALIDATOR_VERSION};{RESOLVER_VERSION};"
             f"{self.classifier}"
         )
+        version = f"{self.extractor};{interpretation}"
+        if len(version) > _METHOD_VERSION_MAX:
+            # Spot-check packets read the exact extractor key from the first four parts.
+            digest = hashlib.sha256(interpretation.encode()).hexdigest()[:24]
+            version = f"{self.extractor};interpretation@{digest}"
+        return _checked(version)
 
     @property
     def jsonld(self) -> str:
