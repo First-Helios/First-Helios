@@ -3434,6 +3434,9 @@ Owner plan with every data write approved; decisions within it delegated. Record
     - jsonld precedence hiding llm dishes that the jsonld stream cannot project (#176; Gold
       +909 rows, +12 venues when applied).
   - Details: the record's "Swap 4" section.
+- **Swap 5 (2026-11-24):** #175 and #176 applied on `main` 87108bb; Gold 98,499 → **99,408**,
+  venues 1,221 → **1,233** (0 lost), median 1050 → 1095. Unsectioned prices still never reach Gold
+  (decided under the owner's delegation, #177 Q1).
 
 ## Amendment 37 (2026-11-20, proposed): reuse saved answers per chunk, not only per page
 
