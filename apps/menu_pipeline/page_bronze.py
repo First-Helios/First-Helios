@@ -403,7 +403,7 @@ class MenuPageWriter:
                 self._succeeded(target, static, blocks, bundle, render=None)
             else:
                 needs_js = target.platform or looks_js_only(static.text)
-                self._skip(static, "js_only" if needs_js else "not_menu", bundle)
+                self._skip(target, static, "js_only" if needs_js else "not_menu", bundle)
                 if needs_js and self._renderer is not None:
                     self._render(target)
         if self._pdf_linked:
@@ -432,7 +432,7 @@ class MenuPageWriter:
         if self._verifier.is_menu(document.html, static.url, trust_path=False):
             self._succeeded(target, static, blocks, bundle, render=None, reader=PDF_READER_VERSION)
         else:
-            self._skip(static, "not_menu", bundle)
+            self._skip(target, static, "not_menu", bundle)
 
     def _render(self, target: PageTarget) -> None:
         assert self._renderer is not None  # noqa: S101 - callers check
@@ -454,7 +454,7 @@ class MenuPageWriter:
         if self._verifier.is_menu(rendered.text, rendered.url, trust_path=False):
             self._succeeded(target, rendered, blocks, bundle, render=self._renderer.name)
         else:
-            self._skip(rendered, "not_menu", bundle)
+            self._skip(target, rendered, "not_menu", bundle)
 
     def _note_pdf_links(self, result: FetchResult) -> None:
         self._pdf_linked |= bool(menu_pdf_links(result.text, result.url))
@@ -474,15 +474,22 @@ class MenuPageWriter:
         )
         self._report.outcomes[failure.reason_code] += 1
 
-    def _skip(self, result: FetchResult, reason: str, bundle: Bundle | None) -> None:
-        """A page that was read but is not extracted: a skipped Capture, bundle kept (S6)."""
+    def _skip(
+        self, target: PageTarget, result: FetchResult, reason: str, bundle: Bundle | None
+    ) -> None:
+        """A page that was read but is not extracted: a skipped Capture, bundle kept (S6).
+
+        Recorded under the target URL, like a failed attempt, not the final URL of a
+        redirect (the bundle keeps that): the due check and R4 look the target up by
+        its own URL, so a redirected rejection would otherwise leave it due forever.
+        """
         fetched_at = _at(result)
         bundle_path = None if bundle is None else self._bundles.write(bundle, fetched_at=fetched_at)
         record_capture_attempt(
             self._session,
             source_namespace=MENU_PAGE_NAMESPACE,
             source_kind=MENU_PAGE_KIND,
-            source_url=result.url,
+            source_url=target.url,
             fetched_at=fetched_at,
             outcome="skipped",
             reason_code=reason,
@@ -545,11 +552,13 @@ class MenuPageWriter:
                 resolved.state, resolved.subject_id, scope, resolved.evidence_id, record
             )
         if not wrote_version:
+            # Under the target URL, as a skip is: the unchanged Version may carry an
+            # endpoint the page no longer answers at (an http -> https redirect).
             record_unchanged_capture(
                 self._session,
                 source_namespace=MENU_PAGE_NAMESPACE,
                 source_kind=MENU_PAGE_KIND,
-                source_url=result.url,
+                source_url=target.url,
                 fetched_at=fetched_at,
                 content_hash=result.content_hash,
                 bundle_path=bundle_path,

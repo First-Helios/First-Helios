@@ -731,13 +731,15 @@ def _stream(
     *,
     variant_of: str | None = None,
     shared: bool = False,
+    native: bool = True,
 ) -> MenuAggregate:
     """A page of ``kind`` in the burger page's family, its dishes under one section.
 
     Each stream keys its dishes natively by kind, as the real streams do, so no
     dish of one corresponds to a dish of the other by path. ``variant_of`` puts
     that item's price on a "Large" variant instead of the item. ``shared`` writes
-    the Organization's page instead of the Establishment's.
+    the Organization's page instead of the Establishment's. ``native=False``
+    leaves the items without a native key, as on an Unsectioned item.
     """
     value = aggregate(scope, shared=shared)
     evidence = value.page.evidence_ids
@@ -751,7 +753,7 @@ def _stream(
             effect="replace",
             support_kind="direct",
             evidence_ids=evidence,
-            source_native_key=f"{kind}-{key}",
+            source_native_key=f"{kind}-{key}" if native else None,
         )
         for position, (key, name, _) in enumerate(dishes)
     )
@@ -837,6 +839,19 @@ def test_a_jsonld_head_without_prices_hides_nothing(factory: sessionmaker[Sessio
         scope = _seed_scope(session, uuid4().hex, "open")
     with factory.begin() as session:
         persist_menu(session, _stream(scope, "jsonld", (("burger", "Burger", None),)))
+        persist_menu(session, _stream(scope, "llm", (("burger", "Burger", 1050),)))
+    assert _enumerated(factory, scope) == {"llm-burger"}
+
+
+def test_a_jsonld_dish_that_cannot_reach_gold_hides_nothing(
+    factory: sessionmaker[Session],
+) -> None:
+    # P8-27: a jsonld head whose dishes sit in Unsectioned has no native path, so
+    # its prices are never enumerated; hiding the llm copies lost the venue's menu.
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    with factory.begin() as session:
+        persist_menu(session, _stream(scope, "jsonld", (("burger", "Burger", 1100),), native=False))
         persist_menu(session, _stream(scope, "llm", (("burger", "Burger", 1050),)))
     assert _enumerated(factory, scope) == {"llm-burger"}
 

@@ -94,6 +94,7 @@ class BundleStore:
             target.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp_name = tempfile.mkstemp(dir=target.parent, suffix=".tmp")
             try:
+                os.fchmod(fd, 0o644)  # mkstemp's 0600 breaks rsync between hosts (ADR-0030 Q6)
                 with os.fdopen(fd, "wb") as handle:
                     handle.write(gzip.compress(data, mtime=0))
                 Path(tmp_name).replace(target)

@@ -194,6 +194,7 @@ def test_bundle_is_content_addressed_and_checkable(tmp_path: Path) -> None:
     assert path.startswith("var/replay/menu-page/2026/09/") and path.endswith(".json.gz")
     data = gzip.decompress((tmp_path / path).read_bytes())
     assert path.rsplit("/", 1)[1] == hashlib.sha256(data).hexdigest() + ".json.gz"
+    assert (tmp_path / path).stat().st_mode & 0o777 == 0o644  # readable for rsync (ADR-0030 Q6)
     assert store.read(path) == bundle
     block = next(b for b in blocks if "$3.50" in b.text)
     assert excerpt(store.read(path), f"blocks:{SEGMENTER_VERSION}:{block.id}[0:5]") == "$3.50"
@@ -553,6 +554,49 @@ def test_skipped_and_failed_pages(session: Session, tmp_path: Path) -> None:
     # A failed or skipped URL isn't fetched again inside the window.
     report = _run(session, tmp_path, pages, now=_T1 + timedelta(days=1))
     assert (report.fetched, report.not_due) == (0, 4)
+
+
+def test_a_redirected_target_counts_as_fetched(session: Session, tmp_path: Path) -> None:
+    """P8-23: a skip or unchanged re-read answered at a redirect's final URL is recorded
+    under the target URL, so the target leaves the due set (it stayed due forever)."""
+    moved, plain = "https://moved.example/menu", "http://plain.example/menu"
+    _seed(
+        session,
+        [
+            _poi("Moved", 30.30, -97.75, gers_id="mp9a", websites=("https://moved.example",)),
+            _poi("Plain", 30.40, -97.75, gers_id="mp9b", websites=("http://plain.example",)),
+        ],
+    )
+    _resolve(
+        session,
+        _Sites(
+            {
+                "https://moved.example/": _FakeResolver(moved),
+                "http://plain.example/": _FakeResolver(plain),
+            }
+        ),
+    )
+    _run(session, tmp_path, _Pages({plain: _page(plain, _MENU)}))  # plain's Version
+
+    # Past the window: moved redirects to its home page (not a menu); plain to https,
+    # with the same text (an unchanged re-read).
+    later = _T1 + REFETCH_WINDOW
+    pages = _Pages(
+        {
+            moved: _page("https://moved.example/", _NOT_MENU, at=later),
+            plain: _page("https://plain.example/menu", _MENU, at=later),
+        }
+    )
+    report = _run(session, tmp_path, pages, now=later)
+    assert (report.fetched, report.unchanged, report.outcomes["not_menu"]) == (2, 1, 1)
+    skip = _captures(session, moved)[-1]  # the first run's 404 precedes it
+    assert skip.reason_code == "not_menu" and skip.bundle_path is not None
+    assert BundleStore(tmp_path).read(skip.bundle_path).url == "https://moved.example/"
+    assert _captures(session, plain)[-1].fetched_at == later
+
+    # Inside the window neither target is fetched again.
+    report = _run(session, tmp_path, pages, now=later + timedelta(days=1))
+    assert (report.fetched, report.not_due) == (0, 2)
 
 
 def test_a_pdf_menu_page_is_read_into_a_version(session: Session, tmp_path: Path) -> None:
