@@ -12,12 +12,18 @@ import pytest
 
 from apps.menu_pipeline import batch_loop
 from apps.menu_pipeline.batch_loop import (
+    AWAITING,
     CONTAINER_PREFIX,
     COOL_TO,
     EXTRACT,
     FETCH,
+    GATE,
+    GOLD,
     PAUSE_AT,
+    REPORT,
+    RESCORE,
     RESUME_AT,
+    SPOT_CHECK,
     Config,
     GpuWatch,
     Host,
@@ -31,6 +37,9 @@ from apps.menu_pipeline.batch_loop import (
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+END_MODULES = (RESCORE, GOLD, GATE, SPOT_CHECK, REPORT)
+WRAPPED = [RESCORE, GOLD, GATE, SPOT_CHECK, REPORT]  # a normal end, in order
+
 
 class FakeHost:
     """Records commands and answers each CLI with a summary line."""
@@ -42,22 +51,33 @@ class FakeHost:
         fail: str | None = None,
         gpu: list[int] | None = None,
         on_sleep: Path | None = None,
+        end_status: Mapping[str, int] | None = None,
     ) -> None:
         self.fetched = list(fetched or [])
         self.fail = fail  # "fetch" or "extract": that CLI exits 1
         self.gpu_readings = list(gpu or [])
         self.on_sleep = on_sleep  # a STOP file the first sleep creates
-        self.commands: list[list[str]] = []
+        self.end_status = dict(end_status or {})  # end-of-run module -> exit status
+        self.commands: list[list[str]] = []  # the pipeline CLIs (fetch, extract)
+        self.ends: list[list[str]] = []  # the end-of-run steps, in order
         self.envs: list[Mapping[str, str] | None] = []
         self.docker_calls: list[tuple[str, str]] = []
         self.sleeps: list[float] = []
 
+    def end_modules(self) -> list[str]:
+        return [next(m for m in END_MODULES if m in command) for command in self.ends]
+
     def run(
         self, command: Sequence[str], out: Path, err: Path, env: Mapping[str, str] | None
     ) -> int:
+        err.write_text("")
+        module = next((m for m in END_MODULES if m in command), None)
+        if module is not None:
+            self.ends.append(list(command))
+            out.write_text("")
+            return self.end_status.get(module, 0)
         self.commands.append(list(command))
         self.envs.append(env)
-        err.write_text("")
         if FETCH in command:
             summary = {"fetched": self.fetched.pop(0), "outcomes": {"ok": 1}}
             out.write_text("menu-page run complete: " + json.dumps(summary) + "\n")
@@ -125,6 +145,7 @@ def test_runs_batches_until_a_fetch_takes_fewer_than_the_batch(tmp_path: Path) -
     log = _progress(tmp_path)
     assert "batch 003 full" in log and "fetched 12 < 50: nothing left, done" in log
     assert "model_pages=1" in log
+    assert fake.end_modules() == WRAPPED
 
 
 def test_stops_every_n_batches_for_a_swap(tmp_path: Path) -> None:
@@ -195,6 +216,140 @@ def test_extract_phase_passes_the_remote_server(tmp_path: Path) -> None:
     assert Loop(config, fake.host()).run() == 0
     (command,) = fake.commands
     assert command[-2:] == ["--server", "http://192.168.1.183:8083"]
+
+
+# -- the end of a run (ADR-0030 Amendment 1) ---------------------------------------------
+
+RUN = "20261124T000000Z"  # FakeHost's clock
+
+
+def _run_dir(tmp_path: Path) -> Path:
+    return tmp_path / "var" / "pipeline-host"
+
+
+def _arg(command: Sequence[str], flag: str) -> str:
+    return command[command.index(flag) + 1]
+
+
+def test_a_normal_end_wraps_gates_and_waits_for_a_reader(tmp_path: Path) -> None:
+    _master(tmp_path)
+    fake = FakeHost([50, 12])
+
+    assert Loop(_config(tmp_path), fake.host()).run() == 0
+
+    assert fake.end_modules() == WRAPPED
+    rescore, gold, gate, spot, report = fake.ends
+    assert rescore[-2:] == ["-m", RESCORE] and gold[-2:] == ["-m", GOLD]
+    reports = _run_dir(tmp_path) / "reports" / RUN
+    assert gate[gate.index(GATE) + 1 :] == [
+        *("--public", "helios", "--master", "helios_work"),
+        *("--out", str(reports / "gate.json")),
+    ]
+    assert (_arg(spot, "--run-id"), _arg(spot, "--out-dir")) == (RUN, str(reports / "spot-check"))
+    assert _arg(report, "--end-reason") == "done" and "--failed-step" not in report
+    assert _arg(report, "--logs") == str(_run_dir(tmp_path) / "logs")
+    assert reports.stat().st_mode & 0o777 == 0o777, "the Pi's worker (uid 999) writes here"
+    marker = (_run_dir(tmp_path) / AWAITING).read_text()
+    assert f"run={RUN}\ngate_exit=0\nfailed_step=None\n" in marker
+    log = _progress(tmp_path)
+    assert f"{RUN}: gate passed; no swap, awaiting a reader" in log
+    assert log.index("end report") < log.index("loop end")
+    # every end step has its own log files, apart from the batches'
+    assert (_run_dir(tmp_path) / "logs" / f"end-{RUN}-gate.out").exists()
+
+
+def test_a_stopped_gate_still_ends_the_run_cleanly(tmp_path: Path) -> None:
+    _master(tmp_path)
+    fake = FakeHost([50] * 3, end_status={GATE: 1})
+
+    assert Loop(_config(tmp_path, stop_every=2), fake.host()).run() == 0
+    assert fake.end_modules() == WRAPPED
+    assert _arg(fake.ends[-1], "--end-reason") == "swap_due"
+    assert "gate_exit=1" in (_run_dir(tmp_path) / AWAITING).read_text()
+    assert "gate stopped; no swap" in _progress(tmp_path)
+
+
+def test_a_failed_wrap_step_skips_the_gate_and_fails_the_run(tmp_path: Path) -> None:
+    _master(tmp_path)
+    fake = FakeHost([12], end_status={GOLD: 1})
+
+    assert Loop(_config(tmp_path), fake.host()).run() == 1
+    assert fake.end_modules() == [RESCORE, GOLD, SPOT_CHECK, REPORT]
+    assert _arg(fake.ends[-1], "--failed-step") == "gold"
+    marker = (_run_dir(tmp_path) / AWAITING).read_text()
+    assert "gate_exit=None\nfailed_step=gold" in marker
+
+
+def test_a_gate_error_is_a_failed_step(tmp_path: Path) -> None:
+    _master(tmp_path)
+    fake = FakeHost([12], end_status={GATE: 2})
+
+    assert Loop(_config(tmp_path), fake.host()).run() == 1
+    assert _arg(fake.ends[-1], "--failed-step") == "gate"
+
+
+def test_a_stop_or_a_failed_cli_gets_the_report_only(tmp_path: Path) -> None:
+    _master(tmp_path)
+    fake = FakeHost([50, 50], fail="extract")
+
+    assert Loop(_config(tmp_path), fake.host()).run() == 1
+    assert fake.end_modules() == [REPORT]
+    assert _arg(fake.ends[0], "--end-reason") == "cli_failed"
+    assert not (_run_dir(tmp_path) / AWAITING).exists()
+
+    (_run_dir(tmp_path) / "STOP").touch()
+    stopped = FakeHost([50])
+    assert Loop(_config(tmp_path), stopped.host()).run() == 0
+    assert stopped.end_modules() == [REPORT]
+    assert _arg(stopped.ends[0], "--end-reason") == "stop_file"
+    assert not (_run_dir(tmp_path) / AWAITING).exists()
+
+
+def test_a_fetch_phase_gets_the_report_only(tmp_path: Path) -> None:
+    _master(tmp_path)
+    fake = FakeHost([7])
+
+    assert Loop(_config(tmp_path, phase="fetch"), fake.host()).run() == 0
+    assert fake.end_modules() == [REPORT]
+    assert _arg(fake.ends[0], "--end-reason") == "done"
+    assert not (_run_dir(tmp_path) / AWAITING).exists(), "the extract phase may start next"
+
+
+def test_an_extraction_phase_that_exits_0_is_a_normal_end(tmp_path: Path) -> None:
+    _master(tmp_path)
+    fake = FakeHost()
+
+    assert Loop(_config(tmp_path, phase="extract-no-model"), fake.host()).run() == 0
+    assert fake.end_modules() == WRAPPED
+    assert _arg(fake.ends[-1], "--end-reason") == "extracted"
+
+
+def test_a_run_awaiting_a_reader_refuses_the_next_start(tmp_path: Path) -> None:
+    _master(tmp_path)
+    Loop(_config(tmp_path), FakeHost([12]).host()).run()
+    fake = FakeHost([50])
+
+    assert Loop(_config(tmp_path), fake.host()).run() == 2
+    assert (fake.commands, fake.ends) == ([], [])
+    assert f"refused: run {RUN} awaits a reader" in _progress(tmp_path)
+
+    (_run_dir(tmp_path) / AWAITING).unlink()  # the reader continues without a swap
+    assert Loop(_config(tmp_path), FakeHost([12]).host()).run() == 0
+
+
+def test_laptop_end_steps_get_only_the_paths_they_take(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    config = _config(tmp_path, host="laptop", data_dir=data, public="helios_laptop")
+
+    def tail(module: str) -> list[str]:
+        command, _ = cli_command(config, module, [], render=False, name="end-x")
+        return command[command.index(module) + 1 :]
+
+    model_paths = ["--base-dir", str(data), "--model-root", f"{data}/var/models"]
+    assert tail(RESCORE) == model_paths
+    assert tail(SPOT_CHECK) == ["--base-dir", str(data)]
+    assert tail(GOLD) == tail(GATE) == tail(REPORT) == []
+    assert parse_args(["--host", "laptop", "--public", "helios_laptop"]).public == "helios_laptop"
 
 
 @pytest.mark.parametrize(

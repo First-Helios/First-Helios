@@ -85,6 +85,20 @@ def test_mark_master_writes_the_marker_the_loop_reads(tmp_path: Path) -> None:
     assert (marker["host"], marker["commit"], marker["dump_sha256"]) == ("pi", "87108bb", sha)
 
 
+def test_the_monthly_timer_fires_in_utc_and_swap_clears_the_runs_marker() -> None:
+    from apps.menu_pipeline.batch_loop import AWAITING  # noqa: PLC0415 - the marker's name
+
+    timer = (HOST_DIR / "helios-pipeline-monthly.timer").read_text(encoding="utf-8")
+    lines = [line for line in timer.splitlines() if not line.startswith("#")]
+    assert "OnCalendar=*-*-10 18:00:00 UTC" in lines, "the Pi's clock is Asia/Shanghai"
+    assert {"Persistent=true", "Unit=helios-pipeline-loop.service"} <= set(lines)
+    assert "WantedBy=timers.target" in lines
+    swap = (HOST_DIR / "swap.sh").read_text(encoding="utf-8")
+    assert f"rm -f var/pipeline-host/{AWAITING}" in swap
+    example = (HOST_DIR / "loop.env.example").read_text(encoding="utf-8")
+    assert "--stop-every 0" in example.splitlines()[3], "a monthly run stops once, at one gate"
+
+
 def test_the_unit_cannot_start_at_boot() -> None:
     text = (HOST_DIR / "helios-pipeline-loop.service").read_text(encoding="utf-8")
     lines = [line for line in text.splitlines() if not line.startswith("#")]

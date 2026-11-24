@@ -1,5 +1,7 @@
-# The batch loop on the Pi under systemd (ADR-0030 Q2): manual starts only, so there is no
-# [Install] section and the unit cannot be enabled at boot. A timer comes with Phase 6.
+# The batch loop on the Pi under systemd (ADR-0030 Q2): no [Install] section, so the unit is
+# never enabled at boot. It starts by hand or from helios-pipeline-monthly.timer (Phase 6,
+# ADR-0030 Amendment 1). A normal run end leaves var/pipeline-host/AWAITING_SWAP, and the loop
+# refuses to start again until swap.sh or a reader removes it.
 #   sudo cp infra/pipeline-host/helios-pipeline-loop.service /etc/systemd/system/
 #   cp infra/pipeline-host/loop.env.example var/pipeline-host/loop.env   # then edit LOOP_ARGS
 #   sudo systemctl daemon-reload
