@@ -108,8 +108,12 @@ Move back with `move-master.sh laptop-to-pi`. Every restore resets the admission
   ssh session.
 - The Pi's system Python is 3.10, so the loop is written for it (a test checks the syntax).
 
-## Open (owner)
+## Decided under the owner's delegation (2026-11-24)
 
-- **`llama-server --api-key`** (ADR-0030 Q3): the client sends no key, and adding one touches
-  auth and secrets (stop-and-ask). Until then, bind the laptop's server to the LAN only while
-  a run uses it, as P8-23 did.
+- **No `llama-server --api-key` for now** (ADR-0030 Q3). The server is on the home LAN, is bound
+  to the laptop's LAN address only while a run uses it (`laptop-llama.sh up <address>`, then
+  `down`), and serves only model completions. A key needs new secret handling in `.env` and the
+  client, so it waits until the server is exposed beyond the LAN or runs unattended.
+- **A stop mid-batch leaves no container.** The loop names each Pi worker container
+  `helios-loop-<batch>-<step>`, and the unit's `ExecStopPost` removes any still running. That
+  holds whether or not `docker compose run` passes systemd's SIGTERM on to its container.
