@@ -66,8 +66,11 @@ EXTRACT_DONE = "extraction run complete: "
 COMPOSE_WORKER = (
     *("docker", "compose", "-f", "infra/docker-compose.yml"),
     *("-f", "infra/docker-compose.pi.yml", "--env-file", ".env"),
-    *("--profile", "menu", "run", "--rm", "--no-deps", "-T", "worker"),
+    *("--profile", "menu", "run", "--rm", "--no-deps", "-T"),
 )
+# (Pi) each worker container is named <prefix><batch>-<step>, so the systemd unit's
+# ExecStopPost can remove one that a stop mid-batch left running
+CONTAINER_PREFIX = "helios-loop-"
 LAPTOP_ENV_DROP = ("WAYLAND_DISPLAY", "XDG_SESSION_TYPE")  # headed Chromium under xvfb-run
 MIN_SHA = 7
 
@@ -276,13 +279,17 @@ def master_refusal(config: Config) -> str | None:
 
 
 def cli_command(
-    config: Config, module: str, args: Sequence[str], *, render: bool
+    config: Config, module: str, args: Sequence[str], *, render: bool, name: str
 ) -> tuple[list[str], dict[str, str] | None]:
-    """The command (and environment, ``None`` to inherit) that runs one pipeline CLI."""
+    """The command (and environment, ``None`` to inherit) that runs one pipeline CLI.
+
+    ``name`` (``<batch>-<step>``) names the Pi's worker container.
+    """
     inner = ["python", "-m", "apps.menu_pipeline.with_db", config.db, "-m", module, *args]
     xvfb = ["xvfb-run", "-a"] if render else []
     if config.host == "pi":
-        return [*COMPOSE_WORKER, *xvfb, *inner], None
+        container = ["--name", f"{CONTAINER_PREFIX}{name}", "worker"]
+        return [*COMPOSE_WORKER, *container, *xvfb, *inner], None
     data = str(config.data_dir)
     paths = ["--base-dir", data, "--model-root", f"{data}/var/models"]
     if module == FETCH:
@@ -337,7 +344,9 @@ class Loop:
 
     # -- one CLI ------------------------------------------------------------------------
     def cli(self, batch: str, step: str, module: str, args: Sequence[str]) -> tuple[int, float]:
-        command, env = cli_command(self.config, module, args, render=module == FETCH)
+        command, env = cli_command(
+            self.config, module, args, render=module == FETCH, name=f"{batch}-{step}"
+        )
         out = self.config.logs / f"batch-{batch}-{step}.out"
         err = self.config.logs / f"batch-{batch}-{step}.err"
         started = time.monotonic()

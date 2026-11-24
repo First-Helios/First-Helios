@@ -90,3 +90,9 @@ def test_the_unit_cannot_start_at_boot() -> None:
     lines = [line for line in text.splitlines() if not line.startswith("#")]
     assert "[Install]" not in lines, "manual starts only (ADR-0030 Q2)"
     assert "ExecStart=/usr/bin/python3 -m apps.menu_pipeline.batch_loop $LOOP_ARGS" in lines
+    from apps.menu_pipeline.batch_loop import (
+        CONTAINER_PREFIX,  # noqa: PLC0415 - the name it removes
+    )
+
+    (stop_post,) = [line for line in lines if line.startswith("ExecStopPost=")]
+    assert f"--filter name={CONTAINER_PREFIX} " in stop_post
