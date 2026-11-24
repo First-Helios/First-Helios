@@ -714,7 +714,9 @@ re-runnable from stored evidence.
 - **Scheduling:** a monthly run on the staging Pi after discovery
   ([ADR-0009 §3](./docs/adr/0009-venue-discovery-source-dedupe-and-schedule.md)
   cadence), as a low-priority batch job. No queue service — adding one is a
-  stop-and-ask dependency ([CLAUDE.md](./CLAUDE.md)).
+  stop-and-ask dependency ([CLAUDE.md](./CLAUDE.md)). The timer, the stop at the swap gate, the
+  run report and the spot-check packet are
+  [ADR-0030 Amendment 1](./docs/adr/0030-pipeline-host-runs.md#amendment-1-2026-11-24-phase-6-monthly-runs).
 - **Change-only runs:** extraction runs only for a new `menu-page` Version (a
   changed hash of the segmented text) or a pipeline-version bump; raw-body
   hashes and ETags are never the change signal. Queue order: new pages, then
