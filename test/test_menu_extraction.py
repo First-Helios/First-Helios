@@ -23,7 +23,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -34,9 +33,6 @@ import apps.menu_pipeline.menu_writes as menu_writes
 import apps.menu_pipeline.page_bronze as page_bronze
 import apps.menu_pipeline.run_report as run_report
 import apps.menu_pipeline.spot_check as spot_check
-from apps.api.db import get_session
-from apps.api.main import app
-from apps.api.schemas import VenueMenuResponse
 from apps.discovery.pipeline import run_discovery
 from apps.discovery.url_pipeline import resolve_urls
 from apps.gold.refresh import refresh_gold
@@ -75,7 +71,6 @@ from packages.helios_core.domains.menu.models import (
     MenuVariant,
     PriceObservation,
 )
-from packages.helios_core.gold.models import CurrentMenu
 from packages.helios_core.identity.contracts import SubjectNotEligibleError
 from packages.helios_core.identity.models import Establishment
 from packages.helios_core.provenance.models import (
@@ -85,15 +80,13 @@ from packages.helios_core.provenance.models import (
     SourceRecord,
     SourceRecordVersion,
 )
-from packages.helios_parsing.chunking import chunks
 from packages.helios_parsing.evaluation import gold_page, metrics, score_page
 from packages.helios_parsing.menu_shape import shape
 from packages.helios_parsing.prompt import GRAMMAR, SYSTEM_PROMPT, token_cap
-from packages.helios_parsing.segment import segment, text_hash
+from packages.helios_parsing.segment import segment
 from packages.helios_parsing.validator import Row, validate
 from test.test_menu_page_bronze import _page, _Pages, _Sites, _WordVerifier
 from test.test_url_pipeline import _NOW, _FakeResolver, _poi
-from test.test_web_client import _fetcher
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -371,10 +364,13 @@ def test_shape_stores_one_variant_per_choice_of_one_printed_price() -> None:
 def test_pipeline_version_names_every_component_within_the_column() -> None:
     spec = load_manifest()["Qwen3-4B-Instruct-2507-Q4_0"]
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
-    assert version.llm.startswith(version.extractor + ";")
+    assert version.llm == (
+        "qwen3-4b-instruct-2507-q4_0@e0ba675d86ab;prompt-v2.4;chunk-v2.3;segment-v2;"
+        "repairs-v9;validator-v13;resolve-v6;classifier-v2"
+    )
     assert len(version.llm) <= 128
     assert version.jsonld == "jsonld-v1;validator-v13;segment-v2;classifier-v2"
-    assert model_tag(spec) in version.extractor
+    assert version.extractor in version.llm
 
 
 def test_output_store_round_trip(tmp_path: Path) -> None:
@@ -386,9 +382,8 @@ def test_output_store_round_trip(tmp_path: Path) -> None:
     assert store.read("y", "sha256:ab") is None  # another extractor version: not reused
     (path,) = tmp_path.glob("var/replay/menu-extract/*/ab.json.gz")
     path.write_bytes(gzip.compress(b'{"format": "other"}'))
-    assert store.read("x", "sha256:ab") is None
-    store.write("x", "sha256:ab", [result.record()])
-    assert store.read("x", "sha256:ab") == [result.attempt.raw]
+    with pytest.raises(ValueError, match="menu-extract-v1"):
+        store.read("x", "sha256:ab")
 
 
 def test_soc_probe_reads_temperature_and_frequency_cap(tmp_path: Path) -> None:
@@ -985,82 +980,6 @@ _JSONLD = (
 )
 
 
-@pytest.mark.parametrize(
-    ("document", "expected"),
-    [
-        (
-            _MENU,
-            [
-                ("Carne Asada Taco", "", 350),
-                ("Horchata", "Large", 350),
-                ("Horchata", "Small", 250),
-                ("Queso", "", 600),
-            ],
-        ),
-        (
-            "<h1>MENU</h1><h2>Specials</h2><div><strong>Elote</strong></div><div>$4.25</div>",
-            [("Elote", "", 425)],
-        ),
-    ],
-    ids=["taqueria", "specials"],
-)
-def test_menu_fixture_from_capture_to_api(
-    venues: _Venues,
-    monkeypatch: pytest.MonkeyPatch,
-    document: str,
-    expected: list[tuple[str, str, int]],
-) -> None:
-    gers = venues.add("Fixture Taqueria")
-    url = venues.menus[gers]
-    homepage = url.removesuffix("menu")
-    routes = {homepage: (200, "<p>Taqueria</p>", "text/html"), url: (200, document, "text/html")}
-    with (
-        _fetcher(venues.tmp_path, routes, page_check=_WordVerifier()) as fetcher,
-        venues.factory.begin() as session,
-    ):
-        discovery = resolve_urls(
-            session, resolver=fetcher, registry={}, decided_at=_NOW, observed_at=_NOW
-        )
-        assert discovery.menu_urls_found == 1, discovery
-    venues.fetch({gers: document}, at=_T1)
-    assert venues.extract(_Server()).extracted == 1
-    (page,) = venues.pages(gers)
-    with venues.factory() as session:
-        extracted = [
-            (name, variant or "", amount) for name, variant, amount, _ in _rows(session, page.id)
-        ]
-        assert sorted(extracted) == expected, "extracted menu prices"
-        refresh_gold(session, effective_instant=datetime.now(UTC))
-        selected = [
-            (r.item_name, r.content_name if r.target_kind == "variant" else "", r.amount_minor)
-            for r in session.scalars(
-                select(CurrentMenu).where(CurrentMenu.source_record_id == page.source_record_id)
-            )
-        ]
-        assert sorted(selected, key=str) == expected, "Gold selected prices"
-        venue = session.scalars(
-            select(Establishment.subject_id).where(
-                Establishment.organization_subject_id == page.subject_id
-            )
-        ).one()
-        monkeypatch.setitem(app.dependency_overrides, get_session, lambda: session)
-        with TestClient(app) as client:
-            result = client.get(f"/v1/venues/{venue}/menu")
-        assert result.status_code == 200
-        response = VenueMenuResponse.model_validate(result.json())
-        served: list[tuple[str | None, str | None, int | None]] = []
-        for menu in response.menus:
-            assert menu.source_url == venues.menus[gers]
-            for section in menu.sections:
-                for item in section.items:
-                    served.extend((item.name, "", p.amount_minor) for p in item.prices)
-                    for variant in item.variants:
-                        served.extend(
-                            (item.name, variant.name, p.amount_minor) for p in variant.prices
-                        )
-        assert sorted(served, key=str) == expected, "published venue prices"
-
-
 def test_jsonld_stream_beside_llm_and_its_empty_successor(venues: _Venues) -> None:
     gers = venues.add("Taco Deli")
     venues.resolve()
@@ -1076,11 +995,10 @@ def test_jsonld_stream_beside_llm_and_its_empty_successor(venues: _Venues) -> No
     with venues.factory() as session:
         assert _rows(session, jsonld.id) == [("Queso", None, 600, PRICE_CONFIDENCE)]
 
-    # JSON-LD gone with identical visible text: an empty successor, so its prices stop being current
+    # JSON-LD gone (with a text change): an empty successor, so its prices stop being current
     later = _T1 + REFETCH_WINDOW + timedelta(minutes=1)
-    venues.fetch({gers: _MENU}, at=later)
-    replay = venues.extract(_Server())
-    assert replay.reused_outputs == 1 and replay.chunks == 0
+    venues.fetch({gers: _MENU.replace("</body>", "<p>Elote</p><p>$4.25</p></body>")}, at=later)
+    venues.extract(_Server())
     heads = [p for p in venues.pages(gers) if p.source_kind == "jsonld"]
     assert [p.operation for p in heads] == ["initial", "observation"]
     with venues.factory() as session:
@@ -1211,41 +1129,3 @@ def test_scope_not_eligible_is_counted_and_retried(
     monkeypatch.setattr("apps.menu_pipeline.extraction.write_page", original)
     again = venues.extract(_Server())
     assert (again.due, again.extracted, again.reused_outputs) == (1, 1, 1)
-
-
-def test_structured_reader_upgrade_replays_empty_result(
-    venues: _Venues, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    gers = venues.add("Empty Structured Stream")
-    venues.resolve()
-    venues.fetch({gers: _MENU.replace("<body>", "<body>" + _JSONLD)}, at=_T1)
-    with monkeypatch.context() as old:
-        old.setattr(extraction, "menu_items", lambda _: [])
-        assert venues.extract(_Server()).jsonld_pages == 0
-    monkeypatch.setattr(extraction, "JSONLD_VERSION", "jsonld-v2")
-    replay = venues.extract(_Server())
-    assert (replay.jsonld_pages, replay.reused_outputs, replay.chunks) == (1, 1, 0)
-    assert venues.extract(_Server()).due == 0
-
-
-def test_corrupt_answers_recover_without_interrupting_other_pages(venues: _Venues) -> None:
-    first = venues.add("Corrupt Cache Cafe")
-    second = venues.add("Healthy Cache Cafe")
-    venues.resolve()
-    venues.fetch({first: _MENU, second: _MENU.replace("Queso", "Elote")}, at=_T1)
-    store = OutputStore(venues.tmp_path)
-    version = PipelineVersion("test-model@0123456789ab", "word-v1")
-    blocks = segment(_MENU)
-    digest = text_hash(blocks)
-    store.write(version.extractor, digest, [{"raw": "{}"}])
-    (path,) = store.folder(version.extractor).glob("*.json.gz")
-    path.write_bytes(path.read_bytes()[:8])
-    text = chunks(blocks)[0]
-    store.write_chunk(version.extractor, text, {"raw": "{}"}, page_text_hash=digest)
-    (path,) = (path.parent / "chunks").glob("*.json.gz")
-    record = json.loads(gzip.decompress(path.read_bytes()))
-    record["key"] = "wrong"
-    path.write_bytes(gzip.compress(json.dumps(record).encode()))
-    report = venues.extract(_Server())
-    assert report.extracted == 2 and not report.failed
-    assert len(list(store.folder(version.extractor).rglob("*.corrupt"))) == 2

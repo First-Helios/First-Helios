@@ -13,13 +13,14 @@ current venue has saved (resolved ``menu-url-discovery`` records), one run:
    JavaScript-only), else ``not_menu``. With a renderer (``--render``, off by
    default) a ``js_only`` page, or a platform page answering ``403``, is
    rendered once and classified again; the render is its own Capture. (ADR-0029
-   D3) A PDF response is read into an HTML document, segmented and
+   D3) A PDF response is read by ``pdf-v1`` into an HTML document, segmented and
    classified the same way (``failed/pdf_unreadable`` or ``pdf_no_text`` when it
    can't be read); a ``.pdf`` link that answers with anything else is
    ``failed/not_pdf``; other non-HTML is ``failed/not_html``.
 3. **Writes** a menu page per record: the Version payload is the menu URL,
-   ``render``, the segmenter version, document and text hashes, and the reader version for PDFs.
-   A payload equal to the record's latest Version writes a ``succeeded`` Capture with no Version
+   ``render``, the segmenter version and the text hash (and ``reader``:
+   ``pdf-v1`` for a PDF). A payload equal to the
+   record's latest Version writes a ``succeeded`` Capture with no Version
    (Amendment 4); otherwise a new Version, so "changed" means a new Version.
    Every Capture that read a body has a durable bundle (:mod:`.bundle`).
 4. **Assigns** each record to its scope (Amendment 3): a platform page
@@ -409,7 +410,7 @@ class MenuPageWriter:
             self._report.linking_menu_pdf += 1
 
     def _pdf(self, target: PageTarget, static: FetchResult) -> None:
-        """(ADR-0029 D3) A PDF: its derived document is the page; the bundle keeps the PDF's
+        """(ADR-0029 D3) A PDF: its ``pdf-v1`` document is the page; the bundle keeps the PDF's
         bytes as ``body`` and the document as ``rendered_dom`` (what the pipeline reads)."""
         document = read_pdf(static.body or b"")
         if isinstance(document, str):
@@ -514,17 +515,8 @@ class MenuPageWriter:
             "render": render,
             "segmenter": SEGMENTER_VERSION,
             "text_hash": text_hash(blocks),
-            "document_hash": _sha(
-                {
-                    "endpoint": bundle.url.partition("://")[2],
-                    "content_type": bundle.content_type,
-                    "document": bundle.rendered_dom
-                    if bundle.rendered_dom is not None
-                    else result.content_hash,
-                }
-            ),
         }
-        if reader is not None:  # PDFs include their document-reader version.
+        if reader is not None:  # (ADR-0029 D3) a PDF read by pdf-v1; HTML payloads unchanged
             payload["reader"] = reader
         wrote_version = False
         for record in target.records:

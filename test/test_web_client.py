@@ -81,7 +81,6 @@ def _fetcher(
     handler: Callable[[httpx.Request], httpx.Response] | None = None,
     page_check: PageVerifier | None = None,
     renderer: PageRenderer | None = None,
-    follow_menu_hubs: bool = False,
 ) -> SiteFetcher:
     def handle(request: httpx.Request) -> httpx.Response:
         if calls is not None:
@@ -107,7 +106,6 @@ def _fetcher(
         sleep=clock.sleep,
         page_check=page_check,
         renderer=renderer,
-        follow_menu_hubs=follow_menu_hubs,
     )
 
 

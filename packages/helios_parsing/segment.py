@@ -145,13 +145,13 @@ def segment(html: str) -> list[Block]:
 
 
 def text_hash(blocks: list[Block]) -> str:
-    """``sha256:`` digest of the normalized segmented text, the model-answer cache key.
+    """``sha256:`` digest of the normalized segmented text, the Bronze change signal.
 
     One line per block, in order: its heading and chrome flags, then its text
     (whitespace already collapsed by ``segment``), NFC-normalized. Those are the
     block fields chunking and the validator read, so markup, class names and
-    scripts can change without changing the hash. Document-level interpretation
-    has its own freshness signal. Chrome text counts: chunking drops it, but the
+    scripts can change without changing the hash, while anything the later
+    stages could see changes it. Chrome text counts: chunking drops it, but the
     validator grounds names over every block and block ids are positional.
     """
     lines = (f"{'h' if b.heading else '-'}{'c' if b.in_chrome else '-'} {b.text}" for b in blocks)

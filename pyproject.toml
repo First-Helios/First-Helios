@@ -28,7 +28,6 @@ menu = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["test"]
 # Put the repo root on sys.path so tests can import the `packages.*` namespace
 # (mirrors alembic.ini's prepend_sys_path = .).
 pythonpath = ["."]

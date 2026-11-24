@@ -60,7 +60,6 @@ listed for review.
 
 from __future__ import annotations
 
-import fcntl
 import gzip
 import hashlib
 import json
@@ -69,10 +68,8 @@ import re
 import tempfile
 import threading
 import time
-import zlib
 from collections import Counter, deque
 from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import suppress
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path, PurePosixPath
@@ -186,18 +183,10 @@ class PipelineVersion:
 
     @property
     def llm(self) -> str:
-        # Both streams finish in one transaction, including an empty JSON-LD read.
-        # Its version belongs in the completion marker used by due_pages.
-        interpretation = (
-            f"{JSONLD_VERSION};{REPAIRS_VERSION};{VALIDATOR_VERSION};{RESOLVER_VERSION};"
+        return _checked(
+            f"{self.extractor};{REPAIRS_VERSION};{VALIDATOR_VERSION};{RESOLVER_VERSION};"
             f"{self.classifier}"
         )
-        version = f"{self.extractor};{interpretation}"
-        if len(version) > _METHOD_VERSION_MAX:
-            # Spot-check packets read the exact extractor key from the first four parts.
-            digest = hashlib.sha256(interpretation.encode()).hexdigest()[:24]
-            version = f"{self.extractor};interpretation@{digest}"
-        return _checked(version)
 
     @property
     def jsonld(self) -> str:
@@ -247,26 +236,20 @@ class OutputStore:
     def _chunk_path(self, extractor: str, key: str) -> Path:
         return self.folder(extractor) / "chunks" / f"{key}.json.gz"
 
-    def read(
-        self, extractor: str, page_text_hash: str, *, expected_chunks: int | None = None
-    ) -> list[str] | None:
+    def read(self, extractor: str, page_text_hash: str) -> list[str] | None:
         """The saved raw answers, one per chunk, or ``None``."""
-        record = _read_answer(
-            self._path(extractor, page_text_hash),
-            extractor,
-            OUTPUT_FORMAT,
-            "text_hash",
-            page_text_hash,
-            expected_chunks=expected_chunks,
-        )
+        record = self.read_record(extractor, page_text_hash)
         return None if record is None else [str(chunk["raw"]) for chunk in record["chunks"]]
 
     def read_record(self, extractor: str, page_text_hash: str) -> dict[str, Any] | None:
         """The whole saved page record, or ``None``."""
         path = self._path(extractor, page_text_hash)
-        return _read_answer(
-            path, extractor, OUTPUT_FORMAT, "text_hash", page_text_hash, recover=False
-        )
+        if not path.is_file():
+            return None
+        record: dict[str, Any] = json.loads(gzip.decompress(path.read_bytes()))
+        if record.get("format") != OUTPUT_FORMAT or record.get("extractor") != extractor:
+            raise ValueError(f"{path} is not a {OUTPUT_FORMAT} record for {extractor}")
+        return record
 
     def write(
         self, extractor: str, page_text_hash: str, chunks: Sequence[Mapping[str, object]]
@@ -287,10 +270,13 @@ class OutputStore:
 
     def read_chunk(self, extractor: str, chunk: str) -> str | None:
         """(Amendment 37) The saved answer to this exact chunk text, or ``None``."""
-        key = chunk_key(chunk)
-        path = self._chunk_path(extractor, key)
-        record = _read_answer(path, extractor, CHUNK_FORMAT, "key", key)
-        return None if record is None else str(record["chunk"]["raw"])
+        path = self._chunk_path(extractor, chunk_key(chunk))
+        if not path.is_file():
+            return None
+        record = json.loads(gzip.decompress(path.read_bytes()))
+        if record.get("format") != CHUNK_FORMAT or record.get("extractor") != extractor:
+            raise ValueError(f"{path} is not a {CHUNK_FORMAT} record for {extractor}")
+        return str(record["chunk"]["raw"])
 
     def write_chunk(
         self, extractor: str, chunk: str, answer: Mapping[str, object], *, page_text_hash: str
@@ -301,7 +287,7 @@ class OutputStore:
         path = self._chunk_path(extractor, key)
         if path.exists():
             return False
-        return _write_gz(
+        _write_gz(
             path,
             {
                 "format": CHUNK_FORMAT,
@@ -311,56 +297,11 @@ class OutputStore:
                 "chunk": dict(answer),
             },
         )
+        return True
 
 
-def _read_answer(
-    path: Path,
-    extractor: str,
-    record_format: str,
-    key_field: str,
-    key: str,
-    *,
-    expected_chunks: int | None = None,
-    recover: bool = True,
-) -> dict[str, Any] | None:
-    try:
-        data = path.read_bytes()
-    except FileNotFoundError:
-        return None
-    try:
-        record = json.loads(gzip.decompress(data))
-        if not isinstance(record, dict) or (
-            record.get("format"),
-            record.get("extractor"),
-            record.get(key_field),
-        ) != (record_format, extractor, key):
-            raise ValueError("answer identity mismatch")
-        answers = record.get("chunks") if record_format == OUTPUT_FORMAT else [record.get("chunk")]
-        if not isinstance(answers, list) or not all(
-            isinstance(answer, dict) and isinstance(answer.get("raw"), str) for answer in answers
-        ):
-            raise ValueError("invalid saved answer")
-        if expected_chunks is not None and len(answers) != expected_chunks:
-            raise ValueError("incomplete page record")
-    except (ValueError, gzip.BadGzipFile, EOFError, zlib.error):
-        if not recover:
-            return None
-        # Recheck under a directory lock so two recovery workers cannot move a
-        # newly regenerated answer after the first worker moved the damaged one.
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            fcntl.flock(directory, fcntl.LOCK_EX)
-            with suppress(FileNotFoundError):
-                if path.read_bytes() == data:
-                    path.rename(path.with_suffix(f".{time.time_ns()}.corrupt"))
-        finally:
-            os.close(directory)
-        return None
-    return record
-
-
-def _write_gz(path: Path, record: Mapping[str, object]) -> bool:
-    """Publish one complete record atomically. Concurrent writers keep the first answer."""
+def _write_gz(path: Path, record: Mapping[str, object]) -> None:
+    """``record`` as gzipped JSON, written atomically (a temp file, then a rename)."""
     data = json.dumps(record, sort_keys=True, ensure_ascii=False).encode("utf-8")
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
@@ -368,13 +309,10 @@ def _write_gz(path: Path, record: Mapping[str, object]) -> bool:
         os.fchmod(fd, 0o644)  # mkstemp's 0600 breaks rsync between hosts (ADR-0030 Q6)
         with os.fdopen(fd, "wb") as handle:
             handle.write(gzip.compress(data, mtime=0))
-        try:
-            os.link(tmp_name, path)
-        except FileExistsError:
-            return False
-        return True
-    finally:
+        Path(tmp_name).replace(path)
+    except BaseException:
         Path(tmp_name).unlink(missing_ok=True)
+        raise
 
 
 @dataclass(slots=True)
@@ -603,11 +541,9 @@ class _Run:
             pending.rejected = True
             return pending
         extractor = self._version.extractor
-        pending.texts = chunks(blocks)
-        pending.saved = self._outputs.read(
-            extractor, due.text_hash, expected_chunks=len(pending.texts)
-        )
+        pending.saved = self._outputs.read(extractor, due.text_hash)
         if pending.saved is None:
+            pending.texts = chunks(blocks)
             for text in pending.texts:
                 reused = self._outputs.read_chunk(extractor, text)
                 pending.parts.append(

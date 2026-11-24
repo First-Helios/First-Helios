@@ -422,7 +422,6 @@ def test_own_site_menu_page_versions_bundle_and_organization_scope(
         "render": None,
         "segmenter": SEGMENTER_VERSION,
         "text_hash": version.source_payload["text_hash"],
-        "document_hash": version.source_payload["document_hash"],
     }
     assert _page_subject(session, "mp1") == _org_subject(session, "kerbey lane")
     capture = session.get(Capture, version.capture_id)
@@ -462,9 +461,10 @@ def test_refetch_window_unchanged_and_changed_text(session: Session, tmp_path: P
     report = _run(session, tmp_path, soon, now=_T1 + timedelta(days=1))
     assert (report.not_due, report.fetched, soon.calls) == (1, 0, [])
 
-    # An identical document records another Capture.
+    # Past the window, markup churn with the same text: a Capture, no Version (Amendment 4).
     later = _T1 + REFETCH_WINDOW
-    report = _run(session, tmp_path, _Pages({url: _page(url, _MENU, at=later)}), now=later)
+    churned = _MENU.replace("<body>", "<body class='x'><script>var t=1;</script>")
+    report = _run(session, tmp_path, _Pages({url: _page(url, churned, at=later)}), now=later)
     assert (report.unchanged, report.versions_changed) == (1, 0)
     assert len(_versions(session, "mp2")) == 1
     unchanged = _captures(session, url)[-1]
@@ -482,9 +482,9 @@ def test_refetch_window_unchanged_and_changed_text(session: Session, tmp_path: P
     )
     assert again.id == unchanged.id
 
-    # Structured markup changes with identical visible text create a new Version.
+    # Changed text: a new Version.
     latest = later + REFETCH_WINDOW
-    changed = _MENU.replace("<body>", '<body><script type="application/ld+json">{}</script>')
+    changed = _MENU.replace("$6.00", "$6.50")
     report = _run(session, tmp_path, _Pages({url: _page(url, changed, at=latest)}), now=latest)
     assert report.versions_changed == 1
     assert len(_versions(session, "mp2")) == 2

@@ -17,7 +17,6 @@ from apps.discovery.web_client import (
     MenuUrlDiscovery,
     is_pdf_link,
 )
-from apps.menu_pipeline.pdf_layout import _priced_rows
 from packages.helios_parsing.pdf import (
     MAX_PAGES,
     PDF_READER_VERSION,
@@ -113,8 +112,7 @@ def test_read_pdf_turns_each_line_into_a_paragraph_and_pages_into_rules() -> Non
     blocks = segment(document.html)
     assert [b.text for b in blocks] == MENU_LINES
     assert document.html.count("<hr>") == 1
-    assert PDF_READER_VERSION == "pdf-v2"
-    assert isinstance(read_pdf(pdf_bytes([["Lunch", "Soup $4"]])), PdfDocument)
+    assert PDF_READER_VERSION == "pdf-v1"
 
 
 def test_read_pdf_refusals() -> None:
@@ -329,31 +327,3 @@ def test_reverification_reads_a_saved_pdf_menu_afresh(tmp_path: Path) -> None:
         )
     assert isinstance(checked, MenuUrlDiscovery)
     assert (checked.menu_url, checked.signal) == ("https://cdn.example/menu.pdf", "pdf")
-
-
-def test_rejected_hub_can_point_to_verified_menu(tmp_path: Path) -> None:
-    routes = {
-        "https://k.com/": (200, "<p>Kitchen</p>", "text/html"),
-        "https://k.com/menu": (200, '<a href="/seasonal-lunch">Lunch menu</a>', "text/html"),
-        "https://k.com/seasonal-lunch": (200, "<h1>MENU</h1><p>Soup $4</p>", "text/html"),
-    }
-    with _fetcher(tmp_path, routes, page_check=_WordVerifier(), follow_menu_hubs=True) as fetcher:
-        result = fetcher.discover_menu_attempt("https://k.com/")
-    assert isinstance(result, tuple)
-    assert [r.menu_url for r in result if isinstance(r, MenuUrlDiscovery)] == [
-        "https://k.com/seasonal-lunch"
-    ]
-
-
-def test_layout_inspector_keeps_each_price_with_its_column_header() -> None:
-    def word(text: str, x: int, y: int) -> dict[str, object]:
-        return {"text": text, "box": [x, y, x + 25, y + 10]}
-
-    headers = [word("Small", 100, 10), word("Large", 180, 10)]
-    cells = [word("Latte", 10, 30), word("$2", 100, 30), word("$4", 180, 30)]
-    (row,) = _priced_rows([headers, cells])
-    assert [(p["variant"]["text"], p["word"]["text"]) for p in row["prices"]] == [
-        ("Small", "$2"),
-        ("Large", "$4"),
-    ]
-    assert _priced_rows([cells]) == []
