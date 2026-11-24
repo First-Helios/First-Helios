@@ -80,6 +80,7 @@ import httpx
 from protego import Protego
 
 from apps.discovery.menu_url import (
+    MAX_CANDIDATES,
     MAX_CHAIN_CANDIDATES,
     MAX_PLATFORM_CANDIDATES,
     MAX_SITEMAP_CHILDREN,
@@ -87,6 +88,7 @@ from apps.discovery.menu_url import (
     is_article_path,
     is_deep_link,
     is_platform_venue_page,
+    menu_links_from_html,
     menu_links_from_sitemap,
     menu_pdf_links,
     ordered_menu_candidates,
@@ -289,6 +291,7 @@ class SiteFetcher:
         random_token: Callable[[], str] = _random_token,
         page_check: PageVerifier | None = None,
         renderer: PageRenderer | None = None,
+        follow_menu_hubs: bool = False,
     ) -> None:
         if not user_agent.strip():
             raise ValueError("SiteFetcher requires a non-empty User-Agent")
@@ -307,6 +310,7 @@ class SiteFetcher:
         self._sleep = sleep
         self._random_token = random_token
         self._page_check: PageVerifier = page_check or HeuristicVerifier()
+        self._follow_menu_hubs = follow_menu_hubs
         self._renderer = renderer
         self._render_failure: CaptureFailure | None = None
         self._last_request_at: dict[str, float] = {}
@@ -946,6 +950,7 @@ class SiteFetcher:
             # point 7): judged from the bytes already fetched, ranked first.
             own.append(self._discovered(homepage, "website"))
         js_only: list[str] = []  # static pages that need a browser, in rank order
+        original_candidates = frozenset(candidates)
         for candidate in candidates:
             result = self.fetch(candidate)
             if result is None or result.status != 200 or not _is_html(result):  # noqa: PLR2004
@@ -962,6 +967,21 @@ class SiteFetcher:
             if not self._page_check.is_menu(result.text, result.url, trust_path=trust_path):
                 if self._should_render(result, platform=False):
                     js_only.append(candidate)
+                elif (
+                    self._follow_menu_hubs
+                    and candidate in original_candidates
+                    and not is_article_path(result.url)
+                ):
+                    for link in menu_links_from_html(result.text, result.url):
+                        if len(candidates) >= MAX_CANDIDATES:
+                            break
+                        if (
+                            not is_article_path(link)
+                            and not same_resource(link, base)
+                            and not any(same_resource(link, seen) for seen in candidates)
+                        ):
+                            candidates.append(link)
+                            self._found_via[link] = result.url
                 continue
             if homepage_hash is not None and _body_hash(result.text) == homepage_hash:
                 continue  # identical body to the homepage: a catch-all/soft-404 answer

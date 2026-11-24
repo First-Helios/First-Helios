@@ -88,6 +88,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="render pages that need JavaScript with headed Chromium (run under xvfb-run -a)",
     )
+    parser.add_argument(
+        "--follow-menu-hubs",
+        action="store_true",
+        help="try menu links on rejected candidates within the existing fetch cap",
+    )
     return parser.parse_args()
 
 
@@ -111,6 +116,7 @@ def main() -> None:
             min_interval_s=args.min_interval,
             page_check=page_check,
             renderer=renderer,
+            follow_menu_hubs=args.follow_menu_hubs,
         ) as fetcher,
         get_sessionmaker()() as session,
     ):
