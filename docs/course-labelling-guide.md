@@ -139,12 +139,13 @@ Each `course_eval <subcommand>` below runs as
 `uv run python -m apps.menu_pipeline.course_eval <subcommand> ...`.
 
 1. **Exclusions.** Build the exclusion file: one GERS id per line, `#` for
-   comments. It holds the venues of the P5-5 held-out pages, plus every venue
-   in an earlier label set when this is a later version's fresh sample. Never
-   open those venues' pages or sections.
+   comments. It holds the venues of the ADR-0013 held-out sets (ADR-0016
+   Amendment 2 item 4), plus every venue in an earlier label set when this is a
+   later version's fresh sample. A venue's whole menu group is excluded with it.
+   Never open those venues' pages or sections.
 2. **Draw** (`course_eval sample`): from the candidates file (every Gold-reaching
-   named section of current Menu pages, exported in slice 1b), with a recorded
-   seed and ~120 venues. The venue's split (~60% train / ~40% test) comes from
+   named section of current Menu pages, from `course_candidates`), with a
+   recorded seed and ~120 venues, one per menu group (Amendment 2 item 3). The venue's split (~60% train / ~40% test) comes from
    a seeded hash and is written into each row. A drawn set is never redrawn
    over; the loader refuses a row whose split has moved.
 3. **Label** (agent, blind). Set `agent_label` and `label` to the same course,
