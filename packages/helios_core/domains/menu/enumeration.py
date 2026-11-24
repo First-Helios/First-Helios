@@ -29,7 +29,9 @@ Scope of this first full-catalog unit (deliberately bounded; see ADR-0006,
   enumerated: the two streams key their dishes differently, so the selector's
   kind rank never compares them. A dish is a price target's item (the target
   itself, or a variant's or modifier's parent item); dishes match on their
-  normalized name only (:func:`dish_key`). The llm stream's other dishes stay.
+  normalized name only (:func:`dish_key`). The llm stream's other dishes stay,
+  and so does a dish whose jsonld price cannot reach Gold itself (no native
+  path, e.g. an Unsectioned item, or outside its effective window at ``E``).
 * **One dish once across a venue's own-site pages (ADR-0022 point 4).** A venue
   keeps up to three own-site menu pages, the ``menu-page`` records keyed
   ``<gers>`` and ``<gers>|<path>``. Those families are ranked ``<gers>`` first,
@@ -103,8 +105,16 @@ def _dish(graph: _PageGraph, node: _Node) -> frozenset[str] | None:
     return None
 
 
-def _jsonld_dishes(session: Session, heads: dict[str, MenuPage]) -> frozenset[frozenset[str]]:
-    """The dishes a subject's live ``jsonld`` head prices; empty without one."""
+def _jsonld_dishes(
+    session: Session, heads: dict[str, MenuPage], effective_instant: datetime
+) -> frozenset[frozenset[str]]:
+    """The dishes a subject's live ``jsonld`` head prices in Gold; empty without one.
+
+    Only a price this enumeration would itself project counts: one with a stable
+    native path (an Unsectioned item has none) whose effective window contains
+    ``E``. A jsonld dish that cannot reach Gold hides nothing, so the llm stream's
+    copy of it stays (P8-27: six venues had lost both streams).
+    """
     page = heads.get("jsonld")
     if page is None or page.operation == "withdrawal":
         return frozenset()
@@ -115,11 +125,16 @@ def _jsonld_dishes(session: Session, heads: dict[str, MenuPage]) -> frozenset[fr
             PriceObservation.page_id == page.id, PriceObservation.price_state == "priced"
         )
     ):
-        node = graph.nodes.get(_price_target_column(price))
-        if node is not None and node.effect != "suppress":
-            dish = _dish(graph, node)
-            if dish is not None:
-                dishes.add(dish)
+        node_kind, node_id = _price_target_column(price)
+        node = graph.nodes.get((node_kind, node_id))
+        if node is None or node.effect == "suppress":
+            continue
+        dish = _dish(graph, node)
+        if dish is None or _canonical_native_path(session, page, node) is None:
+            continue
+        effective = _effective_context(session, node_kind, node_id, price.applicability_id)
+        if effective is not None and _contains_instant(effective, effective_instant):
+            dishes.add(dish)
     return frozenset(dishes)
 
 
@@ -238,7 +253,7 @@ def enumerate_current_requests(
             if _current_gate(session, owned, effective_instant) is not None:
                 continue  # broken mapping or not operating at E: excluded from current
             scope_kind = cast("_Scope", subject_kind)
-            jsonld_dishes = _jsonld_dishes(session, owned)
+            jsonld_dishes = _jsonld_dishes(session, owned, effective_instant)
             repeated: frozenset[frozenset[str]] = frozenset()
             if rank is not None:
                 dishes = _family_dishes(session, owned)
