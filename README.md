@@ -610,7 +610,8 @@ server gets the A76 cores (4-7) and Postgres and the API the A55s.
   (caches, models, replay bundles, audit packets).
 - Data: the public database is replaced by a `pg_dump` restore after each owner-approved apply
   (custom-format dumps and the pre-restore backup under `~/helios-backups/<run>/`). Last:
-  2026-11-19, backend `8a168de`, validator-v12 data (100,009 `current_menu` rows).
+  2026-11-24 (P8-23 swap 5, #175/#176 applied), backend `87108bb`, validator-v13 data (99,408
+  `current_menu` rows; `helios_work` and the laptop hold the same).
 - Pipeline host (P8-23): the `worker` image (Chromium renders work on arm64) and `llama-server`
   (`--profile menu`, A76 cores 4–7) run the menu pipeline against a separate work database
   (`helios_work`), swapped into the public one after a run
