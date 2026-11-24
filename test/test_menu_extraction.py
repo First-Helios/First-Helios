@@ -31,8 +31,11 @@ import apps.menu_pipeline.evaluate as evaluate
 import apps.menu_pipeline.extraction as extraction
 import apps.menu_pipeline.menu_writes as menu_writes
 import apps.menu_pipeline.page_bronze as page_bronze
+import apps.menu_pipeline.run_report as run_report
+import apps.menu_pipeline.spot_check as spot_check
 from apps.discovery.pipeline import run_discovery
 from apps.discovery.url_pipeline import resolve_urls
+from apps.gold.refresh import refresh_gold
 from apps.menu_pipeline.bundle import BundleStore, excerpt
 from apps.menu_pipeline.extraction import (
     TUNING_MIN_ROWS,
@@ -69,7 +72,14 @@ from packages.helios_core.domains.menu.models import (
     PriceObservation,
 )
 from packages.helios_core.identity.contracts import SubjectNotEligibleError
-from packages.helios_core.provenance.models import Capture, Evidence, SourceRecord
+from packages.helios_core.identity.models import Establishment
+from packages.helios_core.provenance.models import (
+    Capture,
+    Evidence,
+    SourceEndpoint,
+    SourceRecord,
+    SourceRecordVersion,
+)
 from packages.helios_parsing.evaluation import gold_page, metrics, score_page
 from packages.helios_parsing.menu_shape import shape
 from packages.helios_parsing.prompt import GRAMMAR, SYSTEM_PROMPT, token_cap
@@ -627,6 +637,122 @@ def test_extraction_writes_an_llm_page_with_checkable_evidence_and_reruns_idempo
     assert len(server.bodies) == 1  # no model call on the re-run
     assert len(venues.pages(gers)) == 1
     assert list(venues.tmp_path.glob("var/replay/menu-extract/*/*.json.gz"))
+
+
+def _stored(venues: _Venues, gers: str) -> dict[str, int]:
+    """The record's Versions, Menu pages and price observations, and its URL's Captures."""
+    pages = [p.id for p in venues.pages(gers)]
+    with venues.factory() as session:
+        return {
+            "versions": session.scalar(
+                select(func.count())
+                .select_from(SourceRecordVersion)
+                .join(SourceRecord, SourceRecord.id == SourceRecordVersion.source_record_id)
+                .where(SourceRecord.external_key == gers)
+            )
+            or 0,
+            "pages": len(pages),
+            "prices": session.scalar(
+                select(func.count())
+                .select_from(PriceObservation)
+                .where(PriceObservation.page_id.in_(pages))
+            )
+            or 0,
+            "captures": session.scalar(
+                select(func.count())
+                .select_from(Capture)
+                .join(SourceEndpoint, SourceEndpoint.id == Capture.source_endpoint_id)
+                .where(SourceEndpoint.canonical_uri == venues.menus[gers])
+            )
+            or 0,
+        }
+
+
+def test_a_rerun_against_unchanged_pages_adds_no_observation_and_no_extraction(
+    venues: _Venues,
+) -> None:
+    """ROADMAP Phase 6 "done when" (ADR-0030 Amendment 1 A5): a re-run against an unchanged
+    site writes no Version, Menu page or price observation and calls no model. Its re-read
+    is replayed from the stored bundle (no network) and is the freshness signal (A3); the
+    run's newly extracted page is the spot check's only candidate (A4)."""
+    gers = venues.add("Kerbey Lane")
+    venues.resolve()
+    url = venues.menus[gers]
+    first_started = datetime.now(UTC)
+    venues.fetch({gers: _MENU}, at=_T1)
+    server = _Server()
+    assert venues.extract(server).extracted == 1
+    first_ended = datetime.now(UTC)
+    stored = _stored(venues, gers)
+    (page,) = venues.pages(gers)
+
+    # The re-run: past the refetch window, the same bytes, read back from the replay bundle.
+    later = _T1 + REFETCH_WINDOW
+    with venues.factory() as session:
+        capture = session.scalar(
+            select(Capture)
+            .join(SourceRecordVersion, SourceRecordVersion.capture_id == Capture.id)
+            .where(SourceRecordVersion.id == page.source_record_version_id)
+        )
+        assert capture is not None and capture.bundle_path is not None
+        body = BundleStore(venues.tmp_path).read(capture.bundle_path).body
+        assert body is not None
+        replayed = _Pages({url: _page(url, body.decode("utf-8"), at=later)})
+        fetched = run_menu_pages(
+            session,
+            fetcher=replayed,
+            verifier=_WordVerifier(),
+            bundles=BundleStore(venues.tmp_path),
+            now=later,
+            on_page=session.commit,
+        )
+        session.commit()
+    rerun = venues.extract(server)
+
+    assert (fetched.fetched, fetched.unchanged) == (1, 1)
+    assert (fetched.versions_new, fetched.versions_changed) == (0, 0)
+    assert (rerun.due, rerun.extracted, rerun.chunks, rerun.prices_written) == (0, 0, 0, 0)
+    assert len(server.bodies) == 1, "no model call on the re-run"
+    assert _stored(venues, gers) == stored | {"captures": stored["captures"] + 1}
+
+    # The spot check draws the first pass's page; the re-run extracted nothing new.
+    with venues.factory() as session:
+        first = spot_check.candidates(session, first_started, first_ended)
+        mine = [c for c in first if c.record_key == gers]
+        assert [c.page_id for c in mine] == [page.id]
+        later_pool = spot_check.candidates(session, first_ended, datetime.now(UTC))
+        assert gers not in {c.record_key for c in later_pool}
+    packet = venues.tmp_path / "packet"
+    manifest = spot_check.write_packet(
+        packet,
+        run_id="20261210T180002Z",
+        seed=1,
+        since=first_started,
+        until=first_ended,
+        pool=mine,
+        chosen=mine,
+        base_dir=venues.tmp_path,
+    )
+    assert manifest["pages"][0]["answers"] is True and manifest["candidates"] == 1
+    assert "Carne Asada Taco" in (packet / "pages" / f"{page.id}.html").read_text()
+    answers = json.loads(
+        (packet / "extract" / "run-20261210T180002Z" / f"{page.id}.json").read_text()
+    )
+    assert [chunk["raw"] for chunk in answers["chunks"]]
+    assert list((packet / "labels").iterdir()) == []
+
+    # Freshness: the venue's newest observation is the unchanged re-read. Gold is rebuilt in a
+    # transaction that is rolled back, so no Gold row outlives the test.
+    with venues.factory() as session:
+        refresh_gold(session, effective_instant=later + timedelta(days=1))
+        venue = session.scalar(
+            select(Establishment.subject_id).where(
+                Establishment.organization_subject_id == page.subject_id
+            )
+        )
+        seen = run_report.observed_at(session)
+        session.rollback()
+    assert venue is not None and seen[venue] == later
 
 
 @pytest.mark.parametrize("mode", ["truncate", "sparse", "timeout_once"])

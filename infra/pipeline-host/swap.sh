@@ -8,7 +8,8 @@
 #   2. back up public `helios` (pi-helios-pre-swap-<stamp>.dump, sha256);
 #   3. restore the dump into `helios_next` while the API keeps serving (fence reset, restore.sh);
 #   4. stop the API, rename helios -> helios_prev and helios_next -> helios, start the API;
-#   5. checks: migrate exit 0, local endpoints and firsthelios.com 200, `alembic check`.
+#   5. checks: migrate exit 0, local endpoints and firsthelios.com 200, `alembic check`;
+#   6. removes var/pipeline-host/AWAITING_SWAP, so the loop (and its timer) may start again.
 # A failed check renames back (helios -> helios_failed, helios_prev -> helios). `helios_prev`
 # stays until the next swap, so --rollback can restore it.
 set -euo pipefail
@@ -116,3 +117,8 @@ if ! checks; then
   die "a check failed: rolled back to the pre-swap database (now helios; the swapped one is helios_failed)"
 fi
 log "swap done: current_menu rows $(sql helios 'select count(*) from gold.current_menu'); helios_prev kept for --rollback"
+# 6. The run that waited for this swap is read: the loop may start again (ADR-0030 Amendment 1).
+if [ -f var/pipeline-host/AWAITING_SWAP ]; then
+  log "clearing AWAITING_SWAP ($(tr '\n' ' ' <var/pipeline-host/AWAITING_SWAP))"
+  rm -f var/pipeline-host/AWAITING_SWAP
+fi

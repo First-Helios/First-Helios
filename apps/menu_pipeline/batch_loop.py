@@ -31,8 +31,18 @@ logged. ``laptop``: measured on the GPU. Between batches it waits while the GPU 
 :data:`PAUSE_AT` until it is below :data:`COOL_TO`; during a batch it ``docker pause``s the
 ``llama-server`` container above :data:`PAUSE_AT` and unpauses it below :data:`RESUME_AT`.
 
-Files under ``<data-dir>/var/pipeline-host/``: ``STOP``, ``MASTER``, ``logs/progress.log``
-(one line per batch) and each CLI's ``logs/batch-NNN-{fetch,extract}.{out,err}``.
+**The end of a run** (ADR-0030 Amendment 1). A run is one loop start, named by its UTC time
+(``20261210T180002Z``). When it ends normally ("done", "swap due", or an extraction phase that
+exited 0; not ``fetch``, whose pages are not extracted yet) the loop wraps the master (rescore,
+Gold refresh, then the swap gate against ``--public`` into ``gate.json``), writes the spot-check
+packet, then the run report, and leaves the ``AWAITING_SWAP`` marker. It never swaps: the next
+start is refused until ``swap.sh`` or a reader removes the marker. A run ended by ``STOP``
+or a failed CLI gets the report only. A failed end step makes the exit status 1.
+
+Files under ``<data-dir>/var/pipeline-host/``: ``STOP``, ``MASTER``, ``AWAITING_SWAP``,
+``logs/progress.log`` (one line per batch), each CLI's ``logs/batch-NNN-<step>.{out,err}``
+and ``logs/end-<run>-<step>.{out,err}``, and ``reports/<run>/`` (``gate.json``,
+``spot-check/``, ``run-report.{json,md}``; mode 0777, because the Pi's worker runs as uid 999).
 """
 
 from __future__ import annotations
@@ -61,6 +71,23 @@ WATCH_EVERY_S = 10
 COOL_EVERY_S = 30
 FETCH = "apps.menu_pipeline.run"
 EXTRACT = "apps.menu_pipeline.extract"
+RESCORE = "apps.menu_pipeline.rescore"
+GOLD = "apps.gold.refresh"
+GATE = "apps.menu_pipeline.swap_gate"
+SPOT_CHECK = "apps.menu_pipeline.spot_check"
+REPORT = "apps.menu_pipeline.run_report"
+AWAITING = "AWAITING_SWAP"
+RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
+# end reasons; the first three end a run normally (the wrap, the gate, the marker)
+DONE, SWAP_DUE, EXTRACTED, STOPPED, CLI_FAILED = (
+    "done",
+    "swap_due",
+    "extracted",
+    "stop_file",
+    "cli_failed",
+)
+NORMAL_ENDS = (DONE, SWAP_DUE, EXTRACTED)
+GATE_VERDICTS = (0, 1)  # swap_gate: passed, stopped; anything else is a failed step
 FETCH_DONE = "menu-page run complete: "
 EXTRACT_DONE = "extraction run complete: "
 COMPOSE_WORKER = (
@@ -86,6 +113,7 @@ class Config:
     data_dir: Path = Path()
     code_dir: Path = Path()
     llama_container: str = "helios-llama-gpu"
+    public: str = "helios"
 
     @property
     def run_dir(self) -> Path:
@@ -94,6 +122,10 @@ class Config:
     @property
     def logs(self) -> Path:
         return self.run_dir / "logs"
+
+    @property
+    def reports(self) -> Path:
+        return self.run_dir / "reports"
 
 
 def _run(command: Sequence[str], out: Path, err: Path, env: Mapping[str, str] | None) -> int:
@@ -278,6 +310,18 @@ def master_refusal(config: Config) -> str | None:
     return None
 
 
+def awaiting_refusal(config: Config) -> str | None:
+    """Why a run may not start while an earlier run waits for a reader, or ``None``."""
+    marker = read_marker(config.run_dir / AWAITING)
+    if marker is None:
+        return None
+    return (
+        f"run {marker.get('run')} awaits a reader since {marker.get('at')} (gate exit "
+        f"{marker.get('gate_exit')}): read reports/{marker.get('run')}/, then swap.sh, or rm "
+        f"{config.run_dir / AWAITING} to continue without a swap (ADR-0030 Amendment 1)"
+    )
+
+
 def cli_command(
     config: Config, module: str, args: Sequence[str], *, render: bool, name: str
 ) -> tuple[list[str], dict[str, str] | None]:
@@ -291,9 +335,13 @@ def cli_command(
         container = ["--name", f"{CONTAINER_PREFIX}{name}", "worker"]
         return [*COMPOSE_WORKER, *container, *xvfb, *inner], None
     data = str(config.data_dir)
-    paths = ["--base-dir", data, "--model-root", f"{data}/var/models"]
+    paths: list[str] = []
+    if module in {FETCH, EXTRACT, RESCORE}:
+        paths = ["--base-dir", data, "--model-root", f"{data}/var/models"]
     if module == FETCH:
         paths += ["--cache-dir", f"{data}/var/site-cache"]
+    if module == SPOT_CHECK:
+        paths = ["--base-dir", data]
     env = {k: v for k, v in os.environ.items() if k not in LAPTOP_ENV_DROP}
     env["PYTHONPATH"] = "."
     uv = ["uv", "run", "--extra", "menu", "--env-file", f"{data}/.env"]
@@ -307,8 +355,8 @@ class Loop:
         self.watch = GpuWatch()
 
     # -- output -------------------------------------------------------------------------
-    def log(self, message: str) -> None:
-        stamp = self.host.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    def log(self, message: str, at: datetime | None = None) -> None:
+        stamp = (at or self.host.now()).strftime("%Y-%m-%dT%H:%M:%SZ")
         line = f"{stamp} {message}"
         with (self.config.logs / "progress.log").open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
@@ -344,11 +392,14 @@ class Loop:
 
     # -- one CLI ------------------------------------------------------------------------
     def cli(self, batch: str, step: str, module: str, args: Sequence[str]) -> tuple[int, float]:
-        command, env = cli_command(
-            self.config, module, args, render=module == FETCH, name=f"{batch}-{step}"
-        )
-        out = self.config.logs / f"batch-{batch}-{step}.out"
-        err = self.config.logs / f"batch-{batch}-{step}.err"
+        return self._cli(f"batch-{batch}-{step}", f"{batch}-{step}", module, args)
+
+    def _cli(self, stem: str, name: str, module: str, args: Sequence[str]) -> tuple[int, float]:
+        """Run one CLI with its output in ``logs/<stem>.{out,err}``; ``name`` names the
+        Pi's container."""
+        command, env = cli_command(self.config, module, args, render=module == FETCH, name=name)
+        out = self.config.logs / f"{stem}.out"
+        err = self.config.logs / f"{stem}.err"
         started = time.monotonic()
         status = self.host.run(command, out, err, env)
         return status, time.monotonic() - started
@@ -371,16 +422,20 @@ class Loop:
         config.logs.mkdir(parents=True, exist_ok=True)
         if config.phase == "gpu-watch":
             return self.gpu_watch()
-        refusal = master_refusal(config)
+        refusal = master_refusal(config) or awaiting_refusal(config)
         if refusal is not None:
             self.log(f"refused: {refusal}")
             return 2
         batches = len(list(config.logs.glob("batch-*-fetch.out"))) + len(
             list(config.logs.glob("batch-*-extract-only.out"))
         )
+        started = self.host.now().replace(microsecond=0)
+        run_id = started.strftime(RUN_ID_FORMAT)
         self.log(
             f"loop start: host {config.host}, phase {config.phase}, db {config.db}, "
             f"master {read_marker(config.run_dir / 'MASTER')}, batches already logged {batches}"
+            f", run {run_id}",
+            at=started,
         )
         stop = threading.Event()
         watchdog = None
@@ -389,19 +444,72 @@ class Loop:
             watchdog.start()
         try:
             if config.phase in {"extract", "extract-no-model"}:
-                status = self.extract_only(batches + 1)
+                status, reason = self.extract_only(batches + 1)
             else:
-                status = self.batches(batches)
+                status, reason = self.batches(batches)
         finally:
             stop.set()
             if self.watch.paused:
                 self.host.docker("unpause", config.llama_container)
+        if self.finish(run_id, reason) is not None:
+            status = 1
         self.log("loop end")
         return status
 
-    def extract_only(self, number: int) -> int:
+    # -- the end of a run (ADR-0030 Amendment 1) ------------------------------------------
+    def end_step(self, run_id: str, step: str, module: str, args: Sequence[str]) -> int:
+        status, seconds = self._cli(f"end-{run_id}-{step}", f"end-{step}", module, args)
+        self.log(f"end {step} exit={status} s={seconds:.0f}")
+        return status
+
+    def wrap(self, run_id: str, out_dir: Path) -> tuple[str | None, int | None]:
+        """Rescore, Gold refresh and the gate on the master: ``(failed step, gate exit)``."""
+        for step, module in (("rescore", RESCORE), ("gold", GOLD)):
+            if self.end_step(run_id, step, module, []) != 0:
+                return step, None
+        gate = self.end_step(
+            run_id,
+            "gate",
+            GATE,
+            ["--public", self.config.public, "--master", self.config.db]
+            + ["--out", str(out_dir / "gate.json")],
+        )
+        return (None if gate in GATE_VERDICTS else "gate"), gate
+
+    def finish(self, run_id: str, reason: str) -> str | None:
+        """The end steps for ``reason``; the first that failed, or ``None``."""
+        config = self.config
+        out_dir = config.reports / run_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir.chmod(0o777)  # the Pi's worker (uid 999) writes the gate, packet and report
+        normal = reason in NORMAL_ENDS and config.phase != "fetch"
+        failed: str | None = None
+        gate: int | None = None
+        if normal:
+            failed, gate = self.wrap(run_id, out_dir)
+            spot = ["--run-id", run_id, "--out-dir", str(out_dir / "spot-check")]
+            if self.end_step(run_id, "spot-check", SPOT_CHECK, spot) != 0 and failed is None:
+                failed = "spot-check"
+        args = ["--run-id", run_id, "--logs", str(config.logs), "--out-dir", str(out_dir)]
+        args += ["--end-reason", reason] + (["--failed-step", failed] if failed else [])
+        if self.end_step(run_id, "report", REPORT, args) != 0 and failed is None:
+            failed = "report"
+        if normal:
+            stamp = self.host.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+            (config.run_dir / AWAITING).write_text(
+                f"run={run_id}\ngate_exit={gate}\nfailed_step={failed}\nat={stamp}\n",
+                encoding="utf-8",
+            )
+            verdict = {0: "passed", 1: "stopped"}.get(gate if gate is not None else -1, "not run")
+            self.log(
+                f"run {run_id}: gate {verdict}; no swap, awaiting a reader "
+                f"(reports/{run_id}/, then swap.sh or rm {AWAITING})"
+            )
+        return failed
+
+    def extract_only(self, number: int) -> tuple[int, str]:
         if self.stop_requested():
-            return 0
+            return 0, STOPPED
         batch = f"{number:03d}"
         self.cool()
         status, seconds = self.cli(batch, "extract-only", EXTRACT, self.extract_args())
@@ -410,9 +518,9 @@ class Loop:
             f"batch {batch} {self.config.phase} exit={status} s={seconds:.0f} "
             f"{progress({}, summary)} {self.temps()}"
         )
-        return 0 if status == 0 else 1
+        return (0, EXTRACTED) if status == 0 else (1, CLI_FAILED)
 
-    def batches(self, logged: int) -> int:
+    def batches(self, logged: int) -> tuple[int, str]:
         config = self.config
         done_here = 0
         number = logged
@@ -437,15 +545,15 @@ class Loop:
             )
             if fetch_status != 0 or extract_status != 0:
                 self.log(f"batch {batch}: a CLI failed, stopping (see logs/batch-{batch}-*.err)")
-                return 1
+                return 1, CLI_FAILED
             if fetch_done(fetch, config.batch):
                 self.log(f"fetched {fetch.get('fetched')} < {config.batch}: nothing left, done")
-                return 0
+                return 0, DONE
             done_here += 1
             if config.stop_every and done_here % config.stop_every == 0:
                 self.log(f"{done_here} batches: swap due, stopping")
-                return 0
-        return 0
+                return 0, SWAP_DUE
+        return 0, STOPPED
 
     def gpu_watch(self) -> int:
         if self.config.host != "laptop":
@@ -477,6 +585,11 @@ def parse_args(argv: Sequence[str] | None = None) -> Config:
     parser.add_argument("--server", help="llama-server base URL for extraction")
     parser.add_argument("--data-dir", type=Path, default=Path(), help="deploy dir (.env, var/)")
     parser.add_argument("--llama-container", default="helios-llama-gpu", help="laptop only")
+    parser.add_argument(
+        "--public",
+        default="helios",
+        help="the database the run's gate compares with (laptop master: helios_laptop, the mirror)",
+    )
     args = parser.parse_args(argv)
     if args.db == "helios":
         parser.error("the public database is written only by a swap (ADR-0030 D1)")
@@ -493,6 +606,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Config:
         server=args.server,
         data_dir=args.data_dir,
         llama_container=args.llama_container,
+        public=args.public,
     )
 
 

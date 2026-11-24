@@ -10,6 +10,8 @@ CLIs in `apps/menu_pipeline/`, and the host glue lives here.
 | `python -m apps.menu_pipeline.swap_gate` | The gate: rows and venues with a menu each fall under 5%, and every lost venue is classified (worker image) |
 | `python -m apps.menu_pipeline.extract --no-model` | Re-interpretation from saved answers only (replaces P8-23's `nomodel.py`) |
 | `python -m apps.menu_pipeline.with_db` | Points a CLI (`-m`) or a PostgreSQL tool (`--pg`) at another database of the same server |
+| `python -m apps.menu_pipeline.run_report` | The run report: pages, outcomes by reason code, model pages/h, SoC and throttling, 45-day venue freshness, the gate (worker image; the loop runs it at every run end) |
+| `python -m apps.menu_pipeline.spot_check` | The monthly spot check's labelling packet: 10 newly extracted pages, seeded (worker image; the loop runs it at a normal run end) |
 | `dump.sh`, `restore.sh` | One database to a dump (sha256), or a dump into one non-public database, **always** followed by the admission-fence reset |
 | `move-master.sh` | A master move between the Pi and the laptop (run on the laptop) |
 | `replay-sync.sh` | `var/replay/` between the hosts |
@@ -17,9 +19,12 @@ CLIs in `apps/menu_pipeline/`, and the host glue lives here.
 | `swap.sh` | The swap into public: `helios_next`, then the rename, the checks, and an automatic rollback |
 | `mirror-laptop.sh` | `helios_laptop` restored from the swapped dump |
 | `laptop-llama.sh` | The laptop GPU's `llama-server` (P8-23's image and flags) |
-| `helios-pipeline-loop.service`, `loop.env.example` | The loop under systemd on the Pi, for manual starts only |
+| `helios-pipeline-loop.service`, `loop.env.example` | The loop under systemd on the Pi (never enabled at boot) |
+| `helios-pipeline-monthly.timer` | Phase 6: starts the loop on the 10th of each month, 18:00 UTC (ADR-0030 Amendment 1) |
 
-Nothing here has run on a host yet: this is stage 1, and the owner deploys it.
+Stage 1 is deployed on the Pi (`d2cadea`, 2026-11-24): the unit is installed and `MASTER` names
+the Pi. Amendment 1's pieces (the run's end steps, the report, the spot check, the timer) reach
+the Pi with the next deploy, and the timer needs the owner's `sudo` install below.
 
 ## Roles
 
@@ -44,15 +49,64 @@ Nothing here has run on a host yet: this is stage 1, and the owner deploys it.
 1. Laptop: `DATA=<deploy dir> bash infra/pipeline-host/laptop-llama.sh up 192.168.1.183`,
    then, in a second terminal:
    `python3 -m apps.menu_pipeline.batch_loop --host laptop --phase gpu-watch --data-dir <deploy dir>`.
-2. Pi: `sudo systemctl start helios-pipeline-loop`. It stops itself after `--stop-every`
-   batches ("swap due"), or when a fetch takes fewer URLs than `--batch` (done). It also stops
-   on `touch var/pipeline-host/STOP` or after a failed CLI. Watch with `journalctl -u
-   helios-pipeline-loop -f` or `tail var/pipeline-host/logs/progress.log`. From the laptop,
-   use short polls only: `timeout 60 ssh -o ConnectTimeout=10 -o ServerAliveInterval=15 …`.
+2. Pi: `sudo systemctl start helios-pipeline-loop` (or the monthly timer does). It stops
+   itself after `--stop-every` batches ("swap due"), or when a fetch takes fewer URLs than
+   `--batch` (done). It also stops on `touch var/pipeline-host/STOP` or after a failed CLI.
+   Watch with `journalctl -u helios-pipeline-loop -f` or `tail
+   var/pipeline-host/logs/progress.log`. From the laptop, use short polls only: `timeout 60
+   ssh -o ConnectTimeout=10 -o ServerAliveInterval=15 …`.
+   - At "done" or "swap due" the loop wraps the master itself (rescore, Gold refresh, the
+     gate), writes the spot-check packet and the run report under
+     `var/pipeline-host/reports/<run>/`, and leaves `var/pipeline-host/AWAITING_SWAP`. It never
+     swaps. Until the marker is gone the loop refuses to start (see "Phase 6 monthly runs").
+   - A `STOP` or a failed CLI writes the report only.
 3. When the GPU is needed back: `touch var/pipeline-host/STOP` on the laptop (ends
    `gpu-watch`), then `laptop-llama.sh down`. The Pi's extraction then fails three chunks in
    a row, the loop stops, and the pages stay due. Change `--server` in `loop.env` before
    restarting.
+
+## Phase 6 monthly runs (ADR-0030 Amendment 1)
+
+**Install the timer once** (owner, sudo), after a deploy that contains it:
+
+```bash
+sudo cp infra/pipeline-host/helios-pipeline-monthly.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now helios-pipeline-monthly.timer
+systemctl list-timers helios-pipeline-monthly.timer   # next firing; Pi shows local time
+```
+
+Set `--stop-every 0` in `var/pipeline-host/loop.env` (see `loop.env.example`), so a monthly
+run goes to the end of the due URLs and stops once, at one gate.
+
+**Each month:**
+
+1. Before the 10th, discovery (owner or agent, by hand, against the master), when there is a
+   new Overture release.
+2. The 10th, 18:00 UTC: the timer starts the loop.
+3. At the run's end, the reader reads `var/pipeline-host/reports/<run>/`:
+   - `run-report.md` (and `.json`): pages fetched, changed and extracted, outcomes, model
+     pages/h, SoC peak and frequency cap, freshness against 45 days / 80%, and the gate;
+   - `gate.json`: `passed`, `stop_reasons`, `lost_by_kind`;
+   - `spot-check/`: the labelling packet (`README.md` is the brief; the labeller sees
+     `pages/` only).
+4. Then one of:
+   - **swap**: from "The swap" below, skip the wrap (already done) and run `dump.sh` and
+     `swap.sh` with `reports/<run>/gate.json`. `swap.sh` removes `AWAITING_SWAP`;
+   - **continue without a swap**: `rm var/pipeline-host/AWAITING_SWAP`, then start the loop.
+5. The spot check: label the packet blind, then score it (the brief has the command); a
+   failure is a finding in `docs/reviews/` (ADR-0013 Amendment 3).
+
+A timer firing while `AWAITING_SWAP` exists starts the loop, which refuses (exit 2): the unit
+shows as failed and the journal says which run waits. A firing while a run is going does
+nothing.
+
+**A report by hand** (for example, after a run that ended on `STOP`), in the worker:
+
+```bash
+$DC --profile menu run --rm --no-deps -T worker $W -m apps.menu_pipeline.run_report \
+  --run-id <run> --end-reason stop_file
+```
 
 ## The swap (on the Pi, loop stopped)
 

@@ -1,0 +1,21 @@
+# The Phase 6 monthly run (ADR-0030 Amendment 1 A1): starts helios-pipeline-loop.service on the
+# 10th of each month at 18:00 UTC (02:00 on the Pi, whose clock is Asia/Shanghai). The time zone
+# is part of OnCalendar, so the Pi's local time does not move it.
+#   sudo cp infra/pipeline-host/helios-pipeline-monthly.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now helios-pipeline-monthly.timer
+#   systemctl list-timers helios-pipeline-monthly.timer      # the next firing, in local time
+# A firing while the loop runs does nothing (one service, one copy). A firing while a run awaits
+# a reader (var/pipeline-host/AWAITING_SWAP) starts the loop, which refuses and logs why.
+# Month by month: discovery (owner or agent, manual) before the 10th, then this run, then a reader
+# reads reports/<run>/ and swaps (swap.sh) or removes the marker.
+[Unit]
+Description=Helios Phase 6 monthly pipeline run (ADR-0030 Amendment 1)
+
+[Timer]
+OnCalendar=*-*-10 18:00:00 UTC
+Persistent=true
+Unit=helios-pipeline-loop.service
+
+[Install]
+WantedBy=timers.target
