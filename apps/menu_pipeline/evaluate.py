@@ -91,11 +91,10 @@ from packages.helios_parsing.evaluation import (
 from packages.helios_parsing.invariance import VARIANTS, added_flips, invariance_page
 from packages.helios_parsing.output import parse_output, rows_of
 from packages.helios_parsing.page_template import llm_stream
-from packages.helios_parsing.segment import segment
+from packages.helios_parsing.segment import Block, segment
 
 if TYPE_CHECKING:
     from packages.helios_parsing.output import ExtractorOutput
-    from packages.helios_parsing.segment import Block
     from packages.helios_parsing.validator import Row, Verdict
 
 
@@ -116,7 +115,13 @@ def load_gold(
 
 
 def blocks_of(data: Path, page_id: str) -> list[Block]:
-    return segment((data / "pages" / f"{page_id}.html").read_text(encoding="utf-8"))
+    """The page's blocks: ``pages/<id>.blocks.json`` when present (a spot-check packet keeps
+    the Capture bundle's own blocks, so a PDF or rendered page scores on what production read;
+    ADR-0030 Amendment 1), else the HTML segmented with the current segmenter."""
+    stored = data / "pages" / f"{page_id}.blocks.json"
+    if stored.is_file():
+        return [Block(**block) for block in json.loads(stored.read_text(encoding="utf-8"))]
+    return segment(html_of(data, page_id))
 
 
 def html_of(data: Path, page_id: str) -> str:
@@ -135,7 +140,7 @@ def extracted_rows(data: Path, tag: str, page_id: str, blocks: list[Block]) -> l
 def interpreted(data: Path, tag: str, page_id: str) -> tuple[list[Block], tuple[Verdict, ...]]:
     """The page's blocks and its ``llm`` stream's verdicts, as the pipeline stores them."""
     html = html_of(data, page_id)
-    blocks = segment(html)
+    blocks = blocks_of(data, page_id)
     stream = llm_stream(blocks, extracted_outputs(data, tag, page_id), html)
     return blocks, stream.validation.verdicts
 
@@ -455,7 +460,7 @@ def cmd_template(data: Path, gold: dict[str, GoldPage], tag: str, *, per_page: b
     pages: dict[str, Counter[str]] = {}
     for pid in complete(data, gold, [tag]):
         html = html_of(data, pid)
-        blocks = segment(html)
+        blocks = blocks_of(data, pid)
         pages[pid] = template_page(gold[pid], blocks, extracted_outputs(data, tag, pid), html)
     print(tag)
     print_template(pages, per_page=per_page)

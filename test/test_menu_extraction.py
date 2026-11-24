@@ -735,6 +735,9 @@ def test_a_rerun_against_unchanged_pages_adds_no_observation_and_no_extraction(
     )
     assert manifest["pages"][0]["answers"] is True and manifest["candidates"] == 1
     assert "Carne Asada Taco" in (packet / "pages" / f"{page.id}.html").read_text()
+    assert evaluate.blocks_of(packet, str(page.id)) == list(
+        BundleStore(venues.tmp_path).read(capture.bundle_path).blocks
+    ), "the harness scores the blocks production read"
     answers = json.loads(
         (packet / "extract" / "run-20261210T180002Z" / f"{page.id}.json").read_text()
     )

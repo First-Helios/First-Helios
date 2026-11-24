@@ -7,12 +7,14 @@ them here rather than on the Pi.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
 
 from apps.menu_pipeline.batch_loop import FETCH, REPORT, Config, Host, Loop
+from apps.menu_pipeline.evaluate import blocks_of
 from apps.menu_pipeline.run_report import (
     TARGET_SHARE,
     aggregate,
@@ -24,6 +26,7 @@ from apps.menu_pipeline.run_report import (
     write_report,
 )
 from apps.menu_pipeline.spot_check import Candidate, default_seed, draw
+from packages.helios_parsing.segment import segment
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -222,6 +225,17 @@ def test_freshness_buckets_and_the_target() -> None:
     )
     assert fresh["passed"] is True and TARGET_SHARE == 0.8
     assert freshness_summary({}, now)["passed"] is None
+
+
+def test_the_harness_scores_a_packets_stored_blocks(tmp_path: Path) -> None:
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    (pages / "1.html").write_text("<p>Queso</p><p>$6.00</p>")
+    assert [b.text for b in blocks_of(tmp_path, "1")] == ["Queso", "$6.00"]
+
+    stored = [asdict(b) for b in segment("<p>Taco</p><p>$3.50</p><p>Agua</p>")]
+    (pages / "1.blocks.json").write_text(json.dumps(stored))
+    assert [b.text for b in blocks_of(tmp_path, "1")] == ["Taco", "$3.50", "Agua"]
 
 
 def _candidate(page_id: int) -> Candidate:

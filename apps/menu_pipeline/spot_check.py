@@ -13,8 +13,10 @@ after a pipeline bump are not drawn.
 The packet (default ``var/pipeline-host/reports/<run id>/spot-check/``) has the layout
 ``apps.menu_pipeline.evaluate`` reads:
 
-- ``pages/<page_id>.html``: the Version's Capture bundle (rendered DOM, else the raw body);
-  ``.pdf`` for a PDF page, which the harness cannot score;
+- ``pages/<page_id>.html`` and ``pages/<page_id>.blocks.json``: the Version's Capture bundle as
+  production read it (``page_html`` and the bundle's segmented blocks, which the harness
+  prefers over re-segmenting), so PDF and rendered pages score exactly; a PDF page also gets
+  ``<page_id>.pdf``, which is what its labeller reads;
 - ``labels/``: empty, for the gold labels;
 - ``extract/run-<run id>/<page_id>.json``: the run's saved page answers, for scoring only;
 - ``manifest.json``: the draw (seed, window, candidates) and each page's ids, URL and venue;
@@ -36,7 +38,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import text
 
 from apps.menu_pipeline.bundle import BundleStore
-from apps.menu_pipeline.extraction import OutputStore
+from apps.menu_pipeline.extraction import OutputStore, page_html
 from apps.menu_pipeline.run_report import run_started
 from packages.helios_core.db.session import get_sessionmaker
 
@@ -120,8 +122,9 @@ extracted pages, drawn with seed {seed} (`manifest.json`).
 **Labeller (blind):** read only `pages/` and this file. Do not open `extract/` or look at the
 pipeline's Menu rows for these pages until your labels are frozen. Write one gold label per page
 as `labels/<page_id>.json` in the gold-label format (`packages/helios_parsing/evaluation.py`),
-marking promo rows as that format asks. A `.pdf` page is labelled from the PDF; the harness
-cannot score it, so its result is recorded by hand.
+marking promo rows as that format asks. Read `<page_id>.pdf` where there is one (a PDF menu),
+otherwise `<page_id>.html` in a browser; `<page_id>.blocks.json` is the harness's input, not
+for labelling. The manifest's `page_file` names the file to read.
 
 **Scoring, after the labels are frozen:**
 
@@ -160,13 +163,15 @@ def write_packet(  # noqa: PLR0913 - one packet's inputs
         entry["answers"] = False
         if page.bundle_path is not None:
             bundle = bundles.read(page.bundle_path)
+            stem = pages_dir / str(page.page_id)
+            # the harness's inputs, exactly as production read them: blocks and page text
+            stem.with_suffix(".html").write_text(page_html(bundle), encoding="utf-8")
+            blocks = [asdict(block) for block in bundle.blocks]
+            stem.with_suffix(".blocks.json").write_text(json.dumps(blocks) + "\n", "utf-8")
+            path = stem.with_suffix(".html")
             if "pdf" in bundle.content_type.lower() and bundle.body is not None:
-                path = pages_dir / f"{page.page_id}.pdf"
+                path = stem.with_suffix(".pdf")  # the labeller reads the PDF itself
                 path.write_bytes(bundle.body)
-            else:
-                path = pages_dir / f"{page.page_id}.html"
-                html = bundle.rendered_dom or (bundle.body or b"").decode("utf-8", "replace")
-                path.write_text(html, encoding="utf-8")
             entry["page_file"] = str(path.relative_to(out_dir))
         if page.text_hash is not None:
             record = outputs.read_record(page.extractor, page.text_hash)
