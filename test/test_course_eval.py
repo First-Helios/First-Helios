@@ -12,6 +12,8 @@ import pytest
 
 from apps.menu_pipeline import course_eval as cli
 from packages.helios_parsing.course_eval import (
+    GROUP_MAX_VENUES,
+    GROUPING_VERSION,
     MIN_SECTIONS,
     MIN_VENUES,
     LabelSetError,
@@ -23,7 +25,9 @@ from packages.helios_parsing.course_eval import (
     draw_label_set,
     exclusion_ids,
     exclusions_digest,
+    menu_groups,
     predictions_of,
+    representatives,
     sample_venues,
     score,
     section,
@@ -207,6 +211,96 @@ def test_draw_label_set_records_the_split_and_manifest() -> None:
             venues=1,
             method_version="m",
         )
+
+
+# --- menu groups (ADR-0016 Amendment 2 item 3) ----------------------------------------------
+
+_versions = iter(range(500_000, 1_000_000))
+
+
+def _candidate(venue: str, name: str, items: tuple[str, ...]) -> Section:
+    n = next(_versions)
+    return Section(venue, n, f"v{n}:b0001:x", name, (name,), items, len(items))
+
+
+def _menu(venue: str, *sections: tuple[str, tuple[str, ...]]) -> list[Section]:
+    return [_candidate(venue, name, items) for name, items in sections]
+
+
+CHAIN = (
+    ("Tacos", ("Al Pastor", "Carnitas")),
+    ("Sides", ("Rice", "Beans")),
+    ("Drinks", ("Horchata", "Jamaica")),
+)
+
+
+def test_menu_groups_link_venues_sharing_three_identical_sections() -> None:
+    candidates = [
+        *_menu("chain-1", *CHAIN),
+        # normalized: case and whitespace don't matter, item order doesn't either
+        *_menu("chain-2", ("  TACOS ", ("carnitas", "al  pastor")), *CHAIN[1:]),
+        *_menu("chain-3", *CHAIN[1:], CHAIN[0], ("Kids", ("Quesadilla", "Nachos"))),
+        *_menu("two-shared", *CHAIN[:2]),  # two copies are not enough
+        *_menu("one-item", *((name, items[:1]) for name, items in CHAIN)),  # 1-item sections
+    ]
+    groups = menu_groups(candidates)
+    assert groups["chain-1"] == groups["chain-2"] == groups["chain-3"] == "chain-1"
+    assert groups["two-shared"] == "two-shared" and groups["one-item"] == "one-item"
+
+
+def test_a_generic_section_links_nothing() -> None:
+    generic = ("Soft Drinks", ("Coke", "Sprite"))
+    candidates = [
+        candidate
+        for v in range(GROUP_MAX_VENUES + 1)
+        for candidate in _menu(
+            f"v{v:03}", generic, ("Mains", (f"Plate {v}", "Bowl")), ("Sweets", ("Pie", f"Cake {v}"))
+        )
+    ]
+    candidates += _menu("a", generic, *CHAIN) + _menu("b", generic, *CHAIN[:2])
+    groups = menu_groups(candidates)
+    assert len(set(groups.values())) == len(groups)  # the shared section is too common
+
+
+def test_representatives_are_seeded_and_an_excluded_member_excludes_its_group() -> None:
+    groups = {"a1": "a1", "a2": "a1", "a3": "a1", "b1": "b1", "c1": "c1", "c2": "c1"}
+    chosen, dropped = representatives(groups, frozenset(), seed=7)
+    assert len(chosen) == 3 and {groups[v] for v in chosen} == {"a1", "b1", "c1"}
+    assert chosen == representatives(groups, frozenset(), seed=7)[0]
+    assert dropped == 0
+    seeds = {tuple(representatives(groups, frozenset(), seed=s)[0]) for s in range(20)}
+    assert len(seeds) > 1  # the seed, not the id order, picks the member
+    chosen, dropped = representatives(groups, frozenset({"c2", "elsewhere"}), seed=7)
+    assert {groups[v] for v in chosen} == {"a1", "b1"} and dropped == 1  # c1 goes with c2
+
+
+def test_draw_takes_one_venue_per_group_and_records_the_grouping() -> None:
+    candidates = [c for v in range(6) for c in _menu(f"chain-{v}", *CHAIN)]
+    candidates += [c for v in range(10) for c in _menu(f"solo-{v}", (f"S{v}", ("Dish", "Plate")))]
+    candidates += _menu("plain", ("Mains", ("Plate", "Bowl")))
+    manifest, rows = draw_label_set(
+        candidates, frozenset({"solo-0"}), set_name="g", seed=3, venues=50, method_version="m"
+    )
+    venues = {r.venue for r in rows}
+    assert sum(v.startswith("chain-") for v in venues) == 1  # never two copies of one menu
+    assert "solo-0" not in venues and len(venues) == 1 + 9 + 1
+    assert manifest.grouping == GROUPING_VERSION
+    assert (manifest.groups, manifest.eligible_groups, manifest.group_excluded_venues) == (
+        12,
+        11,
+        0,
+    )
+    _, rows = draw_label_set(
+        candidates, frozenset({"chain-4"}), set_name="g", seed=3, venues=50, method_version="m"
+    )
+    assert not any(r.venue.startswith("chain-") for r in rows)  # the whole chain is out
+
+
+def test_a_manifest_drawn_before_menu_groups_still_reads() -> None:
+    raw = _manifest().to_json()
+    for key in ("grouping", "groups", "eligible_groups", "group_excluded_venues"):
+        raw.pop(key)
+    assert Manifest.from_json(raw).grouping is None
 
 
 def test_check_label_set_refuses_exclusions_moved_splits_and_duplicates() -> None:

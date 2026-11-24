@@ -31,11 +31,14 @@ from packages.helios_core.domains.menu.contracts import (
     ItemInput,
     MenuAggregate,
     PriceInput,
+    SectionInput,
     Target,
     VariantInput,
 )
 from packages.helios_core.domains.menu.enumeration import (
     MENU_PAGE_NAMESPACE,
+    UNSECTIONED,
+    current_page_summaries,
     dish_key,
     enumerate_current_requests,
 )
@@ -48,6 +51,7 @@ from packages.helios_core.domains.menu.selection import (
 )
 from packages.helios_core.gold import refresh_current_menu
 from packages.helios_core.gold.catalog import refresh_full_catalog
+from packages.helios_core.gold.menu_read import current_sections
 from packages.helios_core.gold.models import CurrentMenu
 from packages.helios_core.identity import (
     admit_source_record,
@@ -661,6 +665,79 @@ def test_refresh_names_each_rows_section_and_item(factory: sessionmaker[Session]
             "Pizza",
         ),
     }
+
+
+def _with_unsectioned(value: MenuAggregate) -> MenuAggregate:
+    """Add a priced item under the structural ``Unsectioned`` section (never in Gold)."""
+    price = value.prices[0]
+    return replace(
+        value,
+        sections=(
+            *value.sections,
+            SectionInput(
+                section_key=UNSECTIONED,
+                name=UNSECTIONED,
+                position=0,
+                effect="replace",
+                support_kind="structural",
+            ),
+        ),
+        items=(
+            *value.items,
+            ItemInput(
+                item_key="water",
+                section_key=UNSECTIONED,
+                name="Water",
+                position=0,
+                dietary_tags=(),
+                effect="replace",
+                support_kind="direct",
+                evidence_ids=value.page.evidence_ids,
+            ),
+        ),
+        prices=(
+            *value.prices,
+            replace(price, observation_key="water", target=Target(kind="item", key="water")),
+        ),
+    )
+
+
+def test_current_sections_and_page_summaries_for_course_candidates(
+    factory: sessionmaker[Session],
+) -> None:
+    """ADR-0016 Amendment 2 item 5: the Gold and Menu reads behind the course candidates."""
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "open")
+    with factory.begin() as session:
+        persist_menu(session, _with_unsectioned(_with_pizza(aggregate(scope))))
+    with factory.begin() as session:
+        refresh_full_catalog(session, effective_instant=E)
+    record = scope.local_input.source_record_id
+    with factory() as session:
+        instant, sections = current_sections(session)
+        pages = current_page_summaries(session, effective_instant=E)
+    assert instant == E
+    ours = [s for s in sections if s.source_record_id == record]
+    page = next(p for p in pages if p.page_id == ours[0].page_id)
+    # One section: the burger row and the pizza's variant row; the section-level
+    # price is not an index row, and the Unsectioned water never reaches Gold.
+    assert [(s.section_key, s.name, s.items, s.priced_rows) for s in ours] == [
+        ("s-food", "Food", ("Burger", "Pizza"), 2)
+    ]
+    assert ours[0].subject_kind == "establishment"
+    assert page.source_record_version_id == scope.local_input.source_record_version_id
+    assert (page.source_kind, page.method_version, page.unsectioned_priced) == ("dom", "1", 1)
+
+
+def test_page_summaries_skip_scopes_the_gate_excludes(factory: sessionmaker[Session]) -> None:
+    with factory.begin() as session:
+        scope = _seed_scope(session, uuid4().hex, "closed")
+    with factory.begin() as session:
+        persist_menu(session, _with_unsectioned(aggregate(scope)))
+    version = scope.local_input.source_record_version_id
+    with factory() as session:
+        pages = current_page_summaries(session, effective_instant=E)
+    assert all(p.source_record_version_id != version for p in pages)
 
 
 def _renamed_base(value: MenuAggregate) -> MenuAggregate:

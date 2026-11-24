@@ -19,11 +19,11 @@ Amendment 4); Gold stores no URL.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 
 from packages.helios_core.gold.models import CurrentMenu
 from packages.helios_core.provenance.contracts import source_endpoints_for_evidence
@@ -178,6 +178,83 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
         )
         for row in session.execute(statement)
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentSection:
+    """One Gold-reaching section: the first element of priced item/variant target paths.
+
+    The unit ADR-0016 labels (Amendment 2 item 1). ``items`` are the section's
+    distinct item names in item-key order; ``priced_rows`` its priced item and
+    variant rows, the unit the price index aggregates.
+    """
+
+    subject_id: int
+    subject_kind: str
+    source_record_id: int
+    root_key: str
+    page_id: int
+    section_key: str
+    name: str | None
+    items: tuple[str, ...]
+    priced_rows: int
+
+
+@dataclass(slots=True)
+class _SectionAcc:
+    page_id: int
+    name: str | None
+    items: dict[str, str] = field(default_factory=dict)  # item native key -> name
+    rows: int = 0
+
+
+def current_sections(session: Session) -> tuple[datetime | None, list[CurrentSection]]:
+    """Every Gold-reaching section and the projection's ``effective_instant``.
+
+    Reads priced ``item``/``variant`` rows only (section-level and modifier
+    prices are never indexed). Ordered by family, then section key; read-only.
+    ``None`` instant when Gold is empty.
+    """
+    instant = session.execute(select(func.max(CurrentMenu.effective_instant))).scalar_one()
+    statement = select(
+        CurrentMenu.subject_id,
+        CurrentMenu.subject_kind,
+        CurrentMenu.source_record_id,
+        CurrentMenu.root_key,
+        CurrentMenu.price_page_id,
+        CurrentMenu.target_path,
+        CurrentMenu.section_name,
+        CurrentMenu.item_name,
+    ).where(
+        CurrentMenu.price_state == "priced",
+        CurrentMenu.target_kind.in_(("item", "variant")),
+    )
+    sections: dict[tuple[int, str, int, str, str], _SectionAcc] = {}
+    for row in session.execute(statement):
+        path = _decode_path(row.target_path)
+        if len(path) < 2 or path[0][0] != "section" or row.price_page_id is None:  # noqa: PLR2004
+            continue  # a priced item/variant always sits under a section and cites its page
+        key = (row.subject_id, row.subject_kind, row.source_record_id, row.root_key, path[0][1])
+        acc = sections.setdefault(key, _SectionAcc(row.price_page_id, row.section_name))
+        acc.page_id = min(acc.page_id, row.price_page_id)
+        acc.rows += 1
+        if row.item_name is not None:
+            acc.items.setdefault(path[1][1], row.item_name)
+    out = [
+        CurrentSection(
+            subject_id=subject_id,
+            subject_kind=subject_kind,
+            source_record_id=record,
+            root_key=root,
+            page_id=acc.page_id,
+            section_key=section_key,
+            name=acc.name,
+            items=tuple(acc.items[k] for k in sorted(acc.items)),
+            priced_rows=acc.rows,
+        )
+        for (subject_id, subject_kind, record, root, section_key), acc in sorted(sections.items())
+    ]
+    return instant, out
 
 
 def menu_family(row: CurrentMenuRow) -> MenuFamily:
