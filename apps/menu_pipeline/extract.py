@@ -18,6 +18,11 @@ interrupted run picks up where it stopped. ``--limit`` counts pages taken.
 Raw model answers are kept under ``var/replay/menu-extract/``. Needs the ``menu``
 extra (the page classifier gives page confidence), so it runs in the worker
 image. Exits 1 when the run stopped after repeated page failures.
+
+``--no-model`` (ADR-0030) never calls ``llama-server`` and needs none: pages whose
+chunks all have saved answers are written (a re-interpretation under the current
+validator), a page that needs the model fails and stays due, and repeated failures
+don't stop the run. The summary adds ``refused_chunk_calls``.
 """
 
 from __future__ import annotations
@@ -26,10 +31,17 @@ import argparse
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from apps.menu_pipeline.bundle import BundleStore
 from apps.menu_pipeline.classifier import load_verifier
-from apps.menu_pipeline.extraction import OutputStore, model_tag, run_extraction
+from apps.menu_pipeline.extraction import (
+    MAX_CONSECUTIVE_FAILURES,
+    NoModel,
+    OutputStore,
+    model_tag,
+    run_extraction,
+)
 from apps.menu_pipeline.llama_client import (
     DEFAULT_SERVER,
     READY_TIMEOUT_S,
@@ -38,6 +50,9 @@ from apps.menu_pipeline.llama_client import (
 )
 from apps.menu_pipeline.models import DEFAULT_ROOT, load_manifest
 from packages.helios_core.db.session import get_sessionmaker
+
+if TYPE_CHECKING:
+    from apps.menu_pipeline.extraction import ChunkExtractor
 
 EXTRACTION_MODEL = "Qwen3-4B-Instruct-2507-Q4_0"  # config/models.yaml entry llama-server serves
 
@@ -48,6 +63,11 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--limit", type=int, default=None, help="max pages taken")
     parser.add_argument("--server", default=DEFAULT_SERVER, help="llama-server base URL")
+    parser.add_argument(
+        "--no-model",
+        action="store_true",
+        help="saved answers only: pages that need the model stay due (ADR-0030)",
+    )
     parser.add_argument(
         "--ready-timeout", type=float, default=READY_TIMEOUT_S, help="seconds to wait for /health"
     )
@@ -72,24 +92,34 @@ def main() -> None:
         raise SystemExit(
             f"the page classifier needs the `menu` extra (worker image): {error}"
         ) from error
+    no_model = NoModel() if args.no_model else None
     with http_client() as http, get_sessionmaker()() as session:
-        client = LlamaClient(http, base_url=args.server)
-        client.wait_ready(timeout_s=args.ready_timeout)
-        (model_file,) = spec.files
-        client.check_model(model_file.name)
+        extractor: ChunkExtractor
+        if no_model is not None:
+            extractor = no_model
+        else:
+            client = LlamaClient(http, base_url=args.server)
+            client.wait_ready(timeout_s=args.ready_timeout)
+            (model_file,) = spec.files
+            client.check_model(model_file.name)
+            extractor = client
         print(f"extraction started {datetime.now(UTC).isoformat()}", flush=True)  # noqa: T201 - CLI output
         report = run_extraction(
             session,
-            extractor=client,
+            extractor=extractor,
             scorer=scorer,
             bundles=BundleStore(args.base_dir),
             outputs=OutputStore(args.base_dir),
             model=model_tag(spec),
             limit=args.limit,
             commit=session.commit,  # Evidence, then the page's Menu writes
+            stop_after=None if no_model is not None else MAX_CONSECUTIVE_FAILURES,
         )
         session.commit()
-    print("extraction run complete: " + json.dumps(report.summary()))  # noqa: T201 - CLI output
+    summary = report.summary()
+    if no_model is not None:
+        summary["refused_chunk_calls"] = no_model.refused
+    print("extraction run complete: " + json.dumps(summary))  # noqa: T201 - CLI output
     if report.aborted:
         raise SystemExit(1)
 

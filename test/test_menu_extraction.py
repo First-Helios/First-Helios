@@ -494,12 +494,17 @@ class _Venues:
         assert report.versions_new + report.versions_changed == len(html), report.summary()
 
     def extract(
-        self, server: _Server, *, scorer: _Scorer | None = None, limit: int | None = None
+        self,
+        server: _Server | None,
+        *,
+        scorer: _Scorer | None = None,
+        limit: int | None = None,
+        no_model: extraction.NoModel | None = None,
     ) -> extraction.ExtractionReport:
         with self.factory() as session:
             report = run_extraction(
                 session,
-                extractor=_client(server),
+                extractor=no_model or _client(server or _Server()),
                 scorer=scorer or _Scorer(),
                 bundles=BundleStore(self.tmp_path),
                 outputs=OutputStore(self.tmp_path),
@@ -507,6 +512,7 @@ class _Venues:
                 limit=limit,
                 commit=session.commit,
                 soc=SocProbe(root=self.tmp_path / "no-sys"),
+                stop_after=None if no_model else extraction.MAX_CONSECUTIVE_FAILURES,
             )
             session.commit()
         return report
@@ -956,6 +962,23 @@ def test_failed_pages_stay_due_and_repeated_failures_stop_the_run(venues: _Venue
 
     retry = venues.extract(_Server(), limit=2)
     assert (retry.due, retry.attempted, retry.extracted, retry.aborted) == (4, 2, 2, False)
+
+
+def test_a_no_model_run_leaves_pages_due_and_does_not_stop(venues: _Venues) -> None:
+    menus = {venues.add(f"Cafe {i}"): _MENU for i in range(4)}
+    venues.resolve()
+    venues.fetch(menus, at=_T1)
+    no_model = extraction.NoModel()
+
+    report = venues.extract(None, no_model=no_model)
+
+    assert not report.aborted and report.failed == {"chunk_failed": 4}
+    assert (report.attempted, report.extracted, report.chunks) == (4, 0, 0)
+    assert no_model.refused >= 4
+    assert all(venues.pages(g) == [] for g in menus)
+
+    with_model = venues.extract(_Server())
+    assert (with_model.due, with_model.extracted, with_model.aborted) == (4, 4, False)
 
 
 def test_scope_not_eligible_is_counted_and_retried(
