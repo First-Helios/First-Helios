@@ -15,12 +15,19 @@ only counts and rates go into ``docs/reviews/`` (template:
         --labels var/course-labels/set-1 --exclude … PREDICTIONS.jsonl [PREDICTIONS.jsonl …]
     uv run python -m apps.menu_pipeline.course_eval score \\
         --labels var/course-labels/set-1 --exclude … PREDICTIONS.jsonl [--out REPORT.json]
+    uv run python -m apps.menu_pipeline.course_eval confirm \\
+        --labels var/course-labels/set-1 --exclude … --review REVIEW.tsv \\
+        PREDICTIONS.jsonl [PREDICTIONS.jsonl …]
     uv run python -m apps.menu_pipeline.course_eval compare BASELINE.json MODEL.json
 
 ``sample`` reads candidate sections (label-set rows without split or labels, one
 per Gold-reaching named section) and, optionally, a JSON object of unsectioned
 priced items per venue; it never overwrites a drawn set. ``disagreements`` lists
-the test sections the owner must review; ``score`` refuses until there are none
+the test sections the owner must review, and ``--review-out`` writes them as a
+TSV with an empty ``confirmed`` column; ``confirm`` applies the owner's filled-in
+TSV (a course, or ``=`` to keep the agent's label) to the pending disagreements
+only, setting ``label`` and ``owner_confirmed`` and never ``agent_label``;
+``score`` refuses until there are none
 and writes the report (default ``var/course-eval/<set>/<labeller>.json``);
 ``compare`` applies the winner rule. Every command that reads a label set needs
 the exclusion lists it was drawn with.
@@ -32,6 +39,7 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -119,10 +127,31 @@ def cmd_sample(args: argparse.Namespace) -> None:
     )
 
 
+REVIEW_COLUMNS = ("section_key", "name", "agent", "arms", "priced_items", "items", "confirmed")
+
+
+def _tsv(value: object) -> str:
+    return str(value).replace("\t", " ").replace("\n", " ")
+
+
 def cmd_disagreements(args: argparse.Namespace) -> None:
     _manifest, rows = load_label_set(args.labels, read_exclusions(args.exclude))
     arms = [predictions_of(read_jsonl(path)) for path in args.predictions]
     pending = disagreements(rows, [arm for _, arm in arms], args.split)
+    if args.review_out:
+        with args.review_out.open("w", encoding="utf-8") as handle:
+            handle.write("\t".join(REVIEW_COLUMNS) + "\n")
+            for row, predicted in pending:
+                fields = (
+                    row.section_key,
+                    " > ".join(row.name_path),
+                    row.agent_label,
+                    " ".join(c or ABSTAIN for c in predicted),
+                    row.priced_items,
+                    " | ".join(row.items),
+                    "",
+                )
+                handle.write("\t".join(_tsv(f) for f in fields) + "\n")
     print(f"{len(pending)} {args.split} sections to review; arms: {[name for name, _ in arms]}")
     for row, predicted in pending:
         shown = ", ".join(row.items[:SHOWN_ITEMS]) + (" …" if len(row.items) > SHOWN_ITEMS else "")
@@ -131,6 +160,55 @@ def cmd_disagreements(args: argparse.Namespace) -> None:
             f"{row.section_key}\t{' > '.join(row.name_path)}\tagent={row.agent_label}\t"
             f"arms={arms_text}\titems={row.priced_items}\t[{shown}]"
         )
+
+
+def confirm_rows(
+    rows: list[Section], pending_keys: set[str], review: dict[str, str]
+) -> tuple[list[Section], int]:
+    """Rows with the owner's confirmations applied (``=`` keeps the agent's label)."""
+    if unknown := sorted(set(review) - pending_keys):
+        raise LabelSetError(
+            f"{len(unknown)} reviewed sections are not pending disagreements: {unknown[0]}"
+        )
+    out, n = [], 0
+    for row in rows:
+        decision = review.get(row.section_key)
+        if decision is None:
+            out.append(row)
+            continue
+        final = row.agent_label if decision == "=" else decision
+        if final not in COURSES:
+            raise LabelSetError(f"{row.section_key}: {decision!r} is not a course or '='")
+        out.append(replace(row, label=final, owner_confirmed=True))
+        n += 1
+    return out, n
+
+
+def cmd_confirm(args: argparse.Namespace) -> None:
+    excluded = read_exclusions(args.exclude)
+    manifest, rows = load_label_set(args.labels, excluded)
+    arms = [arm for _, arm in (predictions_of(read_jsonl(p)) for p in args.predictions)]
+    pending = {row.section_key for row, _ in disagreements(rows, arms)}
+    review: dict[str, str] = {}
+    with args.review.open(encoding="utf-8") as handle:
+        header = handle.readline().rstrip("\n").split("\t")
+        for line in handle:
+            fields = dict(zip(header, line.rstrip("\n").split("\t"), strict=False))
+            if decision := fields.get("confirmed", "").strip():
+                review[fields["section_key"]] = decision
+    updated, n = confirm_rows(rows, pending, review)
+    check_label_set(manifest, updated, excluded)
+    path = args.labels / "sections.jsonl"
+    tmp = path.with_suffix(".jsonl.tmp")
+    with tmp.open("w", encoding="utf-8") as handle:
+        for row in updated:
+            handle.write(json.dumps(row.to_json(), ensure_ascii=False) + "\n")
+    tmp.replace(path)
+    changed = sum(1 for row in updated if row.owner_confirmed and row.label != row.agent_label)
+    left = len(disagreements(updated, arms))
+    print(
+        f"confirmed {n} sections ({changed} changed in total); {left} disagreements still pending"
+    )
 
 
 def _fmt(value: float | None) -> str:
@@ -223,7 +301,14 @@ def main(argv: list[str] | None = None) -> int:
     review.add_argument("--labels", type=Path, required=True)
     review.add_argument("--exclude", type=Path, action="append", required=True)
     review.add_argument("--split", choices=["train", "test"], default="test")
+    review.add_argument("--review-out", type=Path, help="write the pending rows as a review TSV")
     review.add_argument("predictions", type=Path, nargs="+")
+
+    confirming = commands.add_parser("confirm", help="apply the owner's review TSV")
+    confirming.add_argument("--labels", type=Path, required=True)
+    confirming.add_argument("--exclude", type=Path, action="append", required=True)
+    confirming.add_argument("--review", type=Path, required=True)
+    confirming.add_argument("predictions", type=Path, nargs="+")
 
     scoring = commands.add_parser("score", help="score one arm on the test split")
     scoring.add_argument("--labels", type=Path, required=True)
@@ -239,6 +324,7 @@ def main(argv: list[str] | None = None) -> int:
     handler = {
         "sample": cmd_sample,
         "disagreements": cmd_disagreements,
+        "confirm": cmd_confirm,
         "score": cmd_score,
         "compare": cmd_compare,
     }[args.command]

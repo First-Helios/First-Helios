@@ -1,0 +1,62 @@
+{
+ "version": "course-lexicon-v1",
+ "derived_from": "ADR-0016 §1 vocabulary and course-guide-v1; tuned on set-1's training split only (P8-30)",
+ "rules": {
+  "other": [
+   "by the pound", "per pound", "by the gallon", "by the dozen", "extra", "extras", "add on",
+   "add ons", "addon", "condiment", "topping", "topper", "sauce", "dressing", "family",
+   "party", "bulk", "catering", "tray", "serves", "feeds", "package", "merch", "merchandise",
+   "gift card", "miscellaneous", "make it yours"
+  ],
+  "kids": ["kid", "kids", "children", "child", "little one", "keiki"],
+  "non_alcoholic": [
+   "zero proof", "non alcoholic", "nonalcoholic", "mocktail", "mocktails", "non beer",
+   "free spirited", "na beer"
+  ],
+  "alcohol": [
+   "beer", "wine", "wines", "cocktail", "margarita", "sake", "spirits", "whiskey", "whisky",
+   "bourbon", "tequila", "mezcal", "vodka", "gin", "rum", "seltzer", "cider", "by the glass",
+   "by the bottle", "draft", "on tap", "crowler", "growler", "mimosa", "bubbles", "sangria",
+   "champagne", "prosecco", "sparkling wine", "bar menu", "frozen", "frozens", "old fashioned",
+   "spritz", "mixology", "happy hour drinks", "to go alcohol"
+  ],
+  "drink": [
+   "drink", "drinks", "beverage", "beverages", "bev", "bevs", "coffee", "espresso", "latte",
+   "tea", "juice", "smoothie", "soda", "soft drink", "lemonade", "shake", "milkshake",
+   "fountain", "agua fresca", "aguas frescas", "horchata", "boba", "milk tea", "refresher"
+  ],
+  "breakfast": [
+   "breakfast", "brunch", "omelet", "omelette", "pancake", "waffle", "benedict", "morning",
+   "french toast", "egg toast", "two eggs", "kolache", "chilaquiles", "migas"
+  ],
+  "dessert": [
+   "dessert", "desserts", "sweet", "sweets", "pastry", "pastries", "cookie", "cake",
+   "cupcake", "ice cream", "gelato", "churro", "croissant", "donut", "doughnut", "sundae",
+   "pudding", "flan", "frozen yogurt", "paleta"
+  ],
+  "side": [
+   "side", "sides", "extra side", "extra sides", "side order", "fries", "tortilla",
+   "rice and bean"
+  ],
+  "appetizer": [
+   "appetizer", "appetizers", "apetizer", "apetizers", "app", "apps", "starter", "starters",
+   "snack", "snacks", "small plate", "small plates", "shareable", "shareables", "sharable",
+   "sharables", "for the table", "bite", "bites", "soup", "soups", "queso", "guacamole", "dip",
+   "wing", "wings", "antipasti", "antipasto", "meze", "mezze", "tapas", "bruschetta",
+   "calamari", "raw bar", "oyster", "egg roll", "edamame", "dumpling", "spring roll",
+   "seaweed salad", "caprese"
+  ],
+  "entree": [
+   "entree", "entrees", "entrada", "main", "mains", "main course", "burger", "burgers",
+   "sandwich", "sandwiches", "sammie", "sammies", "taco", "tacos", "burrito", "burritos",
+   "pizza", "pizzas", "pasta", "plate", "plates", "platter", "platters", "bowl", "bowls",
+   "wrap", "wraps", "enchilada", "enchiladas", "fajita", "fajitas", "quesadilla", "sushi",
+   "nigiri", "sashimi", "roll", "rolls", "handroll", "ramen", "noodle", "noodles", "pho",
+   "curry", "biryani", "steak", "steaks", "seafood", "combo", "combination", "dinners",
+   "kebab", "kebabs", "gyro", "sub", "subs", "torta", "tortas", "gordita", "chalupa", "flauta",
+   "chimichanga", "lo mein", "fried rice", "donburi", "omakase", "tandoori", "rotisserie",
+   "from the grill", "lunch special", "lunch specials", "meat", "meats", "calzone",
+   "basket", "baskets", "boil", "guisados", "lasagna", "risotto", "stir fry"
+  ]
+ }
+}
