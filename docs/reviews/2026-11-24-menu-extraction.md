@@ -414,3 +414,94 @@ run the venue benchmark on both manifests at the baseline, using the candidate's
 ABGB manifest as input. On a clone run candidate extraction with `--no-model`
 and the same `--base-dir`, refresh Gold, then run both manifests again. The
 ordinary full extraction and Gold commands also cover all benchmark scopes.
+
+## Slice and whole-pie publication
+
+The comparator is the completed diameter revision `b29ab21` (identical tree
+to `91dfcf5` on the rollout branch). The ABGB is development data. Before
+inspecting any Roppolo’s saved answers, we froze 11 prices from the West Campus
+capture for the 2604 Guadalupe St establishment. The manifest pins the bundle
+digest and both section anchors. It covers the five rows under “BY THE SLICE”
+and the three diameters each for Cheese and Specialty Pies under “WHOLE PIE
+PRICES.” The comparison uses explicit item/variant/USD amount on the same URL.
+[West Campus labels](../../test/fixtures/venue-prices/roppolos.json)
+
+### The ABGB before the fix
+
+All ten labels are visible in the pinned capture. In the table, a block pair
+identifies the title and its immediately following price line. “Base” means an
+item-level observation without a portion. The Gold and GET columns agreed for
+every triple. The distinction between the first erroneous input and a later
+failed recovery matters for Cheese and White Clam.
+
+| Printed dish, portion, price | Blocks | First failed step in diameter revision | Repair and validation | Gold and GET |
+| --- | --- | --- | --- | --- |
+| Cheese slice $4 | 109–110 | Answer names Slice, 14-inch/$4. Cheese itself gets base $14. | Repair leaves Slice/base/$4. The page-template pass reassigns $4 to Cheese/Slice, but the residual “Slice” item at 110 ends Cheese’s price scan. Final validation downgrades it. | Absent |
+| Cheese 14-inch $18 | 109–110 | Answer calls the dish Slice. | Repair clears the diameter. Validation accepts Slice/base/$18. | Slice/base/$18 |
+| Cheese 16-inch $20 | 109–110 | Answer calls the dish Slice. | Repair clears the diameter. Validation also accepts Slice/base/$20. | Only $18 survives as the base price for Slice. |
+| Calabrese slice $5 | 111–112 | Answer says 14-inch/$5. | Repair clears the contradicted diameter. Validation accepts base $5. | Calabrese/base/$5 |
+| Wagyu Beef slice $5 | 113–114 | Answer says 14-inch/$5. | Same base-price fallback. | Wagyu Beef/base/$5 |
+| Housemade Sausage slice $5 | 115–116 | Answer says 14-inch/$5. | Same base-price fallback. | Housemade Sausage/base/$5 |
+| Margherita slice $5 | 117–118 | Answer says 14-inch/$5, claiming block 114. | Validation accepts the repaired base $5, $22 and $24 rows. | Only base $22 survives for this placement. |
+| Margherita 14-inch $22 | 117–118 | Repair drops the correct answer’s diameter. The claim at 114 is three blocks before the title, beyond the two-block forward name lookup. | Validation accepts base $22. | Margherita/base/$22 |
+| Margherita 16-inch $24 | 117–118 | Same repair loss for the correct 16-inch/$24 answer. | Validation accepts base $24. | Absent |
+| White Clam 16-inch $24 | 119–120 | Validation grounds the surviving exact claim at the later gluten-free title (143). Its claim names price block 120, after the title at 119. | The exact row gets `price_not_grounded`. A second answer at 115 loses its diameter in repair and gets `price_belongs_to_other_variant`. | Absent. The separate gluten-free base $18 is present. |
+
+The fix uses the printed portion fields immediately following a matching dish
+title. Each field must contain one amount with an explicit slice or diameter
+label. A conflicting label, malformed field or unsupported price continuation
+leaves the row unpriced. The field label “Slice” cannot itself own the prices
+on that line. A diameter row claiming its adjacent price block carries the
+grounded title into validation. These changes apply in saved-answer repair.
+Gold, API selection and the validator use the existing rules.
+
+### Paired publication results
+
+| Venue | Exact labels, diameter → candidate | Label gains | Label losses | Whole-menu API triples, before → after | Added | Removed | Newly wrong |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: |
+| Café Blue | 4/6 → 4/6 | 0 | 0 | 110 → 110 | 0 | 0 | 0 |
+| Brix and Ale | 4/4 → 4/4 | 0 | 0 | 72 → 72 | 0 | 0 | 0 |
+| Warpath Pizza and Pub | 6/6 → 6/6 | 0 | 0 | 130 → 130 | 0 | 0 | 0 |
+| Hippie Picnik | 2/3 → 2/3 | 0 | 0 | 41 → 41 | 0 | 0 | 0 |
+| TenTen | 3/3 → 3/3 | 0 | 0 | 15 → 15 | 0 | 0 | 0 |
+| The ABGB (development) | 7/17 → 17/17 | 10 | 0 | 189 → 194 | 10 | 5 | 0 |
+| Roppolo’s West Campus (held out) | 0/11 → 0/11 | 0 | 0 | 219 → 219 | 0 | 0 | 0 |
+
+All ten additions match the ten capture rows above. The five removals were the
+three unqualified $5 prices, Margherita’s unqualified $22 and the spurious
+Slice/$18. The whole-menu diff compared distinct priced USD item, variant and
+amount triples per source URL for all seven venues, including unlabelled rows.
+A second comparison counted every priced API placement, preserving section, scope,
+item, variant or modifier, currency, channel, service period, validity and
+multiplicity. It found the same ten additions and five removals, all under the
+organization-scoped Pizza section, and no further changes.
+Warpath retained Cheese & Chong at $19/$23/$25 and Santa Rosa at $19/$24/$26,
+each in 12/16/18-inch order.
+
+The held-out domain showed no gain. Roppolo’s prints slices and pies in separate
+sections. Its five slice amounts were already served as item prices under “BY
+THE SLICE.” None had an explicit slice variant. The 12-inch Cheese and Specialty
+Pies amounts were served without a diameter. Section-only context does not
+satisfy the frozen exact-variant metric.
+
+**Replay and versioning.** We repeated the comparison from a private PostgreSQL
+16 restore of the swap-5 dump and a scratch copy of its replay cache. On the
+completed diameter revision we restricted the ordinary due queue to the seven
+venue keys, replayed their 16 records with `extract --no-model`, and refreshed
+the establishment and organization Gold families. We cloned this database and
+repeated extraction, Gold and the real venue menu GET on the candidate, using
+the same complete saved answers. We checked all three manifests with the
+`apps.menu_pipeline.venue_price_eval` reporter against both databases.
+The gains and losses above compare the two reports by URL, dish, portion and
+amount, independently of the older baseline annotations in the manifests.
+
+A repair version bump **is required** to reinterpret already-stored answers.
+The candidate sets `repairs-v11`. The validator stays at `validator-v14` and
+the extractor cache key stays valid. The snapshot had 2,863 unrestricted due
+records. The measured run covers the 16 records for these seven venues. Each
+revision reused 16 full answers with zero failures and zero inference calls. An
+immediate scoped rerun found all 16 up to date.
+
+Strict database-backed `make ci` passed all 2,050 tests with 90.56% coverage
+(88% required). Alembic found no schema changes. The candidate Docker image
+built successfully and its local `/healthz` smoke test returned HTTP 200.

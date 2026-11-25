@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v10"
+REPAIRS_VERSION = "repairs-v11"
 
 # (v7) wine lists are out of scope (ADR-0013 Amendment 15): a section whose heading names
 # wine ("Wine by the Glass", "Sparkling", "Champagne"), or is only colour words and their
@@ -245,6 +245,7 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
     # stitch before dedupe: identical price lines repeat; after it, "$7.50/Medium"
     # must still have read as a price line there
     rows = stitch(rows, blocks)
+    rows = repair_portion_rows(rows, blocks)
     rows = drop_unprinted_variants(rows, blocks)
     rows = split_listed(rows, blocks)
     rows = name_by_title(rows, blocks)
@@ -285,7 +286,7 @@ def printed_name_block(row: Row, blocks: Sequence[Block], index: dict[str, int])
 _DIAMETER_VARIANT = re.compile(r'([1-9][0-9]?)\s*["”″]?')
 
 
-def _diameter_prices(text: str) -> list[tuple[str, Decimal]] | None:
+def _portion_prices(text: str) -> list[tuple[str, Decimal]] | None:
     """Read a complete line of price fields. An unrelated item or prose ends the run."""
     pairs = []
     for field in re.split(r"[|•]", text):
@@ -295,6 +296,7 @@ def _diameter_prices(text: str) -> list[tuple[str, Decimal]] | None:
         start, end, amount = money[0]
         before, after = field[:start].strip(), field[end:].strip()
         if not after and before.casefold() in {"", "slice"}:
+            pairs.append((before.title(), amount))
             continue
         if after and (before or not after.startswith("/")):
             return None
@@ -305,14 +307,69 @@ def _diameter_prices(text: str) -> list[tuple[str, Decimal]] | None:
     return pairs
 
 
-def _grounds_diameter(row: Row, size: str, blocks: Sequence[Block], pos: int | None) -> bool:
+_SLICE_FIELDS = re.compile(r"^slice\s*\$.*[|•]", re.IGNORECASE)
+
+
+def repair_portion_rows(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
+    """Bind a mixed slice/pie line to its adjacent dish title, never to a field label."""
+    index = {b.id: i for i, b in enumerate(blocks)}
+    fields = {i for i, block in enumerate(blocks) if _SLICE_FIELDS.match(block.text)}
+    if not fields:
+        return list(rows)
+    owners = {blocks[i - 1].text.casefold() for i in fields if i > 0}
+    out: list[Row] = []
+    for row in rows:
+        pos = index.get(row.claimed_block or "")
+        if pos is None:
+            out.append(row)
+            continue
+        if row.item.casefold() == "slice" and pos in fields:
+            continue
+        if row.item.casefold() not in owners:
+            out.append(row)
+            continue
+        nearby = range(max(0, pos - FILL_GAP), min(len(blocks), pos + FILL_GAP + 1))
+        titles = [j for j in nearby if blocks[j].text.casefold() == row.item.casefold()]
+        if pos in titles:
+            titles = [pos]
+        if len(titles) != 1:
+            ambiguous = any(j + 1 in fields for j in titles)
+            out.append(replace(row, amount=None, variant=None) if ambiguous else row)
+            continue
+        j = titles[0]
+        if (
+            j + 1 not in fields
+            or blocks[j + 1].heading
+            or any(b.in_chrome for b in blocks[min(pos, j) : max(pos, j + 1) + 1])
+            or any(b.heading for b in blocks[min(pos, j) + 1 : max(pos, j)])
+        ):
+            out.append(row)
+            continue
+        pairs = _portion_prices(blocks[j + 1].text) or []
+        # This repair reads one complete mixed line. A continuation can
+        # change the meaning of a portion or supply a conflicting amount.
+        if j + 2 < len(blocks) and _portion_prices(blocks[j + 2].text) is not None:
+            pairs = []
+        if not pairs or not all(label for label, _ in pairs) or len(dict(pairs)) != len(pairs):
+            out.append(replace(row, amount=None, variant=None, claimed_block=blocks[j].id))
+            continue
+        out.extend(
+            replace(row, variant=label, amount=str(amount), claimed_block=blocks[j].id)
+            for label, amount in pairs
+        )
+    return out
+
+
+def _printed_portions(
+    row: Row, blocks: Sequence[Block], pos: int | None
+) -> list[tuple[str, Decimal]]:
     if pos is None:
-        return False
+        return []
     name = re.match(re.escape(row.item) + r"(?=$|[\s:])", blocks[pos].text, re.IGNORECASE)
-    if not name or _diameter_prices(blocks[pos].text) is not None:
+    if not name or _portion_prices(blocks[pos].text) is not None:
         # A price line beginning "Slice $4 | ..." supplies labels for the dish above.
-        return False
-    amounts: set[Decimal] = set()
+        return []
+    portions: list[tuple[str, Decimal]] = []
     for j in range(pos, min(pos + FILL_GAP + 1, len(blocks))):
         block = blocks[j]
         if block.in_chrome or (j > pos and block.heading):
@@ -322,11 +379,11 @@ def _grounds_diameter(row: Row, size: str, blocks: Sequence[Block], pos: int | N
             line = line[name.end() :].lstrip(" :")
             if not line:
                 continue
-        pairs = _diameter_prices(line)
+        pairs = _portion_prices(line)
         if pairs is None:
             break
-        amounts.update(amount for diameter, amount in pairs if diameter == size)
-    return amounts == {parse_amount(row.amount)}
+        portions.extend(pairs)
+    return portions
 
 
 def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
@@ -351,9 +408,30 @@ def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> lis
         if not row.variant or pair_position(row.item, row.variant):
             out.append(row)
             continue
-        if size := _DIAMETER_VARIANT.fullmatch(row.variant):
-            grounded = _grounds_diameter(row, size[1], blocks, pos)
-            out.append(row if grounded else replace(row, variant=None))
+        # Stitch can copy a slash-suffixed inch label verbatim (e.g. /12").
+        size = _DIAMETER_VARIANT.fullmatch(row.variant) or INCH_LABEL.fullmatch(
+            row.variant.removeprefix("/").strip()
+        )
+        if size:
+            portions = _printed_portions(row, blocks, pos)
+            amounts = {amount for label, amount in portions if label == size[1]}
+            if amounts != {parse_amount(row.amount)}:
+                # A contradicted portion claim cannot become the base price
+                # when the dish prints explicit size/price pairs.
+                amount_text = None if any(label for label, _ in portions) else row.amount
+                out.append(replace(row, amount=amount_text, variant=None))
+                continue
+            # The validator otherwise may advance to a later printing of the
+            # same dish when the answer claimed the adjacent price block.
+            if (
+                pos is not None
+                and index.get(row.claimed_block or "") == pos + 1
+                and (size[1], parse_amount(row.amount))
+                in (_portion_prices(blocks[pos + 1].text) or [])
+            ):
+                out.append(replace(row, claimed_block=blocks[pos].id))
+            else:
+                out.append(row)
             continue
         own = set(norm_tokens(row.variant))
         if own <= set(norm_tokens(row.item)):

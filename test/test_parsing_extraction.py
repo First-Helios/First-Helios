@@ -219,14 +219,14 @@ def test_numeric_diameter_must_match_its_own_price_field() -> None:
         ),
         blocks,
     )
-    variants = [(r.item, r.amount, r.variant) for r in rows if r.amount != "4"]
+    variants = [(r.item, r.amount, r.variant) for r in rows]
     assert variants == [
-        ("Garden Pie", "14", "12"),
-        ("Garden Pie", "18", "16”"),
-        ("Garden Pie", "18", None),
+        ("Garden Pie", "4.00", "Slice"),
+        ("Garden Pie", "14.00", "12"),
+        ("Garden Pie", "18.00", "16"),
         ("Red Pie", "15", '12"'),
         ("Red Pie", "20", "16"),
-        ("Red Pie", "15", None),
+        ("Red Pie", None, None),
     ]
     sized = [r for r in rows if r.variant and r.variant != "Slice"]
     assert all(v.decision == "accept" for v in validate(blocks, sized).verdicts)
@@ -235,7 +235,31 @@ def test_numeric_diameter_must_match_its_own_price_field() -> None:
 def test_price_field_label_is_not_the_owner_of_the_other_prices() -> None:
     blocks = segment('<p>Cheese</p><p>Slice $4 | 14" $18 | 16" $20</p>')
     rows = rows_of(_one_chunk(("b0002", "Slice", "18", "14")), blocks)
-    assert [row.variant for row in rows if row.item == "Slice" and row.amount == "18"] == [None]
+    assert not rows
+
+
+def test_mixed_portion_conflicts_do_not_fall_back_to_base_prices() -> None:
+    for fields in ('Slice $5 | 14" $18 | Slice $6', 'Slice $5 | 14" $18 or $20'):
+        blocks = segment(f"<p>Garden Pie</p><p>{fields}</p>")
+        rows = rows_of(_one_chunk(("b0001", "Garden Pie", "5", "14")), blocks)
+        assert all(v.decision != "accept" for v in validate(blocks, rows).verdicts)
+
+
+def test_conflicting_whole_pie_prices_are_unpublished() -> None:
+    blocks = segment('<p>Garden Pie</p><p>$14/12" | $18/12"</p>')
+    rows = rows_of(_one_chunk(("b0001", "Garden Pie", "14", "12")), blocks)
+    assert all(v.decision != "accept" for v in validate(blocks, rows).verdicts)
+
+
+def test_diameter_on_claimed_price_line_keeps_its_own_title() -> None:
+    blocks = segment('<p>Clam</p><p>$24/16"</p><p>Other Pie $10</p><p>Clam $18</p>')
+    rows = rows_of(
+        _one_chunk(("b0003", "Other Pie", "10", ""), ("b0002", "Clam", "24", "16")), blocks
+    )
+    verdict = validate(blocks, rows).verdicts[-1]
+    assert verdict.decision == "accept"
+    assert verdict.name_evidence and verdict.name_evidence.block_id == "b0001"
+    assert verdict.price_evidence and verdict.price_evidence.block_id == "b0002"
 
 
 def test_numeric_variant_rejects_quantities_ambiguity_and_neighbours() -> None:
