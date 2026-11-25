@@ -575,10 +575,11 @@ signal of what a section *is*: none reaches the API today.
 - **Q3:** `side` goes in the sidebar with `other`.
 - **Q4:** drink-led venues are exempt, by item 2's place-type list.
 
-The build waits on ADR-0016 Amendment 3, whose items 3–6 and Q1–Q4 are still proposed: slice 2
-(`menu.section_course`) and slice 3 (`gold.current_menu.course`). The same food-first groups
-are proposed for the map's area item list in
-[ADR-0020](./0020-drawn-areas-in-the-read-api.md) Amendment 1.
+The build waits on ADR-0016 Amendment 3 slices 2 and 3 (`menu.section_course`, then
+`gold.current_menu.course`). The owner accepted Amendment 3's Q1–Q4 as recommended on
+2026-11-24, and slice 2 is in review (PR #190). The same food-first groups are the course step
+of the map's area item list in [ADR-0020](./0020-drawn-areas-in-the-read-api.md) Amendment 1
+(accepted 2026-11-24).
 
 ## References
 

@@ -2,9 +2,10 @@
 
 **Status:** Accepted 2026-10-23 by the owner, OQ1–OQ6 and OQ8 as recommended and OQ7 changed
 (the `boundary` filter on `GET /v1/venues` is built now; see [Owner decision](#owner-decision)).
-Proposed 2026-10-23 (session P8-8). Not built yet.
-[Amendment 1](#amendment-1-2026-11-24-a-typical-first-order-for-the-area-item-list) (**proposed**,
-not built) would add a "typical first" order to point 4's item list.
+Proposed 2026-10-23 (session P8-8). Built in P8-9 (PR #119).
+[Amendment 1](#amendment-1-2026-11-24-a-typical-first-order-for-the-area-item-list) (**accepted**
+2026-11-24, Q1–Q4 as recommended; not built yet) adds a "typical first" order to point 4's item
+list.
 **Date:** 2026-10-23
 **Phase:** 8 (public v1 site, an [ADR-0019](./0019-public-v1-site.md) follow-up)
 **Extends:** [ADR-0007](./0007-gold-price-index-projection.md) (price index: placement,
@@ -325,13 +326,13 @@ Each has a recommendation. Nothing in this ADR is built until these are answered
 
 ## Amendment 1 (2026-11-24): a "typical first" order for the area item list
 
-**Status: Proposed 2026-11-24 (venue-menu presentation follow-up). Nothing is built.**
-- It is a stop-and-ask change, because it changes point 4's API order.
-- Its course step (item 2a) depends on
+**Status: Accepted 2026-11-24 by the owner, Q1–Q4 as recommended** (see
+[Owner decision](#owner-decision-amendment-1)). Proposed 2026-11-24 (venue-menu presentation
+follow-up). Nothing is built yet.
+- It was a stop-and-ask change, because it changes point 4's API order.
+- Its course step (item 2.1) depends on
   [ADR-0016](./0016-course-labels-for-the-price-index.md) Amendment 3 slice 3, the same
   dependency as [ADR-0022](./0022-several-menu-pages-per-venue.md) Amendment 2 (accepted).
-- Doc drift: this ADR's status line still says "Not built yet", but it was built in P8-9
-  (PR #119).
 
 ### The gap
 
@@ -440,6 +441,19 @@ How the columns were counted:
 - **Q3. The site's default.** "Typical first" without `q`, cheapest first with `q`
   *(recommended)*. Or "typical first" always.
 - **Q4. Venue rotation** *(recommended)*, or plain distance order.
+
+### Owner decision (Amendment 1)
+
+**Answered by the owner on 2026-11-24:** "all answers as recommended".
+
+1. **Q1 pivot:** the area's headline median, the boundary's `all` row for the same currency
+   (item 3). Cuisine filters on the list don't move it.
+2. **Q2 when:** two steps. Build items 2.2–2.4 now (median distance and venue rotation, no
+   slice-3 dependency), then add the course step 2.1 once ADR-0016 slice 3 serves `course` in
+   Gold.
+3. **Q3 site default:** "Typical first" when there is no `q`, cheapest first when there is
+   one. A Typical/Cheapest control writes the choice to the hash as `&sort=`.
+4. **Q4 venue rotation:** yes, as in item 2.3.
 
 ## References
 
