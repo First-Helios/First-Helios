@@ -137,6 +137,17 @@ class CurrentMenu(Base):
             name="ck_gold_times",
         ),
         CheckConstraint("organization_claim_count >= 0", name="ck_gold_org_claims"),
+        CheckConstraint(
+            "course IS NULL OR course IN ("
+            "'appetizer', 'entree', 'side', 'dessert', 'drink', 'alcohol', 'breakfast', "
+            "'kids', 'other')",
+            name="ck_gold_course",
+        ),
+        CheckConstraint(
+            "(course IS NULL OR course_labeller IS NOT NULL) "
+            "AND (course_labeller IS NULL OR length(btrim(course_labeller)) > 0)",
+            name="ck_gold_course_labeller",
+        ),
         {"schema": SCHEMA_GOLD},
     )
 
@@ -177,6 +188,11 @@ class CurrentMenu(Base):
     # (ADR-0006 Amendment 1); a node's own row carries its own name here too.
     section_name: Mapped[str | None] = mapped_column(String(512))
     item_name: Mapped[str | None] = mapped_column(String(512))
+    # The canonical course label (ADR-0016 §6), distinct from the source-asserted
+    # ``menu_section.course``: ``course_labeller`` is the pinned labeller version on
+    # every row whose section it labelled; ``course`` is NULL when it abstained.
+    course: Mapped[str | None] = mapped_column(String(16))
+    course_labeller: Mapped[str | None] = mapped_column(String(128))
     # Shared Organization claims are acknowledged but never merged as local.
     organization_claim_count: Mapped[int] = mapped_column(Integer)
     # Refresh-run metadata: excluded from rebuild-equality comparison.
@@ -187,7 +203,7 @@ class CurrentMenu(Base):
 # category scheme (e.g. ``course``) is a new value here, not a new table or grain.
 # ``all`` is the citywide row: every placed venue, with no cell coordinates.
 AREA_KINDS = ("latlon_grid_0p01", "latlon_grid_0p05", "all")
-CATEGORY_KINDS = ("all",)
+CATEGORY_KINDS = ("all", "course")
 
 _STATS = (
     "p25_minor",

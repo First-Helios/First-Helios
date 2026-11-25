@@ -22,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 
 from apps.gold.refresh import main
 from packages.helios_core.domains.menu.commands import persist_menu
+from packages.helios_core.domains.menu.courses import load_course_pin
 from packages.helios_core.gold.models import CurrentMenu, PriceIndex
 from packages.helios_core.gold.price_index import (
     ALL_AREA,
@@ -177,6 +178,8 @@ def _menu(
     *,
     target_kind: str = "item",
     spans: list[int] | None = None,
+    course: str | None = None,
+    labeller: str | None = None,
 ) -> None:
     """``current_menu`` rows for one family: a number is priced, ``None`` unknown.
 
@@ -206,6 +209,8 @@ def _menu(
                 "content_evidence_ids": [],
                 "organization_claim_count": 0,
                 "refreshed_at": E,
+                "course": course,
+                "course_labeller": labeller,
             }
         )
     session.execute(insert(CurrentMenu), rows)
@@ -260,6 +265,63 @@ def test_percentiles_weigh_each_venue_once(factory: sessionmaker[Session]) -> No
     assert row.oldest_observed_at == OBSERVED
     assert row.newest_observed_at == OBSERVED + timedelta(days=49)
     assert row.effective_instant == E
+
+
+def test_course_rows_index_only_the_pins_passing_courses(factory: sessionmaker[Session]) -> None:
+    """ADR-0016 §6: a passing course is its own group; the rest stay in ``all`` only."""
+    pin = load_course_pin()
+    passing = pin.passing[0]
+    (cell,) = _cells(1)
+    with factory.begin() as session:
+        menus: list[list[int | None]] = [[300, 500], [400], [900]]
+        for amounts in menus:
+            _, shop = _venue(session, cell)
+            _menu(
+                session,
+                (shop, "establishment"),
+                _record(session),
+                amounts,
+                course=passing,
+                labeller=pin.labeller,
+            )
+        _, failing = _venue(session, cell)  # a course that did not pass the gate
+        _menu(
+            session,
+            (failing, "establishment"),
+            _record(session),
+            [100],
+            course="entree",
+            labeller=pin.labeller,
+        )
+        _, abstained = _venue(session, cell)
+        _menu(session, (abstained, "establishment"), _record(session), [200], labeller=pin.labeller)
+        _, stale = _venue(session, cell)  # labelled by another version: unlabelled
+        _menu(
+            session,
+            (stale, "establishment"),
+            _record(session),
+            [250],
+            course=passing,
+            labeller="course-lexicon-v0@000000000000",
+        )
+        _, unlabelled = _venue(session, cell)
+        _menu(session, (unlabelled, "establishment"), _record(session), [700])
+    with factory.begin() as session:
+        report = refresh_price_index(session, effective_instant=E)
+    with factory() as session:
+        rows = session.scalars(
+            select(PriceIndex).where(
+                PriceIndex.area_kind == AREA_KIND, PriceIndex.area_key == _key(cell)
+            )
+        ).all()
+    groups = {(r.category_kind, r.category_key): r for r in rows}
+    assert set(groups) == {("all", "all"), ("course", passing)}
+    course = groups[("course", passing)]
+    # Venue medians 300 (lower middle of 300/500), 400, 900; low sample at 3 < 5.
+    assert (course.venue_count, course.priced_count, course.median_minor) == (3, 4, 400)
+    assert course.low_sample and groups[("all", "all")].venue_count == 7
+    assert report.course_indexed >= 4 and report.course_not_indexed >= 1
+    assert report.course_abstained >= 1 and report.course_unlabelled >= 2
 
 
 def test_a_printed_price_counts_once_however_many_rows_cite_it(
@@ -568,6 +630,12 @@ def test_each_kind_aggregates_the_same_placements(isolated: sessionmaker[Session
         "no_single_venue": 0,
         "no_evidence": 0,
         "shared_menu_url": 2,
+        # Priced item rows by course outcome (ADR-0016 §6): none is labelled here.
+        "course_unlabelled": 8,
+        "course_abstained": 0,
+        "course_other": 0,
+        "course_not_indexed": 0,
+        "course_indexed": 0,
     }
     fine, coarse, city = rows[AREA_KIND], rows["latlon_grid_0p05"], rows[ALL_AREA][ALL_AREA]
     assert set(fine) == {"30.26,-97.74", "30.28,-97.72", "30.35,-97.66"}

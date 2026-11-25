@@ -26,7 +26,7 @@ import pytest
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import sessionmaker
 
-from packages.helios_core.domains.menu.commands import persist_menu
+from packages.helios_core.domains.menu.commands import persist_menu, record_section_courses
 from packages.helios_core.domains.menu.contracts import (
     ItemInput,
     MenuAggregate,
@@ -35,6 +35,7 @@ from packages.helios_core.domains.menu.contracts import (
     Target,
     VariantInput,
 )
+from packages.helios_core.domains.menu.courses import load_course_pin
 from packages.helios_core.domains.menu.enumeration import (
     MENU_PAGE_NAMESPACE,
     UNSECTIONED,
@@ -42,7 +43,7 @@ from packages.helios_core.domains.menu.enumeration import (
     dish_key,
     enumerate_current_requests,
 )
-from packages.helios_core.domains.menu.models import MenuPage, PriceObservation
+from packages.helios_core.domains.menu.models import MenuPage, MenuSection, PriceObservation
 from packages.helios_core.domains.menu.selection import (
     ContextRef,
     SelectionRequest,
@@ -727,6 +728,48 @@ def test_current_sections_and_page_summaries_for_course_candidates(
     assert ours[0].subject_kind == "establishment"
     assert page.source_record_version_id == scope.local_input.source_record_version_id
     assert (page.source_kind, page.method_version, page.unsectioned_priced) == ("dom", "1", 1)
+
+
+def _food_section(session: Session, page_id: int) -> int:
+    return session.scalars(
+        select(MenuSection.id).where(
+            MenuSection.page_id == page_id, MenuSection.section_key == "food"
+        )
+    ).one()
+
+
+def test_refresh_projects_the_pinned_section_course(factory: sessionmaker[Session]) -> None:
+    """ADR-0016 §6: labelled, abstained and unlabelled sections reach Gold distinctly."""
+    pin = load_course_pin()
+    scopes = []
+    with factory.begin() as session:
+        for _ in range(3):
+            scopes.append(_seed_scope(session, uuid4().hex, "open"))
+    pages = []
+    with factory.begin() as session:
+        for scope in scopes:
+            pages.append(persist_menu(session, aggregate(scope)).page_id)
+    with factory.begin() as session:
+        labelled, abstained = (_food_section(session, page) for page in pages[:2])
+        record_section_courses(
+            session, pin.labeller, [(labelled, "drink", None), (abstained, None, None)]
+        )
+        record_section_courses(session, "another-labeller@1", [(labelled, "entree", None)])
+    with factory.begin() as session:
+        refresh_full_catalog(session, effective_instant=E)
+    with factory() as session:
+        found = [
+            {
+                (row.course, row.course_labeller)
+                for row in session.scalars(
+                    select(CurrentMenu).where(
+                        CurrentMenu.source_record_id == scope.local_input.source_record_id
+                    )
+                )
+            }
+            for scope in scopes
+        ]
+    assert found == [{("drink", pin.labeller)}, {(None, pin.labeller)}, {(None, None)}]
 
 
 def test_page_summaries_skip_scopes_the_gate_excludes(factory: sessionmaker[Session]) -> None:

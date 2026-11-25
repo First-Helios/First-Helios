@@ -12,8 +12,9 @@ if TYPE_CHECKING:
 _CORE = "packages.helios_core"
 _REGISTRY = f"{_CORE}.db.model_registry"
 # ADR-0006 §5/§7: Gold reads vertical contracts plus the accepted read-side
-# selector and its enumeration, never vertical ORM or write commands.
-_GOLD_DOMAIN_READS = frozenset({"contracts", "selection", "enumeration"})
+# selector and its enumeration, plus the course-label read contract (ADR-0016 §3),
+# never vertical ORM or write commands.
+_GOLD_DOMAIN_READS = frozenset({"contracts", "selection", "enumeration", "courses"})
 
 
 def _within(name: str, package: str) -> bool:

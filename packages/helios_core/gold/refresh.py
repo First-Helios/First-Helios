@@ -15,6 +15,13 @@ Each row also names its path's innermost section and its item
 name of that ancestor target, from ``select_price`` on the path prefix, so
 inherit, pin and suppression rules apply exactly as they do to ``content_name``.
 
+Each row also carries its section's canonical course (ADR-0016 §6): the label
+the pinned labeller (``config/course_pin.json``) gave the section, read through
+the Menu ``courses`` contract by ``(price page, section native key)``.
+``course_labeller`` is set when the section has a label row at the pin
+(``course`` NULL when the labeller abstained); both stay NULL for an
+unlabelled section.
+
 Business columns are a deterministic function of committed input and the
 request; ``refreshed_at`` is the only non-deterministic column and is excluded
 from rebuild-equality checks. The command flushes; the caller owns the commit.
@@ -29,6 +36,11 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import delete, insert
 
+from packages.helios_core.domains.menu.courses import (
+    CoursePin,
+    load_course_pin,
+    section_courses,
+)
 from packages.helios_core.domains.menu.selection import (
     Selection,
     SelectionRequest,
@@ -139,12 +151,37 @@ def _row_values(
     }
 
 
+def _section_key(request: SelectionRequest) -> str | None:
+    """The native key of the request path's section (``None`` for a base-pinned path)."""
+    kind, key = request.target.native_path[0]
+    return key if kind == "section" else None
+
+
+def _label_courses(
+    session: Session,
+    requests: list[SelectionRequest],
+    rows: list[dict[str, Any]],
+    pin: CoursePin,
+) -> None:
+    """Fill ``course`` / ``course_labeller`` from the section labels at the pin."""
+    pages = {row["price_page_id"] for row in rows if row["price_page_id"] is not None}
+    labels = section_courses(session, pin.labeller, pages)
+    for request, row in zip(requests, rows, strict=True):
+        page, section = row["price_page_id"], _section_key(request)
+        if page is None or section is None or (page, section) not in labels:
+            row["course"] = row["course_labeller"] = None  # unlabelled at the pin
+        else:
+            row["course"] = labels[(page, section)]  # None: the labeller abstained
+            row["course_labeller"] = pin.labeller
+
+
 def refresh_current_menu(
     session: Session,
     requests: Iterable[SelectionRequest],
     *,
     subject_ids: Iterable[int] = (),
     refreshed_at: datetime | None = None,
+    course_pin: CoursePin | None = None,
 ) -> int:
     """Rebuild ``gold.current_menu`` for the requested bounded scope set.
 
@@ -173,6 +210,7 @@ def refresh_current_menu(
         _row_values(session, request, select_price(session, request), stamp, names)
         for request in ordered
     ]
+    _label_courses(session, ordered, rows, course_pin or load_course_pin())
     if rows:
         session.execute(insert(CurrentMenu), rows)
     session.flush()
