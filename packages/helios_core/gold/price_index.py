@@ -19,8 +19,10 @@ amounts) and section-level prices do not. Rules (ADR-0007 Amendment 1):
   over those venue medians. Both use
   ``percentile_disc``, so every statistic is an observed integer amount (the
   lower middle value for an even count); no float touches a price.
-* **Categories.** Only ``all`` today; ``course`` arrives as another
-  ``category_kind`` once a course label exists (ADR-0007 Amendment 1).
+* **Categories.** ``all`` holds every row. ``course`` (ADR-0016 §6) holds, per
+  course in the pin's passing list, the rows the pinned labeller gave that
+  course; other courses, ``other``, abstained and unlabelled rows are only in
+  ``all``. Same placement, venue medians, percentiles and ``low_sample``.
 * **Honesty.** Groups below :data:`MIN_VENUES` venues are kept and flagged
   ``low_sample``. Non-priced rows are counted, never in a percentile.
 * **Area kinds** (ADR-0007 Amendment 3). Each kept placement counts once per
@@ -46,16 +48,19 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_FLOOR, Decimal, localcontext
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, func, insert, select, text
 
+from packages.helios_core.domains.menu.courses import PIN_PATH, CoursePin, load_course_pin
 from packages.helios_core.gold.models import CurrentMenu, PriceIndex, PriceIndexPlacement
 from packages.helios_core.identity.contracts import current_venue_locations
 from packages.helios_core.provenance.contracts import source_endpoint_for_evidence
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
     from sqlalchemy.orm import Session
 
@@ -80,6 +85,12 @@ class PriceIndexReport:
     no_single_venue: int = 0  # not current/operating, several Establishments, or no point
     no_evidence: int = 0  # Organization family without Evidence to read its menu URL from
     shared_menu_url: int = 0  # Organization family whose menu URL another venue shares
+    # Priced item/variant rows of current_menu by course outcome (ADR-0016 §6).
+    course_unlabelled: int = 0  # no label at the pinned version
+    course_abstained: int = 0
+    course_other: int = 0
+    course_not_indexed: int = 0  # a labelled course that did not pass the gate
+    course_indexed: int = 0
 
     def summary(self) -> dict[str, int]:
         return {
@@ -90,6 +101,11 @@ class PriceIndexReport:
             "no_single_venue": self.no_single_venue,
             "no_evidence": self.no_evidence,
             "shared_menu_url": self.shared_menu_url,
+            "course_unlabelled": self.course_unlabelled,
+            "course_abstained": self.course_abstained,
+            "course_other": self.course_other,
+            "course_not_indexed": self.course_not_indexed,
+            "course_indexed": self.course_indexed,
         }
 
 
@@ -310,9 +326,9 @@ _AGGREGATE = """
         ) AS p(subject_id, subject_kind, source_record_id, venue_id, area_key, cell_lat,
                cell_lon, via_organization)
     ),
-    indexed AS (
+    menu_rows AS (
         SELECT p.venue_id, p.area_key, p.cell_lat, p.cell_lon, p.via_organization,
-               'all'::text AS category_kind, 'all'::text AS category_key,
+               c.course, c.course_labeller,
                c.currency_code, c.price_state, c.amount_minor, c.price_observed_at,
                c.source_record_id, c.price_evidence_ids
         FROM gold.current_menu c
@@ -320,6 +336,23 @@ _AGGREGATE = """
           ON p.subject_id = c.subject_id AND p.subject_kind = c.subject_kind
          AND p.source_record_id = c.source_record_id
         WHERE c.target_kind IN ('item', 'variant')
+    ),
+    indexed AS (
+        -- Every row is in `all`; a row labelled by the pinned labeller with a
+        -- course that passed the gate is also in that `course` group (ADR-0016 §6).
+        SELECT venue_id, area_key, cell_lat, cell_lon, via_organization,
+               'all'::text AS category_kind, 'all'::text AS category_key,
+               currency_code, price_state, amount_minor, price_observed_at,
+               source_record_id, price_evidence_ids
+        FROM menu_rows
+        UNION ALL
+        SELECT venue_id, area_key, cell_lat, cell_lon, via_organization,
+               'course'::text AS category_kind, course AS category_key,
+               currency_code, price_state, amount_minor, price_observed_at,
+               source_record_id, price_evidence_ids
+        FROM menu_rows
+        WHERE course_labeller = CAST(:course_labeller AS text)
+          AND course = ANY(CAST(:passing AS text[]))
     ),
     spans AS (
         -- One printed price once: a record's priced rows citing the same Evidence (a
@@ -418,7 +451,19 @@ def aggregate_params(placements: Sequence[Placement], areas: Sequence[Area]) -> 
         "cell_lons": [area[2] for area in areas],
         "via_organization": [p.via_organization for p in placements],
         "min_venues": MIN_VENUES,
+        **course_params(),
     }
+
+
+def course_params(pin_path: Path = PIN_PATH) -> dict[str, Any]:
+    """The pinned labeller and its passing courses (``config/course_pin.json``; ADR-0016 §5)."""
+    pin = _course_pin(pin_path)
+    return {"course_labeller": pin.labeller, "passing": list(pin.passing)}
+
+
+@cache
+def _course_pin(path: Path) -> CoursePin:
+    return load_course_pin(path)
 
 
 def refresh_price_index(
@@ -476,4 +521,29 @@ def refresh_price_index(
         )
     session.flush()
     report.rows = session.scalar(select(func.count()).select_from(PriceIndex)) or 0
+    _count_courses(session, report)
     return report
+
+
+_COURSE_OUTCOMES_SQL = text("""
+    SELECT
+        count(*) FILTER (WHERE course_labeller IS DISTINCT FROM :course_labeller),
+        count(*) FILTER (WHERE course_labeller = :course_labeller AND course IS NULL),
+        count(*) FILTER (WHERE course_labeller = :course_labeller AND course = 'other'),
+        count(*) FILTER (WHERE course_labeller = :course_labeller AND course <> 'other'
+                         AND NOT course = ANY(CAST(:passing AS text[]))),
+        count(*) FILTER (WHERE course_labeller = :course_labeller
+                         AND course = ANY(CAST(:passing AS text[])))
+    FROM gold.current_menu
+    WHERE target_kind IN ('item', 'variant') AND price_state = 'priced'
+""")
+
+
+def _count_courses(session: Session, report: PriceIndexReport) -> None:
+    (
+        report.course_unlabelled,
+        report.course_abstained,
+        report.course_other,
+        report.course_not_indexed,
+        report.course_indexed,
+    ) = session.execute(_COURSE_OUTCOMES_SQL, course_params()).one()

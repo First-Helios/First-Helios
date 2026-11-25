@@ -349,8 +349,10 @@ This section is the single current-status page. Other docs link here.
     ([record](./docs/reviews/2026-11-24-course-labeller-set-1.md)).
   - Slice 2 is built: the Silver `menu.section_course` table (revision `4c7d2e9a1b36`),
     `config/course_pin.json` and `python -m apps.menu_pipeline.label_courses`.
-  - Not built: the Gold course columns and rows (slice 3) and `category_kind=course` in
-    `GET /v1/price-index`.
+  - Slice 3 is built: `gold.current_menu.course`/`course_labeller` and the `course`
+    rows of `gold.price_index` for the pin's passing courses (revision `9b1e5d3c7a20`).
+  - Not built: `category_kind=course` in `GET /v1/price-index`. The API serves only
+    `all` until an ADR-0007 amendment.
 
   This is the one item left in Phase 7's "done when".
 - Price history across captures: a trail ends `absent` at the next Bronze

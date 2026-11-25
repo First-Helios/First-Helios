@@ -67,6 +67,10 @@ if TYPE_CHECKING:
     from packages.helios_core.gold.price_index_read import AreaItemRow, PriceIndexRow
 
 router = APIRouter(prefix="/price-index", tags=["price-index"], route_class=ValidatedRoute)
+# The index also holds `course` rows (ADR-0016 §6); the API serves only `all`
+# until the ADR-0007 amendment adds `course` to `CategoryKind` (ADR-0016
+# Amendment 3 Q3), so responses are unchanged by their arrival.
+SERVED_CATEGORY = "all"
 
 _RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
@@ -141,7 +145,7 @@ def get_price_index(
         Decimal(repr(lat)),
         Decimal(repr(lon)),
         area_kind=area_kind,
-        category_kind=category_kind,
+        category_kind=category_kind or SERVED_CATEGORY,
         currency_code=currency,
     )
     now = datetime.now(UTC)
@@ -185,7 +189,7 @@ def list_price_index_cells(
     rows = price_index_cells(
         session,
         area_kind,
-        category_kind=category_kind,
+        category_kind=category_kind or SERVED_CATEGORY,
         currency_code=currency,
         after=after,
         limit=limit + 1,
@@ -249,7 +253,9 @@ def get_price_index_area(
     no placed venue is ``200`` with ``items: []`` and ``as_of: null``.
     """
     shape = boundary_param(boundary)
-    area = price_index_area(session, shape, category_kind=category_kind, currency_code=currency)
+    area = price_index_area(
+        session, shape, category_kind=category_kind or SERVED_CATEGORY, currency_code=currency
+    )
     now = datetime.now(UTC)
     return PriceIndexAreaResponse(
         boundary=[(float(lat), float(lon)) for lat, lon in shape.corners],

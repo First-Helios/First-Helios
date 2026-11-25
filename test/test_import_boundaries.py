@@ -74,6 +74,7 @@ def test_forbidden_foundation_imports(path: str, source: str) -> None:
         ("gold/refresh.py", "from ..domains.menu.selection import select_price"),
         ("gold/catalog.py", "from ..domains.menu.enumeration import enumerate_current_requests"),
         ("gold/refresh.py", "from ..domains.menu.contracts import NodeKind"),
+        ("gold/refresh.py", "from ..domains.menu.courses import section_courses"),
         ("gold/refresh.py", "from ..identity.contracts import ResolvedScope"),
         ("gold/refresh.py", "from ..provenance.contracts import get_record_version"),
         ("gold/models.py", "from ..db.base import Base"),

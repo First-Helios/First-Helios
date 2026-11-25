@@ -55,13 +55,17 @@ def _tables(connection: Connection) -> dict[str, int]:
 
 def test_populated_round_trip_keeps_every_row(historical_database_engine: Engine) -> None:
     engine = historical_database_engine
-    migrate("upgrade", HEAD)
+    # Populate with today's refresh at the real head, then step back to this
+    # migration: the refresh code always matches the head schema (it reads the
+    # ADR-0016 course labels), and every later downgrade keeps current_menu's rows.
+    migrate("upgrade", "head")
     with Session(engine) as setup, setup.begin():
         scope = seed_scope(setup)
     with Session(engine) as setup, setup.begin():
         persist_menu(setup, aggregate(scope, shared=True))  # Organizations always operate
     with Session(engine) as setup, setup.begin():
         assert refresh_full_catalog(setup, effective_instant=E) >= 1
+    migrate("downgrade", HEAD)
     with engine.connect() as connection:
         before = _tables(connection)
         named = connection.execute(

@@ -718,6 +718,25 @@ Each item below names the text it amends.
      separate go-ahead with backups. The CLI writes only `menu.section_course` (new
      rows), and the Gold refresh is rebuildable.
 
+## Implementation notes (2026-11-24, slices 2–3)
+
+- **Slice 2** (#190, revision `4c7d2e9a1b36`) is as Amendment 3 item 4 describes.
+- **Slice 3** (revision `9b1e5d3c7a20`) refines one point of Amendment 3 item 5.
+  - `course_labeller` is set on every row whose section has a label row at the pin,
+    abstentions included, with `course` NULL on an abstention. `ck_gold_course_labeller`
+    reads "`course` set ⇒ `course_labeller` set", not "both or neither".
+  - Without this, Gold could not tell `course_abstained` from `course_unlabelled` for the
+    refresh report (§6).
+- **The API.** The price-index routes pass `category_kind or 'all'`, so responses are
+  unchanged until the ADR-0007 amendment adds `course` (Amendment 3 Q3).
+- **On the swap-5 scratch copy** (`label_courses --commit`, then `apps.gold.refresh` at
+  the data's instant):
+  - The 421 `all` rows are identical, compared by a checksum of their business columns.
+  - 649 `course` rows were added. Citywide medians: `drink` 400 over 391 venues,
+    `alcohol` 1000 over 195, `breakfast` 995 over 153.
+  - Priced rows by outcome: unlabelled 0, abstained 31,685, `other` 3,597, not indexed
+    39,970, indexed 24,156.
+
 ## Implementation notes (2026-10-21)
 
 - Slice 1a is built (labelling guide, `apps/menu_pipeline/course_eval.py`,
