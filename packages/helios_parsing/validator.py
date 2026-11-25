@@ -1,4 +1,4 @@
-"""Stage [5] validator v13: static grounding checks on extracted rows (ADR-0013 §1, §5).
+"""Stage [5] validator v14: static grounding checks on extracted rows (ADR-0013 §1, §5).
 
 Ported from ``spikes/menu_model/validator.py`` as frozen at spike commit
 ``e6e4e1f`` with ``MENU_SPIKE_VALIDATOR=v3``; the per-row decisions are the
@@ -82,13 +82,19 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Literal
 
-from packages.helios_parsing.prices import PriceToken, bare_page, price_tokens, read_amount
+from packages.helios_parsing.prices import (
+    INCH_LABEL,
+    PriceToken,
+    bare_page,
+    price_tokens,
+    read_amount,
+)
 from packages.helios_parsing.segment import SEGMENTER_VERSION
 
 if TYPE_CHECKING:
     from packages.helios_parsing.segment import Block
 
-VALIDATOR_VERSION = "validator-v13"  # part of the pipeline version
+VALIDATOR_VERSION = "validator-v14"  # part of the pipeline version
 SCAN = 15  # max blocks scanned after a name for its nearest price run
 MIN_AMOUNT, MAX_AMOUNT = Decimal("0.10"), Decimal("500")
 IGNORED_TOKENS = frozenset({"and", "the", "a", "of", "with", "w", "n"})
@@ -535,6 +541,10 @@ def label_tokens(blocks: list[Block], prices: list[list[PriceToken]], tok: Price
     header printed one label per block."""
     j = tok.block_index
     beside = price_label(blocks[j].text, prices[j], tok)
+    # A slash-suffixed diameter belongs only to the price before it in this field.
+    suffix = re.split(r"[|•]", blocks[j].text[tok.end :], maxsplit=1)[0].strip()
+    if suffix.startswith("/") and (diameter := INCH_LABEL.fullmatch(suffix[1:].strip())):
+        beside = diameter[1]
     if not beside and stacked(blocks, prices, j - 1):
         beside = blocks[j - 1].text
     return (

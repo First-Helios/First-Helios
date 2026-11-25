@@ -113,6 +113,9 @@ _V5_FORMS = (
 )
 
 
+INCH_LABEL = re.compile(r'([1-9][0-9]?)\s*["”″]')
+
+
 @dataclass(frozen=True, slots=True)
 class PriceToken:
     block_index: int

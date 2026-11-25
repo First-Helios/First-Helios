@@ -347,3 +347,70 @@ The retained run directory on the Pi is
 packet summary, gate and before/after benchmark reports. The scratch database
 container was stopped after verification. The laptop has a copy of the run
 evidence in `var/pr186-pi-replay/`.
+
+## Printed pizza diameters in saved answers
+
+Baseline `83c0b2f` reproduced six `answer_repair_loss` results at Warpath.
+Cheese & Chong prints 12, 16 and 18 inches at $19, $23 and $25. Santa Rosa
+prints the same diameters at $19, $24 and $26. The saved answers had all six
+pairs. Preserving the number in repair also requires the validator to recognize
+an inch mark in a slash suffix such as `$19.00/12"`.
+
+The candidate uses the item's printed name and its contiguous price fields. Each
+field must have one marked or decimal amount. A numeric size must occur with an
+inch mark in the same field as the claimed amount. Two different amounts for
+the claimed diameter make the claim ambiguous. The regressions include swapped
+amounts, counts, neighboring dishes, and a size label mistaken for an item.
+
+| Venue | Baseline served | Candidate served | Gained | Lost | New wrong diameter/price pairs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Café Blue | 4/6 | 4/6 | 0 | 0 | 0 |
+| Brix and Ale | 4/4 | 4/4 | 0 | 0 | 0 |
+| Warpath Pizza and Pub | 0/6 | 6/6 | 6 | 0 | 0 |
+| Hippie Picnik | 2/3 | 2/3 | 0 | 0 | 0 |
+| TenTen | 3/3 | 3/3 | 0 | 0 | 0 |
+| The ABGB, independent domain | 0/17 | 7/17 | 7 | 0 | 0 |
+
+The original five venues improved from 13/22 to 19/22 and from 66.7% to 86.7%
+mean venue recall. The ABGB labels cover the seven consecutive dishes under
+“Pizza,” including the five slice prices. We selected this domain for its mixed
+layouts and recorded the 17 amounts from the document before reading its answers.
+An initial candidate treated the word “Slice” in a price line as the owner of
+the two whole-pie prices. The final repair excludes that case. The ABGB
+therefore also served as a regression domain during development.
+[Independent labels and capture digest](../../test/fixtures/venue-prices/abgb.json)
+
+**Whole-menu audit.** We compared every distinct priced API triple by venue
+and URL, including items outside the manifests. All 58 new Warpath diameter
+triples and all seven new ABGB diameter triples matched their own item's
+printed amount. At Warpath, 24 unqualified prices became diameter-specific.
+The four other original venues had identical API triples. The benchmark's
+`wrong_variant_prices` list checks additional amounts published for a labelled
+item and variant. The separate whole-menu audit also checked new item names
+and diameters outside those labels.
+
+At The ABGB, three $5 slice prices appeared as unqualified prices for Calabrese,
+Housemade Sausage and Wagyu Beef. Their $22 prices moved to the 14-inch variant.
+Marinara's $16 moved to its 16-inch variant. **White Clam lost its unqualified
+$24**, and the validator rejected its claimed 16-inch price. Its labelled
+triple was missing on both revisions. The baseline's incorrect $18 base price
+on an item named “Slice” also persists. These are limitations of the published
+menu even though all seven newly published diameters are correct.
+
+**Replay.** The benchmark used separate disposable swap-5 databases, saved
+answers, production extraction with the due queue restricted to the six venues,
+and a bounded refresh of their establishment and organization menu projections.
+All 12 due records reused complete page answers in 46.1 seconds, with zero
+failures and zero model calls. Both the repaired rows and price-label validation
+can change stored results, so the method advances to `repairs-v10` and
+`validator-v14`. The extractor key is identical. The unrestricted due query
+returned 2,863 records. At the earlier measured Pi rate of 1,151.5 cached
+pages/hour, budget about **2 h 29 min for extraction** and **48 min for a full
+Gold refresh**, about **3 h 17 min** together on the same snapshot and hardware.
+This is a candidate estimate based on the earlier full Pi run.
+
+To reproduce with the disposable restore and replay directory described above,
+run the venue benchmark on both manifests at the baseline, using the candidate's
+ABGB manifest as input. On a clone run candidate extraction with `--no-model`
+and the same `--base-dir`, refresh Gold, then run both manifests again. The
+ordinary full extraction and Gold commands also cover all benchmark scopes.
