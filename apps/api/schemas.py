@@ -206,6 +206,8 @@ CurrencyCode = Literal["USD"]
 #: citywide ``all`` row. A point names a cell only on a grid.
 AreaKind = Literal["latlon_grid_0p01", "latlon_grid_0p05", "all"]
 GridAreaKind = Literal["latlon_grid_0p01", "latlon_grid_0p05"]
+#: The orders of a drawn area's item list (ADR-0020 §4 and Amendment 1).
+AreaItemSort = Literal["price", "typical"]
 
 
 class PriceIndexGroupResponse(BaseModel):
@@ -352,13 +354,18 @@ class AreaItemResponse(BaseModel):
 class AreaItemList(BaseModel):
     """A cursor-paginated page of the priced rows behind a drawn area's price index.
 
-    Items are ordered by ``amount_minor`` (cheapest first), then by the row's
-    business key, so the order is total. ``as_of`` is the earliest refresh
-    instant on the page; null when ``items`` is empty. ``next_cursor`` is null
-    on the last page.
+    With ``sort=price``, items are ordered by ``amount_minor`` (cheapest
+    first), then by the row's business key. With ``sort=typical``, nearest
+    ``pivot_minor`` first (the cheaper of two equally near rows first), one
+    row per venue per round at each price, then the venue and the business
+    key. Either order is total. ``pivot_minor`` is the area's headline median
+    in the ``typical`` order (null for ``price``, or when nothing is priced).
+    ``as_of`` is the earliest refresh instant on the page; null when
+    ``items`` is empty. ``next_cursor`` is null on the last page.
     """
 
     as_of: datetime | None
+    pivot_minor: int | None
     items: list[AreaItemResponse]
     next_cursor: str | None
 

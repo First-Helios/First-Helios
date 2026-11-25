@@ -307,6 +307,26 @@ def price_index_area(
 type AreaItemKey = tuple[
     int, int, str, int, str, str, str, str | None, datetime | None, datetime | None, str
 ]
+#: An area item's position in the ``typical`` order (ADR-0020 Amendment 1
+#: items 2.2-2.4): the walk's ``pivot``, the distance ``|amount_minor - pivot|``,
+#: ``amount_minor``, the venue round, ``venue_id``, then the same grain.
+type TypicalAreaItemKey = tuple[
+    int,
+    int,
+    int,
+    int,
+    int,
+    int,
+    str,
+    int,
+    str,
+    str,
+    str,
+    str | None,
+    datetime | None,
+    datetime | None,
+    str,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,6 +352,9 @@ class AreaItemRow:
     content_name: str | None
     section_name: str | None
     item_name: str | None
+    #: The row's round in the ``typical`` order: its rank among its venue's
+    #: rows at the same price, by the grain. None in the ``price`` order.
+    venue_round: int | None = None
 
     @property
     def native_path(self) -> tuple[tuple[str, str], ...]:
@@ -353,28 +376,56 @@ class AreaItemRow:
             self.currency_code,
         )
 
+    def typical_key(self, pivot: int) -> TypicalAreaItemKey:
+        """The row's :data:`TypicalAreaItemKey` in a walk around ``pivot``."""
+        if self.venue_round is None:
+            raise ValueError("not a typical-order row")
+        return (
+            pivot,
+            abs(self.amount_minor - pivot),
+            self.amount_minor,
+            self.venue_round,
+            self.venue_id,
+            self.subject_id,
+            self.subject_kind,
+            self.source_record_id,
+            self.root_key,
+            self.target_path,
+            self.channel,
+            self.service_period,
+            self.valid_from,
+            self.valid_to,
+            self.currency_code,
+        )
+
+
+def _grain_order(a: str) -> str:
+    """The ``uq_gold_current_menu`` grain as a NULL-safe sort key, on table alias ``a``."""
+    return (
+        f"{a}.subject_id, {a}.subject_kind, {a}.source_record_id, {a}.root_key, "
+        f"{a}.target_path, {a}.channel, "
+        f"{a}.service_period IS NOT NULL, coalesce({a}.service_period, ''), "
+        f"{a}.valid_from IS NOT NULL, coalesce({a}.valid_from, '-infinity'), "
+        f"{a}.valid_to IS NOT NULL, coalesce({a}.valid_to, '-infinity'), {a}.currency_code"
+    )
+
 
 # The keyset, NULL-safe: each nullable grain column sorts by "is not null"
 # first (NULLs lowest), then by its value with NULL replaced by a constant, so
 # ORDER BY and the row comparison agree and a NULL never makes it unknown.
-_ITEM_ORDER = (
-    "c.amount_minor, c.subject_id, c.subject_kind, c.source_record_id, c.root_key, "
-    "c.target_path, c.channel, c.service_period IS NOT NULL, coalesce(c.service_period, ''), "
-    "c.valid_from IS NOT NULL, coalesce(c.valid_from, '-infinity'), "
-    "c.valid_to IS NOT NULL, coalesce(c.valid_to, '-infinity'), c.currency_code"
-)
-_ITEM_AFTER = (
-    f"AND ({_ITEM_ORDER}) > (CAST(:a_amount AS bigint), CAST(:a_subject AS bigint), "
+_ITEM_ORDER = "c.amount_minor, " + _grain_order("c")
+_GRAIN_AFTER = (
+    "CAST(:a_subject AS bigint), "
     "CAST(:a_kind AS text), CAST(:a_record AS bigint), CAST(:a_root AS text), "
     "CAST(:a_path AS text), CAST(:a_channel AS text), "
     "CAST(:a_period AS text) IS NOT NULL, coalesce(CAST(:a_period AS text), ''), "
     "CAST(:a_from AS timestamptz) IS NOT NULL, "
     "coalesce(CAST(:a_from AS timestamptz), '-infinity'), "
     "CAST(:a_to AS timestamptz) IS NOT NULL, "
-    "coalesce(CAST(:a_to AS timestamptz), '-infinity'), CAST(:a_currency AS text))"
+    "coalesce(CAST(:a_to AS timestamptz), '-infinity'), CAST(:a_currency AS text)"
 )
-_AFTER_PARAMS = (
-    "a_amount",
+_ITEM_AFTER = f"AND ({_ITEM_ORDER}) > (CAST(:a_amount AS bigint), {_GRAIN_AFTER})"
+_GRAIN_PARAMS = (
     "a_subject",
     "a_kind",
     "a_record",
@@ -385,6 +436,27 @@ _AFTER_PARAMS = (
     "a_from",
     "a_to",
     "a_currency",
+)
+_AFTER_PARAMS = ("a_amount", *_GRAIN_PARAMS)
+# The typical order (ADR-0020 Amendment 1 items 2.2-2.4) over the windowed rows
+# ``r``: distance from the pivot (numeric, so no stored amount or cursor pivot
+# can overflow), the cheaper of two equally distant rows, the venue round,
+# then the venue and the grain.
+_TYPICAL_DISTANCE = "abs(CAST(r.amount_minor AS numeric) - CAST(:pivot AS numeric))"
+_TYPICAL_ORDER = f"{_TYPICAL_DISTANCE}, r.amount_minor, r.venue_round, r.venue_id, " + _grain_order(
+    "r"
+)
+_TYPICAL_AFTER = (
+    f"AND ({_TYPICAL_ORDER}) > (CAST(:a_distance AS numeric), CAST(:a_amount AS bigint), "
+    f"CAST(:a_round AS bigint), CAST(:a_venue AS bigint), {_GRAIN_AFTER})"
+)
+_TYPICAL_AFTER_PARAMS = ("a_distance", "a_amount", "a_round", "a_venue", *_GRAIN_PARAMS)
+# A venue's k-th row at one price comes in round k, so one venue's rows at the
+# pivot don't fill a page. Equal price means equal distance, so the partition
+# holds exactly the rows equal on every earlier key.
+_VENUE_ROUND = (
+    ",\n           row_number() OVER (PARTITION BY p.venue_id, c.amount_minor "
+    f"ORDER BY {_grain_order('c')}) AS venue_round"
 )
 # Item and variant names only (ADR-0020 OQ6): a row's item_name is its item's
 # name (its own, on an item row); a variant row's own name is its content_name.
@@ -403,7 +475,7 @@ _ITEMS_SQL = """
            c.target_kind, c.target_path, c.channel, c.service_period, c.valid_from,
            c.valid_to, c.currency_code, c.effective_instant, c.amount_minor,
            c.price_observed_at, c.price_source_kind, c.content_name, c.section_name,
-           c.item_name
+           c.item_name{extra}
     FROM gold.current_menu c
     JOIN placed p
       ON p.subject_id = c.subject_id AND p.subject_kind = c.subject_kind
@@ -437,6 +509,86 @@ def price_index_area_items(
     case-insensitively. Bounded by the placements inside the boundary; no
     index on names. Read-only; takes no locks.
     """
+    query = _area_items_query(
+        session, boundary, currency_code=currency_code, name=name, categories=categories
+    )
+    if query is None:
+        return []
+    sql, params = query
+    if after is not None:
+        sql += _ITEM_AFTER + "\n"
+        params |= dict(zip(_AFTER_PARAMS, after, strict=True))
+    sql += f"ORDER BY {_ITEM_ORDER}\nLIMIT :limit"
+    params["limit"] = limit
+    return [AreaItemRow(**row) for row in session.execute(text(sql), params).mappings()]
+
+
+def area_pivot(
+    session: Session, boundary: Boundary, *, currency_code: str | None = None
+) -> int | None:
+    """The ``typical`` order's pivot: ``boundary``'s headline (``all``) median.
+
+    The figure ``/v1/price-index/area`` serves for the same currency
+    (ADR-0020 Amendment 1 Q1); with no currency, the first currency's (Gold
+    holds USD only). None when the boundary has no priced placed row.
+    """
+    area = price_index_area(session, boundary, category_kind="all", currency_code=currency_code)
+    return next((row.median_minor for row in area.rows if row.median_minor is not None), None)
+
+
+def price_index_area_items_typical(
+    session: Session,
+    boundary: Boundary,
+    *,
+    pivot: int,
+    currency_code: str | None = None,
+    name: str | None = None,
+    categories: CategoryFilters | None = None,
+    after: TypicalAreaItemKey | None = None,
+    limit: int,
+) -> list[AreaItemRow]:
+    """Up to ``limit`` of :func:`price_index_area_items`' rows after ``after``, typical first.
+
+    In :data:`TypicalAreaItemKey` order (ADR-0020 Amendment 1 items
+    2.2-2.4): nearest ``pivot`` first, the cheaper of two equally near rows
+    first, a venue's k-th row at one price in round k, then the venue and the
+    grain. Total, so the keyset works. ``after`` carries the walk's pivot,
+    which must be ``pivot``. The rounds are counted over every filtered row,
+    so the window runs over all of them on every page. Read-only; takes no
+    locks.
+    """
+    if after is not None and after[0] != pivot:
+        raise ValueError("a typical cursor continues the walk around its own pivot")
+    query = _area_items_query(
+        session,
+        boundary,
+        currency_code=currency_code,
+        name=name,
+        categories=categories,
+        extra=_VENUE_ROUND,
+    )
+    if query is None:
+        return []
+    inner, params = query
+    sql = f"SELECT * FROM ({inner}) r\nWHERE true\n"  # noqa: S608 - static fragments; values are bound
+    if after is not None:
+        sql += _TYPICAL_AFTER + "\n"
+        params |= dict(zip(_TYPICAL_AFTER_PARAMS, after[1:], strict=True))
+    sql += f"ORDER BY {_TYPICAL_ORDER}\nLIMIT :limit"
+    params |= {"pivot": pivot, "limit": limit}
+    return [AreaItemRow(**row) for row in session.execute(text(sql), params).mappings()]
+
+
+def _area_items_query(
+    session: Session,
+    boundary: Boundary,
+    *,
+    currency_code: str | None,
+    name: str | None,
+    categories: CategoryFilters | None,
+    extra: str = "",
+) -> tuple[str, dict[str, Any]] | None:
+    """The filtered rows behind ``boundary``'s aggregate, unordered; None when none are placed."""
     placements, _ = _placements_inside(session, boundary)
     if categories and placements:
         allowed = set(
@@ -449,26 +601,21 @@ def price_index_area_items(
         )
         placements = [p for p in placements if p.venue_id in allowed]
     if not placements:
-        return []
+        return None
     params: dict[str, Any] = {
         "subjects": [p.subject_id for p in placements],
         "subject_kinds": [p.subject_kind for p in placements],
         "records": [p.source_record_id for p in placements],
         "venues": [p.venue_id for p in placements],
-        "limit": limit,
     }
-    sql = _ITEMS_SQL
+    sql = _ITEMS_SQL.format(extra=extra)
     if currency_code is not None:
         sql += "AND c.currency_code = :currency\n"
         params["currency"] = currency_code
     if name is not None:
         sql += _ITEM_NAME + "\n"
         params["pattern"] = like_pattern(name)
-    if after is not None:
-        sql += _ITEM_AFTER + "\n"
-        params |= dict(zip(_AFTER_PARAMS, after, strict=True))
-    sql += f"ORDER BY {_ITEM_ORDER}\nLIMIT :limit"
-    return [AreaItemRow(**row) for row in session.execute(text(sql), params).mappings()]
+    return sql, params
 
 
 def indexed_area_venue_ids(
@@ -478,7 +625,7 @@ def indexed_area_venue_ids(
     placements, _ = _placements_inside(session, boundary)
     if not placements:
         return set()
-    sql = _ITEMS_SQL + (_ITEM_NAME if name is not None else "")
+    sql = _ITEMS_SQL.format(extra="") + (_ITEM_NAME if name is not None else "")
     sql = "SELECT DISTINCT venue_id FROM (" + sql + ") matching"  # noqa: S608 - static fragments; name is bound
     params: dict[str, Any] = {
         "subjects": [p.subject_id for p in placements],
