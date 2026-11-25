@@ -28,7 +28,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from apps.api.db import get_session
 from apps.api.item_ids import decode_item_id
 from apps.api.main import app
-from apps.api.pagination import decode_area_item_cursor, encode_area_item_cursor
+from apps.api.pagination import (
+    decode_area_item_cursor,
+    decode_typical_area_item_cursor,
+    encode_area_item_cursor,
+    encode_typical_area_item_cursor,
+)
 from packages.helios_core.gold.models import CurrentMenu, PriceIndex, PriceIndexPlacement
 from packages.helios_core.gold.price_index import (
     ALL_AREA,
@@ -589,7 +594,135 @@ def test_empty_items_are_200(client: TestClient) -> None:
             "boundary": _rect(corner[0], corner[1], corner[0] + D("0.1"), corner[1] + D("0.1"))
         },
     ).json()
-    assert body == {"as_of": None, "items": [], "next_cursor": None}
+    assert body == {"as_of": None, "pivot_minor": None, "items": [], "next_cursor": None}
+
+
+# --------------------------------------------------------------------------- #
+# The typical order (ADR-0020 Amendment 1, step 1: median distance and venue rotation).
+# --------------------------------------------------------------------------- #
+
+
+def _key_of(item: dict[str, Any]) -> tuple[int, int, str | None]:
+    return (item["amount_minor"], item["venue_id"], item["service_period"])
+
+
+@pytest.mark.parametrize("limit", [1, 2, 200])
+def test_typical_walk_is_nearest_the_median_with_venues_taking_turns(
+    client: TestClient, session: Session, limit: int
+) -> None:
+    burgers, tacos, boundary = _seed_items(session, _region())
+    # Venue medians 500 (Burger Barn) and 300 (Taco Stand): the headline is 300.
+    (summary,) = _area(client, boundary)["items"]
+    assert summary["median_minor"] == 300
+
+    pages: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        params = {"boundary": boundary, "sort": "typical", "limit": str(limit)}
+        if cursor:
+            params["cursor"] = cursor
+        body = client.get("/v1/price-index/area/items", params=params).json()
+        pages.append(body)
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+    items = [item for page in pages for item in page["items"]]
+
+    assert {page["pivot_minor"] for page in pages} == {300}
+    assert [_key_of(i) for i in items] == [
+        (300, burgers, None),  # at the pivot: one row per venue, the venue first created first
+        (300, tacos, None),
+        (250, tacos, None),  # 50 away
+        (500, burgers, None),  # 200 away, round 1 ...
+        (500, tacos, None),
+        (500, burgers, "dinner"),  # ... and Burger Barn's second $5.00 row in round 2
+        (700, burgers, None),
+    ]
+    assert len(items) == summary["priced_count"]  # the same rows as the price order
+
+
+def test_typical_rounds_never_repeat_a_venue(client: TestClient, session: Session) -> None:
+    corner = _region()
+    point = _at(corner, "0.005", "0.005")
+    many = _shop(session, point, [1000, 1000, 1000, 1000])
+    one = _shop(session, point, [1000])
+    other = _shop(session, point, [1000, 1200])
+    _refresh(session)
+    s, w = corner
+    boundary = _rect(s, w, s + D("0.01"), w + D("0.01"))
+
+    body = client.get(
+        "/v1/price-index/area/items", params={"boundary": boundary, "sort": "typical"}
+    ).json()
+    assert body["pivot_minor"] == 1000
+    assert [i["venue_id"] for i in body["items"]] == [many, one, other, many, many, many, other]
+
+
+def test_typical_q_narrows_the_rows_but_not_the_pivot(client: TestClient, session: Session) -> None:
+    burgers, tacos, boundary = _seed_items(session, _region())
+    body = client.get(
+        "/v1/price-index/area/items",
+        params={"boundary": boundary, "sort": "typical", "q": "burger"},
+    ).json()
+    assert body["pivot_minor"] == 300
+    assert [_key_of(i) for i in body["items"]] == [
+        (250, tacos, None),
+        (500, burgers, None),
+        (500, burgers, "dinner"),
+    ]
+
+
+def test_typical_walk_keeps_its_pivot_across_a_refresh(
+    client: TestClient, session: Session
+) -> None:
+    corner = _region()
+    _, _, boundary = _seed_items(session, corner)
+    first = client.get(
+        "/v1/price-index/area/items",
+        params={"boundary": boundary, "sort": "typical", "limit": "3"},
+    ).json()
+    assert first["pivot_minor"] == 300
+    cursor = first["next_cursor"]
+    assert decode_typical_area_item_cursor(cursor)[0] == 300
+
+    # A third venue moves the headline: venue medians 300, 500, 900.
+    _shop(session, _at(corner, "0.006", "0.006"), [900, 900, 900])
+    _refresh(session, E + timedelta(days=1))
+    (summary,) = _area(client, boundary)["items"]
+    assert summary["median_minor"] == 500
+
+    rest = client.get(
+        "/v1/price-index/area/items",
+        params={"boundary": boundary, "sort": "typical", "cursor": cursor, "limit": "200"},
+    ).json()
+    assert rest["pivot_minor"] == 300  # the walk's pivot, not today's median
+    distances = [abs(i["amount_minor"] - 300) for i in first["items"] + rest["items"]]
+    assert distances == sorted(distances)
+    assert [i["amount_minor"] for i in rest["items"]] == [500, 500, 500, 700, 900, 900, 900]
+
+    fresh = client.get(
+        "/v1/price-index/area/items", params={"boundary": boundary, "sort": "typical"}
+    ).json()
+    assert fresh["pivot_minor"] == 500
+
+
+def test_typical_empty_boundary_is_200(client: TestClient) -> None:
+    corner = _region()
+    body = client.get(
+        "/v1/price-index/area/items",
+        params={
+            "boundary": _rect(corner[0], corner[1], corner[0] + D("0.1"), corner[1] + D("0.1")),
+            "sort": "typical",
+        },
+    ).json()
+    assert body == {"as_of": None, "pivot_minor": None, "items": [], "next_cursor": None}
+
+
+def test_unknown_sort_is_422(client: TestClient) -> None:
+    response = client.get(
+        "/v1/price-index/area/items", params={"boundary": "0,0;0,1;1,0", "sort": "dearest"}
+    )
+    assert response.status_code == 422
 
 
 def _token(payload: bytes) -> str:
@@ -657,8 +790,49 @@ def test_area_item_cursor_round_trips() -> None:
     ],
 )
 def test_malformed_area_item_cursor_is_400(client: TestClient, cursor: str) -> None:
+    _assert_bad_cursor(client, cursor, "price")
+
+
+_TYPICAL_KEY = (300, 200, 500, 2, 7, *_KEY[1:])
+_TYPICAL_VALID = encode_typical_area_item_cursor(_TYPICAL_KEY)
+
+
+def test_typical_area_item_cursor_round_trips() -> None:
+    assert decode_typical_area_item_cursor(_TYPICAL_VALID) == _TYPICAL_KEY
+    below = (300, 50, 250, 1, 7, *_KEY[1:])
+    assert decode_typical_area_item_cursor(encode_typical_area_item_cursor(below)) == below
+
+
+def _typical(*head: object) -> str:
+    grain = [1, "establishment", 2, "page", "p", "unspecified", None, None, None, "USD"]
+    return _token(json.dumps([*head, *grain], separators=(",", ":")).encode())
+
+
+@pytest.mark.parametrize(
+    ("sort", "cursor"),
+    [
+        ("typical", _VALID),  # a price cursor
+        ("price", _TYPICAL_VALID),  # a typical cursor
+        ("typical", _TYPICAL_VALID + "A"),
+        ("typical", _typical(300, 199, 500, 1, 7)),  # distance is not |amount - pivot|
+        ("typical", _typical(300, -200, 100, 1, 7)),
+        ("typical", _typical(300, 200, 500, 0, 7)),  # rounds count from 1
+        ("typical", _typical(300, 200, 500, 1, -1)),
+        ("typical", _typical(300, True, 500, 1, 7)),
+        ("typical", _typical(300.0, 200, 500, 1, 7)),
+        ("typical", _typical(300, 200, 500, 1)),
+    ],
+)
+def test_cursor_of_the_wrong_sort_or_malformed_typical_is_400(
+    client: TestClient, sort: str, cursor: str
+) -> None:
+    _assert_bad_cursor(client, cursor, sort)
+
+
+def _assert_bad_cursor(client: TestClient, cursor: str, sort: str) -> None:
     response = client.get(
-        "/v1/price-index/area/items", params={"boundary": "0,0;0,1;1,0", "cursor": cursor}
+        "/v1/price-index/area/items",
+        params={"boundary": "0,0;0,1;1,0", "cursor": cursor, "sort": sort},
     )
     assert response.status_code == 400, cursor
     body = response.json()
@@ -759,24 +933,27 @@ def _plans(
 
 
 @pytest.mark.parametrize(
-    ("path", "extra"),
+    ("path", "extra", "statements"),
     [
-        ("/v1/price-index/area", {}),
-        ("/v1/price-index/area", {"currency": "USD"}),
-        ("/v1/price-index/area/items", {}),
-        ("/v1/price-index/area/items", {"q": "burger", "currency": "USD"}),
-        ("/v1/price-index/area/items", {"cursor": _VALID}),
+        ("/v1/price-index/area", {}, 2),
+        ("/v1/price-index/area", {"currency": "USD"}, 2),
+        ("/v1/price-index/area/items", {}, 2),
+        ("/v1/price-index/area/items", {"q": "burger", "currency": "USD"}, 2),
+        ("/v1/price-index/area/items", {"cursor": _VALID}, 2),
+        # The first typical page also reads the headline median: the /area statements first.
+        ("/v1/price-index/area/items", {"sort": "typical"}, 4),
+        ("/v1/price-index/area/items", {"sort": "typical", "cursor": _TYPICAL_VALID}, 2),
     ],
 )
 def test_area_reads_never_seq_scan(
-    client: TestClient, session: Session, path: str, extra: dict[str, str]
+    client: TestClient, session: Session, path: str, extra: dict[str, str], statements: int
 ) -> None:
     _, _, boundary = _seed_items(session, _region())
     plans = _plans(client, session, path, {"boundary": boundary, **extra})
-    assert len(plans) == 2  # the placements in the bbox, then the menu rows
+    assert len(plans) == statements  # the placements in the bbox, then the menu rows
     for nodes in plans:
         assert not [n for n in nodes if n.get("Node Type") == "Seq Scan"]
-    placement, menu = ({n.get("Index Name") for n in nodes} for nodes in plans)
+    placement, menu = ({n.get("Index Name") for n in nodes} for nodes in plans[-2:])
     assert "ix_gold_price_index_placement_point" in placement
     # The menu rows are reached per placed family through one of current_menu's
     # indexes: the planner's pick (uq_gold_current_menu, the scope or the record

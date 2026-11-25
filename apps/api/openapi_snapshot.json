@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "AreaItemList": {
-        "description": "A cursor-paginated page of the priced rows behind a drawn area's price index.\n\nItems are ordered by ``amount_minor`` (cheapest first), then by the row's\nbusiness key, so the order is total. ``as_of`` is the earliest refresh\ninstant on the page; null when ``items`` is empty. ``next_cursor`` is null\non the last page.",
+        "description": "A cursor-paginated page of the priced rows behind a drawn area's price index.\n\nWith ``sort=price``, items are ordered by ``amount_minor`` (cheapest\nfirst), then by the row's business key. With ``sort=typical``, nearest\n``pivot_minor`` first (the cheaper of two equally near rows first), one\nrow per venue per round at each price, then the venue and the business\nkey. Either order is total. ``pivot_minor`` is the area's headline median\nin the ``typical`` order (null for ``price``, or when nothing is priced).\n``as_of`` is the earliest refresh instant on the page; null when\n``items`` is empty. ``next_cursor`` is null on the last page.",
         "properties": {
           "as_of": {
             "anyOf": [
@@ -33,10 +33,22 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "pivot_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pivot Minor"
           }
         },
         "required": [
           "as_of",
+          "pivot_minor",
           "items",
           "next_cursor"
         ],
@@ -1810,7 +1822,7 @@
     },
     "/v1/price-index/area/items": {
       "get": {
-        "description": "Return one page of the priced item and variant rows behind ``/v1/price-index/area``.\n\nThe rows of the venues the index places inside ``boundary`` (shared chain\nmenus left out, as from the median), cheapest first (ADR-0020 \u00a74). Without\n``q``, walking every page gives ``priced_count`` rows. The cursor names the\nlast row's price and business key, not a row id, so it survives a refresh;\nit does not carry ``boundary`` or the filters: send the same ones with\nevery page. A boundary or ``q`` that matches nothing is ``200`` with\n``items: []``.",
+        "description": "Return one page of the priced item and variant rows behind ``/v1/price-index/area``.\n\nThe rows of the venues the index places inside ``boundary`` (shared chain\nmenus left out, as from the median). ``sort=price`` (the default) lists\nthem cheapest first (ADR-0020 \u00a74). ``sort=typical`` lists them nearest\nthe area's headline median first, returned as ``pivot_minor``; among rows\nat one price, each venue's k-th row comes in round k (ADR-0020\nAmendment 1). Without ``q``, walking every page gives ``priced_count``\nrows. The cursor names the last row's position and business key, not a\nrow id, so it survives a refresh; a ``typical`` cursor also keeps its\npivot, so a walk stays on one median. A cursor from the other ``sort`` is\n``400``. It does not carry ``boundary`` or the filters: send the same ones\nwith every page. A boundary or ``q`` that matches nothing is ``200`` with\n``items: []``.",
         "operationId": "list_price_index_area_items_v1_price_index_area_items_get",
         "parameters": [
           {
@@ -1859,6 +1871,22 @@
               ],
               "description": "Only rows whose item or variant name contains this text, case-insensitively (section names are not matched).",
               "title": "Q"
+            }
+          },
+          {
+            "description": "price: cheapest first. typical: nearest the area's headline median first, venues taking turns.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "price",
+              "description": "price: cheapest first. typical: nearest the area's headline median first, venues taking turns.",
+              "enum": [
+                "price",
+                "typical"
+              ],
+              "title": "Sort",
+              "type": "string"
             }
           },
           {

@@ -30,12 +30,15 @@ from apps.api.pagination import (
     MAX_LIMIT,
     decode_area_item_cursor,
     decode_cell_cursor,
+    decode_typical_area_item_cursor,
     encode_area_item_cursor,
     encode_cell_cursor,
+    encode_typical_area_item_cursor,
 )
 from apps.api.schemas import (
     AreaItemList,
     AreaItemResponse,
+    AreaItemSort,
     AreaKind,
     CategoryKind,
     CurrencyCode,
@@ -49,8 +52,10 @@ from apps.api.schemas import (
 )
 from packages.helios_core.gold.price_index import GRID_STEPS
 from packages.helios_core.gold.price_index_read import (
+    area_pivot,
     price_index_area,
     price_index_area_items,
+    price_index_area_items_typical,
     price_index_cell,
     price_index_cells,
 )
@@ -58,6 +63,7 @@ from packages.helios_core.identity.models import Establishment, Organization
 
 if TYPE_CHECKING:
     from apps.api.schemas import Channel, MenuScope, SourceKind
+    from packages.helios_core.gold.price_index import Boundary
     from packages.helios_core.gold.price_index_read import AreaItemRow, PriceIndexRow
 
 router = APIRouter(prefix="/price-index", tags=["price-index"], route_class=ValidatedRoute)
@@ -319,20 +325,36 @@ def list_price_index_area_items(
             "case-insensitively (section names are not matched).",
         ),
     ] = None,
+    sort: Annotated[
+        AreaItemSort,
+        Query(
+            description="price: cheapest first. typical: nearest the area's headline median "
+            "first, venues taking turns.",
+        ),
+    ] = "price",
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
 ) -> AreaItemList:
     """Return one page of the priced item and variant rows behind ``/v1/price-index/area``.
 
     The rows of the venues the index places inside ``boundary`` (shared chain
-    menus left out, as from the median), cheapest first (ADR-0020 §4). Without
-    ``q``, walking every page gives ``priced_count`` rows. The cursor names the
-    last row's price and business key, not a row id, so it survives a refresh;
-    it does not carry ``boundary`` or the filters: send the same ones with
-    every page. A boundary or ``q`` that matches nothing is ``200`` with
+    menus left out, as from the median). ``sort=price`` (the default) lists
+    them cheapest first (ADR-0020 §4). ``sort=typical`` lists them nearest
+    the area's headline median first, returned as ``pivot_minor``; among rows
+    at one price, each venue's k-th row comes in round k (ADR-0020
+    Amendment 1). Without ``q``, walking every page gives ``priced_count``
+    rows. The cursor names the last row's position and business key, not a
+    row id, so it survives a refresh; a ``typical`` cursor also keeps its
+    pivot, so a walk stays on one median. A cursor from the other ``sort`` is
+    ``400``. It does not carry ``boundary`` or the filters: send the same ones
+    with every page. A boundary or ``q`` that matches nothing is ``200`` with
     ``items: []``.
     """
     shape = boundary_param(boundary)
+    if sort == "typical":
+        return _typical_area_items(
+            session, shape, currency, q, categories, limit=limit, cursor=cursor
+        )
     after = decode_area_item_cursor(cursor) if cursor is not None else None
     rows = price_index_area_items(
         session,
@@ -344,10 +366,51 @@ def list_price_index_area_items(
         limit=limit + 1,
     )
     page = rows[:limit]
-    names = _venue_names(session, {row.venue_id for row in page})
-    now = datetime.now(UTC)
     return AreaItemList(
         as_of=min((row.effective_instant for row in page), default=None),
-        items=[_area_item(row, names.get(row.venue_id), now) for row in page],
+        pivot_minor=None,
+        items=_area_items(session, page),
         next_cursor=encode_area_item_cursor(page[-1].key) if len(rows) > limit else None,
     )
+
+
+def _typical_area_items(
+    session: Session,
+    shape: Boundary,
+    currency: CurrencyCode | None,
+    q: str | None,
+    categories: dict[str, tuple[str, ...]],
+    *,
+    limit: int,
+    cursor: str | None,
+) -> AreaItemList:
+    """The ``typical`` page: the pivot from the cursor, or the area's headline median."""
+    after = decode_typical_area_item_cursor(cursor) if cursor is not None else None
+    pivot = after[0] if after is not None else area_pivot(session, shape, currency_code=currency)
+    if pivot is None:  # nothing priced inside: no median, no rows
+        return AreaItemList(as_of=None, pivot_minor=None, items=[], next_cursor=None)
+    rows = price_index_area_items_typical(
+        session,
+        shape,
+        pivot=pivot,
+        currency_code=currency,
+        name=q,
+        categories=categories,
+        after=after,
+        limit=limit + 1,
+    )
+    page = rows[:limit]
+    return AreaItemList(
+        as_of=min((row.effective_instant for row in page), default=None),
+        pivot_minor=pivot,
+        items=_area_items(session, page),
+        next_cursor=encode_typical_area_item_cursor(page[-1].typical_key(pivot))
+        if len(rows) > limit
+        else None,
+    )
+
+
+def _area_items(session: Session, page: list[AreaItemRow]) -> list[AreaItemResponse]:
+    names = _venue_names(session, {row.venue_id for row in page})
+    now = datetime.now(UTC)
+    return [_area_item(row, names.get(row.venue_id), now) for row in page]
