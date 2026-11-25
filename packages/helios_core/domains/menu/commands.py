@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from packages.helios_core.domains.menu.contracts import (
     ApplicabilityInput,
@@ -35,6 +36,7 @@ from packages.helios_core.domains.menu.models import (
     MenuModifier,
     MenuPage,
     MenuSection,
+    MenuSectionCourse,
     MenuVariant,
     PriceObservation,
 )
@@ -46,6 +48,8 @@ from packages.helios_core.provenance.contracts import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from sqlalchemy.orm import Session
 
 _PARTS = (
@@ -311,3 +315,37 @@ def _persist_menu(session: Session, aggregate: MenuAggregate) -> PersistedMenu:
     session.flush()
     session.execute(text("SELECT menu.check_aggregate(:id)"), {"id": page.id})
     return read_aggregate(session, page.id)[1]
+
+
+def record_section_courses(
+    session: Session,
+    labeller_version: str,
+    labels: Iterable[tuple[int, str | None, Decimal | None]],
+    *,
+    batch: int = 5_000,
+) -> int:
+    """Insert ``(section id, course or None, confidence)`` rows at ``labeller_version``.
+
+    Insert-only (ADR-0016 §3): a section that already has a row at this version
+    keeps it (``ON CONFLICT DO NOTHING`` on ``uq_section_course``). Rows go in
+    ``batch``-sized statements. Returns the rows inserted; the caller owns the commit.
+    """
+    rows = [
+        {
+            "section_id": section_id,
+            "labeller_version": labeller_version,
+            "course": course,
+            "confidence": None if confidence is None else confidence.quantize(_CONFIDENCE_SCALE),
+        }
+        for section_id, course, confidence in labels
+    ]
+    inserted = 0
+    for start in range(0, len(rows), batch):  # one statement stays under 65,535 parameters
+        statement = (
+            pg_insert(MenuSectionCourse)
+            .values(rows[start : start + batch])
+            .on_conflict_do_nothing(constraint="uq_section_course")
+            .returning(MenuSectionCourse.id)
+        )
+        inserted += len(session.execute(statement).all())
+    return inserted

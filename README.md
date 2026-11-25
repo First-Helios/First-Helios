@@ -343,11 +343,16 @@ This section is the single current-status page. Other docs link here.
 - The rendered-page quality bars (ADR-0013 slice 6).
 - The price index's `course` category
   ([ADR-0016](./docs/adr/0016-course-labels-for-the-price-index.md), Accepted):
-  slices 1a (labelling guide and comparison harness) and 1b's code (candidates exporter,
-  menu groups, lexicon and embedding + LR arms; Amendment 2) are built. Label set `set-1` is
-  labelled; scoring waits for the owner's review of its test disagreements. The Silver
-  labels, the course projection and its rows in `GET /v1/price-index` are not built. This is
-  the one item left in Phase 7's "done when".
+  slice 1 is done.
+  - The lexicon `course-lexicon-v1@63ed037341a4` won on `set-1`: `drink`, `alcohol` and
+    `breakfast` pass, covering 0.269 of test items
+    ([record](./docs/reviews/2026-11-24-course-labeller-set-1.md)).
+  - Slice 2 is built: the Silver `menu.section_course` table (revision `4c7d2e9a1b36`),
+    `config/course_pin.json` and `python -m apps.menu_pipeline.label_courses`.
+  - Not built: the Gold course columns and rows (slice 3) and `category_kind=course` in
+    `GET /v1/price-index`.
+
+  This is the one item left in Phase 7's "done when".
 - Price history across captures: a trail ends `absent` at the next Bronze
   Version, because native keys are version-local (ADR-0013 N1). Cross-Version
   correspondence is a separate ADR-0005/ADR-0013 question

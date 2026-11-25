@@ -1,4 +1,6 @@
-"""Nine immutable Menu tables. Admission and aggregate checks live in the migration."""
+"""Ten immutable Menu tables: nine aggregate tables and the Silver course labels (ADR-0016).
+
+Admission, aggregate and course-label checks live in the migrations."""
 
 from __future__ import annotations
 
@@ -526,3 +528,58 @@ class EvidenceLink(Base):
     modifier_id: Mapped[int | None] = mapped_column(BigInteger)
     applicability_id: Mapped[int | None] = mapped_column(BigInteger)
     price_id: Mapped[int | None] = mapped_column(BigInteger)
+
+
+# The nine course labels of ADR-0016 §1 (``helios_parsing.course_eval.COURSES``,
+# restated: helios_core does not import helios_parsing).
+COURSE_LABELS = (
+    "appetizer",
+    "entree",
+    "side",
+    "dessert",
+    "drink",
+    "alcohol",
+    "breakfast",
+    "kids",
+    "other",
+)
+
+
+class MenuSectionCourse(Base):
+    """``menu.section_course``: a pinned labeller's course for one section (ADR-0016 §3).
+
+    Silver, insert-only, one row per ``(section, labeller version)``; ``course``
+    NULL means the labeller abstained (different from "no row yet"). Canonical
+    labels stay distinct from the source-asserted ``menu_section.course``. The
+    structural ``Unsectioned`` grouping never gets a row (an insert trigger).
+    """
+
+    __tablename__ = "section_course"
+    __table_args__: Any = (
+        UniqueConstraint("section_id", "labeller_version", name="uq_section_course"),
+        _fk(["section_id"], "menu.menu_section", ["id"], "fk_section_course_section"),
+        Index("ix_section_course_version", "labeller_version", "section_id"),
+        CheckConstraint(
+            "length(labeller_version) BETWEEN 1 AND 128 "
+            "AND labeller_version = btrim(labeller_version, menu.whitespace())",
+            name="ck_section_course_labeller",
+        ),
+        CheckConstraint(
+            "course IS NULL OR course IN (" + ", ".join(f"'{c}'" for c in COURSE_LABELS) + ")",
+            name="ck_section_course_course",
+        ),
+        CheckConstraint(
+            "confidence IS NULL OR confidence BETWEEN 0 AND 1",
+            name="ck_section_course_confidence",
+        ),
+        CheckConstraint("isfinite(labelled_at)", name="ck_section_course_time"),
+        {"schema": SCHEMA_MENU},
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    section_id: Mapped[int] = mapped_column(BigInteger)
+    labeller_version: Mapped[str] = mapped_column(String(128))
+    course: Mapped[str | None] = mapped_column(String(16))
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    labelled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )

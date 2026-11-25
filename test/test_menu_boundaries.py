@@ -10,7 +10,7 @@ from packages.helios_core.db.base import Base
 from test.import_boundaries import boundary_violations
 
 
-def test_exact_nine_menu_tables_and_restrictive_downward_fks() -> None:
+def test_exact_ten_menu_tables_and_restrictive_downward_fks() -> None:
     tables = [table for table in Base.metadata.tables.values() if table.schema == "menu"]
     assert {t.name for t in tables} == {
         "currency",
@@ -22,6 +22,7 @@ def test_exact_nine_menu_tables_and_restrictive_downward_fks() -> None:
         "menu_applicability",
         "price_observation",
         "evidence_link",
+        "section_course",  # ADR-0016 §3: Silver course labels
     }
     for table in tables:
         for fk in table.foreign_keys:
