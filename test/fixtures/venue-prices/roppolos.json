@@ -1,0 +1,119 @@
+{
+  "cohort": "slice-holdout",
+  "venues": [
+    {
+      "venue": "Roppolo's Pizzeria (West Campus)",
+      "gers": "df3c0a96-60fa-49f5-82da-e530eca512eb",
+      "template": "separate slice and whole-pie sections",
+      "pages": [
+        {
+          "url": "https://roppolos.com/menu-west-campus/",
+          "bundle_sha256": "0ca3b91caa843ed4758ec0089b452dd55d8f7c5bde85688e4b579438ea5a4cea",
+          "states": [
+            {
+              "name": "BY THE SLICE",
+              "anchor": "BY THE SLICE",
+              "prices": [
+                {
+                  "item": "Cheese",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 475,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Pepperoni",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 540,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Margherita",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 550,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Specialty",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 575,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Slice of the Day",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 550,
+                  "baseline": "unmeasured"
+                }
+              ]
+            },
+            {
+              "name": "WHOLE PIE PRICES",
+              "anchor": "WHOLE PIE PRICES",
+              "prices": [
+                {
+                  "item": "Cheese",
+                  "variant": "12",
+                  "variant_aliases": [
+                    "12\""
+                  ],
+                  "usd_minor": 1050,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Cheese",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 1450,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Cheese",
+                  "variant": "20",
+                  "variant_aliases": [
+                    "20\""
+                  ],
+                  "usd_minor": 2100,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Specialty Pies",
+                  "variant": "12",
+                  "variant_aliases": [
+                    "12\""
+                  ],
+                  "usd_minor": 1575,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Specialty Pies",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 2575,
+                  "baseline": "unmeasured"
+                },
+                {
+                  "item": "Specialty Pies",
+                  "variant": "20",
+                  "variant_aliases": [
+                    "20\""
+                  ],
+                  "usd_minor": 3395,
+                  "baseline": "unmeasured"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
