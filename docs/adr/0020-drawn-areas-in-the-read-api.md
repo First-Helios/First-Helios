@@ -4,7 +4,7 @@
 (the `boundary` filter on `GET /v1/venues` is built now; see [Owner decision](#owner-decision)).
 Proposed 2026-10-23 (session P8-8). Built in P8-9 (PR #119).
 [Amendment 1](#amendment-1-2026-11-24-a-typical-first-order-for-the-area-item-list) (**accepted**
-2026-11-24, Q1–Q4 as recommended; step 1 built, the course step waits on ADR-0016 slice 3) adds
+2026-11-24, Q1–Q4 as recommended; step 1 built, then the course step after ADR-0016 slice 3) adds
 a "typical first" order to point 4's item list.
 **Date:** 2026-10-23
 **Phase:** 8 (public v1 site, an [ADR-0019](./0019-public-v1-site.md) follow-up)
@@ -329,7 +329,7 @@ Each has a recommendation. Nothing in this ADR is built until these are answered
 **Status: Accepted 2026-11-24 by the owner, Q1–Q4 as recommended** (see
 [Owner decision](#owner-decision-amendment-1)). Proposed 2026-11-24 (venue-menu presentation
 follow-up). Step 1 (items 2.2–2.4) is built; see [Built](#built-amendment-1-step-1). The course
-step (item 2.1) is not.
+step (item 2.1) is built after it; see [Built: the course step](#built-amendment-1-the-course-step).
 - It was a stop-and-ask change, because it changes point 4's API order.
 - Its course step (item 2.1) depends on
   [ADR-0016](./0016-course-labels-for-the-price-index.md) Amendment 3 slice 3, the same
@@ -518,6 +518,34 @@ through the API in process, warm, 20 runs, p50 / p95:
   - central opens on Sliders (The ABGB), Ribeye Kushiyaki (Little Nishi), Buffalo Chips (Blue
     Dog Pizza), Naonis Prosecco (Dovetail Pizza);
   - drinks still appear (Prosecco, Champagne), which is the gap the course step closes.
+
+### Built (Amendment 1, the course step)
+
+Item 2.1, on top of step 1 and ADR-0016 slice 3 (`gold.current_menu.course`).
+
+- **The group:** a SQL `CASE` on each row, in `price_index_read._COURSE_GROUP`:
+  - 3 for `side` and `other`;
+  - otherwise 0 at a drink-led venue;
+  - otherwise 1 for `drink` and 2 for `alcohol`;
+  - otherwise 0 (food, null included).
+
+  Drink-led means a `place_type` in `categories.DRINK_LED_PLACE_TYPES`: cafe, coffee_shop, bar,
+  brewery, pub and juice_bar, the list in ADR-0022 Amendment 2 item 2. The venues come from one
+  uncorrelated subquery on `gold.venue_category` (`ix_gold_venue_category_filter`), inside the
+  same statement, so the statement counts above are unchanged.
+- **The order:** the group comes first, before the distance. The venue round is partitioned by
+  `(venue_id, group, amount_minor)`, so it still holds exactly the rows equal on every earlier
+  key.
+- **The cursor:** `[pivot, group, distance, amount, round, venue_id, …grain]`, 16 values. The
+  group must be 0–3. A step-1 cursor (15 values) is `400 invalid_cursor`.
+- **Only display groups move.** The pivot is still the headline `all` median, and `course`
+  rows in the index don't change it.
+- **Tests:**
+  - the walk at limits 1, 3 and 200: food (a drink-led café's drinks included), then drink,
+    alcohol, side and other;
+  - rotation within a group;
+  - bad and old cursors;
+  - the no-sequential-scan plans for both typical pages.
 
 ## References
 
