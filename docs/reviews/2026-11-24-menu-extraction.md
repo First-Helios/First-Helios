@@ -194,3 +194,156 @@ createdb regression_test
 DATABASE_URL="postgresql+psycopg:///regression_test?host=$scratch" HELIOS_STRICT_DB_TESTS=1 \
   pytest -q test/test_menu_extraction.py
 ```
+
+## Venue-to-API price benchmark
+
+Each label names an establishment, source URL, visible menu state, item, variant
+and USD price. The reader checks the saved discovery URL, Bronze version and
+bundle, original chunk answers, repaired rows, validator verdicts, stored prices,
+Gold and the response to an actual `GET /v1/venues/{id}/menu` request. It reports
+one first loss per label and the change in correct prices per venue relative to
+the frozen baseline. Prices are credited on the labelled page of the requested
+venue. A known alternate location is counted separately even if it serves the
+same dish at the same price. Names and variants ignore case and extra spaces.
+A numeric diameter with or without the inch mark is an explicitly allowed alias
+on the six Warpath labels.
+
+### Checked-in controls
+
+From a clean checkout with uv, PostgreSQL 16 and PostGIS installed, run
+`test/fixtures/venue-prices/run.sh` as a regular user. The command makes a private
+database, runs migrations and replays two authored sites through discovery,
+Bronze, extraction, Gold and the API. It prints each expected price and its
+outcome, then removes the temporary cluster. HTML, saved answers, labels and
+expected outcomes are tracked. This is a fixed census of the fixtures.
+The verifier and model answers are scripted.
+
+Juniper Counter served 3 of 6 labelled prices. The interpreter recovered the
+large tea from visible text even though the scripted answer omitted it. Two
+pizza diameters disappeared during answer repair. The dinner button was present
+but its menu state was absent. East Pier served 0 of 1 correct prices and
+published one wrong-location menu. Its West Pier chowder had the exact same name
+and amount as the East Pier label. The unweighted mean venue recall was 25%.
+
+### Field baseline
+
+The swap-5 snapshot supplied real bundles, saved model answers, Menu pages and
+Gold. Exact bundle SHA-256 values and GERS IDs are in the [field manifest](../../test/fixtures/venue-prices/swap5.json).
+The separately archived Café Blue kids page established its two expected prices
+even though discovery had not saved the URL. Its HTTP body digest is in the same
+manifest. Counts are a sample of labelled prices per venue. No field-wide
+precision or monthly prevalence is inferred.
+
+| Venue and template | Correct at the API | First loss among the sampled prices |
+| --- | ---: | --- |
+| Café Blue, separate WordPress daypart pages | 4 / 6 | Kids menu URL absent from resolved discovery records, losing Popcorn Shrimp and Chicken Fingers |
+| Brix and Ale, breakfast and dinner tab panels | 4 / 4 | All four served |
+| Warpath Pizza and Pub, size-labelled price runs | 0 / 6 | The model associated each amount with its diameter. Answer repair stripped the numeric labels from all six |
+| Hippie Picnik, food-truck menu | 2 / 3 | The $8.00 answer named the bratwurst category instead of the labelled Plain Jane item |
+| TenTen, two-column happy-hour PDF | 3 / 3 | All three served. The item/price associations were checked against the PDF layout |
+
+**13 of 22** expected triples reached the API, with **66.7% mean venue recall**.
+The two-digit size tokens survived in the raw Warpath answers. The persisted
+rows retained all six amounts as base prices. Trying a larger model or earlier
+card extraction would leave the observed repair rule in place.
+
+Café Blue, Brix and Ale and Warpath were chosen to exercise separate pages,
+tabbed states and variants. The last two venues were a separate draw, labelled
+from the documents before inspecting saved answers or API results. On swap-5,
+take the latest non-rendered menu-page version per base GERS key (no `|`), keep
+HTTPS targets and take the lexicographically first URL and key per host.
+Order by PostgreSQL `md5('186-holdout:' || url), url`. The first HTML document
+and first PDF are ranks 1 and 12. The manifest freezes both source documents.
+These two new domains contribute six labelled prices.
+
+Against a disposable restore of the swap-5 dump with its matching replay
+directory, run the following on the baseline and again after a candidate's
+extraction and Gold refresh. The field reader uses a read-only transaction.
+Each row carries its baseline outcome. `gained` and `lost` count changes in
+correct published prices, preserving the venue denominator when there is no menu.
+
+```bash
+uv run python -m apps.menu_pipeline.venue_price_eval \
+  test/fixtures/venue-prices/swap5.json --base-dir "$SCRATCH_DEPLOY" > venue-prices.json
+jq '.venues[] | {venue, served, expected, gained, lost, counts}' venue-prices.json
+```
+
+### Paired card experiment on the laptop GPU
+
+Both card-positive pages in the 72-page P5-14 corpus were run on the RTX 3070
+laptop GPU with the pinned Qwen3-4B-Instruct-2507-Q4_0 model. Each page ran
+baseline first and cards plus residual text second. Timing includes prompt-cache
+warmth and has one observation per route per page. Exact scores match the
+multiplicity of labelled item, variant and decimal-amount triples in the usual
+evaluation scope. Wine sections are excluded by the existing gold label reader.
+
+| Page | Route | Inference chunks | Model seconds | Accepted | Exact / expected | Omissions | Unmatched accepted | Duplicates removed |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3117830345c5 | Existing | 2 | 9.9 | 32 | 25 / 32 | 7 | 7 | 0 |
+| 3117830345c5 | Cards and residual | 2 | 6.9 | 30 | 23 / 32 | 9 | 7 | 0 |
+| 3c0cd41446bc | Existing | 20 | 77.7 | 169 | 121 / 173 | 52 | 48 | 0 |
+| 3c0cd41446bc | Cards and residual | 20 | 78.8 | 168 | 121 / 173 | 52 | 47 | 0 |
+
+Both routes required 22 chunks. The hybrid lost two exact prices in aggregate.
+On the four captured HTML pages of the initial Café Blue, Brix and Ale and
+Warpath price holdout (two Café Blue pages), the shadow reader proposed zero
+cards. Keep this route experimental. The larger P5-14 HTML document has SHA-256
+`2ad2536229715b4d89d0c21f0022a51d8b073498dc45e1e2825dccc0c37f3941`;
+the smaller document's digest is in the repeated-cards experiment above.
+
+```bash
+data=var/menu-eval/corpus/p5-14
+for page in 3117830345c5 3c0cd41446bc; do
+  uv run python -m apps.menu_pipeline.card_shadow "$data/pages/$page.html" \
+    --label "$data/labels/$page.json" --server http://127.0.0.1:8083
+done
+```
+
+## Completed Pi staging replay
+
+The Orange Pi 5 Plus ran merged revision `5fa7033` on November 24–25 UTC.
+The Pi's existing worker image loaded that revision's apps, packages and config
+from read-only mounts. A separate PostgreSQL 16 container on a private Docker
+network held two copies of the verified swap-5 dump, `baseline` and
+`measurement`. The worker used a scratch copy of the Pi's replay cache.
+The public deployment and master database received no writes.
+
+| Stage | Measured outcome | Measured time |
+| --- | --- | ---: |
+| Saved-answer upgrade replay | 2,863 due, 2,863 extracted from full page answers, 0 inferred or refused chunks, 0 failed pages | 8,950.5 s (2 h 29 min) |
+| Immediate rerun | 0 due, 0 extracted, 0 model calls | 4.3 s |
+| Gold refresh | 99,408 current menu rows, 421 price-index rows | 48 min 5 s, including worker startup |
+| Rollout gate | Passed. Both snapshots had 1,233 venues with menus and a citywide median of $10.95. Zero venues gained or lost | 5 s, including worker startup |
+
+The restore started at 22:42:03 UTC. The gate finished at 02:02:48 UTC.
+The packet exported all 10 saved answer files from its 374-candidate historical
+window on the Pi. The five-venue field benchmark produced byte-identical JSON
+against both databases, including all 22 labelled outcomes. Local strict
+`make ci` passed 2,044 tests and `alembic check` found no schema changes.
+
+**Updated estimate.** The measured Pi throughput was 1,151.5 cached pages/hour.
+At that rate the 868 incremental versions in the archive comparison would take
+about **45 minutes** of extraction. A first successful refetch of all 2,863
+eligible legacy records with identical inputs would take about **2 h 29 min**
+of extraction. Neither recrawl was run live. Both estimates exclude fetch,
+render and Gold refresh. The maintainer can schedule the saved-answer replay
+and decide whether to accept that version volume before the first live recrawl.
+
+To reproduce on an isolated Pi worker, use the restore and admission-fence
+reset above, clone the restored database before replay, mount the merged source
+and a copy of the matching replay cache, and point the worker at the clone.
+Run these commands inside that worker. The gate's two names refer to the
+disposable databases on the same isolated PostgreSQL server.
+
+```bash
+python -m apps.menu_pipeline.extract --no-model
+python -m apps.menu_pipeline.extract --no-model
+python -m apps.gold.refresh
+python -m apps.menu_pipeline.swap_gate --public baseline --master measurement
+```
+
+The retained run directory on the Pi is
+`/home/orangepi/pr186-replay.okRs3Z`. It holds the exact launch script, logs,
+packet summary, gate and before/after benchmark reports. The scratch database
+container was stopped after verification. The laptop has a copy of the run
+evidence in `var/pr186-pi-replay/`.

@@ -18,7 +18,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from packages.helios_core.config import get_database_url, get_settings
 
@@ -95,6 +95,17 @@ def database_engine() -> Iterator[Engine]:
 @pytest.fixture
 def disposable_database_engine() -> Iterator[Engine]:
     yield from _database_engine(disposable=True)
+
+
+@pytest.fixture
+def committed_menu_sessions(disposable_database_engine: Engine) -> Iterator[sessionmaker[Session]]:
+    subprocess.run(
+        ["alembic", "-c", str(_REPO_ROOT / "alembic.ini"), "upgrade", "head"],
+        check=True,
+        cwd=_REPO_ROOT,
+        env={**os.environ, "DATABASE_URL": get_database_url()},
+    )
+    yield sessionmaker(bind=disposable_database_engine, expire_on_commit=False)
 
 
 @pytest.fixture
