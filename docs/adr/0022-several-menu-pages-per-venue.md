@@ -6,7 +6,7 @@
 2026-10-31 (see [Applied](#applied-2026-10-28-to-2026-10-31)). Point 2's cap and candidate terms are
 amended by [ADR-0024](./0024-further-menu-page-discovery.md) D2 (see [Amendment 1](#amendment-1-2026-10-31-adr-0024-d2-cap-6-and-drinkscatering-terms)).
 [Amendment 2](#amendment-2-2026-11-24-food-first-course-ordered-sections-and-a-sides--extras-sidebar)
-(**accepted** 2026-11-24, Q1–Q4 as recommended; not built) adds `course` to each menu section and
+(**accepted** 2026-11-24, Q1–Q4 as recommended; built: API with ADR-0016 slice 3, site in First-Helios_Frontend #16) adds `course` to each menu section and
 changes point 5's display order.
 **Date:** 2026-10-27
 **Phase:** 6 deliverable "Several menu pages per venue, before the next re-collection"
@@ -405,7 +405,8 @@ Owner decision on [ADR-0024](./0024-further-menu-page-discovery.md) D2, after it
 
 **Status: Accepted 2026-11-24 by the owner, Q1–Q4 as recommended (see
 [Owner decision](#owner-decision-amendment-2)). Proposed 2026-11-24 (venue-menu presentation
-review, PR #188). Nothing is built.**
+review, PR #188). Built 2026-11-24: the wire field and `_shape_menu` (this repo, after
+ADR-0016 slice 3) and the site's display order (First-Helios_Frontend #16).**
 - It is a stop-and-ask change. It adds a field to the menu wire
   ([ADR-0008](./0008-read-api-conventions.md)), and it changes point 5's display order on
   the site.
@@ -458,7 +459,8 @@ signal of what a section *is*: none reaches the API today.
      Amendment 3 item 5). It is null when the section is unlabelled or the labeller
      abstained.
    - Slice 3 labels sections, so every row under a section carries the same course.
-     `_shape_menu` takes the value from the section's first row.
+     `_shape_menu` takes the first non-null value among the section's rows (as built: slice 3
+     leaves `course` null on a row without a price page, even in a labelled section).
    - The API reorders nothing: pages and sections keep today's order.
    - The OpenAPI snapshot is updated. The frontend contract check reads paths and
      parameters only, so it needs no change.

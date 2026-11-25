@@ -78,7 +78,7 @@ if TYPE_CHECKING:
     from sqlalchemy import ColumnElement, Select
     from sqlalchemy.orm.util import AliasedClass
 
-    from apps.api.schemas import Channel, MenuScope, PriceState, SourceKind
+    from apps.api.schemas import Channel, Course, MenuScope, PriceState, SourceKind
     from packages.helios_core.gold.price_index import Boundary
 
 router = APIRouter(prefix="/venues", tags=["venues"], route_class=ValidatedRoute)
@@ -518,7 +518,9 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
     ``item_name`` (ADR-0006 Amendment 1), which every row on its path carries,
     else from its own row's ``content_name``; first non-null in row order.
     ``id`` comes only from a node's own Gold row: a node with no row of its own
-    has none.
+    has none. ``course`` is the first non-null ``course`` among the section's
+    rows: Gold labels the outermost section, and a row without a price page
+    carries none (ADR-0022 Amendment 2 item 1).
     """
     sections: dict[_Path, MenuSectionResponse] = {}
     items: dict[_Path, MenuItemResponse] = {}
@@ -530,9 +532,16 @@ def _shape_menu(rows: Sequence[CurrentMenuRow], now: datetime) -> list[MenuSecti
         section = sections.get(section_path)
         if section is None:
             section = sections[section_path] = MenuSectionResponse(
-                id=None, key=section_path[-1][1], name=None, prices=[], items=[], modifiers=[]
+                id=None,
+                key=section_path[-1][1],
+                name=None,
+                course=None,
+                prices=[],
+                items=[],
+                modifiers=[],
             )
         section.name = section.name or row.section_name
+        section.course = section.course or cast("Course | None", row.course)
         rest = path[last_section + 1 :]
         price = _price(row, now)
         if not rest:  # a section-level price

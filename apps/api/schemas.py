@@ -107,6 +107,10 @@ PriceState = Literal["priced", "unknown", "unavailable"]
 SourceKind = Literal["jsonld", "dom", "pdf", "llm"]
 Channel = Literal["unspecified", "dine_in", "takeaway"]
 MenuScope = Literal["establishment", "organization"]
+# ADR-0016's nine course labels (``COURSE_LABELS`` in the Menu domain, restated here).
+Course = Literal[
+    "appetizer", "entree", "side", "dessert", "drink", "alcohol", "breakfast", "kids", "other"
+]
 
 
 class MenuPriceResponse(BaseModel):
@@ -163,11 +167,15 @@ class MenuItemResponse(BaseModel):
 class MenuSectionResponse(BaseModel):
     """A named section of a menu. ``name`` is null when the source names no
     section. ``id`` is the section's ``item_id`` for its price history; null
-    unless the section is priced."""
+    unless the section is priced. ``course`` is the section's label from the
+    pinned course labeller (ADR-0016 Amendment 3, ADR-0022 Amendment 2): null
+    when the section is unlabelled or the labeller abstained. It is a display
+    signal; the API reorders nothing."""
 
     id: str | None
     key: str
     name: str | None
+    course: Course | None
     prices: list[MenuPriceResponse]
     items: list[MenuItemResponse]
     modifiers: list[MenuOptionResponse]
