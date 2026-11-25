@@ -78,13 +78,21 @@ def test_frozen_venue_prices(
     with committed_menu_sessions() as session:
         refresh_gold(session, effective_instant=datetime.now(UTC))
         measured = report(manifest, session, tmp_path)
+        # Keep the correct 12-inch row and give the 16-inch label the wrong amount.
+        # The API's extra price must appear in the audit even when its item is served.
+        altered = Manifest.model_validate(manifest.model_dump())
+        altered.venues[0].pages[0].states[1].prices[1].usd_minor = 1400
+        audited = report(altered, session, tmp_path)["venues"][0]
+        assert audited["wrong_variant_prices"] == [
+            {"url": counter.pages[0].url, "item": "garden pie", "variant": "16", "usd_minor": 1800}
+        ]
     print(json.dumps(measured, indent=2))
     result, other = measured["venues"]
     assert result["counts"] == {
-        "served": 3,
-        "answer_repair_loss": 2,
+        "served": 5,
         "state_missing": 1,
     }
+    assert (result["gained"], result["lost"], result["wrong_variant_prices"]) == (2, 0, [])
     assert other["counts"] == {"wrong_location": 1}
     assert other["wrong_location_published"] == east.pages[0].other_location_urls
 

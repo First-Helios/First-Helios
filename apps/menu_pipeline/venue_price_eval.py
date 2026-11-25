@@ -272,6 +272,7 @@ def measure(session: Session, client: TestClient, base: Path, venue: Venue) -> d
     wrong = sorted(other_urls & by_url.keys())
     discovered = set(session.execute(_DISCOVERED, {"gers": venue.gers}).scalars())
     rows = []
+    wrong_variant_prices = []
     for page in venue.pages:
         rec = by_url.get(page.url)
         trace = (
@@ -301,6 +302,15 @@ def measure(session: Session, client: TestClient, base: Path, venue: Venue) -> d
                         "reason": reason,
                     }
                 )
+        # Labels sample the menu. Audit only named variants with a labelled price
+        # on this page, and allow all amounts explicitly labelled across its states.
+        variants = {(item, variant) for item, variant, _ in seen if variant}
+        if trace is not None:
+            for item, variant, amount in sorted(trace.published - seen):
+                if (item, variant) in variants:
+                    wrong_variant_prices.append(
+                        {"url": page.url, "item": item, "variant": variant, "usd_minor": amount}
+                    )
     counts = Counter(r["first_loss"] for r in rows)
     gained = sum(r["baseline"] != "served" and r["first_loss"] == "served" for r in rows)
     lost = sum(r["baseline"] == "served" and r["first_loss"] != "served" for r in rows)
@@ -313,6 +323,7 @@ def measure(session: Session, client: TestClient, base: Path, venue: Venue) -> d
         "lost": lost,
         "counts": dict(counts),
         "prices": rows,
+        "wrong_variant_prices": wrong_variant_prices,
         "wrong_location_captures": wrong,
         "wrong_location_published": sorted(other_urls & served.keys()),
     }

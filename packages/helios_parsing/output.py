@@ -16,14 +16,12 @@ section, ``wine_section``: out of scope, Amendment 15):
 1. a price printed in the variant slot with the price slot empty moves to the
    price (small models lose the key order; v5: any form ``prices`` reads,
    "12.5 USD");
-2. a variant with no letters ("4") is dropped: a bare number is not a size; (v8)
-   unless it is one count of a "3/6" pair in the row's name (see 4);
-3. stitch v3 (``stitch.stitch``): split lines re-assembled into items, price
+2. stitch v3 (``stitch.stitch``): split lines re-assembled into items, price
    fill, variant completion;
-4. a variant whose words are all in the item name ("(L)" copied from "Orange
-   Chicken (L)") is dropped: it was not printed with the price; (v8) unless it is
-   one count of a "3/6" pair in the name ("3/6 Catfish Dinner", "6"), which [5b]
-   grounds against the same-order price pair (``resolve.pair_position``);
+3. drop a variant with no letters unless the item prints that diameter paired
+   with its amount (v10) or the variant is a count in a "3/6" item name (v8);
+4. drop a variant whose words are all in the name ("(L)" copied from "Orange
+   Chicken (L)"), with the same diameter and count-pair exceptions;
 4b. (v4) a variant that is no price's printed label near the item ("chilled, hot,
    or spicy": a description put in the variant slot) is dropped
    (``drop_unprinted_variants``; v5: the validator's labels, column headers
@@ -46,7 +44,13 @@ import re
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from packages.helios_parsing.prices import PriceToken, price_tokens, read_amount
+from packages.helios_parsing.prices import (
+    INCH_LABEL,
+    PriceToken,
+    price_tokens,
+    read_amount,
+    read_money,
+)
 from packages.helios_parsing.resolve import pair_position
 from packages.helios_parsing.stitch import FILL_GAP, name_block, price_only, stitch
 from packages.helios_parsing.validator import (
@@ -56,15 +60,17 @@ from packages.helios_parsing.validator import (
     list_names,
     list_price,
     norm_tokens,
+    parse_amount,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from decimal import Decimal
 
     from packages.helios_parsing.segment import Block
 
 # ``rows_of``'s repairs and stitch v3 together; part of the pipeline version.
-REPAIRS_VERSION = "repairs-v9"
+REPAIRS_VERSION = "repairs-v10"
 
 # (v7) wine lists are out of scope (ADR-0013 Amendment 15): a section whose heading names
 # wine ("Wine by the Glass", "Sparkling", "Champagne"), or is only colour words and their
@@ -222,7 +228,8 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
                 if (
                     variant
                     and not any(ch.isalpha() for ch in variant)
-                    and not pair_position(name, variant)  # (v8) "6" of "3/6 Catfish Dinner"
+                    and not _DIAMETER_VARIANT.fullmatch(variant)
+                    and not pair_position(name, variant)
                 ):
                     variant = ""
                 if name and not wine_section(section.section):
@@ -238,14 +245,6 @@ def rows_of(outputs: Sequence[ExtractorOutput], blocks: Sequence[Block]) -> list
     # stitch before dedupe: identical price lines repeat; after it, "$7.50/Medium"
     # must still have read as a price line there
     rows = stitch(rows, blocks)
-    rows = [
-        replace(row, variant=None)
-        if row.variant
-        and set(norm_tokens(row.variant)) <= set(norm_tokens(row.item))
-        and not pair_position(row.item, row.variant)  # (v8) a count of a "3/6" name pair
-        else row
-        for row in rows
-    ]
     rows = drop_unprinted_variants(rows, blocks)
     rows = split_listed(rows, blocks)
     rows = name_by_title(rows, blocks)
@@ -283,6 +282,53 @@ def printed_name_block(row: Row, blocks: Sequence[Block], index: dict[str, int])
     return name_block(row, blocks, index)
 
 
+_DIAMETER_VARIANT = re.compile(r'([1-9][0-9]?)\s*["”″]?')
+
+
+def _diameter_prices(text: str) -> list[tuple[str, Decimal]] | None:
+    """Read a complete line of price fields. An unrelated item or prose ends the run."""
+    pairs = []
+    for field in re.split(r"[|•]", text):
+        money = read_money(field)
+        if len(money) != 1:
+            return None
+        start, end, amount = money[0]
+        before, after = field[:start].strip(), field[end:].strip()
+        if not after and before.casefold() in {"", "slice"}:
+            continue
+        if after and (before or not after.startswith("/")):
+            return None
+        match = INCH_LABEL.fullmatch(before or after[1:].strip())
+        if not match:
+            return None
+        pairs.append((match[1], amount))
+    return pairs
+
+
+def _grounds_diameter(row: Row, size: str, blocks: Sequence[Block], pos: int | None) -> bool:
+    if pos is None:
+        return False
+    name = re.match(re.escape(row.item) + r"(?=$|[\s:])", blocks[pos].text, re.IGNORECASE)
+    if not name or _diameter_prices(blocks[pos].text) is not None:
+        # A price line beginning "Slice $4 | ..." supplies labels for the dish above.
+        return False
+    amounts: set[Decimal] = set()
+    for j in range(pos, min(pos + FILL_GAP + 1, len(blocks))):
+        block = blocks[j]
+        if block.in_chrome or (j > pos and block.heading):
+            break
+        line = block.text
+        if j == pos:
+            line = line[name.end() :].lstrip(" :")
+            if not line:
+                continue
+        pairs = _diameter_prices(line)
+        if pairs is None:
+            break
+        amounts.update(amount for diameter, amount in pairs if diameter == size)
+    return amounts == {parse_amount(row.amount)}
+
+
 def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> list[Row]:
     """Rows whose variant isn't the label of any price printed near the item lose it.
 
@@ -302,7 +348,18 @@ def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> lis
     out: list[Row] = []
     for row in rows:
         pos = printed_name_block(row, blocks, index)  # (v9) the printed name, not the claim
-        if not row.variant or pos is None or pair_position(row.item, row.variant):
+        if not row.variant or pair_position(row.item, row.variant):
+            out.append(row)
+            continue
+        if size := _DIAMETER_VARIANT.fullmatch(row.variant):
+            grounded = _grounds_diameter(row, size[1], blocks, pos)
+            out.append(row if grounded else replace(row, variant=None))
+            continue
+        own = set(norm_tokens(row.variant))
+        if own <= set(norm_tokens(row.item)):
+            out.append(replace(row, variant=None))
+            continue
+        if pos is None:
             out.append(row)
             continue
         labels = [
@@ -311,7 +368,6 @@ def drop_unprinted_variants(rows: Sequence[Row], blocks: Sequence[Block]) -> lis
             if j >= pos or (prices[j] and price_only(blocks[j].text, prices[j]))  # (v9)
             for t in prices[j]
         ]
-        own = set(norm_tokens(row.variant))
         printed = not labels or any(own <= label for label in labels)
         out.append(row if printed else replace(row, variant=None))
     return out
