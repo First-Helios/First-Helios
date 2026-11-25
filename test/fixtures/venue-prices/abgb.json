@@ -1,0 +1,167 @@
+{
+  "cohort": "independent-pizza",
+  "venues": [
+    {
+      "venue": "The ABGB",
+      "gers": "b536a314-1945-4b25-bd4b-ccfc047b687b",
+      "template": "pizza size runs and pipe-separated price rows",
+      "pages": [
+        {
+          "url": "https://theabgb.com/food-menu",
+          "bundle_sha256": "8a800b2c95ef5843824f852727c8cc072c2d9f18c3adf39c34147ed6432cf32c",
+          "states": [
+            {
+              "name": "Pizza",
+              "anchor": "Pizza",
+              "prices": [
+                {
+                  "item": "Cheese",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 400,
+                  "baseline": "price_rejected"
+                },
+                {
+                  "item": "Cheese",
+                  "variant": "14",
+                  "variant_aliases": [
+                    "14\""
+                  ],
+                  "usd_minor": 1800,
+                  "baseline": "variant_omitted"
+                },
+                {
+                  "item": "Cheese",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 2000,
+                  "baseline": "variant_omitted"
+                },
+                {
+                  "item": "Calabrese",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 500,
+                  "baseline": "variant_omitted"
+                },
+                {
+                  "item": "Calabrese",
+                  "variant": "14",
+                  "variant_aliases": [
+                    "14\""
+                  ],
+                  "usd_minor": 2200,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Calabrese",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 2400,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Wagyu Beef",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 500,
+                  "baseline": "variant_omitted"
+                },
+                {
+                  "item": "Wagyu Beef",
+                  "variant": "14",
+                  "variant_aliases": [
+                    "14\""
+                  ],
+                  "usd_minor": 2200,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Wagyu Beef",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 2400,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Housemade Sausage",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 500,
+                  "baseline": "variant_omitted"
+                },
+                {
+                  "item": "Housemade Sausage",
+                  "variant": "14",
+                  "variant_aliases": [
+                    "14\""
+                  ],
+                  "usd_minor": 2200,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Housemade Sausage",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 2400,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Margherita",
+                  "variant": "Slice",
+                  "variant_aliases": [],
+                  "usd_minor": 500,
+                  "baseline": "variant_omitted"
+                },
+                {
+                  "item": "Margherita",
+                  "variant": "14",
+                  "variant_aliases": [
+                    "14\""
+                  ],
+                  "usd_minor": 2200,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Margherita",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 2400,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "White Clam",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 2400,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Marinara",
+                  "variant": "16",
+                  "variant_aliases": [
+                    "16\""
+                  ],
+                  "usd_minor": 1600,
+                  "baseline": "answer_repair_loss"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

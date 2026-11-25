@@ -204,6 +204,58 @@ def test_rows_of_repairs_slots_and_variants_and_drops_duplicates() -> None:
     assert [(r.section, r.claimed_block) for r in rows][0] == ("Menu", "b0001")
 
 
+def test_numeric_diameter_must_match_its_own_price_field() -> None:
+    blocks = segment(
+        '<p>Garden Pie</p><p>Slice $4 | 12″ $14 | 16” $18</p><p>Red Pie $15/12" | $20/16"</p>'
+    )
+    rows = rows_of(
+        _one_chunk(
+            ("b0001", "Garden Pie", "14", "12"),
+            ("b0001", "Garden Pie", "18", "16”"),
+            ("b0001", "Garden Pie", "18", "12"),
+            ("b0003", "Red Pie", "15", '12"'),
+            ("b0003", "Red Pie", "20", "16"),
+            ("b0003", "Red Pie", "15", "16"),
+        ),
+        blocks,
+    )
+    variants = [(r.item, r.amount, r.variant) for r in rows if r.amount != "4"]
+    assert variants == [
+        ("Garden Pie", "14", "12"),
+        ("Garden Pie", "18", "16”"),
+        ("Garden Pie", "18", None),
+        ("Red Pie", "15", '12"'),
+        ("Red Pie", "20", "16"),
+        ("Red Pie", "15", None),
+    ]
+    sized = [r for r in rows if r.variant and r.variant != "Slice"]
+    assert all(v.decision == "accept" for v in validate(blocks, sized).verdicts)
+
+
+def test_price_field_label_is_not_the_owner_of_the_other_prices() -> None:
+    blocks = segment('<p>Cheese</p><p>Slice $4 | 14" $18 | 16" $20</p>')
+    rows = rows_of(_one_chunk(("b0002", "Slice", "18", "14")), blocks)
+    assert [row.variant for row in rows if row.item == "Slice" and row.amount == "18"] == [None]
+
+
+def test_numeric_variant_rejects_quantities_ambiguity_and_neighbours() -> None:
+    for lines in (
+        ["$14.00/12"],
+        ["$14.00/12 pcs"],
+        ["12 wings $14.00"],
+        ["Serves 12", "$14"],
+        ['12" / 16" $14 / $18'],
+        ['$14/12" | $18/12"'],
+        ["Other Pie", '$14/12"'],
+        ['12" crust, add cheese $14'],
+        ['12" breadsticks $14'],
+        ['$14/12" links'],
+    ):
+        blocks = segment("<p>Garden Pie</p>" + "".join(f"<p>{line}</p>" for line in lines))
+        rows = rows_of(_one_chunk(("b0001", "Garden Pie", "14", "12")), blocks)
+        assert rows[0].variant is None, lines
+
+
 def test_rows_of_keeps_a_dish_printed_again_in_another_menu() -> None:
     # v4: the dedupe key includes the claimed block, so a dish repeated at the same
     # price in a second inline menu (another block) is another placement
