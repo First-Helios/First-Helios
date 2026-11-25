@@ -70,6 +70,7 @@ class CurrentMenuRow:
     content_description: str | None
     section_name: str | None
     item_name: str | None
+    course: str | None  # the section's canonical course (ADR-0016 Amendment 3 item 5)
 
 
 def _decode_path(encoded: str) -> tuple[tuple[str, str], ...]:
@@ -128,6 +129,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             CurrentMenu.content_description,
             CurrentMenu.section_name,
             CurrentMenu.item_name,
+            CurrentMenu.course,
         )
         .where(
             or_(
@@ -175,6 +177,7 @@ def current_menu_rows(session: Session, scopes: Iterable[tuple[int, str]]) -> li
             content_description=row.content_description,
             section_name=row.section_name,
             item_name=row.item_name,
+            course=row.course,
         )
         for row in session.execute(statement)
     ]
