@@ -5,6 +5,9 @@
 [Build notes](#build-notes)), and applied on `helios_laptop` and the Pi on 2026-10-28 through
 2026-10-31 (see [Applied](#applied-2026-10-28-to-2026-10-31)). Point 2's cap and candidate terms are
 amended by [ADR-0024](./0024-further-menu-page-discovery.md) D2 (see [Amendment 1](#amendment-1-2026-10-31-adr-0024-d2-cap-6-and-drinkscatering-terms)).
+[Amendment 2](#amendment-2-2026-11-24-food-first-course-ordered-sections-and-a-sides--extras-sidebar)
+(**accepted** 2026-11-24, Q1–Q4 as recommended; not built) adds `course` to each menu section and
+changes point 5's display order.
 **Date:** 2026-10-27
 **Phase:** 6 deliverable "Several menu pages per venue, before the next re-collection"
 (ROADMAP.md; §7 item 7)
@@ -397,6 +400,186 @@ Owner decision on [ADR-0024](./0024-further-menu-page-discovery.md) D2, after it
   platform records.
 - The [Applied](#applied-2026-10-28-to-2026-10-31) section describes the re-collection under
   cap 3. The new cap and terms reach stored data at the next re-collection.
+
+## Amendment 2 (2026-11-24): food first, course-ordered sections and a sides & extras sidebar
+
+**Status: Accepted 2026-11-24 by the owner, Q1–Q4 as recommended (see
+[Owner decision](#owner-decision-amendment-2)). Proposed 2026-11-24 (venue-menu presentation
+review, PR #188). Nothing is built.**
+- It is a stop-and-ask change. It adds a field to the menu wire
+  ([ADR-0008](./0008-read-api-conventions.md)), and it changes point 5's display order on
+  the site.
+- It depends on [ADR-0016](./0016-course-labels-for-the-price-index.md) Amendment 3
+  slice 3, which puts `course` on `gold.current_menu`. That amendment is proposed in PR #187.
+- The compact menu layout (one line per dish, the observation date and source kind once per
+  source page) is a separate change with no decision in it: First-Helios_Frontend PR #15.
+
+### The gap
+
+The owner: "when I look at a store the first thing I see are extras and things not very
+core".
+
+**Sample.** Measured on 2026-11-24 against the live read API:
+- 300 venues: the first three pages of `GET /v1/venues?has_menu=true`, so the lowest ids,
+  not a random sample.
+- 460 source pages, 23,160 items.
+- Sections were labelled with `course-lexicon-v1@63ed037341a4`.
+
+**What a visitor sees first.**
+- 36 venues open on a non-food section. That counts `drink` or `alcohol` at a venue that is
+  not drink-led (item 2), and `side` or `other` anywhere.
+- At 45 venues, fewer than half of the first 15 items are food.
+- Examples:
+  - Texican Cafe opens on Soft Drinks, Margaritas & Texican Martinis, Margaritas To Go and
+    Domestic.
+  - Maudie's opens on Margaritas and Specialty Cocktails.
+  - Curra's Grill opens on Soft Drinks (19).
+  - Javi's opens on TOGO Beverages (22).
+  - La Posada opens on FAMILY PACK SPECIALS.
+
+**The two causes.** Neither is wrong as data.
+- *Page order.* Point 5 shows pages in rank order, and point 1 keeps the first page sticky. A
+  drinks page or an all-in-one page can therefore come first:
+  - Curra's and Dong Nai: `/…-drink-menu` before `/…-food-menu`;
+  - Maudie's: `/menu-all`;
+  - Texican Cafe: a combined page whose drinks come first.
+- *The source's printed order.* Toast and Uber Eats storefronts and some sites list
+  beverages first: Javi's, Casa Moreno's, Mezze Cafe.
+
+The API should keep both orders, because they are the source's. What the site lacks is a
+signal of what a section *is*: none reaches the API today.
+
+### Decision (proposed)
+
+1. **Wire (an additive [ADR-0008](./0008-read-api-conventions.md) change).**
+   - `MenuSectionResponse` gains `course: Course | null`. `Course` is ADR-0016's nine
+     labels.
+   - The value is the section's label from `gold.current_menu.course` (ADR-0016
+     Amendment 3 item 5). It is null when the section is unlabelled or the labeller
+     abstained.
+   - Slice 3 labels sections, so every row under a section carries the same course.
+     `_shape_menu` takes the value from the section's first row.
+   - The API reorders nothing: pages and sections keep today's order.
+   - The OpenAPI snapshot is updated. The frontend contract check reads paths and
+     parameters only, so it needs no change.
+2. **The site's display order (amends point 5's "the pages' sections in rank order" for
+   display only).**
+   - *Main column*, in three groups. Each group keeps rank order, then printed order:
+     1. food: every section whose course is not `drink`, `alcohol`, `side` or `other`. That
+        includes null, so an unlabelled section is never moved down;
+     2. `drink`;
+     3. `alcohol`.
+   - *Drink-led venues* keep `drink` and `alcohol` in the food group. A venue is drink-led
+     when it has an [ADR-0028](./0028-venue-category-browsing.md) place type of `cafe`,
+     `coffee_shop`, `bar`, `brewery`, `pub` or `juice_bar`. Drinks are what those places
+     sell.
+   - *Sidebar "Sides & extras":* the `side` and `other` sections, each one collapsible.
+     - On a desktop (≥ 900 px wide) it is a sticky right column beside the menu.
+     - On a phone it is a collapsed `<details>` after the main column.
+     - Nothing is hidden or dropped. Every section stays reachable, and the section chips
+       list the sidebar's sections too.
+   - *Section chips* follow the display order, so food comes first and the sidebar's sections
+     come last.
+   - *Attribution.* Moving sections apart separates them from their page's source line. So a
+     section repeats its page's line (scope, price count, observed date, source kind, link)
+     whenever its page differs from the section above it in the same column.
+3. **Why four labels, when only `drink` and `alcohol` (and `breakfast`) pass ADR-0016's
+   gate.**
+   - The gate guards the index, where a wrong label puts a price in the wrong median. Here a
+     label only moves a section down.
+   - Set-1's test split, lexicon confusion
+     ([2026-11-24-course-labeller-set-1.md](../reviews/2026-11-24-course-labeller-set-1.md),
+     PR #187):
+     - The lexicon labelled 1,060 items `drink`, `alcohol`, `side` or `other`.
+     - **None** of them is food by its confirmed label (appetizer, entree, breakfast,
+       dessert or kids).
+     - The errors stay inside the demoted group:
+       - other → side: 80;
+       - alcohol → drink: 9;
+       - drink → other: 8;
+       - other → drink: 6;
+       - drink → alcohol: 1.
+     - `other` is 149 of 157 correct (0.949).
+4. **Measured effect.** This is indicative only: the simulation sorts and scores with the
+   same lexicon, on the 300-venue sample.
+   - Venues whose first section is food: 264 → 293 of 300.
+   - Venues whose first 15 main-column items are less than half food: 45 → 11. The 25th
+     percentile food share goes 0.80 → 1.00.
+   - The sidebar holds 1,677 of 23,160 items (7.2 %), at 135 venues.
+5. **No per-section attachment of extras, for now.** The owner asked for extras in a
+   dropdown beside the section they belong to, if that makes sense. On the sample it mostly
+   doesn't.
+   - There are 318 extras-style sections: lexicon `other`, or names with
+     sides/sauces/extras/toppings/add-ons and similar.
+   - 156 have a generic name with no subject word ("Sides", "Sauces", "Dressings and Sauces").
+   - 131 have a subject word that matches no food section on their page ("Catering Packs",
+     "8oz Sauces").
+   - 18 match several food sections.
+   - 13 match exactly one, and several of those are wrong ("PARTY PACKAGE SPECIALS" →
+     "BREAKFAST TACO SPECIAL").
+   - The section just before is no better: "Sides" after "Dessert", "Sauces" after "Sopa del
+     Mar".
+   - The right matches ("KIDS ADD ONS" → "KIDS MENU", "Wing Sauces" → "4pc Boneless Wings")
+     are about 1 %.
+   - So the sidebar is menu-wide. Per-section attachment can be revisited if extraction
+     starts nesting add-ons (item 6).
+6. **Out of scope.**
+   - *Add-on items inside food sections.* 93 items named "Add …", "Extra …" or "Sub …" sit in
+     74 food sections. Item modifiers are empty on the wire (0 of 23,160 items), so these
+     arrive as dishes. The fix belongs in extraction, as a modifier the site already shows in
+     its "Add-ons" slot, not in a display rule.
+   - *Dishes repeated across pages.* 70 venues repeat 1,386 dish names across pages.
+7. **No interim on the site.** The site does not carry its own copy of the lexicon: a second
+   classifier would drift from the evaluated pin. Until slice 3 serves `course`, sections
+   keep today's order. Q1 gives the alternative.
+
+### Build (after acceptance and slice 3)
+
+- *API:*
+  - `apps/api/schemas.py`: a `Course` literal, and `course` on `MenuSectionResponse`.
+  - `packages/helios_core/gold/menu_read.py`: `current_menu_rows` selects
+    `CurrentMenu.course` into `CurrentMenuRow`.
+  - `apps/api/routes/venues.py`: `_shape_menu` sets each section's `course`.
+  - `apps/api/openapi_snapshot.json` is regenerated.
+  - Tests in `test/test_api_venue_menu.py`:
+    - a section's `course` is its rows' course;
+    - null when unlabelled;
+    - pages and sections keep their order.
+  - No migration beyond slice 3's.
+- *Frontend:*
+  - `js/pages/venue.js`: the groups, the drink-led rule, the sidebar, the chip order and the
+    repeated source lines.
+  - The browser checks gain fixtures with courses: a drink-first restaurant, a drink-led
+    café, a menu with only unlabelled sections, and interleaved pages.
+
+### Owner questions (recommendations first)
+
+- **Q1. When.** Wait for ADR-0016 slice 3 *(recommended)*. Or build an interim in which the
+  API labels sections at request time from the pinned lexicon:
+  - It is a pure function with no migration.
+  - But it is a second read path, which slice 3 would replace.
+- **Q2. What the wire serves.** `course` as stored, all nine labels *(recommended: it is what
+  Gold holds, and ADR-0016's review publishes each label's precision)*. Or only the labels the
+  site acts on.
+- **Q3. Sides.** Put `side` in the sidebar with `other` *(recommended: sides are ordered
+  beside a main, and `side` predictions held no mains on set-1)*. Or keep sides in the main
+  column after food, and put only `other` in the sidebar.
+- **Q4. Drink-led exemption.** Use item 2's place-type list *(recommended)*, or have no
+  exemption.
+
+### Owner decision (Amendment 2)
+
+2026-11-24, after #188 merged: "your recommendations look good". So:
+- **Q1:** wait for ADR-0016 slice 3. There is no request-time interim.
+- **Q2:** the wire serves `course` as stored, all nine labels.
+- **Q3:** `side` goes in the sidebar with `other`.
+- **Q4:** drink-led venues are exempt, by item 2's place-type list.
+
+The build waits on ADR-0016 Amendment 3 slices 2 and 3 (`menu.section_course`, then
+`gold.current_menu.course`). The owner accepted Amendment 3's Q1–Q4 as recommended on
+2026-11-24, and slice 2 is in review (PR #190). The same food-first groups are the course step
+of the map's area item list in [ADR-0020](./0020-drawn-areas-in-the-read-api.md) Amendment 1
+(accepted 2026-11-24).
 
 ## References
 
