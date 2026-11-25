@@ -5,7 +5,7 @@
 [Amendment 2](#amendment-2-2026-11-24-slice-1b-checked-against-the-real-data)
 (decided under the owner's delegation, P8-30) and
 [Amendment 3](#amendment-3-2026-11-24-slice-1s-result-and-the-plan-for-slices-23)
-(slice 1's result; slices 2–3 proposed). The open
+(slice 1's result; slices 2–3 accepted). The open
 questions were answered in session G-2 before the text was written
 ([Owner decisions](#owner-decisions-session-g-2-2026-09-30)).
 **Date:** 2026-09-30
@@ -603,8 +603,13 @@ Each item below names the text it amends.
 
 **Status:**
 - Items 1–2 record the evaluation.
-- Items 3–6 are **proposed** for the owner's review (session P8-30). They are the
-  stop-and-ask path: models and migrations (CLAUDE.md). Nothing in them is built.
+- Items 3–6 were proposed for the owner's review (session P8-30), on the stop-and-ask path
+  for models and migrations (CLAUDE.md). **Accepted 2026-11-24 by the owner**, with
+  Q1–Q4 answered as recommended: "i trust your recomendations for the 4 questions".
+  - Slice 2 is built with revision `4c7d2e9a1b36`.
+  - Slice 3 follows.
+  - Writes to `helios_laptop`, the Pi and `helios_work` still need a separate go-ahead
+    (Q4).
 
 1. **Result** ([2026-11-24-course-labeller-set-1.md](../reviews/2026-11-24-course-labeller-set-1.md)).
    - On `set-1`'s test split (46 venues, 589 sections, 3,254 priced items), the lexicon

@@ -1,0 +1,7 @@
+{
+ "labeller": "course-lexicon-v1@63ed037341a4",
+ "file": "course_lexicon_v1.json",
+ "sha256": "63ed037341a465c1ba3203f7e76b3bef3c7ac12a212a29059ea560ba7ef74408",
+ "passing": ["alcohol", "breakfast", "drink"],
+ "evaluation": "docs/reviews/2026-11-24-course-labeller-set-1.md"
+}

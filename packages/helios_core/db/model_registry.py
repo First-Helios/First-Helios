@@ -14,6 +14,7 @@ from packages.helios_core.domains.menu.models import (
     MenuModifier,
     MenuPage,
     MenuSection,
+    MenuSectionCourse,
     MenuVariant,
     PriceObservation,
 )
@@ -65,6 +66,7 @@ __all__ = [
     "MenuModifier",
     "MenuPage",
     "MenuSection",
+    "MenuSectionCourse",
     "MenuVariant",
     "PriceIndex",
     "PriceIndexPlacement",
