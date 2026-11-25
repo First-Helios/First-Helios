@@ -3,7 +3,9 @@
 Cursors are base64url-encoded tokens over a stable, unique ordering key (the
 Establishment ``subject_id``; for the price-index cell list, a row's business
 key, ADR-0007 Amendment 3; for a drawn area's items, the price and the Gold
-row's business grain, ADR-0020 §4). Opaque means clients are told not to construct or
+row's business grain, ADR-0020 §4, or in the ``typical`` order the pivot,
+distance, price, venue round and venue before that grain, ADR-0020 Amendment 1).
+Opaque means clients are told not to construct or
 depend on the encoding; it is not a security boundary. The token is unsigned, so
 anyone can forge one. That is harmless: the data is public and a cursor is only
 a keyset lower bound, so a forged cursor just starts a page elsewhere. Stable
@@ -22,7 +24,9 @@ from typing import TYPE_CHECKING, cast
 from apps.api.errors import InvalidCursorError
 
 if TYPE_CHECKING:
-    from packages.helios_core.gold.price_index_read import AreaItemKey
+    from collections.abc import Callable
+
+    from packages.helios_core.gold.price_index_read import AreaItemKey, TypicalAreaItemKey
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
@@ -106,9 +110,21 @@ def encode_area_item_cursor(key: AreaItemKey) -> str:
 
     Times are ISO-8601 in UTC; ``None`` is ``null``.
     """
-    amount, subject, kind, record, root, path, channel, period, valid_from, valid_to, currency = key
-    payload = [
-        amount,
+    return _encode_payload([key[0], *_wire_grain(key[1:])])
+
+
+def encode_typical_area_item_cursor(key: TypicalAreaItemKey) -> str:
+    """Encode an area item's ``typical`` key (ADR-0020 Amendment 1 item 3) like the price key.
+
+    ``[pivot, distance, amount, round, venue_id, …grain]``: 15 values, so a
+    cursor of one ``sort`` never decodes as the other's.
+    """
+    return _encode_payload([*key[:5], *_wire_grain(key[5:])])
+
+
+def _wire_grain(grain: tuple[object, ...]) -> list[object]:
+    subject, kind, record, root, path, channel, period, valid_from, valid_to, currency = grain
+    return [
         subject,
         kind,
         record,
@@ -116,10 +132,13 @@ def encode_area_item_cursor(key: AreaItemKey) -> str:
         path,
         channel,
         period,
-        _wire_time(valid_from),
-        _wire_time(valid_to),
+        _wire_time(cast("datetime | None", valid_from)),
+        _wire_time(cast("datetime | None", valid_to)),
         currency,
     ]
+
+
+def _encode_payload(payload: list[object]) -> str:
     raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
@@ -159,33 +178,70 @@ def decode_area_item_cursor(cursor: str) -> AreaItemKey:
     """Decode a canonical area item cursor, or raise :class:`InvalidCursorError` (400).
 
     As with the cell cursor, only the canonical encoding decodes, so each key
-    has exactly one cursor.
+    has exactly one cursor. A ``typical`` cursor (15 values) is refused.
     """
+    values = _decode_payload(cursor, 11)
+    key: AreaItemKey = (_cursor_int(values[0], BIGINT_MIN), *_cursor_grain(values[1:]))
+    _require_canonical(cursor, encode_area_item_cursor, key)
+    return key
+
+
+def decode_typical_area_item_cursor(cursor: str) -> TypicalAreaItemKey:
+    """Decode a canonical ``typical`` area item cursor, or raise :class:`InvalidCursorError`.
+
+    Canonical as the price cursor is, and its distance must be exactly
+    ``|amount - pivot|``. A price cursor (11 values) is refused.
+    """
+    values = _decode_payload(cursor, 15)
+    pivot = _cursor_int(values[0], BIGINT_MIN)
+    distance = values[1]
+    amount = _cursor_int(values[2], BIGINT_MIN)
+    if type(distance) is not int or distance != abs(amount - pivot):
+        raise InvalidCursorError
+    key: TypicalAreaItemKey = (
+        pivot,
+        distance,
+        amount,
+        _cursor_int(values[3], 1),  # rounds count from 1
+        _cursor_int(values[4], 0),
+        *_cursor_grain(values[5:]),
+    )
+    _require_canonical(cursor, encode_typical_area_item_cursor, key)
+    return key
+
+
+def _decode_payload(cursor: str, length: int) -> list[object]:
     try:
         raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
         payload = json.loads(raw.decode("utf-8"))
     except (ValueError, binascii.Error, UnicodeError) as exc:
         raise InvalidCursorError from exc
-    if not isinstance(payload, list) or len(payload) != 11:
+    if not isinstance(payload, list) or len(payload) != length:
         raise InvalidCursorError
-    values = cast("list[object]", payload)
-    key: AreaItemKey = (
-        _cursor_int(values[0], BIGINT_MIN),
-        _cursor_int(values[1], 0),
-        cast("str", _cursor_text(values[2], _SUBJECT_KIND_LENGTH)),
-        _cursor_int(values[3], 0),
-        cast("str", _cursor_text(values[4], _ROOT_KEY_LENGTH)),
-        cast("str", _cursor_text(values[5], None)),
-        cast("str", _cursor_text(values[6], _CHANNEL_LENGTH)),
-        _cursor_text(values[7], _SERVICE_PERIOD_LENGTH, nullable=True),
+    return cast("list[object]", payload)
+
+
+def _cursor_grain(
+    values: list[object],
+) -> tuple[int, str, int, str, str, str, str | None, datetime | None, datetime | None, str]:
+    return (
+        _cursor_int(values[0], 0),
+        cast("str", _cursor_text(values[1], _SUBJECT_KIND_LENGTH)),
+        _cursor_int(values[2], 0),
+        cast("str", _cursor_text(values[3], _ROOT_KEY_LENGTH)),
+        cast("str", _cursor_text(values[4], None)),
+        cast("str", _cursor_text(values[5], _CHANNEL_LENGTH)),
+        _cursor_text(values[6], _SERVICE_PERIOD_LENGTH, nullable=True),
+        _cursor_time(values[7]),
         _cursor_time(values[8]),
-        _cursor_time(values[9]),
-        cast("str", _cursor_text(values[10], _CURRENCY_LENGTH)),
+        cast("str", _cursor_text(values[9], _CURRENCY_LENGTH)),
     )
+
+
+def _require_canonical[K](cursor: str, encode: Callable[[K], str], key: K) -> None:
     try:
-        canonical = encode_area_item_cursor(key)
+        canonical = encode(key)
     except UnicodeError as exc:  # a lone surrogate from a \ud800 escape
         raise InvalidCursorError from exc
     if canonical != cursor:
         raise InvalidCursorError
-    return key

@@ -4,8 +4,8 @@
 (the `boundary` filter on `GET /v1/venues` is built now; see [Owner decision](#owner-decision)).
 Proposed 2026-10-23 (session P8-8). Built in P8-9 (PR #119).
 [Amendment 1](#amendment-1-2026-11-24-a-typical-first-order-for-the-area-item-list) (**accepted**
-2026-11-24, Q1–Q4 as recommended; not built yet) adds a "typical first" order to point 4's item
-list.
+2026-11-24, Q1–Q4 as recommended; step 1 built, the course step waits on ADR-0016 slice 3) adds
+a "typical first" order to point 4's item list.
 **Date:** 2026-10-23
 **Phase:** 8 (public v1 site, an [ADR-0019](./0019-public-v1-site.md) follow-up)
 **Extends:** [ADR-0007](./0007-gold-price-index-projection.md) (price index: placement,
@@ -328,7 +328,8 @@ Each has a recommendation. Nothing in this ADR is built until these are answered
 
 **Status: Accepted 2026-11-24 by the owner, Q1–Q4 as recommended** (see
 [Owner decision](#owner-decision-amendment-1)). Proposed 2026-11-24 (venue-menu presentation
-follow-up). Nothing is built yet.
+follow-up). Step 1 (items 2.2–2.4) is built; see [Built](#built-amendment-1-step-1). The course
+step (item 2.1) is not.
 - It was a stop-and-ask change, because it changes point 4's API order.
 - Its course step (item 2.1) depends on
   [ADR-0016](./0016-course-labels-for-the-price-index.md) Amendment 3 slice 3, the same
@@ -454,6 +455,69 @@ How the columns were counted:
 3. **Q3 site default:** "Typical first" when there is no `q`, cheapest first when there is
    one. A Typical/Cheapest control writes the choice to the hash as `&sort=`.
 4. **Q4 venue rotation:** yes, as in item 2.3.
+
+### Built (Amendment 1 step 1)
+
+Items 2.2–2.4 and 3 are built, without the course step 2.1.
+
+- **API:** `sort=price|typical` on `GET /v1/price-index/area/items`, default `price` (point 4,
+  unchanged). `AreaItemList.pivot_minor` is always present: null for `price`, and also null when
+  nothing inside is priced.
+- **The pivot:** `area_pivot`, which reads the `all` row of `price_index_area` for the same
+  currency (with no currency, the first currency's; Gold holds USD only).
+- **The order:**
+  - `|amount_minor − pivot|`, computed as `numeric` so neither a stored amount nor a cursor's
+    pivot can overflow `bigint`;
+  - then `amount_minor`;
+  - then the venue round: `row_number()` over `(venue_id, amount_minor)`, ordered by the
+    business grain. Equal price means equal distance, so this partition is exactly "equal on
+    the earlier keys";
+  - then `venue_id`, then the grain.
+
+  The window runs over every filtered row (boundary, `currency`, `q`, venue categories), and the
+  keyset is applied outside it.
+- **The cursor:** `[pivot, distance, amount, round, venue_id, …grain]`, 15 values.
+  - The course group is **not** in the cursor yet. The course step adds it, so a cursor issued
+    before that change stops decoding (`400 invalid_cursor`, and the client starts again).
+  - Only the canonical encoding decodes. `distance` must equal `|amount − pivot|`, and the round
+    is at least 1.
+  - A price cursor (11 values) is refused for `typical`, and the reverse.
+  - A later page uses the cursor's pivot and doesn't read the median again.
+- **Tests** (`test/test_api_price_index_area.py`):
+  - the typical walk at limits 1, 2 and 200;
+  - rotation within a round;
+  - `q` narrows the rows but doesn't move the pivot;
+  - the pivot is kept across a refresh that moves the median;
+  - the empty boundary;
+  - an unknown `sort` is `422`;
+  - the cursor codec and the cross-sort `400`;
+  - no sequential scan on either typical page: the first page runs 4 statements (the `/area`
+    pair, then the items pair), and a cursor page runs 2.
+
+**Measured read-only on `helios_laptop`** (2026-11-25, Alembic `73b0e3dba421`, 99,408
+`gold.current_menu` rows, 1,014 placements; `default_transaction_read_only=on`). Times are
+through the API in process, warm, 20 runs, p50 / p95:
+
+| Boundary | `price` first page | `typical` first page | `typical` cursor page | `typical`, `q=taco` |
+|---|---|---|---|---|
+| 2° × 2° around every placement (693 venues, 58,317 priced rows) | 69 / 71 ms | **570 / 646 ms** | 254 / 274 ms | 408 / 437 ms |
+| Central box from the amendment's sample (165 venues, 10,655 rows) | 25 / 27 ms | 109 / 114 ms | 54 / 59 ms | 82 / 87 ms |
+
+- **Where the 2° first page's time goes:**
+  - the pivot is 321 ms. It is the same `/area` aggregate the site already requests for the
+    summary;
+  - the windowed items query is 233 ms, against 63 ms for the price page. Its sort over
+    58,317 rows by the text grain spills to disk (16 MB external merge at the default
+    `work_mem`).
+- **A narrower window was tried and not adopted.** It sorted the grain and the row id only,
+  then joined back the page. It saved about 10% (200 against 222 ms), not enough for a second
+  query shape.
+- **The order on real data:**
+  - in both boundaries, the first 50 rows come from 50 different venues, all at the median
+    ($10.95 for 2°, $12.00 central);
+  - central opens on Sliders (The ABGB), Ribeye Kushiyaki (Little Nishi), Buffalo Chips (Blue
+    Dog Pizza), Naonis Prosecco (Dovetail Pizza);
+  - drinks still appear (Prosecco, Champagne), which is the gap the course step closes.
 
 ## References
 
