@@ -1,0 +1,281 @@
+{
+  "cohort": "swap5-priced-holdout",
+  "seed": null,
+  "venues": [
+    {
+      "venue": "Cafe Blue",
+      "gers": "71cb5828-6b92-40cb-b384-b12945b1a970",
+      "template": "WordPress separate menu pages",
+      "pages": [
+        {
+          "url": "https://cafebluetx.com/lunch-menu/",
+          "bundle_sha256": "cd6669080f1910be3e122fe2e67ba93e2e29bc410c45fd88a2b0fc56061294e3",
+          "states": [
+            {
+              "name": "lunch",
+              "anchor": "Served Monday \u2013 Friday 11am \u2013 3pm",
+              "prices": [
+                {
+                  "item": "Seafood Gumbo",
+                  "variant": null,
+                  "usd_minor": 1600,
+                  "baseline": "served"
+                },
+                {
+                  "item": "Rainbow Trout",
+                  "variant": null,
+                  "usd_minor": 1800,
+                  "baseline": "served"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "url": "https://cafebluetx.com/brunch-menu/",
+          "bundle_sha256": "ea43bf2189a933684c46483c7548096531a2d6701498182073f5a428c89aa1bd",
+          "states": [
+            {
+              "name": "brunch",
+              "anchor": "Available Saturday and Sunday 9a-3p",
+              "prices": [
+                {
+                  "item": "Bloody Mary",
+                  "variant": null,
+                  "usd_minor": 1300,
+                  "baseline": "served"
+                },
+                {
+                  "item": "Cubano Eggs Benedict",
+                  "variant": null,
+                  "usd_minor": 1600,
+                  "baseline": "served"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "url": "https://cafebluetx.com/kids-menu/",
+          "reference_body_sha256": "8765bc0e7f24963747d16b57313ee564880429db234d4806d3f018c690528449",
+          "states": [
+            {
+              "name": "kids",
+              "anchor": "For kids 12 & under",
+              "prices": [
+                {
+                  "item": "Popcorn Shrimp",
+                  "usd_minor": 900,
+                  "baseline": "discovery_miss"
+                },
+                {
+                  "item": "Chicken Fingers",
+                  "usd_minor": 800,
+                  "baseline": "discovery_miss"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "venue": "Brix and Ale",
+      "gers": "7a31023a-e3de-433d-98d0-2f0dd5615e7a",
+      "template": "Milestone tab panels",
+      "pages": [
+        {
+          "url": "https://www.brixandalegtx.com/our-menus",
+          "bundle_sha256": "53c1dbacff028903d3597c403afaab53889ebde3dfa33618a691e3c393e4affb",
+          "states": [
+            {
+              "name": "breakfast",
+              "anchor": "Weekday Breakfast - Monday - Friday: 6:30 am - 11:00 am",
+              "prices": [
+                {
+                  "item": "Egg Royale",
+                  "variant": null,
+                  "usd_minor": 2300,
+                  "baseline": "served"
+                },
+                {
+                  "item": "Breakfast Tacos",
+                  "variant": null,
+                  "usd_minor": 1900,
+                  "baseline": "served"
+                }
+              ]
+            },
+            {
+              "name": "dinner",
+              "anchor": "Weekday Dinner - Sunday - Thursday: 4:00 pm - 11:00 pm",
+              "prices": [
+                {
+                  "item": "BBQ Jackfruit Tacos",
+                  "variant": null,
+                  "usd_minor": 1600,
+                  "baseline": "served"
+                },
+                {
+                  "item": "Jumbo Wings",
+                  "variant": null,
+                  "usd_minor": 1700,
+                  "baseline": "served"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "venue": "Warpath Pizza and Pub",
+      "gers": "92c585eb-d0c1-4cd6-b7bb-0d91f21f4e8f",
+      "template": "size-labelled pizza price runs",
+      "pages": [
+        {
+          "url": "https://warpathpizza.com/round-rock-tx-e-palm-valley-blvd-warpath-pizza-and-pub-food-menu",
+          "bundle_sha256": "41352ad905fa92000c397ac4a544571ed8efb70f5b69d9f09f7b7d37f30a16c1",
+          "states": [
+            {
+              "name": "artisan pizza",
+              "anchor": "PIzza Artisan",
+              "prices": [
+                {
+                  "item": "Cheese & Chong",
+                  "variant": "12\"",
+                  "usd_minor": 1900,
+                  "variant_aliases": [
+                    "12"
+                  ],
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Cheese & Chong",
+                  "variant": "16\"",
+                  "usd_minor": 2300,
+                  "variant_aliases": [
+                    "16"
+                  ],
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Cheese & Chong",
+                  "variant": "18\"",
+                  "usd_minor": 2500,
+                  "variant_aliases": [
+                    "18"
+                  ],
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Santa Rosa",
+                  "variant": "12\"",
+                  "usd_minor": 1900,
+                  "variant_aliases": [
+                    "12"
+                  ],
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Santa Rosa",
+                  "variant": "16\"",
+                  "usd_minor": 2400,
+                  "variant_aliases": [
+                    "16"
+                  ],
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Santa Rosa",
+                  "variant": "18\"",
+                  "usd_minor": 2600,
+                  "variant_aliases": [
+                    "18"
+                  ],
+                  "baseline": "answer_repair_loss"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "venue": "Hippie Picnik",
+      "gers": "09b89b08-62bc-4d23-ab68-e88102da0315",
+      "template": "GoDaddy food-truck list",
+      "pages": [
+        {
+          "url": "https://hippiepicnik.com/hippie-picnik-food-truck",
+          "bundle_sha256": "dcc68bf45c75750aec05f9cb07381486b2fb179924f54f4f157b233c32948044",
+          "states": [
+            {
+              "name": "bratwurst",
+              "anchor": "Hippie Bratwurst",
+              "prices": [
+                {
+                  "item": "Plain Jane",
+                  "usd_minor": 800,
+                  "baseline": "item_omitted"
+                },
+                {
+                  "item": "Currywurst",
+                  "usd_minor": 850,
+                  "baseline": "served"
+                },
+                {
+                  "item": "The Hipster",
+                  "usd_minor": 1000,
+                  "baseline": "served"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "venue": "TenTen",
+      "gers": "1ac262fa-996f-4651-9461-502d1030ebac",
+      "template": "happy-hour PDF",
+      "pages": [
+        {
+          "url": "https://www.tentenaustin.com/s/TT_New_HappyHour_Menu_013025_HB-xnpa.pdf",
+          "bundle_sha256": "ddf971b89996dfe9fb222e7b448b38f78c9bb0a32004f501dbc7e200c78ebd6e",
+          "states": [
+            {
+              "name": "happy hour",
+              "anchor": "everyday 4:30 - 6pm",
+              "prices": [
+                {
+                  "item": "AVOCADO",
+                  "usd_minor": 750,
+                  "baseline": "served"
+                },
+                {
+                  "item": "CHARRED EDAMAME",
+                  "usd_minor": 600,
+                  "baseline": "served"
+                },
+                {
+                  "item": "PORK GYOZA",
+                  "usd_minor": 600,
+                  "baseline": "served"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "holdout_draw": {
+    "salt": "186-holdout:",
+    "method": "First HTML and first PDF in salted hash order, one record per requested host. See experiment record.",
+    "ranks": [
+      1,
+      12
+    ]
+  }
+}

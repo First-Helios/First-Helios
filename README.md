@@ -9,50 +9,53 @@ instructions and [CONTRIBUTING.md](./CONTRIBUTING.md) for the PR workflow.
 
 ## Running and checking menu extraction
 
-Discovery resolves venue websites and verifies candidate menu pages. Bronze stores the
-response and segmented blocks in a replay bundle. Extraction validates model and JSON-LD
-rows against those blocks and writes versioned menus. Gold selects current prices for
-`GET /v1/venues/{venue_id}/menu`.
+The pipeline publishes current menu prices through `GET /v1/venues/{venue_id}/menu`.
 
-| Change | Work on the next run |
-| --- | --- |
-| Same response at the refetch interval | Record the capture and keep the existing version. |
-| HTML, rendered DOM, or PDF reader changes | Version the document and reinterpret it. Identical model inputs can reuse saved answers. |
-| Model, prompt, chunker, or segmenter changes | Generate answers under the new extractor version. |
-| Validator, resolver, classifier, repairs, or JSON-LD reader changes | Reinterpret the bundle using saved answers where available. |
-| A saved answer is corrupt | Preserve it alongside the cache with a `.corrupt` suffix and recover the affected work. |
+```mermaid
+flowchart LR
+    A[Venue website] --> B[Discovery and location checks]
+    B --> C[Bronze capture and menu-page version]
+    C --> D[JSON-LD reader]
+    C --> E[Segmented blocks and saved model answers]
+    E --> F[Validation and DOM interpretation]
+    D --> G[Versioned Menu streams]
+    F --> G
+    G --> H[Gold selection]
+    H --> I[Venue menu API]
+```
 
-In a configured worker, `python -m apps.menu_pipeline.run --limit 1` fetches one due URL.
-`python -m apps.menu_pipeline.extract --limit 1` interprets one due page. Each command takes
-the next entry in its own queue. `python -m apps.gold.refresh` rebuilds the public projections.
-For a frozen site comparison, run `python -m apps.menu_pipeline.coverage_replay FIXTURES HTTP_CACHE`
-with and without `--follow-menu-hubs`. The same opt-in is available in `apps.discovery.resolve_urls`.
-The new interpretation version makes existing published pages due for replay. Saved model
-answers can be reused. Older records also acquire a document fingerprint and a new source
-version on their next successful fetch. Markup-only edits can trigger replay even when model inputs are identical.
+| Input change | Fetch or version | Extraction and inference | Publication |
+| --- | --- | --- | --- |
+| Same document at the refetch interval | Record a successful capture | Existing versions and answers stay current | Existing prices stay current |
+| Changed text, HTML, rendered DOM, final endpoint fingerprint, content type, or PDF reader | Version on a successful fetch when the Bronze payload differs | Interpret both streams. Reuse the page answer or exact chunk answers where possible | Gold refresh selects from the new stream heads, including an emptied JSON-LD stream |
+| New model, prompt, chunker or segmenter identifier | Stored bundles can replay | Look up answers under the new extractor key and infer missing chunks | Refresh Gold after extraction |
+| Changed repairs, validator, resolver, classifier or JSON-LD reader | Replay the stored version | Reinterpret existing answers. A reader change also schedules previously empty results | Refresh Gold after extraction |
+| Damaged saved answer encountered during extraction | Use the stored bundle | Quarantine the entry and recover with intact chunk answers or inference | A failed extraction stays due for retry |
 
-Run the offline repeated-card benchmark with
-`uv run python -m apps.menu_pipeline.card_shadow test/fixtures/menu-review`.
-It reports exact item, variant and price matches, plus the number of residual chunks.
-Pass a single HTML file to inspect evidence spans and the proposed residual model input.
-Supply `--server http://localhost:8080` with an HTML file for a paired inference run that reports
-model seconds, accepted price candidates and duplicate counts. The checked-in fixture has
-four expected price combinations. Two come from simple cards
-and two sizes remain in one model chunk. On the stored P5-14 corpus, all 14 proposals
-matched a label across 72 pages, and residual chunk count stayed at 607. This experiment
-runs offline. On a paired run for one captured page it recovered 23 of 32 exact labeled
-price combinations. The existing path recovered 25. [Experiment record](docs/reviews/2026-11-24-menu-extraction.md)
+A legacy page acquires its document fingerprint on its first successful refetch.
+An interpretation upgrade can also make the stored version due before that fetch.
+Pi publication uses the reviewed swap after the work database passes the gate.
+[Pipeline host runbook](infra/pipeline-host/README.md)
 
-With a disposable PostgreSQL test database configured, run
-`uv run pytest -q test/test_menu_extraction.py -k fixture_from_capture_to_api`
-to check five expected prices across two venue fixtures through discovery, Bronze,
-extraction, Gold and the public venue menu endpoint. The fixtures use scripted model responses.
+**Run one venue through the API.** With a disposable test database configured,
+`uv run pytest -q 'test/test_menu_extraction.py::test_menu_fixture_from_capture_to_api[taqueria]'`
+runs a frozen taqueria through discovery, Bronze, extraction, Gold and the HTTP route.
+Run `test/fixtures/venue-prices/run.sh` for the venue-by-venue loss report from a fresh
+local database (PostgreSQL 16, PostGIS and uv). It includes a wrong-location menu and two
+pizza sizes. [Benchmark and field results](docs/reviews/2026-11-24-menu-extraction.md#venue-to-api-price-benchmark)
 
-For a confirmed PDF or image menu, inspect word boxes with
-`python -m apps.menu_pipeline.pdf_layout MENU.pdf --page 1`. Add `--ocr` for a scanned
-page or supply an image with `--ocr`. The offline tool uses Poppler for PDF text and
-rendering and Tesseract for OCR. Each line retains the page-relative box of each word. Price-row proposals retain item words,
-price words and matching size-header boxes for multi-column rows.
+**Replay one due capture.** In a configured worker against a disposable database,
+`python -m apps.menu_pipeline.extract --no-model --limit 1 --base-dir SCRATCH_DEPLOY`
+reinterprets the next due page with its saved answers. To fetch one due URL, use
+`python -m apps.menu_pipeline.run --limit 1`. The two commands use independent queues.
+
+**Experiments.** `uv run python -m apps.menu_pipeline.card_shadow test/fixtures/menu-review`
+scores repeated-card proposals. Pass an HTML file and `--server http://localhost:8080` to
+compare both routes on identical input. `python -m apps.menu_pipeline.pdf_layout MENU.pdf --page 1`
+inspects word boxes and proposed price columns. Add `--ocr` for a scan. Both tools are offline.
+For discovery replay, `python -m apps.menu_pipeline.coverage_replay FIXTURES HTTP_CACHE`
+uses the frozen network cache. Hub following requires `--follow-menu-hubs`.
+[Experiment record](docs/reviews/2026-11-24-menu-extraction.md)
 
 ## Status
 
