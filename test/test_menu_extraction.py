@@ -372,7 +372,7 @@ def test_pipeline_version_names_every_component_within_the_column() -> None:
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm.startswith(version.extractor + ";")
     assert len(version.llm) <= 128
-    assert version.jsonld == "jsonld-v1;validator-v13;segment-v2;classifier-v2"
+    assert version.jsonld == "jsonld-v1;validator-v14;segment-v2;classifier-v2"
     assert model_tag(spec) in version.extractor
 
 
@@ -1063,7 +1063,7 @@ def test_jsonld_stream_beside_llm_and_its_empty_successor(venues: _Venues) -> No
     # "Queso Fundido" isn't printed on the page: the validator rejects it
     assert report.rows["jsonld:accept"] == 1 and report.rows["jsonld:reject:name_not_grounded"] == 1
     jsonld = next(p for p in venues.pages(gers) if p.source_kind == "jsonld")
-    assert jsonld.method_version == "jsonld-v1;validator-v13;segment-v2;word-v1"
+    assert jsonld.method_version == "jsonld-v1;validator-v14;segment-v2;word-v1"
     with venues.factory() as session:
         assert _rows(session, jsonld.id) == [("Queso", None, 600, PRICE_CONFIDENCE)]
         refresh_gold(session, effective_instant=datetime.now(UTC))
