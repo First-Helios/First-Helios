@@ -3,6 +3,8 @@
 **Status:** Accepted 2026-10-23 by the owner, OQ1–OQ6 and OQ8 as recommended and OQ7 changed
 (the `boundary` filter on `GET /v1/venues` is built now; see [Owner decision](#owner-decision)).
 Proposed 2026-10-23 (session P8-8). Not built yet.
+[Amendment 1](#amendment-1-2026-11-24-a-typical-first-order-for-the-area-item-list) (**proposed**,
+not built) would add a "typical first" order to point 4's item list.
 **Date:** 2026-10-23
 **Phase:** 8 (public v1 site, an [ADR-0019](./0019-public-v1-site.md) follow-up)
 **Extends:** [ADR-0007](./0007-gold-price-index-projection.md) (price index: placement,
@@ -320,6 +322,124 @@ Each has a recommendation. Nothing in this ADR is built until these are answered
 8. **OQ8 order:** one First-Helios build PR (migration, refresh, the three endpoint changes,
    tests). Then a `pg_dump` of `helios_laptop`, `alembic upgrade head` and a Gold refresh there
    (approved owner writes). Then the frontend PR.
+
+## Amendment 1 (2026-11-24): a "typical first" order for the area item list
+
+**Status: Proposed 2026-11-24 (venue-menu presentation follow-up). Nothing is built.**
+- It is a stop-and-ask change, because it changes point 4's API order.
+- Its course step (item 2a) depends on
+  [ADR-0016](./0016-course-labels-for-the-price-index.md) Amendment 3 slice 3, the same
+  dependency as [ADR-0022](./0022-several-menu-pages-per-venue.md) Amendment 2 (accepted).
+- Doc drift: this ADR's status line still says "Not built yet", but it was built in P8-9
+  (PR #119).
+
+### The gap
+
+The owner, looking at every item in a drawn area on the map: the list opens on "Paper plate
+$0.10, Plastic utensils $0.10, Fortune Cookies (1) $0.15, Corn Tortilla $0.20 … this should
+also be ordered better."
+
+Point 4 orders the list cheapest first. Without `q`, the cheapest end of any area is add-ons,
+condiments and packaging.
+
+**Sample.** A central Austin box (30.24–30.31 N, 97.71–97.77 W), with every page fetched from
+the live API on 2026-11-24:
+- 165 venues, 10,655 rows;
+- area median $12.00.
+
+**Orders compared.** The first 50 rows of each:
+
+| Order | Add-on-like | Non-food group | Distinct venues |
+|---|---|---|---|
+| A. cheapest first (today) | 50 | 23 | 16 |
+| B. food groups first, then cheapest | 50 | 0 | 16 |
+| C0. nearest the median | 2 | 8 | 13 |
+| C2. nearest the median, venues rotated | 2 | 13 | **50** |
+| **C1. food groups, nearest the median, venues rotated** | 5 | **0** | **50** |
+| D. food groups first, then dearest | 1 | 0 | 17 (wine bottles and caviar at $295–$500) |
+
+How the columns were counted:
+- *Add-on-like* is a rough name rule (add/extra/side/sauce/tortilla/ranch/packet/…) or under
+  $3. It over-counts: C1's 5 include "Buffalo Chips" and a "With American cheese" variant.
+- *Groups* come from `course-lexicon-v1` on section names, as in ADR-0022 Amendment 2.
+
+**Reading the table.**
+- B shows that the course groups alone don't fix the list. The cheapest food-section rows are
+  still tortillas, ranch and "add jalapeños" lines.
+- Near the median, the rows are dishes.
+- C1's first rows are Ribeye Kushiyaki (Little Nishi), Buffalo Chips (Blue Dog Pizza), a
+  laitue salad (Le Calamar), Camarones (Nomade) and Barbacoa Dumplings (Lucky Robot): $12.00
+  each, all from different venues.
+- Without rotation, the first eight rows are all The ABGB at $12.00.
+
+**With `q`, cheapest first stays right.** Searching compares one dish across venues.
+
+### Decision (proposed)
+
+1. **A `sort` parameter on `GET /v1/price-index/area/items`.**
+   - `price`: the default. It is point 4's order, unchanged for existing clients.
+   - `typical`: item 2.
+2. **The `typical` order.** It is total, so the keyset works.
+   1. *Course group* (once slice 3 serves `course`), as ADR-0022 Amendment 2 defines it:
+      - food: every course except `drink`, `alcohol`, `side` and `other`, and null;
+      - then `drink`;
+      - then `alcohol`;
+      - then `side` and `other`.
+
+      Rows from drink-led venues keep `drink` and `alcohol` in the food group.
+   2. *Distance* `|amount_minor − pivot|`, nearer first. Ties go to the cheaper row.
+   3. *Venue round.* Among rows equal on 2.1–2.2, a venue's k-th row comes in round k, so one
+      venue's $12.00 rows don't fill a page. In SQL this is `row_number()` partitioned by venue
+      and the earlier keys, ordered by the business grain.
+   4. Then `venue_id`, then point 4's business grain.
+3. **The pivot.**
+   - It is the boundary's `all` median for the same `currency`: the venue-weighted headline
+     figure `/v1/price-index/area` returns. The same code computes it once per request.
+   - Category filters don't move it: `/area` has none.
+   - The list response gains `pivot_minor`: null for `price`, so the site can say "nearest the
+     area median ($12.00)".
+   - The `typical` cursor is `[pivot, group, distance, amount, round, venue_id, …grain]`. A
+     later page reuses the cursor's pivot, so a walk stays consistent across a refresh that
+     moves the median.
+   - A cursor from the other `sort` is `400 invalid_cursor`.
+4. **The site.**
+   - It sends `typical` when there is no `q`, and `price` when there is one.
+   - A small control switches between "Typical first" and "Cheapest first". The choice lives in
+     the hash as `&sort=`, like `q`.
+5. **Two steps.**
+   - Build 2.2–2.4 now (C2). It needs nothing from slice 3.
+   - Add 2.1 when `course` reaches Gold (C1).
+   - Measured difference on the sample: 13 drinks among the first 50 rows with C2, and 0 with
+     C1.
+6. **Cost.**
+   - The window runs over every placed row inside the boundary: 10,655 here, and roughly the
+     whole of Gold for a 2° boundary.
+   - The build measures the 2° case on `helios_laptop` and reports it, as point 4's tests do
+     for `q`.
+   - It adds no index and no migration.
+
+### Tests (for the build)
+
+- Point 4's tests run for both `sort` values:
+  - the keyset order is total;
+  - the cursor survives a refresh;
+  - the page count matches `priced_count` when there is no `q`.
+- A `typical` walk keeps its pivot across a refresh that moves the median.
+- A cursor from the other `sort` is rejected.
+- Venue rotation holds: no venue repeats within one round.
+- The OpenAPI snapshot is updated. The frontend `endpoints.js` lists `sort`, and the contract
+  check passes.
+
+### Owner questions (recommendations first)
+
+- **Q1. Pivot.** The area's headline median *(recommended: it is the figure the page already
+  shows)*. Or the plain median of the listed rows: it follows the cuisine filters, but differs
+  from the headline.
+- **Q2. When.** Build item 5's first step now, and add the course step after slice 3
+  *(recommended)*. Or ship both together.
+- **Q3. The site's default.** "Typical first" without `q`, cheapest first with `q`
+  *(recommended)*. Or "typical first" always.
+- **Q4. Venue rotation** *(recommended)*, or plain distance order.
 
 ## References
 

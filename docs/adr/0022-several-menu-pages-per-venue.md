@@ -6,7 +6,8 @@
 2026-10-31 (see [Applied](#applied-2026-10-28-to-2026-10-31)). Point 2's cap and candidate terms are
 amended by [ADR-0024](./0024-further-menu-page-discovery.md) D2 (see [Amendment 1](#amendment-1-2026-10-31-adr-0024-d2-cap-6-and-drinkscatering-terms)).
 [Amendment 2](#amendment-2-2026-11-24-food-first-course-ordered-sections-and-a-sides--extras-sidebar)
-(**proposed**, not built) would add `course` to each menu section and change point 5's display order.
+(**accepted** 2026-11-24, Q1–Q4 as recommended; not built) adds `course` to each menu section and
+changes point 5's display order.
 **Date:** 2026-10-27
 **Phase:** 6 deliverable "Several menu pages per venue, before the next re-collection"
 (ROADMAP.md; §7 item 7)
@@ -402,7 +403,9 @@ Owner decision on [ADR-0024](./0024-further-menu-page-discovery.md) D2, after it
 
 ## Amendment 2 (2026-11-24): food first, course-ordered sections and a sides & extras sidebar
 
-**Status: Proposed 2026-11-24 (venue-menu presentation review). Nothing is built.**
+**Status: Accepted 2026-11-24 by the owner, Q1–Q4 as recommended (see
+[Owner decision](#owner-decision-amendment-2)). Proposed 2026-11-24 (venue-menu presentation
+review, PR #188). Nothing is built.**
 - It is a stop-and-ask change. It adds a field to the menu wire
   ([ADR-0008](./0008-read-api-conventions.md)), and it changes point 5's display order on
   the site.
@@ -563,6 +566,19 @@ signal of what a section *is*: none reaches the API today.
   column after food, and put only `other` in the sidebar.
 - **Q4. Drink-led exemption.** Use item 2's place-type list *(recommended)*, or have no
   exemption.
+
+### Owner decision (Amendment 2)
+
+2026-11-24, after #188 merged: "your recommendations look good". So:
+- **Q1:** wait for ADR-0016 slice 3. There is no request-time interim.
+- **Q2:** the wire serves `course` as stored, all nine labels.
+- **Q3:** `side` goes in the sidebar with `other`.
+- **Q4:** drink-led venues are exempt, by item 2's place-type list.
+
+The build waits on ADR-0016 Amendment 3, whose items 3–6 and Q1–Q4 are still proposed: slice 2
+(`menu.section_course`) and slice 3 (`gold.current_menu.course`). The same food-first groups
+are proposed for the map's area item list in
+[ADR-0020](./0020-drawn-areas-in-the-read-api.md) Amendment 1.
 
 ## References
 
