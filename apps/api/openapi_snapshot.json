@@ -1845,7 +1845,7 @@
     },
     "/v1/price-index/area/items": {
       "get": {
-        "description": "Return one page of the priced item and variant rows behind ``/v1/price-index/area``.\n\nThe rows of the venues the index places inside ``boundary`` (shared chain\nmenus left out, as from the median). ``sort=price`` (the default) lists\nthem cheapest first (ADR-0020 \u00a74). ``sort=typical`` lists them nearest\nthe area's headline median first, returned as ``pivot_minor``; among rows\nat one price, each venue's k-th row comes in round k (ADR-0020\nAmendment 1). Without ``q``, walking every page gives ``priced_count``\nrows. The cursor names the last row's position and business key, not a\nrow id, so it survives a refresh; a ``typical`` cursor also keeps its\npivot, so a walk stays on one median. A cursor from the other ``sort`` is\n``400``. It does not carry ``boundary`` or the filters: send the same ones\nwith every page. A boundary or ``q`` that matches nothing is ``200`` with\n``items: []``.",
+        "description": "Return one page of the priced item and variant rows behind ``/v1/price-index/area``.\n\nThe rows of the venues the index places inside ``boundary`` (shared chain\nmenus left out, as from the median). ``sort=price`` (the default) lists\nthem cheapest first (ADR-0020 \u00a74). ``sort=typical`` lists them by course\ngroup (food, drink, alcohol, then side and other; a drink-led venue's\ndrinks count as food), then nearest the area's headline median first,\nreturned as ``pivot_minor``; among rows at one price, each venue's k-th\nrow comes in round k (ADR-0020 Amendment 1). Without ``q``, walking every page gives ``priced_count``\nrows. The cursor names the last row's position and business key, not a\nrow id, so it survives a refresh; a ``typical`` cursor also keeps its\npivot, so a walk stays on one median. A cursor from the other ``sort`` is\n``400``. It does not carry ``boundary`` or the filters: send the same ones\nwith every page. A boundary or ``q`` that matches nothing is ``200`` with\n``items: []``.",
         "operationId": "list_price_index_area_items_v1_price_index_area_items_get",
         "parameters": [
           {
@@ -1897,13 +1897,13 @@
             }
           },
           {
-            "description": "price: cheapest first. typical: nearest the area's headline median first, venues taking turns.",
+            "description": "price: cheapest first. typical: food, then drinks, then alcohol, then sides and extras; within each, nearest the area's headline median first, venues taking turns.",
             "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "default": "price",
-              "description": "price: cheapest first. typical: nearest the area's headline median first, venues taking turns.",
+              "description": "price: cheapest first. typical: food, then drinks, then alcohol, then sides and extras; within each, nearest the area's headline median first, venues taking turns.",
               "enum": [
                 "price",
                 "typical"

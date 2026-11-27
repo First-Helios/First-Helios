@@ -86,6 +86,9 @@ _RESTAURANT_TAGS = tuple(
     )
 )
 CATEGORY_OPTIONS["place_type"] += (("restaurant", "Restaurants", _RESTAURANT_TAGS),)
+#: Place types whose venues sell drinks first (ADR-0022 Amendment 2 item 2): their
+#: ``drink`` and ``alcohol`` sections stay with the food in display orders.
+DRINK_LED_PLACE_TYPES = ("cafe", "coffee_shop", "bar", "brewery", "pub", "juice_bar")
 LABELS = {
     (group, key): label for group, options in CATEGORY_OPTIONS.items() for key, label, _ in options
 }
