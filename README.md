@@ -808,6 +808,7 @@ The ADR index. Status is the short form of each ADR's Status line.
 | [0028](./docs/adr/0028-venue-category-browsing.md) | Venue categories for browsing without search | Accepted; implemented (ADR-0028) |
 | [0029](./docs/adr/0029-pdf-menus.md) | Reading PDF menus with `pypdf` | Accepted (all as recommended); dependency #164, reader built (#168) |
 | [0030](./docs/adr/0030-pipeline-host-runs.md) | Repeatable pipeline-host runs: one master database, a batch loop and a gated swap | Accepted (P8-28, under the owner's delegation; stage 1 built separately); Amendment 1 (Phase 6 monthly runs) accepted under delegation and built (P8-29; timer not yet installed) |
+| [0031](./docs/adr/0031-phase8-operations-basics.md) | Phase 8 operations basics on the Pi: off-box backups, a restore drill, image health, frontend serving, alerting, and the Pi as production | Proposed (P8-31); Q1–Q26 open; not built |
 
 Also: [RFC-0001](./docs/rfc/0001-menu-pricing-first.md) (menu-and-pricing-first
 scope) and the
