@@ -13,7 +13,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, get_args
 from uuid import uuid4
 
 import pytest
@@ -25,7 +25,9 @@ from apps.api.db import get_session
 from apps.api.item_ids import decode_item_id
 from apps.api.main import app
 from apps.api.routes.venues import _shape_menu
+from apps.api.schemas import Course
 from packages.helios_core.domains.menu.commands import persist_menu
+from packages.helios_core.domains.menu.models import COURSE_LABELS
 from packages.helios_core.domains.menu.selection import ContextRef, SelectionRequest, TargetRef
 from packages.helios_core.gold import menu_read, refresh_current_menu
 from packages.helios_core.gold.menu_read import CurrentMenuRow, menu_source_urls
@@ -136,6 +138,8 @@ def _row(
     source_kind: str | None = "llm",
     confidence: Decimal | None = Decimal("0.9000"),
     evidence_ids: list[int] | None = None,
+    course: str | None = None,
+    course_labeller: str | None = None,
 ) -> dict[str, Any]:
     return {
         "subject_id": subject[0],
@@ -157,6 +161,8 @@ def _row(
         "content_evidence_ids": [],
         "section_name": section_name,
         "item_name": item_name,
+        "course": course,
+        "course_labeller": course_labeller,
         "organization_claim_count": 0,
         "refreshed_at": effective_instant,
     }
@@ -239,6 +245,7 @@ def _plain(
     item_name: str | None = None,
     channel: str = "unspecified",
     observed_at: datetime | None = OBSERVED,
+    course: str | None = None,
 ) -> CurrentMenuRow:
     return CurrentMenuRow(
         subject_id=1,
@@ -264,6 +271,7 @@ def _plain(
         content_description=None,
         section_name=section_name,
         item_name=item_name,
+        course=course,
     )
 
 
@@ -328,6 +336,28 @@ def test_shape_keeps_base_prefixed_and_nested_sections_apart() -> None:
         ("12:tacos", "Inherited"),
         ("12:tacos", "Local"),
         ("sub", "Nested"),
+    ]
+
+
+def test_course_literal_is_the_menu_domains_nine_labels() -> None:
+    assert get_args(Course) == COURSE_LABELS
+
+
+def test_shape_section_course_is_its_rows_course_and_order_is_kept() -> None:
+    # ADR-0022 Amendment 2 item 1: a section takes its rows' course (a page-less row
+    # carries none), null when unlabelled; the API reorders nothing.
+    drinks = ("section", "20:drinks")
+    rows = [
+        _plain("item", drinks, ("item", "21:soda"), name="Soda"),  # no page: no course
+        _plain("item", drinks, ("item", "22:tea"), name="Tea", course="drink"),
+        _plain("item", TACOS, PASTOR, name="Al Pastor", course="entree"),
+        _plain("item", ("section", "30:specials"), ("item", "31:x"), name="X"),
+    ]
+    sections = _shape_menu(rows, LATER)
+    assert [(s.key, s.course) for s in sections] == [
+        ("20:drinks", "drink"),
+        ("12:tacos", "entree"),
+        ("30:specials", None),
     ]
 
 
@@ -415,6 +445,60 @@ def test_menu_shape_staleness_and_source(client: TestClient, session: Session) -
     ]
     assert fish["prices"][0]["state"] == "unknown"
     assert fish["prices"][0]["amount_minor"] is None
+
+
+def test_menu_serves_each_sections_course(client: TestClient, session: Session) -> None:
+    _, venue = _venue(session)
+    subject = (venue, "establishment")
+    record = _record(session)
+    labeller = "course-lexicon-v1@test"
+    drinks = ("section", "20:drinks")
+    _insert(
+        session,
+        [
+            _row(
+                subject,
+                record,
+                "item",
+                _path(drinks, ("item", "21:soda")),
+                amount=300,
+                name="Soda",
+                section_name="Drinks",
+                course="drink",
+                course_labeller=labeller,
+            ),
+            _row(
+                subject,
+                record,
+                "item",
+                _path(TACOS, ("item", "13:bean")),
+                amount=350,
+                name="Bean",
+                section_name="Tacos",
+                course_labeller=labeller,
+            ),  # abstained
+            _row(
+                subject,
+                record,
+                "item",
+                _path(("section", "30:sides"), ("item", "31:rice")),
+                amount=200,
+                name="Rice",
+                section_name="Sides",
+            ),  # unlabelled
+        ],
+    )
+
+    response = client.get(f"/v1/venues/{venue}/menu")
+
+    assert response.status_code == 200
+    (menu,) = response.json()["menus"]
+    # Sections keep Gold's order (target path); course never reorders them.
+    assert [(s["name"], s["course"]) for s in menu["sections"]] == [
+        ("Tacos", None),
+        ("Drinks", "drink"),
+        ("Sides", None),
+    ]
 
 
 def test_as_of_is_the_oldest_refresh_instant(client: TestClient, session: Session) -> None:

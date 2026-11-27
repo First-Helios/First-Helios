@@ -586,8 +586,30 @@
         "type": "object"
       },
       "MenuSectionResponse": {
-        "description": "A named section of a menu. ``name`` is null when the source names no\nsection. ``id`` is the section's ``item_id`` for its price history; null\nunless the section is priced.",
+        "description": "A named section of a menu. ``name`` is null when the source names no\nsection. ``id`` is the section's ``item_id`` for its price history; null\nunless the section is priced. ``course`` is the section's label from the\npinned course labeller (ADR-0016 Amendment 3, ADR-0022 Amendment 2): null\nwhen the section is unlabelled or the labeller abstained. It is a display\nsignal; the API reorders nothing.",
         "properties": {
+          "course": {
+            "anyOf": [
+              {
+                "enum": [
+                  "appetizer",
+                  "entree",
+                  "side",
+                  "dessert",
+                  "drink",
+                  "alcohol",
+                  "breakfast",
+                  "kids",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course"
+          },
           "id": {
             "anyOf": [
               {
@@ -640,6 +662,7 @@
           "id",
           "key",
           "name",
+          "course",
           "prices",
           "items",
           "modifiers"
