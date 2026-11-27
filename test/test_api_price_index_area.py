@@ -34,7 +34,12 @@ from apps.api.pagination import (
     encode_area_item_cursor,
     encode_typical_area_item_cursor,
 )
-from packages.helios_core.gold.models import CurrentMenu, PriceIndex, PriceIndexPlacement
+from packages.helios_core.gold.models import (
+    CurrentMenu,
+    PriceIndex,
+    PriceIndexPlacement,
+    VenueCategory,
+)
 from packages.helios_core.gold.price_index import (
     ALL_AREA,
     GRID_STEPS,
@@ -158,23 +163,29 @@ def _menu(
     *,
     section: str = "Mains",
     names: list[str] | None = None,
+    courses: list[str | None] | None = None,
 ) -> None:
-    """One item row per amount (``None``: unknown) under one section of one family."""
+    """One item row per amount (``None``: unknown) under one section of one family.
+
+    ``courses`` gives each row's Gold course (ADR-0016 slice 3), labelled at a
+    test labeller; unlabelled when omitted.
+    """
     rows: list[dict[str, Any]] = []
     for position, amount in enumerate(amounts):
         name = names[position] if names else f"Item {position}"
-        rows.append(
-            _row(
-                subject,
-                record,
-                _path(("section", "s"), ("item", f"i{position}")),
-                amount,
-                section_name=section,
-                item_name=name,
-                content_name=name,
-                observed=OBSERVED + timedelta(days=position),
-            )
+        row = _row(
+            subject,
+            record,
+            _path(("section", "s"), ("item", f"i{position}")),
+            amount,
+            section_name=section,
+            item_name=name,
+            content_name=name,
+            observed=OBSERVED + timedelta(days=position),
         )
+        if courses is not None:
+            row |= {"course": courses[position], "course_labeller": "course-test@1"}
+        rows.append(row)
     session.execute(insert(CurrentMenu), rows)
 
 
@@ -706,6 +717,89 @@ def test_typical_walk_keeps_its_pivot_across_a_refresh(
     assert fresh["pivot_minor"] == 500
 
 
+def _drink_led(session: Session, venue: int, place_type: str = "cafe") -> None:
+    """Give ``venue`` an ADR-0028 place type, as the category refresh would."""
+    record = _record(session)
+    session.execute(
+        insert(VenueCategory),
+        [
+            {
+                "venue_id": venue,
+                "category_group": "place_type",
+                "category_key": place_type,
+                "source_record_version_id": record.source_record_version_id,
+                "source_categories": [place_type],
+                "mapping_version": "test",
+                "observed_at": OBSERVED,
+                "refreshed_at": E,
+            }
+        ],
+    )
+
+
+@pytest.mark.parametrize("limit", [1, 3, 200])
+def test_typical_walk_puts_food_first_then_drink_alcohol_and_extras(
+    client: TestClient, session: Session, limit: int
+) -> None:
+    # ADR-0020 Amendment 1 item 2.1: the course group comes before the distance.
+    corner = _region()
+    point = _at(corner, "0.005", "0.005")
+    diner = _shop(
+        session,
+        point,
+        [1000, 1000, 1000, 1000, 400, 2000],
+        courses=["side", "drink", "alcohol", "entree", None, "other"],
+    )
+    # Venue medians 1000 and 1000 (lower medians): the headline pivot is 1000.
+    cafe = _shop(session, point, [1000, 1000], courses=["drink", "alcohol"])
+    _drink_led(session, cafe)
+    _refresh(session)
+    s, w = corner
+    boundary = _rect(s, w, s + D("0.01"), w + D("0.01"))
+
+    items: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        params = {"boundary": boundary, "sort": "typical", "limit": str(limit)}
+        if cursor:
+            params["cursor"] = cursor
+        body = client.get("/v1/price-index/area/items", params=params).json()
+        assert body["pivot_minor"] == 1000
+        items += body["items"]
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+
+    assert [(i["venue_id"], i["amount_minor"]) for i in items] == [
+        # Food at the pivot, round 1: the diner's entree, the cafe's drink (drink-led) ...
+        (diner, 1000),
+        (cafe, 1000),
+        (cafe, 1000),  # ... round 2: the cafe's alcohol, still food at a drink-led venue
+        (diner, 400),  # unlabelled is food, 600 away
+        (diner, 1000),  # drink
+        (diner, 1000),  # alcohol
+        (diner, 1000),  # side, at the pivot ...
+        (diner, 2000),  # ... then other
+    ]
+    assert len(items) == 8
+
+
+def test_typical_rounds_rotate_within_a_course_group(client: TestClient, session: Session) -> None:
+    corner = _region()
+    point = _at(corner, "0.005", "0.005")
+    one = _shop(session, point, [1000, 1000, 1000], courses=["entree", "drink", "entree"])
+    two = _shop(session, point, [1000, 1000], courses=["drink", "entree"])
+    _refresh(session)
+    s, w = corner
+    boundary = _rect(s, w, s + D("0.01"), w + D("0.01"))
+
+    body = client.get(
+        "/v1/price-index/area/items", params={"boundary": boundary, "sort": "typical"}
+    ).json()
+    # Food: round 1 is one row per venue, then one's second entree; then the drinks.
+    assert [i["venue_id"] for i in body["items"]] == [one, two, one, one, two]
+
+
 def test_typical_empty_boundary_is_200(client: TestClient) -> None:
     corner = _region()
     body = client.get(
@@ -793,13 +887,13 @@ def test_malformed_area_item_cursor_is_400(client: TestClient, cursor: str) -> N
     _assert_bad_cursor(client, cursor, "price")
 
 
-_TYPICAL_KEY = (300, 200, 500, 2, 7, *_KEY[1:])
+_TYPICAL_KEY = (300, 1, 200, 500, 2, 7, *_KEY[1:])
 _TYPICAL_VALID = encode_typical_area_item_cursor(_TYPICAL_KEY)
 
 
 def test_typical_area_item_cursor_round_trips() -> None:
     assert decode_typical_area_item_cursor(_TYPICAL_VALID) == _TYPICAL_KEY
-    below = (300, 50, 250, 1, 7, *_KEY[1:])
+    below = (300, 0, 50, 250, 1, 7, *_KEY[1:])
     assert decode_typical_area_item_cursor(encode_typical_area_item_cursor(below)) == below
 
 
@@ -814,13 +908,16 @@ def _typical(*head: object) -> str:
         ("typical", _VALID),  # a price cursor
         ("price", _TYPICAL_VALID),  # a typical cursor
         ("typical", _TYPICAL_VALID + "A"),
-        ("typical", _typical(300, 199, 500, 1, 7)),  # distance is not |amount - pivot|
-        ("typical", _typical(300, -200, 100, 1, 7)),
-        ("typical", _typical(300, 200, 500, 0, 7)),  # rounds count from 1
-        ("typical", _typical(300, 200, 500, 1, -1)),
-        ("typical", _typical(300, True, 500, 1, 7)),
-        ("typical", _typical(300.0, 200, 500, 1, 7)),
-        ("typical", _typical(300, 200, 500, 1)),
+        ("typical", _typical(300, 0, 199, 500, 1, 7)),  # distance is not |amount - pivot|
+        ("typical", _typical(300, 0, -200, 100, 1, 7)),
+        ("typical", _typical(300, 0, 200, 500, 0, 7)),  # rounds count from 1
+        ("typical", _typical(300, 0, 200, 500, 1, -1)),
+        ("typical", _typical(300, 0, True, 500, 1, 7)),
+        ("typical", _typical(300.0, 0, 200, 500, 1, 7)),
+        ("typical", _typical(300, 4, 200, 500, 1, 7)),  # four course groups: 0-3
+        ("typical", _typical(300, -1, 200, 500, 1, 7)),
+        ("typical", _typical(300, True, 200, 500, 1, 7)),
+        ("typical", _typical(300, 200, 500, 1, 7)),  # issued before the course group: 15 values
     ],
 )
 def test_cursor_of_the_wrong_sort_or_malformed_typical_is_400(

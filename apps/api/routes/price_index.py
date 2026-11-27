@@ -328,8 +328,9 @@ def list_price_index_area_items(
     sort: Annotated[
         AreaItemSort,
         Query(
-            description="price: cheapest first. typical: nearest the area's headline median "
-            "first, venues taking turns.",
+            description="price: cheapest first. typical: food, then drinks, then alcohol, then "
+            "sides and extras; within each, nearest the area's headline median first, venues "
+            "taking turns.",
         ),
     ] = "price",
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -339,10 +340,11 @@ def list_price_index_area_items(
 
     The rows of the venues the index places inside ``boundary`` (shared chain
     menus left out, as from the median). ``sort=price`` (the default) lists
-    them cheapest first (ADR-0020 §4). ``sort=typical`` lists them nearest
-    the area's headline median first, returned as ``pivot_minor``; among rows
-    at one price, each venue's k-th row comes in round k (ADR-0020
-    Amendment 1). Without ``q``, walking every page gives ``priced_count``
+    them cheapest first (ADR-0020 §4). ``sort=typical`` lists them by course
+    group (food, drink, alcohol, then side and other; a drink-led venue's
+    drinks count as food), then nearest the area's headline median first,
+    returned as ``pivot_minor``; among rows at one price, each venue's k-th
+    row comes in round k (ADR-0020 Amendment 1). Without ``q``, walking every page gives ``priced_count``
     rows. The cursor names the last row's position and business key, not a
     row id, so it survives a refresh; a ``typical`` cursor also keeps its
     pivot, so a walk stays on one median. A cursor from the other ``sort`` is

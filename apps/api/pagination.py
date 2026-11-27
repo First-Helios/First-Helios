@@ -4,7 +4,8 @@ Cursors are base64url-encoded tokens over a stable, unique ordering key (the
 Establishment ``subject_id``; for the price-index cell list, a row's business
 key, ADR-0007 Amendment 3; for a drawn area's items, the price and the Gold
 row's business grain, ADR-0020 §4, or in the ``typical`` order the pivot,
-distance, price, venue round and venue before that grain, ADR-0020 Amendment 1).
+course group, distance, price, venue round and venue before that grain, ADR-0020
+Amendment 1).
 Opaque means clients are told not to construct or
 depend on the encoding; it is not a security boundary. The token is unsigned, so
 anyone can forge one. That is harmless: the data is public and a cursor is only
@@ -99,6 +100,7 @@ BIGINT_MIN = -(2**63)
 # service_period, currency_code); target_path is unbounded text.
 _SUBJECT_KIND_LENGTH, _ROOT_KEY_LENGTH, _CHANNEL_LENGTH, _SERVICE_PERIOD_LENGTH = 32, 512, 16, 128
 _CURRENCY_LENGTH = 3
+_LAST_COURSE_GROUP = 3  # price_index_read.COURSE_GROUPS: food 0 … extras 3
 
 
 def _wire_time(value: datetime | None) -> str | None:
@@ -116,10 +118,11 @@ def encode_area_item_cursor(key: AreaItemKey) -> str:
 def encode_typical_area_item_cursor(key: TypicalAreaItemKey) -> str:
     """Encode an area item's ``typical`` key (ADR-0020 Amendment 1 item 3) like the price key.
 
-    ``[pivot, distance, amount, round, venue_id, …grain]``: 15 values, so a
-    cursor of one ``sort`` never decodes as the other's.
+    ``[pivot, group, distance, amount, round, venue_id, …grain]``: 16 values, so
+    a cursor of one ``sort`` never decodes as the other's, nor one issued before
+    the course group joined the order (15 values).
     """
-    return _encode_payload([*key[:5], *_wire_grain(key[5:])])
+    return _encode_payload([*key[:6], *_wire_grain(key[6:])])
 
 
 def _wire_grain(grain: tuple[object, ...]) -> list[object]:
@@ -178,7 +181,7 @@ def decode_area_item_cursor(cursor: str) -> AreaItemKey:
     """Decode a canonical area item cursor, or raise :class:`InvalidCursorError` (400).
 
     As with the cell cursor, only the canonical encoding decodes, so each key
-    has exactly one cursor. A ``typical`` cursor (15 values) is refused.
+    has exactly one cursor. A ``typical`` cursor (16 values) is refused.
     """
     values = _decode_payload(cursor, 11)
     key: AreaItemKey = (_cursor_int(values[0], BIGINT_MIN), *_cursor_grain(values[1:]))
@@ -189,22 +192,25 @@ def decode_area_item_cursor(cursor: str) -> AreaItemKey:
 def decode_typical_area_item_cursor(cursor: str) -> TypicalAreaItemKey:
     """Decode a canonical ``typical`` area item cursor, or raise :class:`InvalidCursorError`.
 
-    Canonical as the price cursor is, and its distance must be exactly
-    ``|amount - pivot|``. A price cursor (11 values) is refused.
+    Canonical as the price cursor is; its course group is one of the four, and
+    its distance must be exactly ``|amount - pivot|``. A price cursor (11
+    values) and a pre-course-group cursor (15) are refused.
     """
-    values = _decode_payload(cursor, 15)
+    values = _decode_payload(cursor, 16)
     pivot = _cursor_int(values[0], BIGINT_MIN)
-    distance = values[1]
-    amount = _cursor_int(values[2], BIGINT_MIN)
-    if type(distance) is not int or distance != abs(amount - pivot):
+    group = _cursor_int(values[1], 0)
+    distance = values[2]
+    amount = _cursor_int(values[3], BIGINT_MIN)
+    if group > _LAST_COURSE_GROUP or type(distance) is not int or distance != abs(amount - pivot):
         raise InvalidCursorError
     key: TypicalAreaItemKey = (
         pivot,
+        group,
         distance,
         amount,
-        _cursor_int(values[3], 1),  # rounds count from 1
-        _cursor_int(values[4], 0),
-        *_cursor_grain(values[5:]),
+        _cursor_int(values[4], 1),  # rounds count from 1
+        _cursor_int(values[5], 0),
+        *_cursor_grain(values[6:]),
     )
     _require_canonical(cursor, encode_typical_area_item_cursor, key)
     return key

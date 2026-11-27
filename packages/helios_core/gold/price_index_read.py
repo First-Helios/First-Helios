@@ -29,7 +29,11 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import literal, select, text, tuple_
 
-from packages.helios_core.gold.categories import CategoryFilters, category_predicates
+from packages.helios_core.gold.categories import (
+    DRINK_LED_PLACE_TYPES,
+    CategoryFilters,
+    category_predicates,
+)
 from packages.helios_core.gold.models import PriceIndex, PriceIndexPlacement
 from packages.helios_core.gold.price_index import (
     AGGREGATE_SQL,
@@ -308,9 +312,11 @@ type AreaItemKey = tuple[
     int, int, str, int, str, str, str, str | None, datetime | None, datetime | None, str
 ]
 #: An area item's position in the ``typical`` order (ADR-0020 Amendment 1
-#: items 2.2-2.4): the walk's ``pivot``, the distance ``|amount_minor - pivot|``,
-#: ``amount_minor``, the venue round, ``venue_id``, then the same grain.
+#: item 2): the walk's ``pivot``, the course group, the distance
+#: ``|amount_minor - pivot|``, ``amount_minor``, the venue round, ``venue_id``,
+#: then the same grain.
 type TypicalAreaItemKey = tuple[
+    int,
     int,
     int,
     int,
@@ -353,8 +359,12 @@ class AreaItemRow:
     section_name: str | None
     item_name: str | None
     #: The row's round in the ``typical`` order: its rank among its venue's
-    #: rows at the same price, by the grain. None in the ``price`` order.
+    #: rows in the same course group at the same price, by the grain. None in
+    #: the ``price`` order.
     venue_round: int | None = None
+    #: The row's course group in the ``typical`` order (:data:`COURSE_GROUPS`).
+    #: None in the ``price`` order.
+    course_group: int | None = None
 
     @property
     def native_path(self) -> tuple[tuple[str, str], ...]:
@@ -378,10 +388,11 @@ class AreaItemRow:
 
     def typical_key(self, pivot: int) -> TypicalAreaItemKey:
         """The row's :data:`TypicalAreaItemKey` in a walk around ``pivot``."""
-        if self.venue_round is None:
+        if self.venue_round is None or self.course_group is None:
             raise ValueError("not a typical-order row")
         return (
             pivot,
+            self.course_group,
             abs(self.amount_minor - pivot),
             self.amount_minor,
             self.venue_round,
@@ -438,24 +449,48 @@ _GRAIN_PARAMS = (
     "a_currency",
 )
 _AFTER_PARAMS = ("a_amount", *_GRAIN_PARAMS)
-# The typical order (ADR-0020 Amendment 1 items 2.2-2.4) over the windowed rows
-# ``r``: distance from the pivot (numeric, so no stored amount or cursor pivot
-# can overflow), the cheaper of two equally distant rows, the venue round,
-# then the venue and the grain.
+#: The ``typical`` order's course groups (ADR-0020 Amendment 1 item 2.1, the groups
+#: of ADR-0022 Amendment 2): food (every course but the ones below, and null),
+#: drink, alcohol, then side and other. A drink-led venue's drink and alcohol rows
+#: stay in the food group.
+COURSE_GROUPS = {"food": 0, "drink": 1, "alcohol": 2, "extras": 3}
+# A row's course group, on aliases ``c`` (gold.current_menu) and ``p`` (placed).
+# The drink-led venues are one uncorrelated subquery on ix_gold_venue_category_filter.
+_COURSE_GROUP = (
+    "CASE WHEN c.course IN ('side', 'other') THEN 3 "
+    "WHEN p.venue_id IN (SELECT vc.venue_id FROM gold.venue_category vc "
+    "WHERE vc.category_group = 'place_type' "
+    "AND vc.category_key = ANY(CAST(:drink_led AS text[]))) THEN 0 "
+    "WHEN c.course = 'drink' THEN 1 WHEN c.course = 'alcohol' THEN 2 ELSE 0 END"
+)
+# The typical order (ADR-0020 Amendment 1 item 2) over the windowed rows ``r``:
+# the course group, distance from the pivot (numeric, so no stored amount or
+# cursor pivot can overflow), the cheaper of two equally distant rows, the venue
+# round, then the venue and the grain.
 _TYPICAL_DISTANCE = "abs(CAST(r.amount_minor AS numeric) - CAST(:pivot AS numeric))"
-_TYPICAL_ORDER = f"{_TYPICAL_DISTANCE}, r.amount_minor, r.venue_round, r.venue_id, " + _grain_order(
-    "r"
+_TYPICAL_ORDER = (
+    f"r.course_group, {_TYPICAL_DISTANCE}, r.amount_minor, r.venue_round, r.venue_id, "
+    + _grain_order("r")
 )
 _TYPICAL_AFTER = (
-    f"AND ({_TYPICAL_ORDER}) > (CAST(:a_distance AS numeric), CAST(:a_amount AS bigint), "
-    f"CAST(:a_round AS bigint), CAST(:a_venue AS bigint), {_GRAIN_AFTER})"
+    f"AND ({_TYPICAL_ORDER}) > (CAST(:a_group AS integer), CAST(:a_distance AS numeric), "
+    f"CAST(:a_amount AS bigint), CAST(:a_round AS bigint), CAST(:a_venue AS bigint), "
+    f"{_GRAIN_AFTER})"
 )
-_TYPICAL_AFTER_PARAMS = ("a_distance", "a_amount", "a_round", "a_venue", *_GRAIN_PARAMS)
-# A venue's k-th row at one price comes in round k, so one venue's rows at the
-# pivot don't fill a page. Equal price means equal distance, so the partition
-# holds exactly the rows equal on every earlier key.
+_TYPICAL_AFTER_PARAMS = (
+    "a_group",
+    "a_distance",
+    "a_amount",
+    "a_round",
+    "a_venue",
+    *_GRAIN_PARAMS,
+)
+# A venue's k-th row in one course group at one price comes in round k, so one
+# venue's rows at the pivot don't fill a page. Equal price means equal distance,
+# so the partition holds exactly the rows equal on every earlier key.
 _VENUE_ROUND = (
-    ",\n           row_number() OVER (PARTITION BY p.venue_id, c.amount_minor "
+    f",\n           {_COURSE_GROUP} AS course_group"
+    f",\n           row_number() OVER (PARTITION BY p.venue_id, {_COURSE_GROUP}, c.amount_minor "
     f"ORDER BY {_grain_order('c')}) AS venue_round"
 )
 # Item and variant names only (ADR-0020 OQ6): a row's item_name is its item's
@@ -549,10 +584,10 @@ def price_index_area_items_typical(
 ) -> list[AreaItemRow]:
     """Up to ``limit`` of :func:`price_index_area_items`' rows after ``after``, typical first.
 
-    In :data:`TypicalAreaItemKey` order (ADR-0020 Amendment 1 items
-    2.2-2.4): nearest ``pivot`` first, the cheaper of two equally near rows
-    first, a venue's k-th row at one price in round k, then the venue and the
-    grain. Total, so the keyset works. ``after`` carries the walk's pivot,
+    In :data:`TypicalAreaItemKey` order (ADR-0020 Amendment 1 item 2): by
+    course group (:data:`COURSE_GROUPS`), then nearest ``pivot``, the cheaper
+    of two equally near rows first, a venue's k-th row in one group at one
+    price in round k, then the venue and the grain. Total, so the keyset works. ``after`` carries the walk's pivot,
     which must be ``pivot``. The rounds are counted over every filtered row,
     so the window runs over all of them on every page. Read-only; takes no
     locks.
@@ -575,7 +610,7 @@ def price_index_area_items_typical(
         sql += _TYPICAL_AFTER + "\n"
         params |= dict(zip(_TYPICAL_AFTER_PARAMS, after[1:], strict=True))
     sql += f"ORDER BY {_TYPICAL_ORDER}\nLIMIT :limit"
-    params |= {"pivot": pivot, "limit": limit}
+    params |= {"pivot": pivot, "limit": limit, "drink_led": list(DRINK_LED_PLACE_TYPES)}
     return [AreaItemRow(**row) for row in session.execute(text(sql), params).mappings()]
 
 
