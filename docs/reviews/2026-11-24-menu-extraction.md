@@ -65,3 +65,443 @@ capture 07 yielded 12 and 4 words from its text layer. OCR returned 179 and 321
 words and proposed 10 and 2 priced rows respectively. Some headers were garbled,
 and these row counts do not establish item or price accuracy. The production text reader accepts short
 text menus containing letters and a marked dollar price for the usual verification.
+
+## Freshness rollout on the merged revision
+
+[PR #186](https://github.com/First-Helios/First-Helios/pull/186) merged at
+08:50 UTC on November 24. All six head checks passed. There were no reviews,
+inline comments or conversation comments. Merge commit `5fa7033` has the same
+tree as the reviewed head `340edd6`. The measurements used that merge, a
+private PostgreSQL 16 restore of `helios_work-2026-11-24-p8-23-swap5.dump`
+(SHA-256 `a9af13914e6ee486b656e87a9590cc470640768e85b44adc13cd42c3418c1d74`)
+and a disposable copy of the laptop replay directory.
+
+### Additional versions on repeat captures
+
+**868 additional page versions in 1,406 consecutive capture pairs** across
+907 distinct menu URLs. The old payload changed in 414 pairs (29.4%). The
+merged rule changed in 1,282 (91.2%). The difference is 61.7 percentage points.
+Each pair here belongs to one record, so a changed URL contributes one version.
+The archive contains 6,487 successful menu-page captures overall. To associate
+unchanged captures with a record unambiguously, the comparison requires one
+historically stable record and target per endpoint, matching the stored target
+URL. It compares adjacent successful captures in fetch-time and capture-ID order,
+breaking the sequence at any failed or skipped capture. Shared URLs and target
+switches are outside this estimate. Counts pool multiple crawl intervals.
+
+The comparison carries the actual old version payload forward through unchanged
+captures and checks the stored blocks against its text hash. The new comparison
+adds the merged writer's document identity (final endpoint after the scheme,
+content type, and rendered document or static response digest) on **both** sides.
+This measures steady-state behavior. A legacy version also lacks the new
+document hash, so its first successful fetch after upgrade writes a version
+even for identical bytes. PDF payloads also advance from reader v1 to v2.
+That first-fetch effect is separate from replaying stored versions and from the
+868 recurring additions. If all 2,863 currently eligible records refetch successfully
+with identical inputs after the method replay, that first recrawl adds another
+2,863 cached extractions, zero inference chunks and about 5.4 hours on the Pi.
+Failures, withdrawals and changes to the URL set will alter that scenario.
+
+A seeded draw (186) of **16 of the 868 additions** found **0 changed extracted
+menus and 16 instances of incidental churn**. Both documents were interpreted
+using the same saved answers. The shaped LLM sections, items, variants and prices
+matched in all 16, as did parsed JSON-LD menu items and offers. In 15 pairs all
+parsed JSON-LD matched. Spice Garden (capture 26947 → 40588) changed the schema
+representation of the same five image URLs. Other inspected differences included
+WordPress nonces at Twin Isle (27034 → 40964), a cache timestamp at Kobe
+(27117 → 40479), and an analytics script at Yamas (40351 → 42296). A menu change
+can still matter even with identical visible text, as the removal test below shows.
+
+### Extraction cost
+
+| Workload | Pages due or version-triggered | Pages fully covered by saved answers | Chunks needing inference | Estimated extraction wall time |
+| --- | ---: | ---: | ---: | --- |
+| One-time method upgrade on stored versions | 2,863 | 2,863 | 0 | 68 min laptop or 5.4 h Pi |
+| All changed versions across the archived recrawls, using the archive-end cache | 1,282 | 1,282 | 0 | 30 min laptop or 2.4 h Pi |
+| Same recrawls, assuming only the preceding capture's page and exact chunk answers survive | 1,282 | 931 | 2,324 | About 3.6 h with Pi writes and laptop GPU inference |
+| Increment attributable to the document rule, included in both recrawl rows | 868 | 868 | 0 | 21 min laptop or 1.6 h Pi |
+
+**Measured.** The production due query returned 2,863 reinterpretations.
+Every one passed the page-answer identity and expected-chunk-count checks.
+The first 40 in queue order ran through the production classifier, interpretation,
+evidence and committed Menu writes with `extract --no-model` in **56.7 seconds**
+on the laptop with fsync enabled. All 40 used page answers, with zero failures or
+refused model calls. The recrawl counts use archived successful versions as
+extraction triggers, conditional on the record still being eligible when extraction
+runs. All 1,282 later texts were already present at archive end. Looking up a
+future capture that way understates live inference for changed text.
+
+**Estimated.** In the preceding-capture scenario, exact chunk comparisons leave
+351 pages with 2,324 missing chunks. This assumes a complete previous extraction
+and ignores reusable answers from other pages and earlier crawls. All misses
+belong to changes the old rule also detected. The laptop estimates scale the
+40-page timing by page count. The Pi estimates use the earlier measured 532
+cached pages/hour. The GPU scenario adds 931 / 532 hours to the 2,324 misses
+at the historical mixed-run rate of 1,813 inferred chunks in 5,289 seconds.
+Page size, DB speed and cache coverage affect these estimates. They exclude
+fetching, rendering, Gold refresh and deployment. [Pi and GPU timings](2026-11-19-p8-23-pi-long-run.md)
+
+### Rollout decision and correctness
+
+The database regression first selected the structured $6.00 Queso price in Gold.
+Removing only JSON-LD caused a new version with the same visible text. Extraction
+reused the page answer with zero inference, wrote an empty structured successor,
+and a fresh Gold projection selected zero prices from the former structured page.
+The monthly packet regression used the production model and classifier identifiers
+with a fixture model response. Its newly extracted page exported the saved chunk
+answer under the merged method key. A separate run of the actual monthly packet
+over November 23 drew 10 of 374 historical candidates and exported 10 answer files.
+
+**Recommendation.** Stage the upgrade with the saved-answer replay. Budget about
+5.4 hours of Pi extraction for that replay plus the first successful refetches of
+legacy records. The maintainer should decide whether to accept the recurring
+version and database-write volume (868 extra versions plus their downstream
+extractions in this cohort), or require a narrower document fingerprint
+before enabling a full production recrawl. Any narrower rule should retain the
+structured-price removal and DOM interpretation regressions. Card extraction and
+OCR remain experimental and hub following stays opt-in.
+
+### Reproduction
+
+From the follow-up checkout with the menu extra, local verified models and
+swap-5 replay files, run the following in Bash. The helper prints the counts,
+sampled capture IDs and interpretation comparisons. The JSONL contains the
+before/after bundle paths for inspecting the original documents.
+
+```bash
+set -eu
+export PATH="$PWD/.venv/bin:$(pg_config --bindir):$PATH"
+scratch=$(mktemp -d)
+export PGHOST="$scratch"
+initdb -D "$scratch/db" -A trust >/dev/null
+pg_ctl -D "$scratch/db" -o "-k $scratch -c listen_addresses=''" -l "$scratch/postgres.log" start
+trap 'pg_ctl -D "$scratch/db" stop -m fast' EXIT
+createdb measurement
+pg_restore --no-owner --no-acl --exit-on-error -j4 -d measurement \
+  var/laptop-run/helios_work-2026-11-24-p8-23-swap5.dump
+psql -d measurement -c "select setval('menu.admission_fence', txid_current(), true)"
+mkdir -p "$scratch/cache/var"
+cp -a --reflink=auto var/replay "$scratch/cache/var/"
+export DATABASE_URL="postgresql+psycopg:///measurement?host=$scratch"
+PYTHONPATH=. python docs/reviews/measure_pr186.py "$scratch/cache" "$scratch/pairs.jsonl"
+python -m apps.menu_pipeline.spot_check --run-id 20261123T000000Z \
+  --until 2026-11-24T00:00:00Z --base-dir "$scratch/cache" --out-dir "$scratch/packet"
+jq '[.pages[] | select(.answers)] | length' "$scratch/packet/manifest.json"
+createdb -T measurement timing
+DATABASE_URL="postgresql+psycopg:///timing?host=$scratch" \
+  python -m apps.menu_pipeline.extract --no-model --limit 40 --base-dir "$scratch/cache"
+createdb regression_test
+DATABASE_URL="postgresql+psycopg:///regression_test?host=$scratch" HELIOS_STRICT_DB_TESTS=1 \
+  pytest -q test/test_menu_extraction.py
+```
+
+## Venue-to-API price benchmark
+
+Each label names an establishment, source URL, visible menu state, item, variant
+and USD price. The reader checks the saved discovery URL, Bronze version and
+bundle, original chunk answers, repaired rows, validator verdicts, stored prices,
+Gold and the response to an actual `GET /v1/venues/{id}/menu` request. It reports
+one first loss per label and the change in correct prices per venue relative to
+the frozen baseline. Prices are credited on the labelled page of the requested
+venue. A known alternate location is counted separately even if it serves the
+same dish at the same price. Names and variants ignore case and extra spaces.
+A numeric diameter with or without the inch mark is an explicitly allowed alias
+on the six Warpath labels.
+
+### Checked-in controls
+
+From a clean checkout with uv, PostgreSQL 16 and PostGIS installed, run
+`test/fixtures/venue-prices/run.sh` as a regular user. The command makes a private
+database, runs migrations and replays two authored sites through discovery,
+Bronze, extraction, Gold and the API. It prints each expected price and its
+outcome, then removes the temporary cluster. HTML, saved answers, labels and
+expected outcomes are tracked. This is a fixed census of the fixtures.
+The verifier and model answers are scripted.
+
+Juniper Counter served 3 of 6 labelled prices. The interpreter recovered the
+large tea from visible text even though the scripted answer omitted it. Two
+pizza diameters disappeared during answer repair. The dinner button was present
+but its menu state was absent. East Pier served 0 of 1 correct prices and
+published one wrong-location menu. Its West Pier chowder had the exact same name
+and amount as the East Pier label. The unweighted mean venue recall was 25%.
+
+### Field baseline
+
+The swap-5 snapshot supplied real bundles, saved model answers, Menu pages and
+Gold. Exact bundle SHA-256 values and GERS IDs are in the [field manifest](../../test/fixtures/venue-prices/swap5.json).
+The separately archived Café Blue kids page established its two expected prices
+even though discovery had not saved the URL. Its HTTP body digest is in the same
+manifest. Counts are a sample of labelled prices per venue. No field-wide
+precision or monthly prevalence is inferred.
+
+| Venue and template | Correct at the API | First loss among the sampled prices |
+| --- | ---: | --- |
+| Café Blue, separate WordPress daypart pages | 4 / 6 | Kids menu URL absent from resolved discovery records, losing Popcorn Shrimp and Chicken Fingers |
+| Brix and Ale, breakfast and dinner tab panels | 4 / 4 | All four served |
+| Warpath Pizza and Pub, size-labelled price runs | 0 / 6 | The model associated each amount with its diameter. Answer repair stripped the numeric labels from all six |
+| Hippie Picnik, food-truck menu | 2 / 3 | The $8.00 answer named the bratwurst category instead of the labelled Plain Jane item |
+| TenTen, two-column happy-hour PDF | 3 / 3 | All three served. The item/price associations were checked against the PDF layout |
+
+**13 of 22** expected triples reached the API, with **66.7% mean venue recall**.
+The two-digit size tokens survived in the raw Warpath answers. The persisted
+rows retained all six amounts as base prices. Trying a larger model or earlier
+card extraction would leave the observed repair rule in place.
+
+Café Blue, Brix and Ale and Warpath were chosen to exercise separate pages,
+tabbed states and variants. The last two venues were a separate draw, labelled
+from the documents before inspecting saved answers or API results. On swap-5,
+take the latest non-rendered menu-page version per base GERS key (no `|`), keep
+HTTPS targets and take the lexicographically first URL and key per host.
+Order by PostgreSQL `md5('186-holdout:' || url), url`. The first HTML document
+and first PDF are ranks 1 and 12. The manifest freezes both source documents.
+These two new domains contribute six labelled prices.
+
+Against a disposable restore of the swap-5 dump with its matching replay
+directory, run the following on the baseline and again after a candidate's
+extraction and Gold refresh. The field reader uses a read-only transaction.
+Each row carries its baseline outcome. `gained` and `lost` count changes in
+correct published prices, preserving the venue denominator when there is no menu.
+
+```bash
+uv run python -m apps.menu_pipeline.venue_price_eval \
+  test/fixtures/venue-prices/swap5.json --base-dir "$SCRATCH_DEPLOY" > venue-prices.json
+jq '.venues[] | {venue, served, expected, gained, lost, counts}' venue-prices.json
+```
+
+### Paired card experiment on the laptop GPU
+
+Both card-positive pages in the 72-page P5-14 corpus were run on the RTX 3070
+laptop GPU with the pinned Qwen3-4B-Instruct-2507-Q4_0 model. Each page ran
+baseline first and cards plus residual text second. Timing includes prompt-cache
+warmth and has one observation per route per page. Exact scores match the
+multiplicity of labelled item, variant and decimal-amount triples in the usual
+evaluation scope. Wine sections are excluded by the existing gold label reader.
+
+| Page | Route | Inference chunks | Model seconds | Accepted | Exact / expected | Omissions | Unmatched accepted | Duplicates removed |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3117830345c5 | Existing | 2 | 9.9 | 32 | 25 / 32 | 7 | 7 | 0 |
+| 3117830345c5 | Cards and residual | 2 | 6.9 | 30 | 23 / 32 | 9 | 7 | 0 |
+| 3c0cd41446bc | Existing | 20 | 77.7 | 169 | 121 / 173 | 52 | 48 | 0 |
+| 3c0cd41446bc | Cards and residual | 20 | 78.8 | 168 | 121 / 173 | 52 | 47 | 0 |
+
+Both routes required 22 chunks. The hybrid lost two exact prices in aggregate.
+On the four captured HTML pages of the initial Café Blue, Brix and Ale and
+Warpath price holdout (two Café Blue pages), the shadow reader proposed zero
+cards. Keep this route experimental. The larger P5-14 HTML document has SHA-256
+`2ad2536229715b4d89d0c21f0022a51d8b073498dc45e1e2825dccc0c37f3941`;
+the smaller document's digest is in the repeated-cards experiment above.
+
+```bash
+data=var/menu-eval/corpus/p5-14
+for page in 3117830345c5 3c0cd41446bc; do
+  uv run python -m apps.menu_pipeline.card_shadow "$data/pages/$page.html" \
+    --label "$data/labels/$page.json" --server http://127.0.0.1:8083
+done
+```
+
+## Completed Pi staging replay
+
+The Orange Pi 5 Plus ran merged revision `5fa7033` on November 24–25 UTC.
+The Pi's existing worker image loaded that revision's apps, packages and config
+from read-only mounts. A separate PostgreSQL 16 container on a private Docker
+network held two copies of the verified swap-5 dump, `baseline` and
+`measurement`. The worker used a scratch copy of the Pi's replay cache.
+The public deployment and master database received no writes.
+
+| Stage | Measured outcome | Measured time |
+| --- | --- | ---: |
+| Saved-answer upgrade replay | 2,863 due, 2,863 extracted from full page answers, 0 inferred or refused chunks, 0 failed pages | 8,950.5 s (2 h 29 min) |
+| Immediate rerun | 0 due, 0 extracted, 0 model calls | 4.3 s |
+| Gold refresh | 99,408 current menu rows, 421 price-index rows | 48 min 5 s, including worker startup |
+| Rollout gate | Passed. Both snapshots had 1,233 venues with menus and a citywide median of $10.95. Zero venues gained or lost | 5 s, including worker startup |
+
+The restore started at 22:42:03 UTC. The gate finished at 02:02:48 UTC.
+The packet exported all 10 saved answer files from its 374-candidate historical
+window on the Pi. The five-venue field benchmark produced byte-identical JSON
+against both databases, including all 22 labelled outcomes. Local strict
+`make ci` passed 2,044 tests and `alembic check` found no schema changes.
+
+**Updated estimate.** The measured Pi throughput was 1,151.5 cached pages/hour.
+At that rate the 868 incremental versions in the archive comparison would take
+about **45 minutes** of extraction. A first successful refetch of all 2,863
+eligible legacy records with identical inputs would take about **2 h 29 min**
+of extraction. Neither recrawl was run live. Both estimates exclude fetch,
+render and Gold refresh. The maintainer can schedule the saved-answer replay
+and decide whether to accept that version volume before the first live recrawl.
+
+To reproduce on an isolated Pi worker, use the restore and admission-fence
+reset above, clone the restored database before replay, mount the merged source
+and a copy of the matching replay cache, and point the worker at the clone.
+Run these commands inside that worker. The gate's two names refer to the
+disposable databases on the same isolated PostgreSQL server.
+
+```bash
+python -m apps.menu_pipeline.extract --no-model
+python -m apps.menu_pipeline.extract --no-model
+python -m apps.gold.refresh
+python -m apps.menu_pipeline.swap_gate --public baseline --master measurement
+```
+
+The retained run directory on the Pi is
+`/home/orangepi/pr186-replay.okRs3Z`. It holds the exact launch script, logs,
+packet summary, gate and before/after benchmark reports. The scratch database
+container was stopped after verification. The laptop has a copy of the run
+evidence in `var/pr186-pi-replay/`.
+
+## Printed pizza diameters in saved answers
+
+Baseline `83c0b2f` reproduced six `answer_repair_loss` results at Warpath.
+Cheese & Chong prints 12, 16 and 18 inches at $19, $23 and $25. Santa Rosa
+prints the same diameters at $19, $24 and $26. The saved answers had all six
+pairs. Preserving the number in repair also requires the validator to recognize
+an inch mark in a slash suffix such as `$19.00/12"`.
+
+The candidate uses the item's printed name and its contiguous price fields. Each
+field must have one marked or decimal amount. A numeric size must occur with an
+inch mark in the same field as the claimed amount. Two different amounts for
+the claimed diameter make the claim ambiguous. The regressions include swapped
+amounts, counts, neighboring dishes, and a size label mistaken for an item.
+
+| Venue | Baseline served | Candidate served | Gained | Lost | New wrong diameter/price pairs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Café Blue | 4/6 | 4/6 | 0 | 0 | 0 |
+| Brix and Ale | 4/4 | 4/4 | 0 | 0 | 0 |
+| Warpath Pizza and Pub | 0/6 | 6/6 | 6 | 0 | 0 |
+| Hippie Picnik | 2/3 | 2/3 | 0 | 0 | 0 |
+| TenTen | 3/3 | 3/3 | 0 | 0 | 0 |
+| The ABGB, independent domain | 0/17 | 7/17 | 7 | 0 | 0 |
+
+The original five venues improved from 13/22 to 19/22 and from 66.7% to 86.7%
+mean venue recall. The ABGB labels cover the seven consecutive dishes under
+“Pizza,” including the five slice prices. We selected this domain for its mixed
+layouts and recorded the 17 amounts from the document before reading its answers.
+An initial candidate treated the word “Slice” in a price line as the owner of
+the two whole-pie prices. The final repair excludes that case. The ABGB
+therefore also served as a regression domain during development.
+[Independent labels and capture digest](../../test/fixtures/venue-prices/abgb.json)
+
+**Whole-menu audit.** We compared every distinct priced API triple by venue
+and URL, including items outside the manifests. All 58 new Warpath diameter
+triples and all seven new ABGB diameter triples matched their own item's
+printed amount. At Warpath, 24 unqualified prices became diameter-specific.
+The four other original venues had identical API triples. The benchmark's
+`wrong_variant_prices` list checks additional amounts published for a labelled
+item and variant. The separate whole-menu audit also checked new item names
+and diameters outside those labels.
+
+At The ABGB, three $5 slice prices appeared as unqualified prices for Calabrese,
+Housemade Sausage and Wagyu Beef. Their $22 prices moved to the 14-inch variant.
+Marinara's $16 moved to its 16-inch variant. **White Clam lost its unqualified
+$24**, and the validator rejected its claimed 16-inch price. Its labelled
+triple was missing on both revisions. The baseline's incorrect $18 base price
+on an item named “Slice” also persists. These are limitations of the published
+menu even though all seven newly published diameters are correct.
+
+**Replay.** The benchmark used separate disposable swap-5 databases, saved
+answers, production extraction with the due queue restricted to the six venues,
+and a bounded refresh of their establishment and organization menu projections.
+All 12 due records reused complete page answers in 46.1 seconds, with zero
+failures and zero model calls. Both the repaired rows and price-label validation
+can change stored results, so the method advances to `repairs-v10` and
+`validator-v14`. The extractor key is identical. The unrestricted due query
+returned 2,863 records. At the earlier measured Pi rate of 1,151.5 cached
+pages/hour, budget about **2 h 29 min for extraction** and **48 min for a full
+Gold refresh**, about **3 h 17 min** together on the same snapshot and hardware.
+This is a candidate estimate based on the earlier full Pi run.
+
+To reproduce with the disposable restore and replay directory described above,
+run the venue benchmark on both manifests at the baseline, using the candidate's
+ABGB manifest as input. On a clone run candidate extraction with `--no-model`
+and the same `--base-dir`, refresh Gold, then run both manifests again. The
+ordinary full extraction and Gold commands also cover all benchmark scopes.
+
+## Slice and whole-pie publication
+
+The comparator is the completed diameter revision `b29ab21` (identical tree
+to `91dfcf5` on the rollout branch). The ABGB is development data. Before
+inspecting any Roppolo’s saved answers, we froze 11 prices from the West Campus
+capture for the 2604 Guadalupe St establishment. The manifest pins the bundle
+digest and both section anchors. It covers the five rows under “BY THE SLICE”
+and the three diameters each for Cheese and Specialty Pies under “WHOLE PIE
+PRICES.” The comparison uses explicit item/variant/USD amount on the same URL.
+[West Campus labels](../../test/fixtures/venue-prices/roppolos.json)
+
+### The ABGB before the fix
+
+All ten labels are visible in the pinned capture. In the table, a block pair
+identifies the title and its immediately following price line. “Base” means an
+item-level observation without a portion. The Gold and GET columns agreed for
+every triple. The distinction between the first erroneous input and a later
+failed recovery matters for Cheese and White Clam.
+
+| Printed dish, portion, price | Blocks | First failed step in diameter revision | Repair and validation | Gold and GET |
+| --- | --- | --- | --- | --- |
+| Cheese slice $4 | 109–110 | Answer names Slice, 14-inch/$4. Cheese itself gets base $14. | Repair leaves Slice/base/$4. The page-template pass reassigns $4 to Cheese/Slice, but the residual “Slice” item at 110 ends Cheese’s price scan. Final validation downgrades it. | Absent |
+| Cheese 14-inch $18 | 109–110 | Answer calls the dish Slice. | Repair clears the diameter. Validation accepts Slice/base/$18. | Slice/base/$18 |
+| Cheese 16-inch $20 | 109–110 | Answer calls the dish Slice. | Repair clears the diameter. Validation also accepts Slice/base/$20. | Only $18 survives as the base price for Slice. |
+| Calabrese slice $5 | 111–112 | Answer says 14-inch/$5. | Repair clears the contradicted diameter. Validation accepts base $5. | Calabrese/base/$5 |
+| Wagyu Beef slice $5 | 113–114 | Answer says 14-inch/$5. | Same base-price fallback. | Wagyu Beef/base/$5 |
+| Housemade Sausage slice $5 | 115–116 | Answer says 14-inch/$5. | Same base-price fallback. | Housemade Sausage/base/$5 |
+| Margherita slice $5 | 117–118 | Answer says 14-inch/$5, claiming block 114. | Validation accepts the repaired base $5, $22 and $24 rows. | Only base $22 survives for this placement. |
+| Margherita 14-inch $22 | 117–118 | Repair drops the correct answer’s diameter. The claim at 114 is three blocks before the title, beyond the two-block forward name lookup. | Validation accepts base $22. | Margherita/base/$22 |
+| Margherita 16-inch $24 | 117–118 | Same repair loss for the correct 16-inch/$24 answer. | Validation accepts base $24. | Absent |
+| White Clam 16-inch $24 | 119–120 | Validation grounds the surviving exact claim at the later gluten-free title (143). Its claim names price block 120, after the title at 119. | The exact row gets `price_not_grounded`. A second answer at 115 loses its diameter in repair and gets `price_belongs_to_other_variant`. | Absent. The separate gluten-free base $18 is present. |
+
+The fix uses the printed portion fields immediately following a matching dish
+title. Each field must contain one amount with an explicit slice or diameter
+label. A conflicting label, malformed field or unsupported price continuation
+leaves the row unpriced. The field label “Slice” cannot itself own the prices
+on that line. A diameter row claiming its adjacent price block carries the
+grounded title into validation. These changes apply in saved-answer repair.
+Gold, API selection and the validator use the existing rules.
+
+### Paired publication results
+
+| Venue | Exact labels, diameter → candidate | Label gains | Label losses | Whole-menu API triples, before → after | Added | Removed | Newly wrong |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: |
+| Café Blue | 4/6 → 4/6 | 0 | 0 | 110 → 110 | 0 | 0 | 0 |
+| Brix and Ale | 4/4 → 4/4 | 0 | 0 | 72 → 72 | 0 | 0 | 0 |
+| Warpath Pizza and Pub | 6/6 → 6/6 | 0 | 0 | 130 → 130 | 0 | 0 | 0 |
+| Hippie Picnik | 2/3 → 2/3 | 0 | 0 | 41 → 41 | 0 | 0 | 0 |
+| TenTen | 3/3 → 3/3 | 0 | 0 | 15 → 15 | 0 | 0 | 0 |
+| The ABGB (development) | 7/17 → 17/17 | 10 | 0 | 189 → 194 | 10 | 5 | 0 |
+| Roppolo’s West Campus (held out) | 0/11 → 0/11 | 0 | 0 | 219 → 219 | 0 | 0 | 0 |
+
+All ten additions match the ten capture rows above. The five removals were the
+three unqualified $5 prices, Margherita’s unqualified $22 and the spurious
+Slice/$18. The whole-menu diff compared distinct priced USD item, variant and
+amount triples per source URL for all seven venues, including unlabelled rows.
+A second comparison counted every priced API placement, preserving section, scope,
+item, variant or modifier, currency, channel, service period, validity and
+multiplicity. It found the same ten additions and five removals, all under the
+organization-scoped Pizza section, and no further changes.
+Warpath retained Cheese & Chong at $19/$23/$25 and Santa Rosa at $19/$24/$26,
+each in 12/16/18-inch order.
+
+The held-out domain showed no gain. Roppolo’s prints slices and pies in separate
+sections. Its five slice amounts were already served as item prices under “BY
+THE SLICE.” None had an explicit slice variant. The 12-inch Cheese and Specialty
+Pies amounts were served without a diameter. Section-only context does not
+satisfy the frozen exact-variant metric.
+
+**Replay and versioning.** We repeated the comparison from a private PostgreSQL
+16 restore of the swap-5 dump and a scratch copy of its replay cache. On the
+completed diameter revision we restricted the ordinary due queue to the seven
+venue keys, replayed their 16 records with `extract --no-model`, and refreshed
+the establishment and organization Gold families. We cloned this database and
+repeated extraction, Gold and the real venue menu GET on the candidate, using
+the same complete saved answers. We checked all three manifests with the
+`apps.menu_pipeline.venue_price_eval` reporter against both databases.
+The gains and losses above compare the two reports by URL, dish, portion and
+amount, independently of the older baseline annotations in the manifests.
+
+A repair version bump **is required** to reinterpret already-stored answers.
+The candidate sets `repairs-v11`. The validator stays at `validator-v14` and
+the extractor cache key stays valid. The snapshot had 2,863 unrestricted due
+records. The measured run covers the 16 records for these seven venues. Each
+revision reused 16 full answers with zero failures and zero inference calls. An
+immediate scoped rerun found all 16 up to date.
+
+Strict database-backed `make ci` passed all 2,050 tests with 90.56% coverage
+(88% required). Alembic found no schema changes. The candidate Docker image
+built successfully and its local `/healthz` smoke test returned HTTP 200.

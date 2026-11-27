@@ -1,0 +1,10 @@
+{
+  "counter": {"sections": [
+    {"section": "Lunch", "items": [
+      {"b":"b0004","n":"Carrot Soup","p":"6.00"},
+      {"b":"b0006","n":"Hibiscus Tea","v":"Small","p":"3.00"}]},
+    {"section": "Stone Oven", "items": [
+      {"b":"b0010","n":"Garden Pie","v":"12","p":"14.00"},
+      {"b":"b0010","n":"Garden Pie","v":"16","p":"18.00"}]}]},
+  "west": {"sections":[{"section":"West Pier","items":[{"b":"b0004","n":"Clam Chowder","p":"8.75"}]}]}
+}

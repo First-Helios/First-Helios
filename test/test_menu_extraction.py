@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import gzip
 import json
-import os
 import re
-import subprocess
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -25,7 +23,6 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, sessionmaker
 
 import apps.discovery.url_pipeline as url_pipeline
 import apps.menu_pipeline.evaluate as evaluate
@@ -41,6 +38,8 @@ from apps.discovery.pipeline import run_discovery
 from apps.discovery.url_pipeline import resolve_urls
 from apps.gold.refresh import refresh_gold
 from apps.menu_pipeline.bundle import BundleStore, excerpt
+from apps.menu_pipeline.classifier import VERIFIER_NAME
+from apps.menu_pipeline.extract import EXTRACTION_MODEL
 from apps.menu_pipeline.extraction import (
     TUNING_MIN_ROWS,
     TUNING_RESOLVED_SHARE_MAX,
@@ -65,7 +64,6 @@ from apps.menu_pipeline.menu_writes import (
 )
 from apps.menu_pipeline.models import load_manifest
 from apps.menu_pipeline.page_bronze import REFETCH_WINDOW, run_menu_pages
-from packages.helios_core.config import get_database_url
 from packages.helios_core.domains.menu.enumeration import enumerate_current_requests
 from packages.helios_core.domains.menu.models import (
     EvidenceLink,
@@ -98,7 +96,8 @@ from test.test_web_client import _fetcher
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import Session, sessionmaker
+
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LINE = re.compile(r"^(b\d{4}) \| (.*)$")
@@ -373,7 +372,7 @@ def test_pipeline_version_names_every_component_within_the_column() -> None:
     version = PipelineVersion(model=model_tag(spec), classifier="classifier-v2")
     assert version.llm.startswith(version.extractor + ";")
     assert len(version.llm) <= 128
-    assert version.jsonld == "jsonld-v1;validator-v13;segment-v2;classifier-v2"
+    assert version.jsonld == "jsonld-v1;validator-v14;segment-v2;classifier-v2"
     assert model_tag(spec) in version.extractor
 
 
@@ -407,17 +406,6 @@ def test_soc_probe_reads_temperature_and_frequency_cap(tmp_path: Path) -> None:
 
 
 # -- database: end to end ----------------------------------------------------------------
-
-
-@pytest.fixture
-def committed(disposable_database_engine: Engine) -> Iterator[sessionmaker[Session]]:
-    subprocess.run(
-        ["alembic", "-c", str(_REPO_ROOT / "alembic.ini"), "upgrade", "head"],
-        check=True,
-        cwd=_REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": get_database_url()},
-    )
-    yield sessionmaker(bind=disposable_database_engine, expire_on_commit=False)
 
 
 @dataclass
@@ -471,9 +459,9 @@ class _Venues:
         # discovery re-verifies saved URLs: other tests' venues keep theirs
         monkeypatch.setattr(url_pipeline, "iter_venues_to_resolve", mine)
 
-    def add(self, name: str) -> str:
+    def add(self, name: str, *, website: str | None = None) -> str:
         gers = f"{self.token}-{len(self.menus)}"
-        site = f"https://{gers}.example.com"
+        site = website or f"https://{gers}.example.com"
         self.menus[gers] = f"{site}/menu"
         resolver = _FakeResolver(self.menus[gers])
         self.sites[site] = self.sites[site + "/"] = resolver  # the website as saved
@@ -513,6 +501,7 @@ class _Venues:
         server: _Server | None,
         *,
         scorer: _Scorer | None = None,
+        model: str = "test-model@0123456789ab",
         limit: int | None = None,
         no_model: extraction.NoModel | None = None,
     ) -> extraction.ExtractionReport:
@@ -523,7 +512,7 @@ class _Venues:
                 scorer=scorer or _Scorer(),
                 bundles=BundleStore(self.tmp_path),
                 outputs=OutputStore(self.tmp_path),
-                model="test-model@0123456789ab",
+                model=model,
                 limit=limit,
                 commit=session.commit,
                 soc=SocProbe(root=self.tmp_path / "no-sys"),
@@ -549,9 +538,9 @@ class _Venues:
 
 @pytest.fixture
 def venues(
-    committed: sessionmaker[Session], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    committed_menu_sessions: sessionmaker[Session], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> _Venues:
-    return _Venues(committed, tmp_path, monkeypatch)
+    return _Venues(committed_menu_sessions, tmp_path, monkeypatch)
 
 
 _T1 = _NOW + timedelta(minutes=1)
@@ -686,7 +675,9 @@ def test_a_rerun_against_unchanged_pages_adds_no_observation_and_no_extraction(
     first_started = datetime.now(UTC)
     venues.fetch({gers: _MENU}, at=_T1)
     server = _Server()
-    assert venues.extract(server).extracted == 1
+    model = model_tag(load_manifest()[EXTRACTION_MODEL])
+    scorer = _Scorer(name=VERIFIER_NAME)
+    assert venues.extract(server, model=model, scorer=scorer).extracted == 1
     first_ended = datetime.now(UTC)
     stored = _stored(venues, gers)
     (page,) = venues.pages(gers)
@@ -712,7 +703,7 @@ def test_a_rerun_against_unchanged_pages_adds_no_observation_and_no_extraction(
             on_page=session.commit,
         )
         session.commit()
-    rerun = venues.extract(server)
+    rerun = venues.extract(server, model=model, scorer=scorer)
 
     assert (fetched.fetched, fetched.unchanged) == (1, 1)
     assert (fetched.versions_new, fetched.versions_changed) == (0, 0)
@@ -1072,9 +1063,13 @@ def test_jsonld_stream_beside_llm_and_its_empty_successor(venues: _Venues) -> No
     # "Queso Fundido" isn't printed on the page: the validator rejects it
     assert report.rows["jsonld:accept"] == 1 and report.rows["jsonld:reject:name_not_grounded"] == 1
     jsonld = next(p for p in venues.pages(gers) if p.source_kind == "jsonld")
-    assert jsonld.method_version == "jsonld-v1;validator-v13;segment-v2;word-v1"
+    assert jsonld.method_version == "jsonld-v1;validator-v14;segment-v2;word-v1"
     with venues.factory() as session:
         assert _rows(session, jsonld.id) == [("Queso", None, 600, PRICE_CONFIDENCE)]
+        refresh_gold(session, effective_instant=datetime.now(UTC))
+        assert session.scalars(
+            select(CurrentMenu.amount_minor).where(CurrentMenu.price_page_id == jsonld.id)
+        ).all() == [600]
 
     # JSON-LD gone with identical visible text: an empty successor, so its prices stop being current
     later = _T1 + REFETCH_WINDOW + timedelta(minutes=1)
@@ -1085,6 +1080,15 @@ def test_jsonld_stream_beside_llm_and_its_empty_successor(venues: _Venues) -> No
     assert [p.operation for p in heads] == ["initial", "observation"]
     with venues.factory() as session:
         assert session.scalar(select(func.count()).where(MenuItem.page_id == heads[-1].id)) == 0
+        refresh_gold(session, effective_instant=datetime.now(UTC))
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(CurrentMenu)
+                .where(CurrentMenu.price_page_id == jsonld.id)
+            )
+            == 0
+        )
 
 
 def test_a_page_with_nothing_extracted_writes_an_empty_llm_page(venues: _Venues) -> None:

@@ -1,0 +1,102 @@
+{
+  "cohort": "redistributable-smoke",
+  "seed": null,
+  "venues": [
+    {
+      "venue": "Juniper Counter",
+      "gers": "counter",
+      "template": "daypart menu and size-labelled prices",
+      "pages": [
+        {
+          "url": "https://juniper.example/menu",
+          "states": [
+            {
+              "name": "lunch",
+              "anchor": "Served until 2 PM",
+              "prices": [
+                {
+                  "item": "Carrot Soup",
+                  "usd_minor": 600,
+                  "baseline": "served"
+                },
+                {
+                  "item": "Hibiscus Tea",
+                  "variant": "Small",
+                  "usd_minor": 300,
+                  "baseline": "served"
+                },
+                {
+                  "item": "Hibiscus Tea",
+                  "variant": "Large",
+                  "usd_minor": 450,
+                  "baseline": "served"
+                }
+              ]
+            },
+            {
+              "name": "stone oven",
+              "anchor": "Stone Oven",
+              "prices": [
+                {
+                  "item": "Garden Pie",
+                  "variant": "12\"",
+                  "variant_aliases": [
+                    "12"
+                  ],
+                  "usd_minor": 1400,
+                  "baseline": "answer_repair_loss"
+                },
+                {
+                  "item": "Garden Pie",
+                  "variant": "16\"",
+                  "variant_aliases": [
+                    "16"
+                  ],
+                  "usd_minor": 1800,
+                  "baseline": "answer_repair_loss"
+                }
+              ]
+            },
+            {
+              "name": "dinner",
+              "anchor": "Served after 5 PM",
+              "prices": [
+                {
+                  "item": "Mushroom Pot Pie",
+                  "usd_minor": 1350,
+                  "baseline": "state_missing"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "venue": "East Pier Kitchen",
+      "gers": "east",
+      "template": "location links",
+      "pages": [
+        {
+          "url": "https://pier.example/east/menu",
+          "states": [
+            {
+              "name": "east pier lunch",
+              "anchor": "Lunch at the East Pier location",
+              "prices": [
+                {
+                  "item": "Clam Chowder",
+                  "usd_minor": 875,
+                  "baseline": "wrong_location"
+                }
+              ]
+            }
+          ],
+          "other_location_urls": [
+            "https://pier.example/west/menu"
+          ]
+        }
+      ]
+    }
+  ]
+}
