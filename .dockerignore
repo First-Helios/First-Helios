@@ -31,3 +31,7 @@
 # Local data / replay bundles
 data/
 var/
+
+# Not read at runtime: ADRs, reviews and the test suite stay out of the image (ADR-0031 D3, R116)
+docs/
+test/
