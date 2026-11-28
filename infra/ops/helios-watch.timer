@@ -1,0 +1,12 @@
+# Starts helios-watch.service every 5 minutes (ADR-0031 D5). The `site` check's period is 5 min
+# with 10 min grace, so a missed firing or two never alerts; a dead Pi does, by silence.
+[Unit]
+Description=Helios watcher, every 5 minutes (ADR-0031 D5)
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=30s
+Unit=helios-watch.service
+
+[Install]
+WantedBy=timers.target

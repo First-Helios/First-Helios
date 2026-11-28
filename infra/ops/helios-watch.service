@@ -1,0 +1,15 @@
+# The Pi's watcher (ADR-0031 D5): infra/ops/watch.sh, started every 5 minutes by
+# helios-watch.timer. The ping URLs come from ~/.config/helios-ops/hc.env (mode 0600), outside the
+# deploy directory, the Docker build context and every container. Setup: infra/ops/README.md.
+[Unit]
+Description=Helios watcher: site, disk, run progress, awaiting reader (ADR-0031 D5)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=orangepi
+WorkingDirectory=/home/orangepi/First-Helios
+EnvironmentFile=/home/orangepi/.config/helios-ops/hc.env
+ExecStart=/bin/bash infra/ops/watch.sh
+TimeoutStartSec=4min

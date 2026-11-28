@@ -10,6 +10,9 @@
 # `systemctl stop` stops mid-batch, which loses no data (both CLIs commit per URL or page and
 # the next run takes the rest). The worker container runs outside this unit's cgroup, so
 # ExecStopPost removes any `helios-loop-*` container (the loop names each one) still running.
+# Alerting (ADR-0031 D5): the `monthly-run` check gets /start, then /$EXIT_STATUS (a refusal on
+# AWAITING_SWAP exits 2 and alerts). Both pings are `-`-prefixed and hc-ping.sh exits 0 on any
+# failure, so a ping can never fail or hold up the run. Without hc.env there are no pings.
 [Unit]
 Description=Helios pipeline batch loop (ADR-0030; manual starts only)
 Requires=docker.service
@@ -20,8 +23,11 @@ Type=simple
 User=orangepi
 WorkingDirectory=/home/orangepi/First-Helios
 EnvironmentFile=/home/orangepi/First-Helios/var/pipeline-host/loop.env
+EnvironmentFile=-/home/orangepi/.config/helios-ops/hc.env
+ExecStartPre=-/bin/bash infra/ops/hc-ping.sh HC_MONTHLY_RUN_URL start
 # $LOOP_ARGS unbraced: systemd splits it into words
 ExecStart=/usr/bin/python3 -m apps.menu_pipeline.batch_loop $LOOP_ARGS
 ExecStopPost=/bin/sh -c 'docker ps -q --filter name=helios-loop- | xargs -r docker rm -f'
+ExecStopPost=-/bin/bash infra/ops/hc-ping.sh HC_MONTHLY_RUN_URL exit
 Restart=no
 TimeoutStopSec=120

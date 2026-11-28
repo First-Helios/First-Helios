@@ -108,5 +108,5 @@ def test_the_unit_cannot_start_at_boot() -> None:
         CONTAINER_PREFIX,  # noqa: PLC0415 - the name it removes
     )
 
-    (stop_post,) = [line for line in lines if line.startswith("ExecStopPost=")]
+    (stop_post,) = [line for line in lines if line.startswith("ExecStopPost=/bin/sh")]
     assert f"--filter name={CONTAINER_PREFIX} " in stop_post
