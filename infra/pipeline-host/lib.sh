@@ -32,6 +32,17 @@ pg() {
 
 sql() { pg "$1" psql -X -v ON_ERROR_STOP=1 -Atc "$2"; }
 
+# db_lock [seconds]: hold var/pipeline-host/db.lock until this script exits (fd 9). swap.sh,
+# recover.sh and the nightly backup take it, so a backup's pg_dump never meets a swap's database
+# renames (ADR-0031 D1, Q3). Waits up to [seconds] (default 1 h) for whoever holds it.
+db_lock() {
+  mkdir -p "$DATA/var/pipeline-host"
+  exec 9>"$DATA/var/pipeline-host/db.lock"
+  flock -n 9 && return 0
+  log "waiting for var/pipeline-host/db.lock (a swap, recover or backup holds it)"
+  flock -w "${1:-3600}" 9 || die "var/pipeline-host/db.lock still held after ${1:-3600} s"
+}
+
 # pi_script <script> [args...]: one of these scripts on the Pi. Its login shell is fish, so the
 # remote command is a plain `bash <path> <args>` (no $(...), no quoting tricks): pass simple
 # arguments (names, absolute paths).

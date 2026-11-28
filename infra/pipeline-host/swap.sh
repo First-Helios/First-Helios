@@ -11,7 +11,8 @@
 #   5. checks: migrate exit 0, local endpoints and firsthelios.com 200, `alembic check`;
 #   6. removes var/pipeline-host/AWAITING_SWAP, so the loop (and its timer) may start again.
 # A failed check renames back (helios -> helios_failed, helios_prev -> helios). `helios_prev`
-# stays until the next swap, so --rollback can restore it.
+# stays until the next swap, so --rollback can restore it. Both modes hold
+# var/pipeline-host/db.lock (lib.sh db_lock), shared with recover.sh and the nightly backup.
 set -euo pipefail
 USAGE="usage: swap.sh <gate.json> <master.dump> <backup dir> [accept-stop reason] | --rollback"
 MODE=${1:?$USAGE}
@@ -25,6 +26,7 @@ cd "$(dirname "$(realpath "$0")")/../.."
 # shellcheck source=infra/pipeline-host/lib.sh
 . infra/pipeline-host/lib.sh
 HOST=pi
+db_lock # the nightly backup must not dump mid-rename (ADR-0031 D1)
 ENDPOINTS=(/healthz /readyz "/v1/venues?limit=1" "/v1/venues?limit=1&cuisine=mexican"
   /v1/venues/category-facets /v1/price-index/cells)
 PUBLIC=(https://firsthelios.com/ https://firsthelios.com/healthz "https://firsthelios.com/v1/venues?limit=1")

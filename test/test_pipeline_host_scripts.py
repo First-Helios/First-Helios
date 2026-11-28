@@ -26,6 +26,7 @@ def test_every_script_is_listed() -> None:
         "mark-master.sh",
         "mirror-laptop.sh",
         "move-master.sh",
+        "recover.sh",
         "replay-sync.sh",
         "restore.sh",
         "swap.sh",
@@ -54,6 +55,8 @@ def test_restore_refuses_the_public_database(tmp_path: Path) -> None:
         (("restore.sh", "nas", "helios_work", "{dump}"), "host must be pi or laptop"),
         (("restore.sh", "pi", "helios_work; drop", "{dump}"), "not a database name"),
         (("swap.sh",), "usage"),
+        (("recover.sh",), "usage"),
+        (("recover.sh", "{dump}"), "usage"),
         (("move-master.sh", "sideways"), "BACKUPS"),
         (("mark-master.sh", "pi", "zz", "0" * 64), "not a commit"),
         (("mark-master.sh", "pi", "87108bb", "abc"), "not a sha256"),
@@ -110,3 +113,36 @@ def test_the_unit_cannot_start_at_boot() -> None:
 
     (stop_post,) = [line for line in lines if line.startswith("ExecStopPost=")]
     assert f"--filter name={CONTAINER_PREFIX} " in stop_post
+
+
+@pytest.mark.skipif(BASH is None, reason="no bash")
+@pytest.mark.skipif((HOST_DIR.parent.parent / "DEPLOYED_COMMIT").exists(), reason="a deploy dir")
+def test_recover_needs_the_deployed_commit(tmp_path: Path) -> None:
+    dump = tmp_path / "x.dump"
+    dump.write_bytes(b"")
+    result = _bash(str(HOST_DIR / "recover.sh"), str(dump), str(dump))
+    assert result.returncode == 1 and "no DEPLOYED_COMMIT" in result.stderr
+
+
+def test_swap_and_recover_hold_the_db_lock_in_every_mode() -> None:
+    """The nightly backup must never dump mid-rename (ADR-0031 D1, Q3)."""
+    swap = (HOST_DIR / "swap.sh").read_text(encoding="utf-8")
+    assert swap.index("\ndb_lock") < swap.index('if [ "$MODE" = --rollback ]'), "--rollback too"
+    recover = (HOST_DIR / "recover.sh").read_text(encoding="utf-8")
+    assert recover.index("\ndb_lock") < recover.index("restore.sh pi helios_next")
+
+
+@pytest.mark.skipif(BASH is None or shutil.which("flock") is None, reason="no bash or flock")
+def test_db_lock_waits_then_gives_up(tmp_path: Path) -> None:
+    lock = tmp_path / "var" / "pipeline-host" / "db.lock"
+    lock.parent.mkdir(parents=True)
+    script = f"""
+    exec 8>{lock}; flock 8                          # a swap holds the lock
+    (DATA={tmp_path}; . {HOST_DIR / "lib.sh"}; db_lock 1; echo acquired)
+    """
+    result = _bash("-c", script)
+    assert result.returncode == 1
+    assert "waiting for var/pipeline-host/db.lock" in result.stdout
+    assert "still held after 1 s" in result.stderr and "acquired" not in result.stdout
+    free = _bash("-c", f"DATA={tmp_path}; . {HOST_DIR / 'lib.sh'}; db_lock 1; echo acquired")
+    assert free.returncode == 0 and "acquired" in free.stdout
