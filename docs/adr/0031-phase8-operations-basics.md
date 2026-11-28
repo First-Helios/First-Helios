@@ -576,9 +576,9 @@ settings):
 |---|---|
 | Always Use HTTPS | **Working:** `http://firsthelios.com/` and `http://www.firsthelios.com/` both return 301 to `https://` |
 | Minimum TLS 1.2 | **Working:** a TLS 1.1-only handshake fails; TLS 1.2 returns 200 |
-| HSTS | **Partly.** `strict-transport-security: max-age=2592000` (1 month) is sent, but **without `includeSubDomains`**, and no `X-Content-Type-Options: nosniff` header appears. The two toggles need rechecking |
+| HSTS | **Working** (re-checked after the owner's fix): `strict-transport-security: max-age=2592000; includeSubDomains` on the apex and `www`. Cloudflare's No-Sniff toggle still adds no `X-Content-Type-Options` header; D4's nginx sends `nosniff` itself, so this is left as is |
 | Bot Fight Mode off | **Working:** `curl` gets 200 on `/healthz`, `/v1/venues`, `/v1/price-index/cells` |
-| `/v1/` rate limit (100 per 10 s per IP) | **Not firing.** 130 requests, then 300 requests in 11.6 s (about 260 per 10 s) to `/v1/venues?limit=1`: every one 200, and no block 12 s later. Check that the rule is deployed (enabled), its action is Block (not Log), and it matches URI Path, not full URI |
+| `/v1/` rate limit (100 per 10 s per IP) | **Working** after the owner fixed the rule. The first test, 300 requests in 11.6 s, got 300 × 200. The re-test, 300 requests to `/v1/venues?limit=1` in 5.7 s, got 116 × 200 and 184 × 429; the extra 16 got through because Cloudflare counts with a short lag. The block is Cloudflare's default response: `429`, `Retry-After: 8`, `text/plain` body `error code: 1015`, not the ADR-0008 JSON shape (D4's nginx gives that). `/` kept answering 200 during the block, and `/v1/` answered 200 again 15 s later |
 
 ## Alternatives considered
 
