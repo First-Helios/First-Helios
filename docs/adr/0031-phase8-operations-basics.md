@@ -1,8 +1,11 @@
 # ADR-0031: Phase 8 operations basics on the Pi: off-box backups, a restore drill, image health, frontend serving, alerting, and the Pi as production
 
-**Status:** Proposed 2026-11-27 (session P8-31). Nothing is built. Every part touches `infra/`,
-deploy config or secrets, or adds a host tool or an external account, so all of it is
-stop-and-ask ([CLAUDE.md](../../CLAUDE.md)). Each section ends with numbered owner questions.
+**Status:** Accepted 2026-11-28 (session P8-31). The owner answered Q6a, Q7/Q9, Q19 and Q24.
+The rest were decided under the owner's delegation ("ask the questions you need answered if you
+can't come to a good decision on them"), and the owner may overturn any of them before this PR
+merges. See [Decisions](#decisions-2026-11-28). Proposed 2026-11-27. Nothing is built: each build
+step touching `infra/` is still its own reviewed PR, and nothing reaches the Pi without the
+owner's go-ahead.
 **Date:** 2026-11-27
 **Phase:** 8 (Operations: Prod & Resilience)
 **Builds on:** [ADR-0002](./0002-containerization.md) (one image, Compose; the publishing and
@@ -520,6 +523,62 @@ to the Pi without the owner's go-ahead.
 26. **Watch the first scheduled run?** Deploy only the `monthly-run` and `site` pings (plus
     `hc.env`) before 2026-12-10 (*recommended*: two `-`-prefixed lines in the loop unit and one
     timer, which can't affect the run). Or wait and deploy everything after the swap.
+
+## Decisions (2026-11-28)
+
+**Owner** marks the owner's answers. **Delegated** marks items decided under the owner's
+delegation, which take the recommendation unless noted otherwise.
+
+| Q | Decision | By |
+|---|---|---|
+| 1 | restic (pinned release ≥ 0.17, sha256-checked) to a Cloudflare R2 bucket | Delegated |
+| 2 | Nightly at 09:00 UTC: `helios`, `helios_work`, `var/replay/`, `var/pipeline-host/`, the manifest. Keep 7 daily, 5 weekly, 12 monthly; prune weekly | Delegated |
+| 3 | `flock var/pipeline-host/db.lock` in `swap.sh` and the backup | Delegated |
+| 4 | No USB disk for now (the laptop mirror is the local copy) | Delegated |
+| 5 | (b) The laptop runs `restic copy` monthly into its own repository. That copy is also drill A's source | Delegated |
+| 6a | The owner removes the eight V1 credentials and the `FLASK_*` lines from the Pi's `.env`, and revokes any still-live key at its provider | **Owner** |
+| 6b | Postgres moves off `helios`/`helios` after the 2026-12-10 run's swap, as its own step | Delegated |
+| 7 | Both drills: A monthly on the laptop; B once on the Pi from a spare microSD. The owner asked why B is needed. The answer: A proves the data, B proves the host can be rebuilt from written steps, and how long that takes. Owner chose the microSD drill | **Owner** |
+| 8 | `recover.sh`, and the amended rule "public changes only through `swap.sh`, or `recover.sh` on a host with no public database" | Delegated |
+| 9 | Drill B in the **week of 2026-12-14**, the owner at the board with a ≥ 64 GB A2 microSD. The card-before-eMMC boot order is checked first | **Owner** |
+| 10 | The clock stops when the public API matches the manifest's `current_menu` rows, venues with a menu and `alembic_version` | Delegated |
+| 11 | Image `HEALTHCHECK`; Compose's `api` healthcheck removed; `disable: true` on `migrate` and `llama-model-check` | Delegated |
+| 12 | Native `ubuntu-24.04-arm` job, non-required for two weeks, then the owner makes it required | Delegated |
+| 13 | GHCR publishing as a follow-up amendment, once the arm64 job is green | Delegated |
+| 14 | `docs/` and `test/` out of the image; the `/readyz` CI smoke | Delegated |
+| 15 | nginx in Compose replaces `dev_server.py` | Delegated |
+| 16 | `rate_limited` in `ErrorCode` (an ADR-0008 amendment); nginx at 10 r/s burst 20, and 2 r/s burst 5 on price history, after the no-429 check on the largest area. This answers ADR-0019 Q5 | Delegated |
+| 17 | No direct tunnel route to the API | Delegated |
+| 18 | healthchecks.io (Hobbyist, free), plus Cloudflare's Tunnel Health Alert | Delegated |
+| 19 | **Email only** | **Owner** |
+| 20 | No outside prober for now | Delegated |
+| 21 | Disk 85%, run grace 4 days, progress stall 8 h, reader nudge 3 days | Delegated |
+| 22 | Prometheus and node-exporter deferred until after two monthly runs | Delegated |
+| 23 | **The Pi is production for now**, with exit triggers 1–4. This answers ADR-0019 Q4 as (b) | Delegated |
+| 24 | **Neither wired Ethernet nor a UPS for now.** The Wi-Fi link and residential power stay accepted risks, and D5's alerts report them. Trigger 1 (two outages over 1 h in 30 days) reopens this question first | **Owner** |
+| 25 | No staging host; the laptop and CI are pre-production | Delegated |
+| 26 | **Changed from the recommendation: no pings before 2026-12-10.** The owner's standing instruction for this work was not to disturb the monthly timer. So nothing changes on the Pi until that run's swap; D1, D5 and the loop-unit pings deploy together afterwards | Delegated |
+
+**Revised schedule:**
+
+1. D3 is repo-only, any time.
+2. D1 and D5 are built as PRs before 12-10, and deployed after the 12-10 run's swap.
+3. The first backup, then drill A.
+4. Drill B, week of 12-14. If D1 can't be deployed and back up at least one night before the
+   drill, it moves to the following week.
+5. D4.
+6. D6's doc changes.
+
+**Cloudflare, as checked from outside on 2026-11-28** (after the owner changed the appendix's
+settings):
+
+| Setting | Result |
+|---|---|
+| Always Use HTTPS | **Working:** `http://firsthelios.com/` and `http://www.firsthelios.com/` both return 301 to `https://` |
+| Minimum TLS 1.2 | **Working:** a TLS 1.1-only handshake fails; TLS 1.2 returns 200 |
+| HSTS | **Partly.** `strict-transport-security: max-age=2592000` (1 month) is sent, but **without `includeSubDomains`**, and no `X-Content-Type-Options: nosniff` header appears. The two toggles need rechecking |
+| Bot Fight Mode off | **Working:** `curl` gets 200 on `/healthz`, `/v1/venues`, `/v1/price-index/cells` |
+| `/v1/` rate limit (100 per 10 s per IP) | **Not firing.** 130 requests, then 300 requests in 11.6 s (about 260 per 10 s) to `/v1/venues?limit=1`: every one 200, and no block 12 s later. Check that the rule is deployed (enabled), its action is Block (not Log), and it matches URI Path, not full URI |
 
 ## Alternatives considered
 
