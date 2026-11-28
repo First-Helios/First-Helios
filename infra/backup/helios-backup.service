@@ -1,0 +1,27 @@
+# The nightly off-box backup (ADR-0031 D1): infra/backup/backup.sh, started by
+# helios-backup.timer. Secrets come from ~/.config/helios-ops/ (mode 0700, files 0600), which is
+# outside the deploy directory, the Docker build context and every container. See
+# infra/backup/README.md for the one-time setup.
+#   sudo cp infra/backup/helios-backup.service infra/backup/helios-backup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl start helios-backup        # the first run, by hand: journalctl -u helios-backup -f
+#   sudo systemctl enable --now helios-backup.timer
+[Unit]
+Description=Helios nightly off-box backup to R2 (ADR-0031 D1)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=orangepi
+WorkingDirectory=/home/orangepi/First-Helios
+EnvironmentFile=/home/orangepi/.config/helios-ops/r2.env
+# hc.env (D5) is optional: without it the backup runs unwatched
+EnvironmentFile=-/home/orangepi/.config/helios-ops/hc.env
+Environment=RESTIC_PASSWORD_FILE=/home/orangepi/.config/helios-ops/restic-password
+ExecStart=/bin/bash infra/backup/backup.sh
+# The first snapshot uploads everything; later nights are near zero (D1 estimate)
+TimeoutStartSec=4h
+Nice=10
+IOSchedulingClass=idle

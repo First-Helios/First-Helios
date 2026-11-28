@@ -17,6 +17,7 @@ CLIs in `apps/menu_pipeline/`, and the host glue lives here.
 | `replay-sync.sh` | `var/replay/` between the hosts |
 | `mark-master.sh` | Writes `var/pipeline-host/MASTER` |
 | `swap.sh` | The swap into public: `helios_next`, then the rename, the checks, and an automatic rollback |
+| `recover.sh` | A night's backup dumps into a host with no public database (drill B, a lost Pi; ADR-0031 Q8; runbook in [`../backup/`](../backup/README.md)) |
 | `mirror-laptop.sh` | `helios_laptop` restored from the swapped dump |
 | `laptop-llama.sh` | The laptop GPU's `llama-server` (P8-23's image and flags) |
 | `helios-pipeline-loop.service`, `loop.env.example` | The loop under systemd on the Pi (never enabled at boot) |
@@ -30,7 +31,9 @@ the Pi with the next deploy, and the timer needs the owner's `sudo` install belo
 
 - **The master** is the only database the pipeline writes: `helios_work` on the Pi (the
   normal case) or `helios_laptop`. `var/pipeline-host/MASTER` on each host names it.
-- **Public `helios`** (Pi) changes only through `swap.sh`.
+- **Public `helios`** (Pi) changes only through `swap.sh`, or `recover.sh` on a host with no public
+  database (ADR-0031 Q8). Both, and the nightly backup, hold `var/pipeline-host/db.lock`, so a
+  backup never dumps mid-rename.
 - **`helios_laptop`** mirrors public after each swap, while the master is on the Pi.
 
 ## One-time setup on the Pi (owner)

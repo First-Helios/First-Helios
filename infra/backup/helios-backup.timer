@@ -1,0 +1,14 @@
+# Starts helios-backup.service daily at 09:00 UTC (03:00 in Austin; 17:00 on the Pi's
+# Asia/Shanghai clock), far from the monthly run's 18:00 UTC start on the 10th (ADR-0031 D1, Q2).
+# A backup overlapping a swap waits for var/pipeline-host/db.lock instead of failing.
+# Persistent=true: a night missed while the Pi was off runs at the next boot.
+[Unit]
+Description=Helios nightly off-box backup (ADR-0031 D1)
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 UTC
+Persistent=true
+Unit=helios-backup.service
+
+[Install]
+WantedBy=timers.target

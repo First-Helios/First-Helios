@@ -17,6 +17,10 @@ data/*.db
 # Environment
 .env
 .env.local
+# Host secrets (ADR-0031): they live in ~/.config/helios-ops/ on each host, never here
+r2.env
+hc.env
+restic-password
 
 # Runtime state — replay bundles, caches, local artifacts (Twelve-Factor)
 var/
