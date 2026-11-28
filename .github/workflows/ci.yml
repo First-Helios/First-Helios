@@ -126,6 +126,23 @@ jobs:
     name: Docker image
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # The smoke test migrates this empty database from the image (ADR-0031 D3).
+    services:
+      postgres:
+        image: imresamu/postgis:16-3.4
+        env:
+          POSTGRES_USER: helios
+          POSTGRES_PASSWORD: helios
+          POSTGRES_DB: helios
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U helios"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -142,22 +159,67 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Smoke test: the image boots and serves liveness. /readyz is not
-      # checked here — it needs a database, and the Tests job already covers
-      # that path against a real Postgres.
-      - name: Smoke test /healthz
-        run: |
-          docker run -d --name helios-api -p 8000:8000 helios-api:ci
-          for _ in $(seq 1 30); do
-            if curl -fsS http://localhost:8000/healthz; then
-              echo "\nhealthz OK"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "healthz never came up; container logs:"
-          docker logs helios-api
-          exit 1
+      # The image's HEALTHCHECK reports healthy, `alembic upgrade head` runs from the image, and
+      # /readyz and /v1/venues answer 200 on the migrated, empty database.
+      - name: Smoke test (health, migrate, readyz)
+        run: bash infra/ci/docker-smoke.sh helios-api:ci
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs helios-api || true
+
+  # Native arm64 build of both images (ADR-0031 D3, Q12): the Pi builds arm64 at deploy time, so
+  # an arm-only break (the worker's Chromium is the likeliest) shows up here instead of on the Pi.
+  # Not a required check at first: the owner adds it to branch protection after two weeks of PRs.
+  # Its own cache scopes, so the amd64 job's cache isn't overwritten.
+  docker-arm64:
+    name: Docker image (arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: imresamu/postgis:16-3.4
+        env:
+          POSTGRES_USER: helios
+          POSTGRES_PASSWORD: helios
+          POSTGRES_DB: helios
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U helios"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build image (runtime)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: infra/Dockerfile
+          push: false
+          load: true
+          tags: helios-api:ci
+          cache-from: type=gha,scope=arm64-runtime
+          cache-to: type=gha,mode=max,scope=arm64-runtime
+
+      - name: Smoke test (health, migrate, readyz)
+        run: bash infra/ci/docker-smoke.sh helios-api:ci
+
+      - name: Build image (worker)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: infra/Dockerfile
+          target: worker
+          push: false
+          cache-from: type=gha,scope=arm64-worker
+          cache-to: type=gha,mode=max,scope=arm64-worker
 
       - name: Container logs on failure
         if: failure()

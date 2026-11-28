@@ -75,6 +75,13 @@ COPY --from=builder --chown=helios:helios /app /app
 USER helios
 EXPOSE 8000
 
+# Liveness only (/healthz needs no database), so the probe holds under plain `docker run` as well
+# as Compose, which no longer defines its own (ADR-0031 D3, R116). Plain Docker never restarts an
+# unhealthy container: this is a status signal; database reachability is /readyz's job. The slim
+# image has no curl, so the interpreter does the request.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"]
+
 # Migrations are deliberately NOT run here. Running `alembic upgrade head` on
 # container start races when more than one replica boots at once; it's a
 # separate one-shot step (see the `migrate` service in docker-compose.yml).
